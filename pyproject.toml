@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "biomapper"
+version = "0.1.0"
+description = "A unified Python toolkit for biological data harmonization and ontology mapping"
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "biomapper"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+requests = "^2.25.1"
+pandas = "^2.0.0"
+sqlalchemy = "^1.4.0"
+pyyaml = "^5.4.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^6.2.5"
+pytest-cov = "^2.12.1"
+black = "^21.5b2"
+flake8 = "^3.9.2"
+mypy = "^0.910"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.black]
+line-length = 88
+target-version = ['py37']
+include = '\.pyi?$'

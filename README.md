@@ -99,21 +99,56 @@ graph TB
 
 ## Installation
 
+### Development Setup
+
+1. Install Python 3.11 with pyenv (if not already installed):
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows use: venv\Scripts\activate
+# Install pyenv dependencies
+sudo apt-get update
+sudo apt-get install -y make build-essential libssl-dev zlib1g-dev \
+libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev \
+libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev python3-openssl
 
-# Install for development
-pip install -e .
+# Install pyenv
+curl https://pyenv.run | bash
 
-# Install development dependencies
-pip install -r requirements-dev.txt
+# Add to your shell configuration
+echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+
+# Reload shell configuration
+source ~/.bashrc
+
+# Install Python 3.11
+pyenv install 3.11.7
+pyenv global 3.11.7
+```
+
+2. Install Poetry (if not already installed):
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Add Poetry to your PATH
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+3. Clone and set up the project:
+```bash
+git clone https://github.com/yourusername/biomapper.git
+cd biomapper
+
+# Install dependencies with Poetry
+poetry install
 ```
 
 ## Quick Start
 
 ```python
+# Using Poetry's virtual environment
+poetry shell
+
 from biomapper import AnalyteMetadata
 from biomapper.standardization import BridgeDBHandler
 
@@ -127,64 +162,71 @@ bridge_handler = BridgeDBHandler()
 results = bridge_handler.standardize(["P12345", "Q67890"])
 ```
 
-## Development Setup
+## Development
 
-1. Clone the repository
+### Using Poetry
+
 ```bash
-git clone https://github.com/yourusername/biomapper.git
-cd biomapper
+# Activate virtual environment
+poetry shell
+
+# Run a command in the virtual environment
+poetry run python script.py
+
+# Add a new dependency
+poetry add package-name
+
+# Add a development dependency
+poetry add --group dev package-name
+
+# Update dependencies
+poetry update
+
+# Show currently installed packages
+poetry show
+
+# Build the package
+poetry build
 ```
 
-2. Set up development environment
+### Running Tests
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate
+# Run tests
+poetry run pytest
 
-# Install development dependencies
-pip install -r requirements-dev.txt
+# Run tests with coverage
+poetry run pytest --cov=biomapper
 ```
 
-3. Run tests
+### Code Quality
 ```bash
-pytest
+# Format code with black
+poetry run black .
+
+# Run linting
+poetry run flake8 .
+
+# Type checking
+poetry run mypy .
 ```
 
 ## Project Structure
 
 ```
 biomapper/
-├── annotation_engine/        # Main package directory
-│   ├── core/               # Core functionality
-│   ├── standardization/    # ID standardization components
-│   ├── mapping/           # Ontology mapping components
-│   ├── utils/            # Utility functions
-│   └── schemas/         # Data schemas and models
-├── tests/               # Test files
+├── biomapper/           # Main package directory
+│   ├── core/           # Core functionality
+│   │   ├── metadata.py # Metadata handling
+│   │   └── validators.py # Data validation
+│   ├── standardization/# ID standardization components
+│   ├── mapping/        # Ontology mapping components
+│   ├── utils/          # Utility functions
+│   └── schemas/        # Data schemas and models
+├── tests/              # Test files
 ├── docs/               # Documentation
-└── scripts/           # Utility scripts
-```
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## Testing
-
-Run the test suite:
-```bash
-pytest
-```
-
-With coverage:
-```bash
-pytest --cov=biomapper
+├── scripts/            # Utility scripts
+├── pyproject.toml      # Poetry configuration and dependencies
+└── poetry.lock        # Lock file for dependencies
 ```
 
 ## License
