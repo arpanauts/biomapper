@@ -2,7 +2,7 @@
 name = "biomapper"
 version = "0.1.0"
 description = "A unified Python toolkit for biological data harmonization and ontology mapping"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Trent Leslie <trent.leslie@phenomehealth.org>"]
 license = "MIT"
 readme = "README.md"
 packages = [{include = "biomapper"}]
@@ -12,7 +12,7 @@ python = "^3.11"
 requests = "^2.25.1"
 pandas = "^2.0.0"
 sqlalchemy = "^1.4.0"
-pyyaml = "^5.4.1"
+pyyaml = "^6.0.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^6.2.5"
