@@ -15,11 +15,13 @@ sqlalchemy = "^1.4.0"
 pyyaml = "^6.0.1"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^6.2.5"
-pytest-cov = "^2.12.1"
-black = "^21.5b2"
-flake8 = "^3.9.2"
-mypy = "^0.910"
+pytest = "^7.4.3"
+pytest-cov = "^4.1.0"
+pytest-mock = "^3.14.0"
+mypy = "^1.7.0"
+ruff = "^0.1.6"
+jupyter = "^1.1.1"
+ipykernel = "^6.29.5"
 
 [build-system]
 requires = ["poetry-core"]
@@ -28,8 +30,36 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+addopts = "-ra -q --cov=biomapper --cov-report=term-missing"
+markers = [
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
 
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ['py37']
-include = '\.pyi?$'
+target-version = "py311"
+select = ["E", "F", "I"]  # Error, Pyflakes, Isort rules
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.coverage.run]
+source = ["biomapper"]
+omit = ["tests/*", "**/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "pass"
+]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
