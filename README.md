@@ -47,7 +47,7 @@ source ~/.bashrc
 
 # Install Python 3.11
 pyenv install 3.11.7
-pyenv global 3.11.7
+pyenv local 3.11.7
 ```
 
 2. Install Poetry (if not already installed):
