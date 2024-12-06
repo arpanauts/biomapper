@@ -1,12 +1,15 @@
-# tests/test_ramp_client.py
+"""Test suite for RaMP API client functionality."""
 
-from typing import Any, Dict, List
+# ruff: noqa: S101
+
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
 import requests
 
 from biomapper.standardization.ramp_client import (
+    AnalyteType,
     PathwayStats,
     RaMPAPIError,
     RaMPClient,
@@ -17,13 +20,13 @@ from biomapper.standardization.ramp_client import (
 # Test fixtures
 @pytest.fixture
 def ramp_client() -> RaMPClient:
-    """Create a RaMPClient instance for testing"""
+    """Create a RaMPClient instance for testing."""
     return RaMPClient()
 
 
 @pytest.fixture
 def mock_response() -> Mock:
-    """Create a mock response object with default values"""
+    """Create a mock response object with default values."""
     mock = Mock()
     mock.status_code = 200
     mock.json.return_value = {"result": [], "function_call": [], "numFoundIds": []}
@@ -32,7 +35,7 @@ def mock_response() -> Mock:
 
 # Test basic client initialization
 def test_client_initialization() -> None:
-    """Test that client initializes with default config"""
+    """Test that client initializes with default configuration."""
     client = RaMPClient()
     assert isinstance(client.config, RaMPConfig)
     assert client.config.base_url == "https://rampdb.nih.gov/api"
@@ -40,7 +43,7 @@ def test_client_initialization() -> None:
 
 
 def test_client_custom_config() -> None:
-    """Test that client accepts custom config"""
+    """Test that client accepts custom configuration."""
     custom_config = RaMPConfig(base_url="https://custom.url", timeout=60)
     client = RaMPClient(config=custom_config)
     assert client.config.base_url == "https://custom.url"
@@ -52,7 +55,7 @@ def test_client_custom_config() -> None:
 def test_get_source_versions(
     mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
 ) -> None:
-    """Test source versions endpoint"""
+    """Test source versions endpoint."""
     mock_request.return_value = mock_response
     response = ramp_client.get_source_versions()
     mock_request.assert_called_with(
@@ -62,14 +65,15 @@ def test_get_source_versions(
 
 
 @patch("requests.Session.request")
-def test_get_id_types(
+def test_get_valid_id_types(
     mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
 ) -> None:
-    """Test ID types endpoint"""
+    """Test ID types endpoint."""
     mock_request.return_value = mock_response
-    response = ramp_client.get_id_types()
+    mock_response.json.return_value = {"result": []}
+    response = ramp_client.get_valid_id_types()
     mock_request.assert_called_with(
-        method="GET", url="https://rampdb.nih.gov/api/id-types", timeout=30
+        method="GET", url="https://rampdb.nih.gov/api/validIdTypes", timeout=30
     )
     assert isinstance(response, dict)
 
@@ -78,7 +82,7 @@ def test_get_id_types(
 def test_get_pathways_from_analytes(
     mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
 ) -> None:
-    """Test pathways endpoint"""
+    """Test pathways endpoint."""
     test_analytes = ["hmdb:HMDB0000064", "uniprot:P31323"]
     mock_request.return_value = mock_response
     response = ramp_client.get_pathways_from_analytes(test_analytes)
@@ -95,7 +99,7 @@ def test_get_pathways_from_analytes(
 def test_get_chemical_properties(
     mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
 ) -> None:
-    """Test chemical properties endpoint"""
+    """Test chemical properties endpoint."""
     test_metabolites = ["hmdb:HMDB0000064"]
     mock_request.return_value = mock_response
     response = ramp_client.get_chemical_properties(test_metabolites)
@@ -111,7 +115,7 @@ def test_get_chemical_properties(
 # Test error handling
 @patch("requests.Session.request")
 def test_api_error_handling(mock_request: Mock, ramp_client: RaMPClient) -> None:
-    """Test that API errors are properly handled"""
+    """Test that API errors are properly handled."""
     mock_request.side_effect = requests.exceptions.RequestException("API Error")
     with pytest.raises(RaMPAPIError):
         ramp_client.get_source_versions()
@@ -119,7 +123,7 @@ def test_api_error_handling(mock_request: Mock, ramp_client: RaMPClient) -> None
 
 # Test analysis methods
 def test_analyze_pathway_stats() -> None:
-    """Test pathway statistics analysis"""
+    """Test pathway statistics analysis."""
     client = RaMPClient()
     test_data = {
         "result": [
@@ -143,7 +147,7 @@ def test_analyze_pathway_stats() -> None:
 
 
 def test_find_pathway_overlaps() -> None:
-    """Test pathway overlap analysis"""
+    """Test pathway overlap analysis."""
     client = RaMPClient()
     test_data = {
         "result": [
@@ -168,7 +172,7 @@ def test_find_pathway_overlaps() -> None:
 def test_get_ontologies_from_metabolites(
     mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
 ) -> None:
-    """Test getting ontology mappings for metabolites with both IDs and names"""
+    """Test getting ontology mappings for metabolites with both IDs and names."""
     mock_request.return_value = mock_response
 
     # Test with IDs
@@ -206,7 +210,7 @@ def test_get_ontologies_from_metabolites(
 def test_get_metabolites_from_ontologies(
     mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
 ) -> None:
-    """Test metabolites from ontology terms endpoint"""
+    """Test metabolites from ontology terms endpoint."""
     mock_request.return_value = mock_response
 
     test_ontologies = ["CHEBI:15903"]
@@ -236,7 +240,7 @@ def test_get_metabolites_from_ontologies(
 def test_get_chemical_classes(
     mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
 ) -> None:
-    """Test getting chemical classes for metabolites"""
+    """Test getting chemical classes for metabolites."""
     mock_request.return_value = mock_response
 
     # Test normal case
@@ -261,7 +265,7 @@ def test_get_chemical_classes(
 def test_get_common_reaction_analytes(
     mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
 ) -> None:
-    """Test getting common reaction analytes"""
+    """Test getting common reaction analytes."""
     mock_request.return_value = mock_response
 
     test_analytes = ["uniprot:P31323", "hmdb:HMDB0000122"]
@@ -279,7 +283,7 @@ def test_get_common_reaction_analytes(
 def test_get_reactions_from_analytes(
     mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
 ) -> None:
-    """Test getting reactions from analytes"""
+    """Test getting reactions from analytes."""
     mock_request.return_value = mock_response
 
     test_analytes = ["uniprot:P31323", "hmdb:HMDB0000122"]
@@ -297,7 +301,7 @@ def test_get_reactions_from_analytes(
 def test_get_reaction_classes(
     mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
 ) -> None:
-    """Test getting reaction classes"""
+    """Test getting reaction classes."""
     mock_request.return_value = mock_response
 
     test_analytes = ["uniprot:P31323", "hmdb:HMDB0000122"]
@@ -312,9 +316,9 @@ def test_get_reaction_classes(
 
 
 def test_empty_response_handling() -> None:
-    """Test handling of empty responses"""
+    """Test handling of empty responses."""
     client = RaMPClient()
-    empty_data: dict[str, list] = {"result": []}
+    empty_data: dict[str, list[Any]] = {"result": []}
     stats = client.analyze_pathway_stats(empty_data)
     overlaps = client.find_pathway_overlaps(empty_data)
     assert len(stats) == 0
@@ -323,7 +327,7 @@ def test_empty_response_handling() -> None:
 
 @patch("requests.Session.request")
 def test_timeout_handling(mock_request: Mock, ramp_client: RaMPClient) -> None:
-    """Test timeout handling"""
+    """Test timeout handling."""
     mock_request.side_effect = requests.exceptions.Timeout("Timeout")
     with pytest.raises(RaMPAPIError) as exc_info:
         ramp_client.get_source_versions()
@@ -333,7 +337,7 @@ def test_timeout_handling(mock_request: Mock, ramp_client: RaMPClient) -> None:
 # Integration-style tests
 @patch("requests.Session.request")
 def test_full_pathway_analysis_flow(mock_request: Mock) -> None:
-    """Test complete pathway analysis workflow with mocked responses"""
+    """Test complete pathway analysis workflow with mocked responses."""
     # Create mock response with realistic test data
     mock_response = Mock()
     mock_response.status_code = 200
@@ -372,18 +376,18 @@ def test_full_pathway_analysis_flow(mock_request: Mock) -> None:
 
 
 def test_analyze_pathway_stats_empty_result() -> None:
-    """Test pathway statistics analysis with empty result"""
+    """Test pathway statistics analysis with empty result."""
     client = RaMPClient()
-    test_data: Dict[str, List[Any]] = {"no_result": []}  # Missing 'result' key
+    test_data: dict[str, list[Any]] = {"no_result": []}  # Missing 'result' key
     stats = client.analyze_pathway_stats(test_data)
     assert isinstance(stats, dict)
     assert len(stats) == 0
 
 
 def test_find_pathway_overlaps_empty_result() -> None:
-    """Test pathway overlap analysis with empty result"""
+    """Test pathway overlap analysis with empty result."""
     client = RaMPClient()
-    test_data: Dict[str, List[Any]] = {"no_result": []}  # Missing 'result' key
+    test_data: dict[str, list[Any]] = {"no_result": []}  # Missing 'result' key
     overlaps = client.find_pathway_overlaps(test_data)
     assert isinstance(overlaps, dict)
     assert len(overlaps) == 0
@@ -393,7 +397,7 @@ def test_find_pathway_overlaps_empty_result() -> None:
 def test_perform_chemical_enrichment(
     mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
 ) -> None:
-    """Test performing chemical enrichment analysis"""
+    """Test performing chemical enrichment analysis."""
     mock_request.return_value = mock_response
 
     test_metabolites = ["hmdb:HMDB0000064", "hmdb:HMDB0000148"]
@@ -409,7 +413,7 @@ def test_perform_chemical_enrichment(
 
 @patch("requests.Session.request")
 def test_full_metabolite_workflow(mock_request: Mock) -> None:
-    """Test complete metabolite analysis workflow with mocked responses"""
+    """Test complete metabolite analysis workflow with mocked responses."""
     # Create mock response
     mock_response = Mock()
     mock_response.status_code = 200
@@ -432,7 +436,7 @@ def test_full_metabolite_workflow(mock_request: Mock) -> None:
 
 @patch("requests.Session.request")
 def test_full_analyte_workflow(mock_request: Mock) -> None:
-    """Test complete analyte workflow with mocked responses"""
+    """Test complete analyte workflow with mocked responses."""
     # Create mock response
     mock_response = Mock()
     mock_response.status_code = 200
@@ -455,7 +459,7 @@ def test_full_analyte_workflow(mock_request: Mock) -> None:
 
 
 def test_pathwaystats_dataclass() -> None:
-    """Test PathwayStats dataclass initialization and attributes"""
+    """Test PathwayStats dataclass initialization and attributes."""
     test_stats = PathwayStats(
         total_pathways=5,
         pathways_by_source={"kegg": 2, "reactome": 3},
@@ -467,3 +471,162 @@ def test_pathwaystats_dataclass() -> None:
     assert test_stats.pathways_by_source == {"kegg": 2, "reactome": 3}
     assert test_stats.unique_pathway_names == {"path1", "path2", "path3"}
     assert test_stats.pathway_sources == {"kegg", "reactome"}
+
+
+@patch("requests.Session.request")
+def test_get_pathway_by_analyte_basic(
+    mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
+) -> None:
+    """Test basic pathway retrieval by analyte ID."""
+    mock_request.return_value = mock_response
+    mock_response.json.return_value = {"result": []}  # Add mock response data
+    ramp_client.get_pathway_by_analyte(["test_id"])
+    mock_request.assert_called_with(
+        method="GET",
+        url="https://rampdb.nih.gov/api/pathwayFromAnalyte",
+        timeout=30,
+        params={"sourceId": ["test_id"], "queryType": "both"},
+    )
+
+
+@patch("requests.Session.request")
+def test_get_pathway_by_analyte_with_type(
+    mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
+) -> None:
+    """Test pathway retrieval with specific analyte type."""
+    mock_request.return_value = mock_response
+    mock_response.json.return_value = {"result": []}  # Add mock response data
+    ramp_client.get_pathway_by_analyte(["test_id"], AnalyteType.METABOLITE)
+    mock_request.assert_called_with(
+        method="GET",
+        url="https://rampdb.nih.gov/api/pathwayFromAnalyte",
+        timeout=30,
+        params={"sourceId": ["test_id"], "queryType": "metabolite"},
+    )
+
+
+@patch("requests.Session.request")
+def test_get_pathway_by_name(
+    mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
+) -> None:
+    """Test pathway retrieval by name search."""
+    mock_request.return_value = mock_response
+    mock_response.json.return_value = {"result": []}  # Add mock response data
+    ramp_client.get_pathway_by_name("glycolysis")
+    mock_request.assert_called_with(
+        method="GET",
+        url="https://rampdb.nih.gov/api/pathwayFromName",
+        timeout=30,
+        params={"pathway": "glycolysis"},
+    )
+
+
+@patch("requests.Session.request")
+def test_get_pathway_by_ontology(
+    mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
+) -> None:
+    """Test pathway retrieval using ontology ID."""
+    mock_request.return_value = mock_response
+    mock_response.json.return_value = {"result": []}  # Add mock response data
+    ramp_client.get_pathway_by_ontology("GO:0006096")
+    mock_request.assert_called_with(
+        method="GET",
+        url="https://rampdb.nih.gov/api/pathwayFromOntology",
+        timeout=30,
+        params={"ontologyId": "GO:0006096"},
+    )
+
+
+@patch("requests.Session.request")
+def test_get_analytes_by_pathway(
+    mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
+) -> None:
+    """Test analyte retrieval for a pathway."""
+    mock_request.return_value = mock_response
+    mock_response.json.return_value = {"result": []}  # Add mock response data
+    ramp_client.get_analytes_by_pathway("path_123")
+    mock_request.assert_called_with(
+        method="GET",
+        url="https://rampdb.nih.gov/api/analyteFromPathway",
+        timeout=30,
+        params={"pathwayId": "path_123", "queryType": "both"},
+    )
+
+
+@patch("requests.Session.request")
+def test_get_analytes_by_ontology(
+    mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
+) -> None:
+    """Test analyte retrieval using ontology ID."""
+    mock_request.return_value = mock_response
+    mock_response.json.return_value = {"result": []}  # Add mock response data
+    ramp_client.get_analytes_by_ontology("GO:0006096")
+    mock_request.assert_called_with(
+        method="GET",
+        url="https://rampdb.nih.gov/api/analyteFromOntology",
+        timeout=30,
+        params={"ontologyId": "GO:0006096", "queryType": "both"},
+    )
+
+
+def test_pathway_stats() -> None:
+    """Test pathway statistics calculation."""
+    client = RaMPClient()
+    result = client.analyze_pathway_stats({"result": []})
+    assert isinstance(result, dict)
+
+
+def test_analyze_pathway_stats_invalid_data() -> None:
+    """Test pathway statistics analysis with invalid data structure."""
+    client = RaMPClient()
+
+    # Test with invalid data structure
+    invalid_data: dict[str, list[Any]] = {"wrong_key": []}
+    stats = client.analyze_pathway_stats(invalid_data)
+    assert isinstance(stats, dict)
+    assert len(stats) == 0
+
+
+def test_find_pathway_overlaps_invalid_data() -> None:
+    """Test pathway overlap analysis with invalid data structure."""
+    client = RaMPClient()
+
+    # Test with invalid data structure
+    invalid_data: dict[str, list[Any]] = {"wrong_key": []}
+    overlaps = client.find_pathway_overlaps(invalid_data)
+    assert isinstance(overlaps, dict)
+    assert len(overlaps) == 0
+
+
+@patch("requests.Session.request")
+def test_get_pathway_info(
+    mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
+) -> None:
+    """Test retrieving detailed pathway information."""
+    mock_request.return_value = mock_response
+    mock_response.json.return_value = {"result": [{"pathway_data": "test_data"}]}
+
+    response = ramp_client.get_pathway_info("path_123")
+    mock_request.assert_called_with(
+        method="GET",
+        url="https://rampdb.nih.gov/api/pathwayInfo/path_123",
+        timeout=30,
+    )
+    assert isinstance(response, dict)
+
+
+@patch("requests.Session.request")
+def test_get_metabolite_info(
+    mock_request: Mock, ramp_client: RaMPClient, mock_response: Mock
+) -> None:
+    """Test retrieving detailed metabolite information."""
+    mock_request.return_value = mock_response
+    mock_response.json.return_value = {"result": [{"metabolite_data": "test_data"}]}
+
+    response = ramp_client.get_metabolite_info("hmdb:HMDB0000064")
+    mock_request.assert_called_with(
+        method="GET",
+        url="https://rampdb.nih.gov/api/metaboliteInfo/hmdb:HMDB0000064",
+        timeout=30,
+    )
+    assert isinstance(response, dict)
