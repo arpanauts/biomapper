@@ -1,28 +1,22 @@
-"""
-RaMP-DB API Client
-
-This module provides a Python interface to the RaMP-DB REST API.
-It handles authentication, request formation, and response parsing
-for interacting with the RaMP database of metabolic pathways.
-"""
+"""RaMP-DB API Client for interfacing with the RaMP database."""
 
 import json
 from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
 
 class RaMPAPIError(Exception):
-    """Custom exception for RaMP API errors"""
+    """Custom exception for RaMP API errors."""
 
     pass
 
 
 class AnalyteType(Enum):
-    """Enumeration for analyte types in RaMP queries"""
+    """Enumeration for analyte types in RaMP queries."""
 
     METABOLITE = "metabolite"
     GENE = "gene"
@@ -31,7 +25,7 @@ class AnalyteType(Enum):
 
 @dataclass
 class RaMPConfig:
-    """Configuration for RaMP API client"""
+    """Configuration for RaMP API client."""
 
     base_url: str = "https://rampdb.nih.gov/api"
     timeout: int = 30
@@ -39,30 +33,30 @@ class RaMPConfig:
 
 @dataclass
 class PathwayStats:
-    """Statistics about pathways for a metabolite"""
+    """Statistics about pathways associated with an analyte."""
 
     total_pathways: int
-    pathways_by_source: dict
-    unique_pathway_names: set
-    pathway_sources: set
+    pathways_by_source: dict[str, int]
+    unique_pathway_names: set[str]
+    pathway_sources: set[str]
 
 
 class RaMPClient:
-    """Client for interacting with the RaMP-DB API"""
+    """Client for interacting with the RaMP-DB API."""
 
-    def __init__(self, config: Optional[RaMPConfig] = None) -> None:
-        """Initialize the RaMP API client
+    def __init__(self, config: RaMPConfig | None = None) -> None:
+        """Initialize the RaMP API client.
 
         Args:
-            config: Optional RaMPConfig object with custom settings
+            config: Optional RaMPConfig object with custom settings.
         """
         self.config = config or RaMPConfig()
         self.session = requests.Session()
 
     def _make_request(
         self, method: str, endpoint: str, **kwargs: Any
-    ) -> Dict[str, Any]:
-        """Make a request to the RaMP API
+    ) -> dict[str, Any]:
+        """Make a request to the RaMP API.
 
         Args:
             method: HTTP method to use
@@ -84,104 +78,60 @@ class RaMPClient:
             response.raise_for_status()
             return dict(response.json())
         except requests.exceptions.RequestException as e:
-            raise RaMPAPIError(f"Request failed: {str(e)}") from e
+            raise RaMPAPIError(f"Request failed: {e!s}") from e
 
-    def get_source_versions(self) -> Dict:
-        """Get RaMP source database versions
-
-        Returns:
-            Dict containing version information
-        """
+    def get_source_versions(self) -> dict[str, Any]:
+        """Get available source database versions."""
         return self._make_request("GET", "source-versions")
 
-    def get_id_types(self) -> Dict:
-        """Get valid RaMP database prefixes for genes and metabolites
+    def get_valid_id_types(self) -> dict[str, Any]:
+        """Get valid ID types."""
+        return self._make_request("GET", "validIdTypes")
 
-        Returns:
-            Dict containing valid ID prefixes
-        """
-        return self._make_request("GET", "id-types")
+    def get_pathway_info(self, pathway_id: str) -> dict[str, Any]:
+        """Retrieve detailed information about a specific pathway."""
+        return self._make_request("GET", f"pathwayInfo/{pathway_id}")
 
-    def get_pathways_from_analytes(self, analytes: List[str]) -> Dict[str, List[Dict]]:
-        """Get pathways associated with a list of analyte IDs
+    def get_metabolite_info(self, metabolite_id: str) -> dict[str, Any]:
+        """Retrieve detailed information about a specific metabolite."""
+        return self._make_request("GET", f"metaboliteInfo/{metabolite_id}")
 
-        Args:
-            analytes: List of analyte IDs (must include source prefix,
-                     e.g. "hmdb:HMDB0000001" or "uniprot:P12345")
-
-        Returns:
-            Dict containing:
-                - data: List of pathway dictionaries with pathway information
-                - function_call: The R function call used
-                - numFoundIds: Number of IDs found
-        """
+    def get_pathways_from_analytes(
+        self, analytes: list[str]
+    ) -> dict[str, list[dict[str, str]]]:
+        """Get pathways associated with given analytes."""
         payload = {"analytes": analytes}
         return self._make_request("POST", "pathways-from-analytes", json=payload)
 
-    def get_chemical_classes(self, metabolites: List[str]) -> Dict:
-        """Get chemical classes for a list of metabolite IDs
-
-        Args:
-            metabolites: List of metabolite IDs (must include source prefix)
-
-        Returns:
-            Dict containing chemical class information
-        """
+    def get_chemical_classes(self, metabolites: list[str]) -> dict[str, Any]:
+        """Get chemical classes for given metabolites."""
         payload = {"metabolites": metabolites}
         return self._make_request("POST", "chemical-classes", json=payload)
 
-    def get_chemical_properties(self, metabolites: List[str]) -> Dict:
-        """Get chemical properties for a list of metabolite IDs
-
-        Args:
-            metabolites: List of metabolite IDs (must include source prefix)
-
-        Returns:
-            Dict containing chemical properties
-        """
+    def get_chemical_properties(self, metabolites: list[str]) -> dict[str, Any]:
+        """Get chemical properties for given metabolites."""
         payload = {"metabolites": metabolites}
         return self._make_request("POST", "chemical-properties", json=payload)
 
     def get_ontologies_from_metabolites(
-        self, metabolites: List[str], names_or_ids: str = "ids"
-    ) -> Dict:
-        """Get ontology mappings for a list of metabolites
-
-        Args:
-            metabolites: List of metabolite IDs or names
-            names_or_ids: Whether the input is names or ids (default: "ids")
-
-        Returns:
-            Dict containing ontology mappings
-        """
+        self, metabolites: list[str], names_or_ids: str = "ids"
+    ) -> dict[str, Any]:
+        """Get ontology mappings for metabolites."""
         payload = {"metabolite": metabolites, "namesOrIds": names_or_ids}
         return self._make_request("POST", "ontologies-from-metabolites", json=payload)
 
     def get_metabolites_from_ontologies(
-        self, ontologies: List[str], output_format: str = "json"
-    ) -> Dict:
-        """Get metabolites associated with ontology terms
-
-        Args:
-            ontologies: List of ontology terms
-            output_format: Desired output format (default: "json")
-
-        Returns:
-            Dict containing metabolite information
-        """
+        self, ontologies: list[str], output_format: str = "json"
+    ) -> dict[str, Any]:
+        """Get metabolites associated with ontology terms."""
         payload = {"ontology": ontologies, "format": output_format}
         return self._make_request("POST", "metabolites-from-ontologies", json=payload)
 
-    def analyze_pathway_stats(self, pathways_data: Dict) -> Dict[str, PathwayStats]:
-        """Analyze pathway statistics for each analyte
-
-        Args:
-            pathways_data: Response from get_pathways_from_analytes()
-
-        Returns:
-            Dict mapping analyte IDs to their PathwayStats
-        """
-        stats: Dict[str, PathwayStats] = {}
+    def analyze_pathway_stats(
+        self, pathways_data: dict[str, Any]
+    ) -> dict[str, PathwayStats]:
+        """Analyze pathway statistics from response data."""
+        stats: dict[str, PathwayStats] = {}
 
         if "result" not in pathways_data:
             return stats
@@ -214,15 +164,8 @@ class RaMPClient:
 
         return stats
 
-    def find_pathway_overlaps(self, pathways_data: Dict) -> Dict[str, int]:
-        """Find pathways that are shared between analytes
-
-        Args:
-            pathways_data: Response from get_pathways_from_analytes()
-
-        Returns:
-            Dict mapping pathway names to number of analytes involved
-        """
+    def find_pathway_overlaps(self, pathways_data: dict[str, Any]) -> dict[str, int]:
+        """Find overlapping pathways in response data."""
         if "result" not in pathways_data:
             return {}
 
@@ -237,55 +180,61 @@ class RaMPClient:
         # Convert sets to counts
         return {name: len(analytes) for name, analytes in pathway_counts.items()}
 
-    def get_common_reaction_analytes(self, analytes: List[str]) -> Dict:
-        """Find analytes involved in same reactions as input analytes
-
-        Args:
-            analytes: List of analyte IDs (can include metabolites and proteins)
-
-        Returns:
-            Dict containing reactions and associated analytes
-        """
+    def get_common_reaction_analytes(self, analytes: list[str]) -> dict[str, Any]:
+        """Get common reaction analytes."""
         payload = {"analyte": analytes}
         return self._make_request("POST", "common-reaction-analytes", json=payload)
 
-    def get_reactions_from_analytes(self, analytes: List[str]) -> Dict:
-        """Get reactions associated with input analytes
-
-        Args:
-            analytes: List of analyte IDs (can include metabolites and proteins)
-
-        Returns:
-            Dict containing reaction information
-        """
+    def get_reactions_from_analytes(self, analytes: list[str]) -> dict[str, Any]:
+        """Get reactions associated with analytes."""
         payload = {"analytes": analytes}
         return self._make_request("POST", "reactions-from-analytes", json=payload)
 
-    def get_reaction_classes(self, analytes: List[str]) -> Dict:
-        """Get reaction classes associated with input analytes
-
-        Args:
-            analytes: List of analyte IDs (can include metabolites and proteins)
-
-        Returns:
-            Dict containing reaction class information
-        """
+    def get_reaction_classes(self, analytes: list[str]) -> dict[str, Any]:
+        """Get reaction classes for analytes."""
         payload = {"analytes": analytes}
         return self._make_request(
             "POST", "reaction-classes-from-analytes", json=payload
         )
 
-    def perform_chemical_enrichment(self, metabolites: List[str]) -> Dict:
-        """Perform chemical class enrichment analysis
-
-        Args:
-            metabolites: List of metabolite IDs (must include source prefix)
-
-        Returns:
-            Dict containing enrichment results
-        """
+    def perform_chemical_enrichment(self, metabolites: list[str]) -> dict[str, Any]:
+        """Perform chemical enrichment analysis."""
         payload = {"metabolites": metabolites}
         return self._make_request("POST", "chemical-enrichment", json=payload)
+
+    def get_pathway_by_analyte(
+        self, analyte_ids: list[str], analyte_type: AnalyteType = AnalyteType.BOTH
+    ) -> dict[str, Any]:
+        """Find pathways associated with given analytes."""
+        params = {
+            "sourceId": analyte_ids,
+            "queryType": analyte_type.value,
+        }
+        return self._make_request("GET", "pathwayFromAnalyte", params=params)
+
+    def get_pathway_by_name(self, pathway_name: str) -> dict[str, Any]:
+        """Search for pathways by name or description."""
+        params = {"pathway": pathway_name}
+        return self._make_request("GET", "pathwayFromName", params=params)
+
+    def get_pathway_by_ontology(self, ontology_id: str) -> dict[str, Any]:
+        """Find pathways using ontology identifiers."""
+        params = {"ontologyId": ontology_id}
+        return self._make_request("GET", "pathwayFromOntology", params=params)
+
+    def get_analytes_by_pathway(
+        self, pathway_id: str, analyte_type: AnalyteType = AnalyteType.BOTH
+    ) -> dict[str, Any]:
+        """Retrieve analytes associated with a pathway."""
+        params = {"pathwayId": pathway_id, "queryType": analyte_type.value}
+        return self._make_request("GET", "analyteFromPathway", params=params)
+
+    def get_analytes_by_ontology(
+        self, ontology_id: str, analyte_type: AnalyteType = AnalyteType.BOTH
+    ) -> dict[str, Any]:
+        """Find analytes using ontology identifiers."""
+        params = {"ontologyId": ontology_id, "queryType": analyte_type.value}
+        return self._make_request("GET", "analyteFromOntology", params=params)
 
 
 # Example usage:
