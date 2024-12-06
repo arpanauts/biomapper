@@ -1,11 +1,30 @@
 [tool.poetry]
 name = "biomapper"
-version = "0.1.0"
+version = "0.1.4"
 description = "A unified Python toolkit for biological data harmonization and ontology mapping"
 authors = ["Trent Leslie <trent.leslie@phenomehealth.org>"]
 license = "MIT"
 readme = "README.md"
 packages = [{include = "biomapper"}]
+repository = "https://github.com/arpanauts/biomapper"
+documentation = "https://github.com/arpanauts/biomapper/blob/main/README.md"
+keywords = [
+    "bioinformatics",
+    "ontology",
+    "data mapping",
+    "biological data",
+    "standardization",
+    "harmonization"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Natural Language :: English"
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -22,6 +41,15 @@ mypy = "^1.7.0"
 ruff = "^0.1.6"
 jupyter = "^1.1.1"
 ipykernel = "^6.29.5"
+types-requests = "^2.31.0.20240311"
+
+[tool.poetry.extras]
+api = ["fastapi", "uvicorn"]  # For potential REST API functionality
+viz = ["matplotlib", "seaborn"]  # For visualization features
+full = ["fastapi", "uvicorn", "matplotlib", "seaborn"]
+
+[tool.poetry.scripts]
+biomapper = "biomapper.cli:main"
 
 [build-system]
 requires = ["poetry-core"]
@@ -39,15 +67,41 @@ markers = [
 [tool.ruff]
 line-length = 88
 target-version = "py311"
-select = ["E", "F", "I"]  # Error, Pyflakes, Isort rules
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "DTZ", # flake8-datetimez
+    "RUF", # Ruff-specific rules
+    "N",   # pep8-naming
+    "D",   # pydocstyle
+    "UP",  # pyupgrade
+    "S",   # flake8-bandit
+]
+ignore = ["D203", "D213"]
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.pydocstyle]
+convention = "google"
+
+[tool.ruff.isort]
+known-first-party = ["biomapper"]
+combine-as-imports = true
 
 [tool.coverage.run]
 source = ["biomapper"]
-omit = ["tests/*", "**/__init__.py"]
+omit = [
+    "tests/*",
+    "**/__init__.py",
+    "**/cli.py"
+]
 
 [tool.coverage.report]
 exclude_lines = [
@@ -55,11 +109,30 @@ exclude_lines = [
     "def __repr__",
     "if __name__ == .__main__.:",
     "raise NotImplementedError",
-    "pass"
+    "pass",
+    "raise ImportError",
+    "raise NotImplementedError"
 ]
+show_missing = true
+fail_under = 80
 
 [tool.mypy]
 python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+check_untyped_defs = true
+strict_optional = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+show_error_codes = true
+pretty = true
+sqlite_cache = true
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
