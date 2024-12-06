@@ -24,6 +24,11 @@ A unified Python toolkit for biological data harmonization and ontology mapping.
 
 ## Installation
 
+### Using pip
+```bash
+pip install biomapper
+```
+
 ### Development Setup
 
 1. Install Python 3.11 with pyenv (if not already installed):
@@ -71,12 +76,10 @@ poetry install
 ## Quick Start
 
 ```python
-# Using Poetry's virtual environment
-poetry shell
-
 from biomapper import AnalyteMetadata
-from biomapper.standardization import BridgeDBHandler
+from biomapper.standardization import BridgeDBHandler, RaMPClient
 
+# Example 1: Using BridgeDB
 # Initialize metadata handler
 metadata = AnalyteMetadata()
 
@@ -85,6 +88,17 @@ bridge_handler = BridgeDBHandler()
 
 # Process identifiers
 results = bridge_handler.standardize(["P12345", "Q67890"])
+
+# Example 2: Using RaMP-DB
+# Initialize the RaMP client
+ramp_client = RaMPClient()
+
+# Get database versions
+versions = ramp_client.get_source_versions()
+
+# Get pathways for metabolites
+# Example: Get pathways for Creatine (HMDB0000064)
+pathways = ramp_client.get_pathways_from_analytes(["hmdb:HMDB0000064"])
 ```
 
 ## Development
