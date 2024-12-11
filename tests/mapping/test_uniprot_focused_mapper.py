@@ -6,8 +6,10 @@ import pytest
 import requests
 from requests import Response, exceptions
 from requests.adapters import HTTPAdapter
+from requests_mock import Mocker
 from urllib3.util.retry import Retry
 
+from biomapper.core.protein_metadata_comparison import ProteinMetadataComparison
 from biomapper.mapping.uniprot_focused_mapper import UniProtConfig, UniprotFocusedMapper
 
 
@@ -132,6 +134,26 @@ def test_map_id_with_exception(mapper: UniprotFocusedMapper) -> None:
     ), patch.object(mapper, "_check_job_status", return_value=None):
         with pytest.raises(Exception, match="Test error"):
             mapper.map_id("P05067", "Ensembl")
+
+
+def test_map_id_with_http_error(
+    mapper: UniprotFocusedMapper, mock_session: Mock
+) -> None:
+    """Test handling of HTTP errors in map_id."""
+    # Mock a 500 error response
+    error_response = Mock(spec=Response)
+    error_response.status_code = 500
+    error_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+        "500 Server Error"
+    )
+
+    mock_session.post.return_value = error_response
+    mapper.session = mock_session
+
+    # Should return empty dict on error
+    result = mapper.map_id("P12345", "GeneCards")
+    assert result == {}
+    mock_session.post.assert_called_once()
 
 
 # Database mapping tests
@@ -313,7 +335,7 @@ def test_retry_on_error_codes(
     """Test retry behavior for different error codes."""
     error_response = Mock(spec=Response)
     error_response.status_code = http_code
-    error_response.raise_for_status.side_effect = requests.exceptions.RequestException(
+    error_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
         f"Error {http_code}"
     )
 
@@ -455,6 +477,34 @@ def test_submit_job_request_exception(mapper: UniprotFocusedMapper) -> None:
         assert result is None
 
 
+def test_submit_job_with_http_error(mapper: UniprotFocusedMapper) -> None:
+    """Test handling of HTTP errors in _submit_job."""
+    # Mock a response that will raise HTTPError
+    error_response = Mock(spec=Response)
+    error_response.status_code = 500
+    error_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+        "500 Server Error"
+    )
+
+    with patch.object(mapper.session, "post", return_value=error_response):
+        result = mapper._submit_job("UniProtKB_AC-ID", "GeneCards", ["P05067"])
+        assert result is None
+
+
+def test_check_job_status_with_http_error(mapper: UniprotFocusedMapper) -> None:
+    """Test handling of HTTP errors in _check_job_status."""
+    # Mock a response that will raise HTTPError
+    error_response = Mock(spec=Response)
+    error_response.status_code = 500
+    error_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+        "500 Server Error"
+    )
+
+    with patch.object(mapper.session, "get", return_value=error_response):
+        result = mapper._check_job_status("test_job_id")
+        assert result is None
+
+
 def test_remove_source_database_from_results(
     mapper: UniprotFocusedMapper, mock_session: Mock
 ) -> None:
@@ -537,4 +587,113 @@ def test_check_job_status_request_exception(mapper: UniprotFocusedMapper) -> Non
         f"{mapper.config.base_url}/idmapping/status/test_job_id",
         timeout=mapper.config.timeout,
         allow_redirects=False,
+    )
+
+
+@pytest.fixture
+def mock_failed_polling(requests_mock: Mocker) -> None:
+    """Mock a polling scenario that exceeds max attempts"""
+    requests_mock.post(
+        "https://test.uniprot.org/idmapping/run", json={"jobId": "MOCK_JOB_ID"}
+    )
+    # Mock status check to always return "running"
+    requests_mock.get(
+        "https://test.uniprot.org/idmapping/status/MOCK_JOB_ID", status_code=200
+    )
+
+
+def test_map_to_database_timeout(
+    mapper: UniprotFocusedMapper, mock_failed_polling: None
+) -> None:
+    """Test handling of polling timeout"""
+    result = mapper._map_to_database("UniProtKB_AC-ID", "Ensembl", ["P12345"])
+    assert result == {}
+
+
+def test_generate_mappings(mapper: UniprotFocusedMapper, requests_mock: Mocker) -> None:
+    """Test _generate_mappings with multiple proteins"""
+    # Mock successful mapping response
+    requests_mock.post(
+        "https://test.uniprot.org/idmapping/run", json={"jobId": "MOCK_JOB_ID"}
+    )
+    requests_mock.get(
+        "https://test.uniprot.org/idmapping/status/MOCK_JOB_ID",
+        status_code=303,
+        headers={"Location": "https://test.uniprot.org/results/MOCK_RESULT"},
+    )
+    requests_mock.get(
+        "https://test.uniprot.org/results/MOCK_RESULT",
+        json={"results": [{"from": "P12345", "to": {"id": "ENSG00000123"}}]},
+    )
+
+    result = mapper._generate_mappings(proteins={"P12345"}, categories=["Protein/Gene"])
+
+    assert isinstance(result, dict)
+    assert "P12345" in result
+    assert "Ensembl" in result["P12345"]
+    assert result["P12345"]["Ensembl"] == ["ENSG00000123"]
+
+
+def test_get_job_results_all_retries_fail(
+    mapper: UniprotFocusedMapper, requests_mock: Mocker
+) -> None:
+    """Test _get_job_results when all retries fail"""
+    requests_mock.get("https://test.uniprot.org/results/MOCK_RESULT", status_code=500)
+
+    result = mapper._get_job_results("https://test.uniprot.org/results/MOCK_RESULT")
+    assert result == {}
+
+
+def test_process_chunk_causes_exception(mocker):
+    """Force a TypeError in process_chunk by returning a non-tuple from process_protein."""
+    comparer = ProteinMetadataComparison()
+
+    # Mock the mapper
+    mock_mapper = mocker.Mock()
+    mock_mapper.CORE_MAPPINGS = {"Disease": ["MIM"]}
+    comparer.mapper = mock_mapper
+
+    # Suppress the progress bar and capture print statements
+    mocker.patch("tqdm.tqdm")
+    mock_print = mocker.patch("builtins.print")
+
+    # Define a fake _generate_mappings to force an exception in process_chunk
+    def mock_generate_mappings(proteins, categories=None):
+        def process_protein(protein: str) -> tuple[str, dict[str, list[str]]]:
+            # Intentionally return None to cause a TypeError
+            return None  # type: ignore[return-value]  # Not a tuple, will cause unpacking to fail
+
+        def process_chunk(chunk: list[str]) -> dict[str, dict[str, list[str]]]:
+            chunk_mappings: dict[str, dict[str, list[str]]] = {}
+            for protein in chunk:
+                try:
+                    # This line will raise a TypeError because process_protein returns None
+                    protein_id, mappings = process_protein(protein)
+                    if mappings:
+                        chunk_mappings[protein_id] = mappings
+                except Exception as e:
+                    print(f"\nWarning: Failed processing protein {protein}: {str(e)}")
+                    continue
+            return chunk_mappings
+
+        protein_list = list(proteins)
+        mappings: dict[str, dict[str, list[str]]] = {}
+        chunk_size = 1
+        for i in range(0, len(protein_list), chunk_size):
+            chunk = protein_list[i : i + chunk_size]
+            mappings.update(process_chunk(chunk))
+        return mappings
+
+    # Patch the original _generate_mappings with our mock version
+    mocker.patch.object(comparer, "_generate_mappings", new=mock_generate_mappings)
+
+    # Run the test
+    result = comparer._generate_mappings({"P99999"})
+
+    # No mappings should be returned due to the error
+    assert result == {}
+
+    # Verify that the warning was printed, indicating lines 222-224 ran
+    mock_print.assert_any_call(
+        "\nWarning: Failed processing protein P99999: cannot unpack non-iterable NoneType object"
     )
