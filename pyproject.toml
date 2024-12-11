@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "biomapper"
-version = "0.1.4"
+version = "0.1.6"
 description = "A unified Python toolkit for biological data harmonization and ontology mapping"
 authors = ["Trent Leslie <trent.leslie@phenomehealth.org>"]
 license = "MIT"
@@ -45,6 +45,7 @@ ipykernel = "^6.29.5"
 types-requests = "^2.31.0.20240311"
 pandas-stubs = "^2.2.3.241126"
 types-tqdm = "^4.67.0.20241119"
+requests-mock = "^1.11.0"
 
 [tool.poetry.extras]
 api = ["fastapi", "uvicorn"]  # For potential REST API functionality
