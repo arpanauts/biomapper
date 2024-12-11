@@ -163,7 +163,7 @@ class ProteinMetadataComparison:
     def _generate_mappings(
         self, proteins: set[str], categories: Optional[list[str]] = None
     ) -> dict[str, dict[str, list[str]]]:
-        """Generate mappings for a set of proteins with progress tracking.
+        """Generate mappings for a set of proteins using optimized parallel processing.
 
         Args:
             proteins: Set of UniProt IDs to map
@@ -172,69 +172,86 @@ class ProteinMetadataComparison:
         Returns:
             Dict mapping protein IDs to their database mappings.
         """
-        mappings: dict[str, dict[str, list[str]]] = {}
-        protein_list = list(proteins)
-        chunk_size = 100
+        # Get target databases once instead of per protein
+        target_dbs: list[str] = []
+        for category in categories or self.mapper.CORE_MAPPINGS.keys():
+            if category in self.mapper.CORE_MAPPINGS:
+                target_dbs.extend(
+                    [
+                        db
+                        for db in self.mapper.CORE_MAPPINGS[category]
+                        if db != "UniProtKB_AC-ID"
+                    ]
+                )
+        target_dbs = list(set(target_dbs))  # Remove duplicates
+
+        def process_protein(protein: str) -> tuple[str, dict[str, list[str]]]:
+            """Process a single protein's mappings."""
+            protein_mappings: dict[str, list[str]] = {}
+
+            for target_db in target_dbs:
+                try:
+                    result = self.mapper.map_id(protein, target_db)
+                    if result.get("results"):
+                        mapped_ids: list[str] = []
+                        for mapping in result["results"]:
+                            to_id = mapping.get("to")
+                            if isinstance(to_id, dict):
+                                to_id = to_id.get("id")
+                            if isinstance(to_id, str):
+                                mapped_ids.append(to_id)
+                        if mapped_ids:
+                            protein_mappings[target_db] = mapped_ids
+                except Exception as e:
+                    print(
+                        f"\nWarning: Failed mapping {protein} to {target_db}: {str(e)}"
+                    )
+                    continue
+
+            return protein, protein_mappings
 
         def process_chunk(chunk: list[str]) -> dict[str, dict[str, list[str]]]:
+            """Process a chunk of proteins."""
             chunk_mappings: dict[str, dict[str, list[str]]] = {}
 
             for protein in chunk:
                 try:
-                    # Get valid target databases for each category
-                    target_dbs: list[str] = []
-                    for category in categories or self.mapper.CORE_MAPPINGS.keys():
-                        if category in self.mapper.CORE_MAPPINGS:
-                            target_dbs.extend(
-                                [
-                                    db
-                                    for db in self.mapper.CORE_MAPPINGS[category]
-                                    if db != "UniProtKB_AC-ID"
-                                ]
-                            )
-
-                    # Map to each target database
-                    protein_mappings: dict[str, list[str]] = {}
-                    for target_db in target_dbs:
-                        result = self.mapper.map_id(protein, target_db)
-                        if result.get("results"):
-                            mapped_ids: list[str] = []
-                            for mapping in result["results"]:
-                                to_id = mapping.get("to")
-                                if isinstance(to_id, dict):
-                                    to_id = to_id.get("id")
-                                if isinstance(to_id, str):  # Type guard
-                                    mapped_ids.append(to_id)
-                            if mapped_ids:
-                                protein_mappings[target_db] = mapped_ids
-
-                    if protein_mappings:
-                        chunk_mappings[protein] = protein_mappings
-
+                    protein_id, mappings = process_protein(protein)
+                    if mappings:
+                        chunk_mappings[protein_id] = mappings
                 except Exception as e:
-                    print(f"\nWarning: Mapping failed for protein {protein}: {str(e)}")
+                    print(f"\nWarning: Failed processing protein {protein}: {str(e)}")
                     continue
 
             return chunk_mappings
 
-        # Process chunks in parallel using ThreadPoolExecutor
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        # Optimize chunk size based on total proteins
+        protein_list = list(proteins)
+        total_proteins = len(protein_list)
+        # Smaller chunks for better reliability, adjusted based on total size
+        chunk_size = min(25, max(5, total_proteins // 100))
+
+        # Use fewer workers for smaller datasets
+        max_workers = min(6, max(2, total_proteins // chunk_size // 2))
+
+        mappings: dict[str, dict[str, list[str]]] = {}
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = []
             for i in range(0, len(protein_list), chunk_size):
                 chunk = protein_list[i : i + chunk_size]
                 futures.append(executor.submit(process_chunk, chunk))
 
-            for future in tqdm(
-                concurrent.futures.as_completed(futures),
-                total=len(futures),
-                desc="Processing protein chunks",
-                unit="chunk",
-            ):
-                try:
-                    chunk_result = future.result()
-                    mappings.update(chunk_result)
-                except Exception as e:
-                    print(f"\nWarning: Chunk processing failed: {str(e)}")
+            # Process results with progress bar
+            with tqdm(total=len(futures), desc="Processing protein chunks") as pbar:
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        chunk_result = future.result()
+                        mappings.update(chunk_result)
+                        pbar.update(1)
+                    except Exception as e:
+                        print(f"\nWarning: Chunk processing failed: {str(e)}")
+                        pbar.update(1)
 
         return mappings
 
