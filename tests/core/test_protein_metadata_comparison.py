@@ -450,25 +450,35 @@ def test_invalid_uniprot_format(comparer: ProteinMetadataComparison) -> None:
 @pytest.mark.parametrize(
     "protein_id,expected_clean,expected_valid",
     [
-        # Existing cases
+        # Standard formats
         ("P12345", "P12345", True),
-        ("p12345", "P12345", True),
         ("Q9UNM6", "Q9UNM6", True),
-        (" P12345 ", "P12345", True),
-        # New cases to cover lines 82-84
-        (pd.NA, "<NA>", False),  # Tests pd.isna(protein_id) - line 82
-        ("", "", False),  # Tests bool(cleaned_id) - line 83
-        ("ABC123", "ABC123", False),  # Tests regex match - line 84
+        ("O15553", "O15553", True),
+        # Delimited formats
+        ("P12345_Q67890", "P12345", True),
+        ("Q9UNM6,O15553", "Q9UNM6", True),
+        ("P12345|SSDH_RAT", "P12345", True),
+        # Isoform handling
+        ("P12345-1", "P12345", True),
+        ("Q9UNM6-2", "Q9UNM6", True),
+        # Invalid formats
+        ("", "", False),
+        ("invalid", "INVALID", False),
+        ("P1234", "P1234", False),  # Too short
+        ("P123456", "P123456", False),  # Too long
+        ("12345P", "12345P", False),  # Wrong format
+        # Edge cases
+        (" P12345 ", "P12345", True),  # Whitespace
+        ("p12345", "P12345", True),  # Case insensitive
+        ("P12345_invalid", "P12345", True),  # Valid first ID
+        ("invalid_P12345", "INVALID", False),  # Invalid first ID
     ],
 )
 def test_clean_uniprot_id_comprehensive(
-    protein_id: Any, expected_clean: str, expected_valid: bool
+    protein_id: str, expected_clean: str, expected_valid: bool
 ) -> None:
-    """Test clean_uniprot_id with comprehensive test cases covering all validation paths."""
-    if isinstance(protein_id, pd._libs.missing.NAType):
-        clean_id, is_valid = clean_uniprot_id(str(protein_id))
-    else:
-        clean_id, is_valid = clean_uniprot_id(protein_id)
+    """Test clean_uniprot_id with comprehensive test cases."""
+    clean_id, is_valid = clean_uniprot_id(protein_id)
     assert clean_id == expected_clean
     assert is_valid == expected_valid
 
@@ -829,3 +839,33 @@ def test_process_chunk_causes_exception(mocker):
     mock_print.assert_any_call(
         "\nWarning: Failed processing protein P99999: Test forced exception"
     )
+
+
+def test_validate_protein_ids_with_delimited_values(
+    comparer: ProteinMetadataComparison,
+) -> None:
+    """Test validation of protein IDs with delimited values."""
+    test_data = pd.Series(
+        [
+            "P12345_Q67890",  # Multiple valid IDs with underscore
+            "Q9UNM6,O15553",  # Multiple valid IDs with comma
+            "P12345|SSDH_RAT",  # UniProt entry name format
+            "invalid_P12345",  # Invalid + valid
+            "P12345-1",  # Isoform
+        ]
+    )
+
+    result = comparer.validate_protein_ids(test_data, "test_source")
+
+    # Check valid IDs
+    assert "P12345" in result.valid_ids
+    assert "Q67890" in result.valid_ids
+    assert "Q9UNM6" in result.valid_ids
+    assert "O15553" in result.valid_ids
+
+    # Check invalid records
+    invalid_ids = set(result.invalid_records["id"])
+    assert "invalid" in invalid_ids
+
+    # Verify original values are preserved
+    assert "invalid_P12345" in result.invalid_records["original_value"]
