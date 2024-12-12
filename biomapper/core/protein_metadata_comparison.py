@@ -48,23 +48,42 @@ class ValidationResult:
 def clean_uniprot_id(protein_id: str) -> tuple[str, bool]:
     """Clean and validate UniProt ID format.
 
+    Handles various formats including:
+    - Basic accession (P12345)
+    - Accession with isoform (P12345-1)
+    - Multiple IDs with delimiters (P12345_Q67890 or P12345,Q67890)
+    - Entry name format (P12345|SSDH_RAT)
+
     Args:
         protein_id: Raw protein ID
 
     Returns:
         Tuple of (cleaned_id, is_valid)
     """
-    # Clean and standardize
-    cleaned_id = str(protein_id).strip().upper().split(".")[0]
+    # Handle empty or null values
+    if pd.isna(protein_id) or not protein_id:
+        return str(protein_id), False
 
-    # Check if the ID matches UniProt format and isn't NaN/empty
-    is_valid = (
-        not pd.isna(protein_id)
-        and bool(cleaned_id)
-        and bool(re.match(r"^[POQ][0-9A-Z]{5}$", cleaned_id))
-    )
+    # Clean and standardize basic ID
+    cleaned_id = str(protein_id).strip().upper()
 
-    return cleaned_id, is_valid
+    # Check for common delimiters and split if found
+    if any(delim in cleaned_id for delim in ["_", ",", ";", "|"]):
+        # Take first ID from delimited string
+        cleaned_id = re.split(r"[_,;|]", cleaned_id)[0].strip()
+
+    # Remove any isoform suffix (e.g., -1, -2)
+    base_id = re.sub(r"-\d+$", "", cleaned_id)
+
+    # Updated regex for UniProt accession format:
+    # - Starts with [OPQ] followed by 5 alphanumeric characters, or
+    # - Starts with [A-N,R-Z] followed by 5 numbers, or
+    # - Starts with [A-Z] followed by 5 alphanumeric characters
+    uniprot_pattern = r"^([OPQ][0-9A-Z]{5}|[A-N,R-Z][0-9]{5}|[A-Z][0-9A-Z]{5})$"
+
+    is_valid = bool(re.match(uniprot_pattern, base_id))
+
+    return base_id, is_valid
 
 
 class ProteinMetadataComparison:
@@ -106,14 +125,19 @@ class ProteinMetadataComparison:
         }
 
         for pid in protein_ids.dropna():
-            cleaned_id, is_valid = clean_uniprot_id(pid)
-            if is_valid:
-                valid_ids.add(cleaned_id)
-            else:
-                invalid_records["id"].append(pid)
-                invalid_records["reason"].append("Invalid UniProt format")
-                invalid_records["original_value"].append(str(pid))
-                invalid_records["source"].append(source_name)
+            # Handle potential multiple IDs in one field
+            original_value = str(pid)
+            potential_ids = re.split(r"[_,;|]", original_value)
+
+            for single_id in potential_ids:
+                cleaned_id, is_valid = clean_uniprot_id(single_id)
+                if is_valid:
+                    valid_ids.add(cleaned_id)
+                else:
+                    invalid_records["id"].append(single_id.strip())
+                    invalid_records["reason"].append("Invalid UniProt format")
+                    invalid_records["original_value"].append(original_value)
+                    invalid_records["source"].append(source_name)
 
         return ValidationResult(valid_ids=valid_ids, invalid_records=invalid_records)
 
