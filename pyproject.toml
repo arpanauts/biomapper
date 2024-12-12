@@ -5,7 +5,7 @@ description = "A unified Python toolkit for biological data harmonization and on
 authors = ["Trent Leslie <trent.leslie@phenomehealth.org>"]
 license = "MIT"
 readme = "README.md"
-packages = [{include = "biomapper"}]
+packages = [{include = "biomapper", from = "."}]
 repository = "https://github.com/arpanauts/biomapper"
 documentation = "https://github.com/arpanauts/biomapper/blob/main/README.md"
 keywords = [
@@ -33,6 +33,7 @@ pandas = "^2.0.0"
 sqlalchemy = "^1.4.0"
 pyyaml = "^6.0.1"
 tqdm = "^4.66.1"
+libChEBIpy = "1.0.10"  # Import as 'libchebipy' in code
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
