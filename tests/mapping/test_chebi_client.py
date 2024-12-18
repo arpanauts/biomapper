@@ -76,8 +76,9 @@ def test_search_by_name_success(chebi_client: ChEBIClient, mock_entity: Mock) ->
     """Test successful name search with multiple results."""
     entities = [mock_entity, mock_entity]  # Two identical entities for testing
 
-    with patch("libchebipy.search", return_value=entities):
+    with patch("biomapper.mapping.chebi_client.chebi_search", return_value=entities):
         results = chebi_client.search_by_name("test")
+        assert isinstance(results, list)  # Verify it's a list
         assert len(results) == 2
         for result in results:
             assert isinstance(result, ChEBIResult)
@@ -93,8 +94,12 @@ def test_search_by_name_partial_failures(
     bad_entity = Mock()
     bad_entity.get_id.side_effect = ValueError("Bad ID")
 
-    with patch("libchebipy.search", return_value=[good_entity, bad_entity]):
+    with patch(
+        "biomapper.mapping.chebi_client.chebi_search",
+        return_value=[good_entity, bad_entity],
+    ):
         results = chebi_client.search_by_name("test")
+        assert isinstance(results, list)  # Verify it's a list
         assert len(results) == 1  # Only good entity should be included
         assert results[0].chebi_id == "CHEBI:12345"
 
@@ -105,6 +110,7 @@ def test_max_results_limit(chebi_client: ChEBIClient, mock_entity: Mock) -> None
 
     with patch("libchebipy.search", return_value=entities):
         results = chebi_client.search_by_name("test", max_results=3)
+        assert isinstance(results, list)  # Verify it's a list
         assert len(results) == 3
 
 
