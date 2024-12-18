@@ -27,7 +27,7 @@ share/python-wheels/
 MANIFEST
 .python-version
 
-# Raw data
+# Raw data & outputs
 *.csv
 *.tsv
 *.xlsx
@@ -37,12 +37,8 @@ MANIFEST
 *.yml
 *.jsonl
 *.parquet
-
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+*.png
+*_report.txt
 
 # Installer logs
 pip-log.txt
