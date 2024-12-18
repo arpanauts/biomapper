@@ -4,14 +4,16 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Optional, Dict
 import re
-from io import StringIO
 import pandas as pd
+import io
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 class RefMetError(Exception):
@@ -62,52 +64,159 @@ class RefMetClient:
 
         return session
 
-    def search_by_name(self, name: str) -> Optional[Dict[str, Any]]:
-        """Search RefMet by compound name.
+    def preprocess_complex_terms(self, term: str) -> list[str]:
+        """Break down complex terms into simpler searchable terms.
 
         Args:
-            name: Metabolite name to search for
+            term: Complex term like "Total HDL cholesterol"
+
+        Returns:
+            List of simpler terms to search
+        """
+        skip_words = {"total", "free", "ratio", "concentration", "average", "diameter"}
+
+        term = term.lower()
+        for split_word in ["in", "to", "of", "and"]:
+            term = term.replace(f" {split_word} ", ";")
+
+        parts = [p.strip() for p in term.split(";") if p.strip()]
+
+        cleaned_parts = []
+        for part in parts:
+            words = part.split()
+            words = [w for w in words if w not in skip_words]
+            if words:
+                cleaned_parts.append(" ".join(words))
+
+        return cleaned_parts
+
+    def search_by_name(self, name: str) -> Optional[Dict[str, Any]]:
+        """Search RefMet by compound name."""
+        # Clean and lowercase the name
+        clean_name = re.sub(r"[^a-zA-Z0-9\s\-]", " ", name)
+        clean_name = re.sub(r"\s+", " ", clean_name).strip().lower()
+
+        url = f"{self.config.base_url}/name_to_refmet_new_minID.php"
+        payload = {"metabolite_name": clean_name}
+
+        retries = 0
+        while retries < self.config.max_retries:
+            try:
+                response = self.session.post(
+                    url, data=payload, timeout=self.config.timeout
+                )
+                response.raise_for_status()
+
+                if not response.content:
+                    return None
+
+                # Parse TSV response
+                df = pd.read_csv(io.StringIO(response.text), sep="\t")
+                if df.empty:
+                    return None
+
+                # Extract first row
+                row = df.iloc[0]
+
+                # Helper function to safely get values
+                def safe_get(val: Any) -> str:
+                    return (
+                        str(val).strip()
+                        if pd.notna(val) and str(val).strip() != "-"
+                        else ""
+                    )
+
+                # Get ChEBI ID and add prefix if it's a valid ID
+                chebi_id = safe_get(row.get("ChEBI_ID"))
+                if chebi_id and chebi_id.isdigit():
+                    chebi_id = f"CHEBI:{chebi_id}"
+
+                # Map all expected fields
+                result = {
+                    "refmet_id": safe_get(row.get("RefMet_ID")),
+                    "name": safe_get(row.get("Standardized name")),
+                    "formula": safe_get(row.get("Formula")),
+                    "exact_mass": safe_get(row.get("Exact mass")),
+                    "inchikey": safe_get(row.get("INCHI_KEY")),
+                    "pubchem_id": safe_get(row.get("PubChem_CID")),
+                    "chebi_id": chebi_id,
+                    "hmdb_id": safe_get(row.get("HMDB_ID")),
+                    "kegg_id": safe_get(row.get("KEGG_ID")),
+                }
+
+                # Remove empty fields
+                result = {k: v for k, v in result.items() if v}
+
+                return result if result else None
+
+            except Exception as e:
+                logger.error(f"RefMet search failed: {str(e)}")
+                retries += 1
+                if retries == self.config.max_retries:
+                    return None
+
+        return None
+
+    def _direct_search(self, name: str) -> Optional[Dict[str, Any]]:
+        """Internal method for direct RefMet search.
+
+        Args:
+            name: Name to search for
 
         Returns:
             Dict containing compound info or None if search fails
         """
+        # Clean the name
+        clean_name = re.sub(r"[^a-zA-Z0-9\s\-]", " ", name)
+        clean_name = re.sub(r"\s+", " ", clean_name).strip().lower()
+
+        url = f"{self.config.base_url}/name_to_refmet_new_minID.php"
+        payload = {"metabolite_name": clean_name}
+
         try:
-            # Clean the name
-            clean_name = re.sub(r"[^a-zA-Z0-9\s]", " ", name)
-            clean_name = " ".join(clean_name.split())
-
-            url = f"{self.config.base_url}/name_to_refmet_new_minID.php"
-            payload = {"metabolite_name": clean_name}
-
             response = self.session.post(url, data=payload, timeout=self.config.timeout)
             response.raise_for_status()
 
             if not response.content:
                 return None
 
-            # Parse tab-delimited response using pandas
-            try:
-                df = pd.read_csv(StringIO(response.text), sep="\t")
-                if df.empty or len(df.columns) < 6:  # Check for required columns
-                    return None
-            except pd.errors.EmptyDataError:
-                return None
-            except pd.errors.ParserError:  # Handle malformed TSV
+            return self._process_response(response.text)
+
+        except Exception as e:
+            logger.warning(f"RefMet search failed for '{name}': {str(e)}")
+            return None
+
+    def _process_response(
+        self, response_text: str
+    ) -> Optional[dict[str, Optional[str]]]:
+        """Process the RefMet response text."""
+        try:
+            df = pd.read_csv(io.StringIO(response_text), sep="\t")
+            if df.empty:
                 return None
 
-            # Get first match
-            try:
-                result = df.iloc[0].to_dict()
-                return {
-                    "refmet_id": str(result.get("refmet_id", "")),
-                    "name": str(result.get("name", "")),
-                    "formula": str(result.get("formula", "")),
-                    "exact_mass": str(result.get("exact_mass", "")),
-                    "inchikey": str(result.get("inchikey", "")),
-                    "pubchem_id": str(result.get("pubchem_id", "")),
-                }
-            except (KeyError, IndexError):
+            row = df.iloc[0]
+            refmet_id = row.get("RefMet_ID", "")
+            if not refmet_id or pd.isna(refmet_id):
                 return None
 
-        except requests.RequestException:
+            # Ensure REFMET: prefix
+            if not refmet_id.startswith("REFMET:"):
+                refmet_id = f"REFMET:{refmet_id}"
+
+            return {
+                "refmet_id": refmet_id,
+                "name": str(row.get("Standardized name", "")),
+                "formula": str(row.get("Formula", "")),
+                "exact_mass": str(row.get("Exact mass", "")),
+                "inchikey": str(row.get("INCHI_KEY", "")),
+                "pubchem_id": str(row.get("PubChem_CID", "")),
+                "chebi_id": f"CHEBI:{row['ChEBI_ID']}"
+                if pd.notna(row.get("ChEBI_ID"))
+                else None,
+                "hmdb_id": str(row.get("HMDB_ID", "")),
+                "kegg_id": str(row.get("KEGG_ID", "")),
+            }
+        except Exception as e:
+            logger.error(f"Error processing RefMet response: {e}")
             return None
