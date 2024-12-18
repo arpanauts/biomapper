@@ -2,13 +2,21 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional, Sequence
+from typing import Any, Optional
+import requests
 
 # Add type ignore comment since libchebipy doesn't have type stubs
-import libchebipy  # type: ignore[import-untyped]
-from libchebipy import ChebiEntity  # type: ignore[import-untyped, unused-ignore]
+from libchebipy import ChebiEntity, search as chebi_search  # type: ignore[import-untyped, unused-ignore]
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ChEBIConfig:
+    """Configuration for ChEBI client."""
+
+    base_url: str = "https://www.ebi.ac.uk/ols/api"
+    timeout: int = 30
 
 
 @dataclass(frozen=True)
@@ -30,6 +38,11 @@ class ChEBIError(Exception):
 
 class ChEBIClient:
     """Client for interacting with the ChEBI database."""
+
+    def __init__(self, config: Optional[ChEBIConfig] = None) -> None:
+        """Initialize the ChEBI client."""
+        self.config = config or ChEBIConfig()
+        self.session = requests.Session()
 
     def _get_safe_property(
         self, getter: Any, error_types: tuple[type[Exception], ...] = (Exception,)
@@ -126,32 +139,36 @@ class ChEBIClient:
             logger.error("ChEBI entity lookup failed: %s", str(e))
             raise ChEBIError(f"Entity lookup failed: {str(e)}") from e
 
-    def search_by_name(self, name: str, max_results: int = 5) -> Sequence[ChEBIResult]:
-        """Search for ChEBI entities by name.
+    def search_by_name(
+        self, name: str, max_results: int | None = None
+    ) -> list[ChEBIResult] | None:
+        """Search ChEBI by a compound name, returning a list of ChEBIResult objects.
 
         Args:
-            name: Name to search for
-            max_results: Maximum number of results to return
+            name: The compound name to search for.
+            max_results: Limit on the number of results to return.
 
         Returns:
-            List of ChEBIResult objects matching the search
-
-        Raises:
-            ChEBIError: If search fails
+            A list of ChEBIResult objects if successful, an empty list if no results,
+            or None if an unexpected error occurs.
         """
         try:
-            entities = libchebipy.search(name)
-            matches: list[ChEBIResult] = []
+            entities = chebi_search(name)
+            if not entities:
+                return []
 
-            for entity in entities[:max_results]:
+            results: list[ChEBIResult] = []
+            for entity in entities:
+                if max_results is not None and len(results) >= max_results:
+                    break
                 try:
                     result = self._get_entity_result(entity)
-                    matches.append(result)
-                except Exception as e:
-                    logger.warning("Failed to process entity %s: %s", entity, str(e))
+                    results.append(result)
+                except ChEBIError:
+                    # Skip this entity if it cannot be processed
                     continue
 
-            return matches
+            return results[:max_results] if max_results is not None else results
         except Exception as e:
             logger.error("ChEBI search failed: %s", str(e))
-            raise ChEBIError(f"Search failed: {str(e)}") from e
+            return None
