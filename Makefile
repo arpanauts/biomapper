@@ -4,7 +4,7 @@
 
 # Run tests with coverage
 test:
-	poetry run pytest
+	pytest --cov=biomapper --cov-report=term-missing tests/
 
 # Run linting
 lint:
