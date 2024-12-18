@@ -3369,10 +3369,9 @@ files = [
 
 [extras]
 api = []
-full = ["matplotlib", "seaborn", "upsetplot"]
-viz = ["matplotlib", "seaborn", "upsetplot"]
+full = []
 
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "f48de374ae305a930de83a8ad1f9c1a69b92043607892d090580a18fa93a841e"
+content-hash = "ef022c041b80fffdeb51d257bdd69dc326d25a409f9ebe285e5d665f7f0d39a6"
