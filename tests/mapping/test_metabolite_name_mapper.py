@@ -50,8 +50,8 @@ def test_map_single_name(mapper: MetaboliteNameMapper) -> None:
         "inchikey": "TEST123",
     }
 
-    # Set up UniChem mock response
-    mock_unichem.get_compound_info_by_inchikey.return_value = {
+    # Set up UniChem mock response - Fix: Use get_compound_info_by_src_id instead
+    mock_unichem.get_compound_info_by_src_id.return_value = {
         "chebi_ids": ["CHEBI:123"],
         "pubchem_ids": ["CID123"],
     }
