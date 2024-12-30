@@ -95,7 +95,9 @@ class MetaboliteNameMapper:
                 if inchikey:
                     try:
                         unichem_result = (
-                            self.unichem_client.get_compound_info_by_inchikey(inchikey)
+                            self.unichem_client.get_compound_info_by_src_id(
+                                inchikey, "inchikey"
+                            )
                         )
                         if unichem_result:
                             # Get ChEBI ID if not already found
