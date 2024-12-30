@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "biomapper"
-version = "0.3.2"
+version = "0.3.3"
 description = "A unified Python toolkit for biological data harmonization and ontology mapping"
 authors = ["Trent Leslie <trent.leslie@phenomehealth.org>"]
 license = "MIT"
@@ -43,6 +43,8 @@ openai = "^1.14.0"
 python-dotenv = "^1.0.1"
 dspy-ai = "^2.1.8"
 cloudpickle = "^3.0.0"
+python-multipart = "0.0.10"
+cryptography = ">=43.0.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
