@@ -6,21 +6,22 @@ A unified Python toolkit for biological data harmonization and ontology mapping.
 
 ### Core Functionality
 - **ID Standardization**: Unified interface for standardizing biological identifiers
-- **Ontology Mapping**: Comprehensive ontology mapping using major biological databases
+- **Ontology Mapping**: Comprehensive ontology mapping using major biological databases and AI-powered techniques
 - **Data Validation**: Robust validation of input data and mappings
 - **Extensible Architecture**: Easy integration of new data sources and mapping services
 
 ### Supported Systems
 
 #### ID Standardization Tools
-- BridgeDb
-- RefMet
-- RaMP-DB
+- RaMP-DB: Integration with the Rapid Mapping Database for metabolites and pathways
 
-#### Ontology Mapping Services
-- UMLS Metathesaurus
-- Ontology Lookup Service (OLS)
-- BioPortal
+#### Mapping Services
+- ChEBI: Chemical Entities of Biological Interest database integration
+- UniChem: Cross-referencing of chemical structure identifiers
+- UniProt: Protein-focused mapping capabilities
+- RefMet: Reference list of metabolite names and identifiers
+- RAG-Based Mapping: AI-powered mapping using Retrieval Augmented Generation
+- Multi-Provider RAG: Combining multiple data sources for improved mapping accuracy
 
 ## Installation
 
@@ -76,20 +77,18 @@ poetry install
 ## Quick Start
 
 ```python
-from biomapper import AnalyteMetadata
-from biomapper.standardization import BridgeDBHandler, RaMPClient
+from biomapper.mapping import UniProtFocusedMapper, MetaboliteNameMapper
+from biomapper.standardization import RaMPClient
 
-# Example 1: Using BridgeDB
-# Initialize metadata handler
-metadata = AnalyteMetadata()
+# Example 1: Using UniProt-focused mapping
+uniprot_mapper = UniProtFocusedMapper()
+protein_mapping = uniprot_mapper.map_identifier("P12345")
 
-# Create standardization handler
-bridge_handler = BridgeDBHandler()
+# Example 2: Using Metabolite Name Mapping
+metabolite_mapper = MetaboliteNameMapper()
+metabolite_mapping = metabolite_mapper.map_name("glucose")
 
-# Process identifiers
-results = bridge_handler.standardize(["P12345", "Q67890"])
-
-# Example 2: Using RaMP-DB
+# Example 3: Using RaMP-DB
 # Initialize the RaMP client
 ramp_client = RaMPClient()
 
@@ -99,6 +98,12 @@ versions = ramp_client.get_source_versions()
 # Get pathways for metabolites
 # Example: Get pathways for Creatine (HMDB0000064)
 pathways = ramp_client.get_pathways_from_analytes(["hmdb:HMDB0000064"])
+
+# Example 4: Using RAG-based mapping
+from biomapper.mapping import RagMapper
+
+rag_mapper = RagMapper()
+rag_results = rag_mapper.map_name("alpha-D-glucose")
 ```
 
 ## Development
@@ -178,17 +183,18 @@ For support, please open an issue in the GitHub issue tracker.
 
 ## Roadmap
 
-- [ ] Initial release with core functionality
-- [ ] Add support for additional ontology services
-- [ ] Implement caching layer
+- [x] Initial release with core functionality
+- [x] Implement RAG-based mapping capabilities
+- [x] Add support for major chemical/biological databases (ChEBI, UniChem, UniProt)
+- [ ] Add caching layer for improved performance
+- [ ] Expand RAG capabilities with more specialized models
 - [ ] Add batch processing capabilities
 - [ ] Develop REST API interface
 
 ## Acknowledgments
 
-- [BridgeDb](https://www.bridgedb.org/)
-- [RefMet](https://refmet.metabolomicsworkbench.org/)
 - [RaMP-DB](http://rampdb.org/)
-- [UMLS](https://www.nlm.nih.gov/research/umls/index.html)
-- [OLS](https://www.ebi.ac.uk/ols/index)
-- [BioPortal](https://bioportal.bioontology.org/)
+- [ChEBI](https://www.ebi.ac.uk/chebi/)
+- [UniChem](https://www.ebi.ac.uk/unichem/)
+- [UniProt](https://www.uniprot.org/)
+- [RefMet](https://refmet.metabolomicsworkbench.org/)
