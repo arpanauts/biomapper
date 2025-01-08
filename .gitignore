@@ -39,6 +39,7 @@ MANIFEST
 *.parquet
 *.png
 *_report.txt
+*.sdf
 
 # Installer logs
 pip-log.txt
@@ -166,7 +167,6 @@ cython_debug/
 # Project specific
 arivale_ukbb_comparison/
 tests_*.py*
-main.py
 tutorial_*.py*
 
 # PyCharm
