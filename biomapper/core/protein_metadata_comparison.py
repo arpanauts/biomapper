@@ -10,7 +10,7 @@ import pandas as pd
 from tqdm import tqdm
 import concurrent.futures
 
-from ..mapping.uniprot_focused_mapper import UniprotFocusedMapper
+from ..mapping.clients.uniprot_focused_mapper import UniprotFocusedMapper
 
 
 class ProteinMapping(TypedDict):
