@@ -36,7 +36,7 @@ def mock_openai_response() -> ChatCompletion:
 
 
 @pytest.fixture
-def mock_openai_client(mock_openai_response):
+def mock_openai_client(mock_openai_response: ChatCompletion) -> Mock:
     """Create a mock OpenAI instance."""
     instance = Mock()
     instance.chat.completions.create.return_value = mock_openai_response
@@ -44,7 +44,7 @@ def mock_openai_client(mock_openai_response):
 
 
 @pytest.fixture
-def mock_langfuse():
+def mock_langfuse() -> Mock:
     """Create a mock Langfuse client."""
     mock = Mock()
     mock.trace.return_value.id = "test_trace_id"
@@ -52,7 +52,9 @@ def mock_langfuse():
 
 
 @pytest.fixture
-def mock_llm_mapper(mock_openai_client, mock_langfuse, monkeypatch):
+def mock_llm_mapper(
+    mock_openai_client: Mock, mock_langfuse: Mock, monkeypatch: pytest.MonkeyPatch
+) -> LLMMapper:
     """Create a mock LLMMapper instance with mocked dependencies."""
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-key")
@@ -80,11 +82,11 @@ def mock_llm_mapper(mock_openai_client, mock_langfuse, monkeypatch):
     ],
 )
 def test_map_term(
-    mock_llm_mapper,
-    term,
-    target_ontology,
-    expected_response,
-):
+    mock_llm_mapper: LLMMapper,
+    term: str,
+    target_ontology: str | None,
+    expected_response: str,
+) -> None:
     """Test mapping a single term."""
     # Map term
     result = mock_llm_mapper.map_term(term, target_ontology)
@@ -96,13 +98,13 @@ def test_map_term(
     assert result.matches[0].score == 0.8
 
 
-def test_estimate_cost(mock_llm_mapper):
+def test_estimate_cost(mock_llm_mapper: LLMMapper) -> None:
     """Test cost estimation."""
     cost = mock_llm_mapper._estimate_cost(1000)
     assert cost > 0
 
 
-def test_map_term_with_metadata(mock_llm_mapper):
+def test_map_term_with_metadata(mock_llm_mapper: LLMMapper) -> None:
     """Test mapping a term with additional metadata."""
     # Map term with metadata
     metadata = {"source": "test"}
