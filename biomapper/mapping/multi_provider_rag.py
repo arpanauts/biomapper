@@ -4,13 +4,16 @@ from typing import Dict, List, Optional, Any
 
 import pandas as pd
 from pydantic import BaseModel
+from langfuse.decorators import langfuse_context
 
-from .rag_mapper import RAGMapper
-from ..schemas.llm_schema import LLMMatch, LLMMapperResult, MatchConfidence
+from .rag import RAGCompoundMapper
+from ..schemas.rag_schema import LLMMapperResult, RAGMetrics, Match
+from ..schemas.llm_schema import LLMMatch, MatchConfidence
 from ..schemas.provider_schemas import (
     ProviderType,
     ProviderConfig,
 )
+from ..schemas.store_schema import VectorStoreConfig
 
 
 class MultiProviderSignatureBase:
@@ -30,42 +33,28 @@ class CrossReferenceResult(BaseModel):
     confidence: float
 
 
-class MultiProviderMapper(RAGMapper):
+class MultiProviderMapper(RAGCompoundMapper):
     """Multi-provider RAG mapper with cross-reference resolution."""
 
     def __init__(
         self,
         providers: Dict[ProviderType, ProviderConfig],
-        model: str = "gpt-4",
-        temperature: float = 0.0,
-        max_tokens: int = 1000,
+        langfuse_key: Optional[str] = None,
+        store_config: Optional[VectorStoreConfig] = None,
     ):
         """Initialize multi-provider mapper.
 
         Args:
             providers: Dictionary of provider configurations
-            model: OpenAI model identifier
-            temperature: Sampling temperature
-            max_tokens: Maximum tokens per request
+            langfuse_key: Optional Langfuse API key for monitoring
+            store_config: Optional vector store configuration
         """
-        # Get first available data path to use as compounds path
-        compounds_path = next(
-            (config.data_path for config in providers.values() if config.data_path),
-            None,
-        )
-        if not compounds_path:
-            raise ValueError("At least one provider must have a valid data_path")
-
-        # Initialize base with first provider's data path
-        super().__init__(
-            compounds_path=compounds_path,
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        # Initialize base RAG mapper
+        super().__init__(langfuse_key=langfuse_key, store_config=store_config)
 
         self.providers = providers
         self.knowledge_bases: Dict[ProviderType, pd.DataFrame] = {}
+        self._initialize_predictor()
 
         # Load knowledge bases for each provider
         for provider_type, config in providers.items():
@@ -82,9 +71,6 @@ class MultiProviderMapper(RAGMapper):
                 df = self._preprocess_refmet(df)
 
             self.knowledge_bases[provider_type] = df
-
-        # Initialize DSPy predictor with multi-provider signature
-        self.predictor = self._initialize_predictor()
 
     def _load_provider_kb(
         self, provider: ProviderType, config: ProviderConfig
@@ -152,6 +138,37 @@ class MultiProviderMapper(RAGMapper):
             axis=1,
         )
         return df
+
+    def _initialize_predictor(self) -> None:
+        """Initialize the prediction components."""
+        from dspy import Predict  # type: ignore
+
+        self.predictor = Predict(MultiProviderSignatureBase)
+
+    def _process_predictor_output(
+        self, output: Any, *, query_term: str, latency: float, tokens_used: int
+    ) -> Any:
+        """Process the output from the predictor.
+
+        Args:
+            output: Raw output from predictor
+            query_term: The query term being processed
+            latency: Processing latency in seconds
+            tokens_used: Number of tokens used
+
+        Returns:
+            Processed output
+        """
+        # Process the output and track metrics
+        if self.metrics:
+            metrics = RAGMetrics(
+                retrieval_latency_ms=0.0,  # No retrieval in this case
+                generation_latency_ms=latency * 1000,  # Convert to ms
+                total_latency_ms=latency * 1000,  # Convert to ms
+                tokens_used=tokens_used,
+            )
+            self.metrics.record_metrics(metrics)
+        return output
 
     def _retrieve_multi_context(
         self, query: str, providers: Optional[List[ProviderType]] = None, k: int = 3
@@ -223,25 +240,55 @@ class MultiProviderMapper(RAGMapper):
         Returns:
             List of cross-reference matches
         """
-        # This is a simplified implementation
-        # In practice, you'd want to use the xrefs field and proper ID matching
         kb = self.knowledge_bases[provider]
-        mask = kb["text"].str.contains(match.target_name, case=False, regex=False)
-        results = []
 
-        for _, row in kb[mask].iterrows():
-            results.append(
-                LLMMatch(
-                    target_id=row.get("id", ""),
-                    target_name=row.get("name", ""),
-                    confidence=MatchConfidence.MEDIUM,
-                    score=0.7,
-                    reasoning=f"Cross-reference match from {provider}",
-                    metadata={"provider": provider.value},
+        # Verify required columns exist
+        required_cols = {"id", "name", "text"}
+        missing_cols = required_cols - set(kb.columns)
+        if missing_cols:
+            return []  # Silently return empty list if columns are missing
+
+        # Try exact ID match first
+        id_mask = kb["id"] == match.target_id
+        if id_mask.any():
+            results = []
+            for _, row in kb[id_mask].iterrows():
+                results.append(
+                    LLMMatch(
+                        target_id=str(row["id"]),
+                        target_name=str(row["name"]),
+                        confidence=MatchConfidence.HIGH,
+                        score=0.9,
+                        reasoning=f"Exact ID match from {provider}",
+                        metadata={"provider": provider.value},
+                    )
                 )
-            )
+            return results
 
-        return results
+        # Fall back to text search if no ID match
+        try:
+            text_mask = kb["text"].str.contains(
+                match.target_name, case=False, regex=False
+            )
+            if not text_mask.any():
+                return []
+
+            results = []
+            for _, row in kb[text_mask].iterrows():
+                results.append(
+                    LLMMatch(
+                        target_id=str(row["id"]),
+                        target_name=str(row["name"]),
+                        confidence=MatchConfidence.MEDIUM,
+                        score=0.7,
+                        reasoning=f"Text match from {provider}",
+                        metadata={"provider": provider.value},
+                    )
+                )
+            return results
+
+        except (AttributeError, KeyError):
+            return []  # Handle any pandas errors gracefully
 
     def _map_term_with_providers(
         self,
@@ -260,13 +307,15 @@ class MultiProviderMapper(RAGMapper):
             Mapping result with cross-references
         """
         metadata = metadata or {}
-        # Start tracing with fixed ID for testing
-        trace = self.langfuse.trace(
-            name=f"multi_provider_map_term_{term}", id=metadata.get("trace_id")
-        )
+        # Get trace_id from metadata
+        trace_id = metadata.get("trace_id")
         initial_result = None
 
         try:
+            # Start tracing with fixed ID for testing
+            if trace_id and self.tracker.client:
+                langfuse_context.update_current_trace(id=trace_id)
+
             # Get contexts from all relevant providers
             contexts = self._retrieve_multi_context(term, target_providers)
 
@@ -274,42 +323,106 @@ class MultiProviderMapper(RAGMapper):
             prediction = self.predictor(
                 contexts=contexts,
                 query=term,
-                target_providers=target_providers or list(self.providers.keys()),
+                target_providers=target_providers,
             )
+            latency_ms = prediction.latency if hasattr(prediction, "latency") else 0.0
 
-            # Process initial matches
-            initial_result = self._process_predictor_output(
-                output=prediction.matches,
+            # Convert prediction matches to Match objects
+            matches = []
+            for match in prediction.matches:
+                matches.append(
+                    Match(
+                        id=match.target_id,
+                        name=match.target_name,
+                        confidence=str(match.score),
+                        reasoning=match.reasoning or "",
+                        target_name=match.target_name,
+                        target_id=match.target_id,
+                        metadata=match.metadata or {},
+                    )
+                )
+
+            # Create initial result
+            initial_result = LLMMapperResult(
                 query_term=term,
-                latency=prediction.latency,
-                tokens_used=prediction.tokens_used,
+                best_match=matches[0]
+                if matches
+                else Match(
+                    id="",
+                    name="",
+                    confidence="0.0",
+                    reasoning="No match found",
+                    target_name="",
+                    target_id="",
+                ),
+                matches=matches,
+                trace_id=trace_id,
+                metrics={
+                    "confidence": float(matches[0].confidence) if matches else 0.0,
+                    "latency_ms": latency_ms,
+                },
             )
-
-            # Set trace ID in result
-            initial_result.trace_id = trace.id
 
             # Resolve cross-references
-            xref_results = self._resolve_cross_references(
-                initial_result.matches, target_providers or list(self.providers.keys())
-            )
+            if initial_result and target_providers:
+                # Convert Match objects back to LLMMatch for cross-reference resolution
+                llm_matches: List[LLMMatch] = []
+                for match in initial_result.matches:
+                    if match.target_id and match.target_name:
+                        llm_matches.append(
+                            LLMMatch(
+                                target_id=match.target_id,
+                                target_name=match.target_name,
+                                confidence=MatchConfidence.HIGH
+                                if float(match.confidence) > 0.8
+                                else MatchConfidence.LOW,
+                                score=float(match.confidence),
+                                reasoning=match.reasoning or "",
+                                metadata={
+                                    k: str(v) for k, v in (match.metadata or {}).items()
+                                },
+                            )
+                        )
 
-            # Update matches with cross-reference information
-            if xref_results:
-                best_result = xref_results[0]
-                initial_result.matches = [best_result.primary_match]
-                initial_result.best_match = best_result.primary_match
+                if (
+                    llm_matches
+                ):  # Only resolve cross-references if we have valid matches
+                    xrefs = self._resolve_cross_references(
+                        llm_matches,
+                        target_providers,
+                    )
 
-                # Add cross-reference matches
-                for provider_matches in best_result.xrefs.values():
-                    initial_result.matches.extend(provider_matches)
-
-            # Update trace status to completed
-            trace.update(status="completed")
+                    if xrefs:
+                        # Convert CrossReferenceResult to Match objects
+                        xref_matches = []
+                        for xref in xrefs:
+                            for provider_matches in xref.xrefs.values():
+                                for match in provider_matches:
+                                    if match.target_id and match.target_name:
+                                        xref_matches.append(
+                                            Match(
+                                                id=match.target_id,
+                                                name=match.target_name,
+                                                confidence=str(match.score),
+                                                reasoning=match.reasoning or "",
+                                                target_name=match.target_name,
+                                                target_id=match.target_id,
+                                                metadata={
+                                                    k: str(v)
+                                                    for k, v in (
+                                                        match.metadata or {}
+                                                    ).items()
+                                                },
+                                            )
+                                        )
+                        initial_result.matches = (
+                            xref_matches  # Replace matches instead of extending
+                        )
 
             return initial_result
         except Exception as e:
-            # Update trace status to failed on error and re-raise
-            trace.update(status="failed", error=str(e))
+            if trace_id and self.tracker.client:
+                self.tracker.record_error(trace_id, str(e))
             raise
 
     def map_term(
