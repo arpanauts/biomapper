@@ -4,15 +4,15 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Optional, List, Callable, Any
+from typing import List, Optional, Callable, Any
 import re
 from collections import defaultdict
 
 import pandas as pd
 
-from .chebi_client import ChEBIClient
-from .refmet_client import RefMetClient
-from .unichem_client import UniChemClient
+from .clients.chebi_client import ChEBIClient
+from .clients.refmet_client import RefMetClient
+from .clients.unichem_client import UniChemClient
 
 logger = logging.getLogger(__name__)
 
