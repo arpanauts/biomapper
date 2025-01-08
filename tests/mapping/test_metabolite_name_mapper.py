@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from requests_mock import Mocker
 
-from biomapper.mapping.chebi_client import ChEBIResult
+from biomapper.mapping.clients.chebi_client import ChEBIResult
 from biomapper.mapping.metabolite_name_mapper import (
     MetaboliteClass,
     MetaboliteMapping,
