@@ -3,5 +3,5 @@
 from .standardization import RaMPClient
 from .core import SetAnalyzer
 
-__version__ = "0.3.3"
+__version__ = "0.4.0"
 __all__ = ["RaMPClient", "SetAnalyzer"]
