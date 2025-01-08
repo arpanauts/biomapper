@@ -40,6 +40,7 @@ MANIFEST
 *.png
 *_report.txt
 *.sdf
+*.sqlite3
 
 # Installer logs
 pip-log.txt
