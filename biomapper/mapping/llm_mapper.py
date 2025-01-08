@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, TYPE_CHECKING
 import time
 import os
 
-from langfuse import Langfuse  # type: ignore
+from langfuse import Langfuse
 from openai import OpenAI
 
 if TYPE_CHECKING:
