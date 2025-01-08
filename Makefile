@@ -20,7 +20,7 @@ format:
 
 # Type checking
 typecheck:
-	poetry run mypy .
+	poetry run mypy --python-version=3.11 .
 
 # Run all checks
 check: format lint typecheck test
