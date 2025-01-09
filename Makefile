@@ -1,4 +1,7 @@
-.PHONY: test lint format typecheck check clean docs docs-clean docs-serve full-check
+.PHONY: test lint lint-fix format typecheck check clean docs docs-clean docs-serve full-check all
+
+# Default target when just running 'make'
+all: check
 
 # Run tests with coverage
 test:
@@ -22,7 +25,7 @@ typecheck:
 
 # Build documentation
 docs:
-	cd docs && make html
+	cd docs && SPHINX_DEBUG=1 make html
 
 # Clean documentation build files
 docs-clean:
@@ -46,16 +49,13 @@ clean:
 	find . -type d -name ".ruff_cache" -exec rm -r {} +
 	cd docs && make clean
 
-# Run all checks and build docs only if all checks pass
+# Run all checks and build docs
 check:
 	poetry run ruff format . && \
 	poetry run ruff check . && \
 	poetry run mypy --python-version=3.11 . && \
 	pytest --cov=biomapper --cov-report=term-missing tests/ && \
-	cd docs && make html
+	(cd docs && SPHINX_DEBUG=1 make html && cd ..)
 
 # Full check with clean first
 full-check: clean check
-
-# Default target when just running 'make'
-all: check
