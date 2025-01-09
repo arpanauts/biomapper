@@ -1,5 +1,5 @@
 Welcome to biomapper's documentation!
-====================================
+=====================================
 
 biomapper is a Python package for biological data harmonization and ontology mapping.
 
