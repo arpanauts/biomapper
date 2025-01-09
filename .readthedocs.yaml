@@ -10,10 +10,6 @@ sphinx:
 
 python:
   install:
+    - requirements: docs/requirements.txt
     - method: pip
       path: .
-      extra_requirements:
-        - sphinx
-        - sphinx-rtd-theme
-        - sphinx-autodoc-typehints
-        - myst-parser
