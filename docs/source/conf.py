@@ -1,8 +1,7 @@
 import os
 import sys
-from typing import Any, Dict, List
 
-sys.path.insert(0, os.path.abspath('../..'))
+sys.path.insert(0, os.path.abspath("../.."))
 
 # Project information
 project = "biomapper"
@@ -27,16 +26,19 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 
 # Source suffixes
 source_suffix = {
-    '.rst': 'restructuredtext',
-    '.md': 'markdown',
+    ".rst": "restructuredtext",
+    ".md": "markdown",
 }
 
 # HTML output options
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
 html_theme_options = {
-    'navigation_depth': 4,
-    'titles_only': False,
+    "navigation_depth": 4,
+    "titles_only": False,
+    "display_version": True,  # Added: Show version number
+    "prev_next_buttons_location": "both",  # Added: Navigation buttons
+    "style_external_links": True,  # Added: Mark external links
 }
 
 # Napoleon settings
@@ -57,11 +59,11 @@ napoleon_type_aliases = None
 # Autodoc settings
 autodoc_typehints = "description"
 autodoc_default_options = {
-    'members': True,
-    'member-order': 'bysource',
-    'special-members': '__init__',
-    'undoc-members': True,
-    'exclude-members': '__weakref__'
+    "members": True,
+    "member-order": "bysource",
+    "special-members": "__init__",
+    "undoc-members": True,
+    "exclude-members": "__weakref__",
 }
 
 # MyST settings
@@ -69,3 +71,10 @@ myst_enable_extensions = [
     "colon_fence",
     "deflist",
 ]
+
+# Added: Better intersphinx linking
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
+    'pandas': ('https://pandas.pydata.org/docs/', None),
+}
