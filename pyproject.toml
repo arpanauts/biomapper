@@ -7,7 +7,7 @@ license = "MIT"
 readme = "README.md"
 packages = [{include = "biomapper", from = "."}]
 repository = "https://github.com/arpanauts/biomapper"
-documentation = "https://github.com/arpanauts/biomapper/blob/main/README.md"
+documentation = "https://biomapper.readthedocs.io/"
 keywords = [
     "bioinformatics",
     "ontology",
@@ -64,6 +64,10 @@ pandas-stubs = "^2.2.3.241126"
 types-tqdm = "^4.67.0.20241119"
 requests-mock = "^1.11.0"
 # OpenAI package includes its own type hints, so types-openai is not needed
+sphinx = "^8.1.3"
+sphinx-rtd-theme = "^3.0.2"
+sphinx-autodoc-typehints = "^3.0.0"
+myst-parser = "^4.0.0"
 
 [tool.poetry.extras]
 api = ["fastapi", "uvicorn"]  # For potential REST API functionality
