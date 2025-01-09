@@ -11,5 +11,14 @@ sphinx:
 
 python:
   install:
+    - method: pip
+      path: .
     - method: poetry
       path: .
+      extra_requirements:
+        - docs
+
+# Required for Poetry support
+search:
+  ignore:
+    - poetry.lock
