@@ -46,6 +46,14 @@ MANIFEST
 vector_store/
 hmdb_metabolites.xml
 
+# Keep specific txt files
+!hmdb_metabolites_sample.txt
+!tests_protein_set.py.txt
+!docs/requirements.txt
+
+# Ignore docs/build/ directory entirely
+docs/build/
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
@@ -83,7 +91,7 @@ instance/
 .scrapy
 
 # Sphinx documentation
-docs/_build/
+#docs/_build/
 
 # PyBuilder
 .pybuilder/
@@ -168,9 +176,6 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
-
-# Documentation
-docs/build/
 
 # Project specific
 arivale_ukbb_comparison/
