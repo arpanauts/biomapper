@@ -41,6 +41,10 @@ MANIFEST
 *_report.txt
 *.sdf
 *.sqlite3
+*.xml
+*.bin
+vector_store/
+hmdb_metabolites.xml
 
 # Installer logs
 pip-log.txt
@@ -171,4 +175,4 @@ docs/build/
 # Project specific
 arivale_ukbb_comparison/
 tests_*.py*
-tutorial_*.py*
+#tutorial_*.py*
