@@ -2,3 +2,5 @@
 # Ignore assert statements in test files
 [lint.per-file-ignores]
 "tests/*" = ["S101"] 
+# Allow tutorial files to have more flexible formatting for better documentation
+"examples/*" = ["E402", "F841", "F811"]
