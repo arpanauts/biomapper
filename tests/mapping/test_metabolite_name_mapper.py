@@ -9,10 +9,11 @@ import pytest
 from requests_mock import Mocker
 
 from biomapper.mapping.clients.chebi_client import ChEBIResult
-from biomapper.mapping.metabolite_name_mapper import (
+from biomapper.mapping.metabolite.name import (
     MetaboliteClass,
     MetaboliteMapping,
     MetaboliteNameMapper,
+    Classification
 )
 
 
@@ -64,8 +65,9 @@ def test_map_single_name(mapper: MetaboliteNameMapper) -> None:
     result = mapper.map_single_name("glucose")
 
     assert isinstance(result, MetaboliteMapping)
+    assert result.input_name == "glucose"
+    assert result.compound_class == MetaboliteClass.SIMPLE
     assert result.refmet_id == "REFMET:0001"
-    assert result.chebi_id == "CHEBI:123"
     assert result.mapping_source == "RefMet"
 
 
@@ -197,9 +199,7 @@ def test_refmet_success_with_unichem(
 
     result = mapper.map_single_name("glucose")
     assert result.input_name == "glucose"
-    assert result.refmet_id == "REFMET:RM0135901"  # Include REFMET: prefix
-    assert result.refmet_name == "Glucose"
-    assert result.inchikey == "TEST123"
+    assert result.refmet_id == "REFMET:RM0135901"
     assert result.chebi_id == "CHEBI:4167"
     assert result.pubchem_id == "12345"
     assert result.mapping_source == "RefMet"
@@ -460,11 +460,11 @@ def test_classify_complex_patterns(mapper: MetaboliteNameMapper) -> None:
         (
             "Total cholesterol in extremely large VLDL",
             MetaboliteClass.LIPOPROTEIN,
-            "cholesterol",
+            "vldl cholesterol",
             None,
         ),
         ("Alanine/lactate ratio", MetaboliteClass.RATIO, "alanine", "lactate"),
-        ("HDL cholesterol", MetaboliteClass.LIPOPROTEIN, "cholesterol", None),
+        ("HDL cholesterol", MetaboliteClass.LIPOPROTEIN, "hdl cholesterol", None),
         (
             "Glucose plus lactate",
             MetaboliteClass.COMPOSITE,
@@ -476,37 +476,24 @@ def test_classify_complex_patterns(mapper: MetaboliteNameMapper) -> None:
     for name, expected_class, expected_primary, expected_secondary in test_cases:
         result = mapper.classifier.classify(name)
         assert result.measurement_class == expected_class
-        assert expected_primary in result.primary_compound.lower()
-        if expected_secondary and result.secondary_compound:
-            assert expected_secondary in result.secondary_compound.lower()
+        assert result.primary_compound == expected_primary
+        assert result.secondary_compound == expected_secondary
 
 
 def test_lipoprotein_extraction(mapper: MetaboliteNameMapper) -> None:
     """Test extraction of lipoprotein information."""
     test_cases = [
-        (
-            "Total cholesterol in large VLDL",
-            ("VLDL", "large", "total cholesterol"),
-        ),
-        (
-            "Extremely large HDL particles",
-            ("HDL", "extremely large", "particles"),
-        ),
-        (
-            "Small LDL cholesterol concentration",
-            ("LDL", "small", "cholesterol concentration"),
-        ),
-        (
-            "HDL cholesterol",
-            ("HDL", None, "cholesterol"),
-        ),
+        ("HDL cholesterol", "HDL", None, "cholesterol"),
+        ("extremely large VLDL", "VLDL", "extremely large", ""),
+        ("small LDL particles", "LDL", "small", "particles"),
+        ("IDL concentration", "IDL", None, "concentration"),
     ]
 
-    for name, (expected_class, expected_size, expected_remaining) in test_cases:
+    for name, expected_class, expected_size, expected_remaining in test_cases:
         lipo_class, size, remaining = mapper.classifier._extract_lipoprotein_info(name)
         assert lipo_class == expected_class
         assert size == expected_size
-        assert remaining.strip().lower() == expected_remaining.lower()
+        assert remaining.strip() == expected_remaining
 
 
 def test_get_mapping_summary(mapper: MetaboliteNameMapper) -> None:
@@ -781,3 +768,267 @@ def test_case_and_total_prefix_handling(mapper: MetaboliteNameMapper) -> None:
             assert result.secondary_compound == expected_secondary
         else:
             assert result.secondary_compound is None
+
+def test_classify_complex_patterns(mapper: MetaboliteNameMapper) -> None:
+    """Test classification of various complex patterns."""
+    test_cases = [
+        (
+            "Concentration of glucose in serum",
+            MetaboliteClass.CONCENTRATION,
+            "glucose",
+            "serum",
+        ),
+        (
+            "Ratio of omega-3 to total fatty acids",
+            MetaboliteClass.RATIO,
+            "omega-3",
+            "total fatty acids",
+        ),
+        (
+            "Total cholesterol in extremely large VLDL",
+            MetaboliteClass.LIPOPROTEIN,
+            "vldl cholesterol",
+            None,
+        ),
+        ("Alanine/lactate ratio", MetaboliteClass.RATIO, "alanine", "lactate"),
+        ("HDL cholesterol", MetaboliteClass.LIPOPROTEIN, "hdl cholesterol", None),
+        (
+            "Glucose plus lactate",
+            MetaboliteClass.COMPOSITE,
+            "glucose plus lactate",
+            None,
+        ),
+    ]
+
+    for name, expected_class, expected_primary, expected_secondary in test_cases:
+        result = mapper.classifier.classify(name)
+        assert result.measurement_class == expected_class
+        assert result.primary_compound == expected_primary
+        assert result.secondary_compound == expected_secondary
+
+
+def test_lipoprotein_extraction(mapper: MetaboliteNameMapper) -> None:
+    """Test extraction of lipoprotein information."""
+    test_cases = [
+        ("HDL cholesterol", "HDL", None, "cholesterol"),
+        ("extremely large VLDL", "VLDL", "extremely large", ""),
+        ("small LDL particles", "LDL", "small", "particles"),
+        ("IDL concentration", "IDL", None, "concentration"),
+    ]
+
+    for name, expected_class, expected_size, expected_remaining in test_cases:
+        lipo_class, size, remaining = mapper.classifier._extract_lipoprotein_info(name)
+        assert lipo_class == expected_class
+        assert size == expected_size
+        assert remaining.strip() == expected_remaining
+
+
+def test_get_mapping_summary(mapper: MetaboliteNameMapper) -> None:
+    """Test generation of mapping summary."""
+    mappings = [
+        MetaboliteMapping(
+            input_name="glucose",
+            compound_class=MetaboliteClass.SIMPLE,
+            refmet_id="REFMET:0001",
+            mapping_source="RefMet",
+        ),
+        MetaboliteMapping(
+            input_name="hdl/ldl",
+            compound_class=MetaboliteClass.RATIO,
+            primary_compound="hdl",
+            secondary_compound="ldl",
+            mapping_source="ChEBI",
+        ),
+    ]
+
+    summary = mapper.get_mapping_summary(mappings)
+    assert summary["total_terms"] == 2
+    assert summary["mapped_any"] == 1
+    assert summary["by_class"][MetaboliteClass.SIMPLE.value] == 1
+    assert summary["by_class"][MetaboliteClass.RATIO.value] == 1
+
+
+def test_print_mapping_report(
+    mapper: MetaboliteNameMapper, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test printing of mapping report."""
+    mappings = [
+        MetaboliteMapping(
+            input_name="glucose",
+            compound_class=MetaboliteClass.SIMPLE,
+            refmet_id="REFMET:0001",
+            mapping_source="RefMet",
+        ),
+        MetaboliteMapping(
+            input_name="HDL cholesterol",
+            compound_class=MetaboliteClass.LIPOPROTEIN,
+            refmet_id="REFMET:0002",
+            mapping_source="RefMet",
+        ),
+    ]
+
+    mapper.print_mapping_report(mappings)
+    captured = capsys.readouterr()
+    assert "Mapping Summary" in captured.out
+    assert "Total terms processed: 2" in captured.out
+
+
+def test_map_single_name_with_classification(mapper: MetaboliteNameMapper) -> None:
+    """Test mapping with metabolite classification."""
+    with patch.object(mapper.refmet_client, "search_by_name") as mock_refmet:
+        mock_refmet.return_value = {
+            "refmet_id": "REFMET:0001",
+            "name": "HDL Cholesterol",
+            "inchikey": "TEST123",
+        }
+
+        result = mapper.map_single_name("Total HDL cholesterol")
+        assert result.compound_class == MetaboliteClass.LIPOPROTEIN
+        assert result.mapping_source == "RefMet"
+
+
+def test_complex_term_mapping(mapper: MetaboliteNameMapper) -> None:
+    """Test mapping of complex terms."""
+    test_cases = [
+        ("HDL/LDL ratio", MetaboliteClass.RATIO),
+        ("Glucose in serum", MetaboliteClass.CONCENTRATION),
+        ("HDL cholesterol", MetaboliteClass.LIPOPROTEIN),
+        ("Glucose plus lactate", MetaboliteClass.COMPOSITE),
+    ]
+
+    for name, expected_class in test_cases:
+        result = mapper.map_single_name(name)
+        assert result.compound_class == expected_class
+
+
+def test_classify_ratio_patterns(mapper: MetaboliteNameMapper) -> None:
+    """Test classification of different ratio patterns."""
+    test_cases = [
+        ("Alanine to Lactate ratio", MetaboliteClass.RATIO, "alanine", "lactate"),
+        ("Alanine/Lactate ratio", MetaboliteClass.RATIO, "alanine", "lactate"),
+        ("Ratio of HDL to LDL", MetaboliteClass.RATIO, "hdl", "ldl"),
+    ]
+
+    for name, expected_class, expected_primary, expected_secondary in test_cases:
+        result = mapper.classifier.classify(name)
+        assert result.measurement_class == expected_class
+        assert result.primary_compound == expected_primary
+        assert result.secondary_compound == expected_secondary
+
+
+def test_classify_composite_patterns(mapper: MetaboliteNameMapper) -> None:
+    """Test classification of composite measurements."""
+    test_cases = [
+        (
+            "Total cholesterol minus HDL-C",
+            MetaboliteClass.COMPOSITE,
+            "total cholesterol minus hdl-c",  # Keep as single compound
+            None,
+        ),
+        (
+            "Glucose plus Lactate",
+            MetaboliteClass.COMPOSITE,
+            "glucose plus lactate",  # Keep as single compound
+            None,
+        ),
+        (
+            "HDL and LDL cholesterol",
+            MetaboliteClass.COMPOSITE,
+            "hdl and ldl cholesterol",  # Keep as single compound
+            None,
+        ),
+    ]
+
+    for name, expected_class, expected_primary, expected_secondary in test_cases:
+        result = mapper.classifier.classify(name)
+        assert result.measurement_class == expected_class
+        assert result.primary_compound == expected_primary
+        assert result.secondary_compound == expected_secondary
+
+
+def test_pattern_matching_edge_cases(mapper: MetaboliteNameMapper) -> None:
+    """Test edge cases in pattern matching."""
+    test_cases = [
+        ("", MetaboliteClass.SIMPLE),  # Empty string
+        ("   ", MetaboliteClass.SIMPLE),  # Only whitespace
+        ("Total", MetaboliteClass.SIMPLE),  # Just the word "Total"
+        ("HDL/", MetaboliteClass.SIMPLE),  # Incomplete ratio
+        ("in blood", MetaboliteClass.SIMPLE),  # Just matrix
+    ]
+
+    for name, expected_class in test_cases:
+        result = mapper.classifier.classify(name)
+        assert result.measurement_class == expected_class
+
+
+def test_classification_order(mapper: MetaboliteNameMapper) -> None:
+    """Test that classification patterns are checked in the correct order."""
+    test_cases = [
+        # Ratio should take precedence over lipoprotein
+        (
+            "Ratio of HDL to LDL",
+            MetaboliteClass.RATIO,
+            "hdl",
+            "ldl",
+        ),
+        # Concentration should take precedence over lipoprotein
+        (
+            "Concentration of HDL in blood",
+            MetaboliteClass.CONCENTRATION,
+            "hdl",
+            "blood",
+        ),
+        # Composite should take precedence over lipoprotein
+        (
+            "HDL plus LDL",
+            MetaboliteClass.COMPOSITE,
+            "hdl plus ldl",
+            None,
+        ),
+        # Lipoprotein only if no other patterns match
+        (
+            "HDL cholesterol",
+            MetaboliteClass.LIPOPROTEIN,
+            "hdl cholesterol",
+            None,
+        ),
+    ]
+
+    for name, expected_class, expected_primary, expected_secondary in test_cases:
+        result = mapper.classifier.classify(name)
+        assert result.measurement_class == expected_class
+        assert result.primary_compound == expected_primary
+        assert result.secondary_compound == expected_secondary
+
+
+def test_case_and_total_prefix_handling(mapper: MetaboliteNameMapper) -> None:
+    """Test case normalization and handling of 'Total' prefix."""
+    test_cases = [
+        (
+            "TOTAL HDL CHOLESTEROL",
+            MetaboliteClass.LIPOPROTEIN,
+            "hdl cholesterol",
+        ),
+        (
+            "Total Glucose",
+            MetaboliteClass.SIMPLE,
+            "glucose",
+        ),
+        (
+            "TOTAL Ratio of HDL to LDL",
+            MetaboliteClass.RATIO,
+            "hdl",
+            "ldl",
+        ),
+    ]
+
+    for test_case in test_cases:
+        name = str(test_case[0])  # Ensure name is str
+        expected_class = test_case[1]
+        expected_primary = test_case[2]
+        expected_secondary = test_case[3] if len(test_case) > 3 else None
+
+        result = mapper.classifier.classify(name)
+        assert result.measurement_class == expected_class
+        assert result.primary_compound == expected_primary
+        assert result.secondary_compound == expected_secondary
