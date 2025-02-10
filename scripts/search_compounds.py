@@ -1,89 +1,118 @@
-"""Search compounds in the Chroma database."""
+"""Script to search compounds using ChromaDB."""
 
-import chromadb
-from pathlib import Path
-from typing import List, Dict, Any
+import argparse
+import asyncio
+from typing import Dict, List, Optional, Any
 
-def get_synonyms(metadata: Dict[str, Any]) -> List[str]:
-    """Extract synonyms from metadata, handling both string and list formats."""
-    synonyms = metadata.get('synonyms', [])
-    if isinstance(synonyms, str):
-        # Handle old format where synonyms are comma-separated string
-        return [s.strip() for s in synonyms.split(',') if s.strip()]
-    return synonyms
+from biomapper.mapping.rag.chroma import ChromaVectorStore, ChromaDocument
+from biomapper.mapping.rag.embedder import ChromaEmbedder
+from biomapper.schemas.store_schema import VectorStoreConfig
 
-def main():
-    # Initialize ChromaDB client
-    chroma_path = Path("vector_store")
-    client = chromadb.PersistentClient(path=str(chroma_path))
+
+async def search_compounds(
+    query: str,
+    k: int = 5,
+    collection_name: str = "compounds",
+    metadata_filters: Optional[Dict[str, Any]] = None,
+    content_filters: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """Search for compounds using ChromaDB.
     
-    # Get the compounds collection
-    collection = client.get_collection("compounds")
-    
-    # Search for glucose-related compounds using multiple queries
-    queries = [
-        "glucose d-glucose alpha-glucose beta-glucose dextrose",  # Common names
-        "glucose monosaccharide hexose blood-sugar",             # Related terms
-        "glucose metabolism glycolysis gluconeogenesis",         # Metabolic terms
-    ]
-    
-    all_results = []
-    for query in queries:
-        results = collection.query(
-            query_texts=[query],
-            n_results=30,  # Get more results since we'll filter
-            include=["documents", "metadatas"]
+    Args:
+        query: Search query
+        k: Number of results to return
+        collection_name: Name of the ChromaDB collection to search in
+        metadata_filters: Optional filters for metadata fields (e.g., {"hmdb_id": "HMDB0000001"})
+        content_filters: Optional filters for document content
+
+    Returns:
+        List of compound documents with their metadata
+    """
+    # Initialize embedder and vector store
+    embedder = ChromaEmbedder()
+    store = ChromaVectorStore(
+        config=VectorStoreConfig(
+            collection_name=collection_name,
+            persist_directory="vector_store"
         )
-        all_results.extend(zip(results['documents'][0], results['metadatas'][0]))
-    
-    # Deduplicate results
-    seen = set()
-    unique_results = []
-    for doc, metadata in all_results:
-        name = metadata.get('name', '')
-        if name not in seen:
-            seen.add(name)
-            unique_results.append((doc, metadata))
-    
+    )
+
+    # Get query embedding
+    query_embedding = await embedder.embed_text(query)
+
+    # Search for relevant documents
+    documents = await store.get_relevant(
+        query_embedding=query_embedding,
+        k=k,
+        where=metadata_filters,
+        where_document=content_filters,
+    )
+
+    # Format results
+    results = []
+    for doc in documents:
+        result = {
+            "content": doc.content,
+            **doc.metadata
+        }
+        results.append(result)
+
+    return results
+
+
+async def main() -> None:
+    """Main function."""
+    parser = argparse.ArgumentParser(description="Search compounds using ChromaDB")
+    parser.add_argument("query", help="Search query")
+    parser.add_argument("-k", type=int, default=5, help="Number of results to return")
+    parser.add_argument(
+        "--collection",
+        default="compounds",
+        help="ChromaDB collection name to search in (default: compounds)",
+    )
+    parser.add_argument(
+        "--hmdb-id",
+        help="Filter by HMDB ID",
+    )
+    parser.add_argument(
+        "--name",
+        help="Filter by compound name",
+    )
+    parser.add_argument(
+        "--domain-type",
+        help="Filter by domain type",
+    )
+    args = parser.parse_args()
+
+    # Build metadata filters
+    metadata_filters = {}
+    if args.hmdb_id:
+        metadata_filters["hmdb_id"] = args.hmdb_id
+    if args.name:
+        metadata_filters["name"] = args.name
+    if args.domain_type:
+        metadata_filters["domain_type"] = args.domain_type
+
+    # Search compounds
+    results = await search_compounds(
+        query=args.query,
+        k=args.k,
+        collection_name=args.collection,
+        metadata_filters=metadata_filters if metadata_filters else None
+    )
+
     # Print results
-    print("\nTop glucose-related compounds:")
-    print("-" * 50)
-    
-    count = 0
-    for doc, metadata in unique_results:
-        name = metadata.get('name', '').lower()
-        desc = doc.lower()
-        synonyms = get_synonyms(metadata)
-        
-        # Check if glucose is prominently mentioned
-        is_glucose_related = (
-            'glucose' in name or
-            any('glucose' in syn.lower() for syn in synonyms) or
-            desc.startswith('glucose') or
-            'glucose is' in desc.lower() or
-            'glucose,' in desc.lower()
-        )
-        
-        if is_glucose_related:
-            count += 1
-            print(f"\n{count}. HMDB ID: {metadata.get('hmdb_id', 'N/A')}")
-            print(f"Name: {metadata.get('name', 'N/A')}")
-            
-            # Show glucose-related synonyms
-            glucose_synonyms = [syn for syn in synonyms if 'glucose' in syn.lower()]
-            if glucose_synonyms:
-                print("Glucose-related synonyms:", ", ".join(glucose_synonyms))
-            
-            # Show start of description
-            desc_preview = doc[:200] + "..." if len(doc) > 200 else doc
-            print(f"Description: {desc_preview}")
-            
-        if count >= 10:  # Show at most 10 results
-            break
-            
-    if count == 0:
-        print("\nNo glucose-related compounds found.")
-        print("Try adjusting the search terms or checking the database contents.")
+    print(f"\nFound {len(results)} results for query: {args.query}")
+    print(f"Collection: {args.collection}\n")
+    for i, result in enumerate(results, 1):
+        print(f"Result {i}:")
+        print(f"  HMDB ID: {result['hmdb_id']}")
+        print(f"  Name: {result['name']}")
+        print(f"  Description: {result.get('description', '')[:200]}...")
+        if result.get('synonyms'):
+            print(f"  Synonyms: {result['synonyms'][:200]}...")
+        print()
+
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
