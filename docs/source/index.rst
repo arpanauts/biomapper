@@ -16,6 +16,14 @@ biomapper is a Python package for biological data harmonization and ontology map
    tutorials/llm_mapper
    tutorials/multi_provider
    tutorials/protein
+   tutorials/examples
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Architecture
+   
+   architecture/overview
+   architecture/testing
 
 .. toctree::
    :maxdepth: 2
