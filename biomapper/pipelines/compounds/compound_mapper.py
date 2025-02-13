@@ -21,7 +21,6 @@ class CompoundClass(Enum):
     LIPOPROTEIN = "lipoprotein"  # Lipoprotein particle measurements
 
 
-@dataclass
 class CompoundDocument(DomainDocument):
     """Standard compound document."""
     name: str
@@ -41,6 +40,7 @@ class CompoundDocument(DomainDocument):
     def update_from_rag(self, rag_result: MappingResult) -> None:
         """Update document with RAG mapping results."""
         if rag_result.mapped_entity:
+            # Update fields from mapped entity
             self.primary_id = rag_result.mapped_entity.primary_id
             self.refmet_id = rag_result.mapped_entity.refmet_id
             self.refmet_name = rag_result.mapped_entity.refmet_name
@@ -50,6 +50,10 @@ class CompoundDocument(DomainDocument):
             self.pubchem_id = rag_result.mapped_entity.pubchem_id
             self.confidence = rag_result.confidence
             self.source = "rag"
+        else:
+            # Handle case where no match is found
+            self.confidence = 0.0
+            self.source = "rag_no_match"
             if rag_result.metadata:
                 self.metadata = rag_result.metadata
 
