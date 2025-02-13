@@ -3,6 +3,8 @@
 import logging
 from typing import List, Optional, Dict, Any
 
+from ...core.base_mapper import MappingResult
+
 from ...core.base_pipeline import BaseMappingPipeline, BaseNameMapper
 from ...core.base_rag import BaseRAGMapper
 from ...monitoring.langfuse_tracker import LangfuseTracker
