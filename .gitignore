@@ -43,7 +43,7 @@ MANIFEST
 *.sqlite3
 *.xml
 *.bin
-vector_store/
+#vector_store/
 hmdb_metabolites.xml
 
 # Keep specific txt files
@@ -181,3 +181,4 @@ cython_debug/
 arivale_ukbb_comparison/
 tests_*.py*
 #tutorial_*.py*
+vector_store/
