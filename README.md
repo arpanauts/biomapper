@@ -2,6 +2,8 @@
 
 A unified Python toolkit for biological data harmonization and ontology mapping. `biomapper` provides a single interface for standardizing identifiers and mapping between various biological ontologies, making multi-omic data integration more accessible and reproducible.
 
+[Documentation](https://biomapper.readthedocs.io/) | [Examples](examples/) | [Contributing](CONTRIBUTING.md)
+
 ## Features
 
 ### Core Functionality
@@ -32,7 +34,13 @@ pip install biomapper
 
 ### Development Setup
 
-1. Install Python 3.11 with pyenv (if not already installed):
+1. Clone the repository:
+```bash
+git clone https://github.com/arpanauts/biomapper.git
+cd biomapper
+```
+
+2. Install Python 3.11 with pyenv (if not already installed):
 ```bash
 # Install pyenv dependencies
 sudo apt-get update
@@ -52,107 +60,114 @@ echo 'eval "$(pyenv init -)"' >> ~/.bashrc
 source ~/.bashrc
 
 # Install Python 3.11
-pyenv install 3.11.7
-pyenv local 3.11.7
+pyenv install 3.11
+pyenv local 3.11
 ```
 
-2. Install Poetry (if not already installed):
+3. Install Poetry (if not already installed):
 ```bash
 curl -sSL https://install.python-poetry.org | python3 -
-
-# Add Poetry to your PATH
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
 ```
 
-3. Clone and set up the project:
+4. Install project dependencies:
 ```bash
-git clone https://github.com/yourusername/biomapper.git
-cd biomapper
-
-# Install dependencies with Poetry
 poetry install
 ```
 
-## Quick Start
-
-```python
-from biomapper.mapping import UniProtFocusedMapper, MetaboliteNameMapper
-from biomapper.standardization import RaMPClient
-
-# Example 1: Using UniProt-focused mapping
-uniprot_mapper = UniProtFocusedMapper()
-protein_mapping = uniprot_mapper.map_identifier("P12345")
-
-# Example 2: Using Metabolite Name Mapping
-metabolite_mapper = MetaboliteNameMapper()
-metabolite_mapping = metabolite_mapper.map_name("glucose")
-
-# Example 3: Using RaMP-DB
-# Initialize the RaMP client
-ramp_client = RaMPClient()
-
-# Get database versions
-versions = ramp_client.get_source_versions()
-
-# Get pathways for metabolites
-# Example: Get pathways for Creatine (HMDB0000064)
-pathways = ramp_client.get_pathways_from_analytes(["hmdb:HMDB0000064"])
-
-# Example 4: Using RAG-based mapping
-from biomapper.mapping import RagMapper
-
-rag_mapper = RagMapper()
-rag_results = rag_mapper.map_name("alpha-D-glucose")
-```
-
-## Development
-
-### Using Poetry
-
+5. Set up pre-commit hooks:
 ```bash
-# Activate virtual environment
-poetry shell
-
-# Run a command in the virtual environment
-poetry run python script.py
-
-# Add a new dependency
-poetry add package-name
-
-# Add a development dependency
-poetry add --group dev package-name
-
-# Update dependencies
-poetry update
-
-# Show currently installed packages
-poetry show
-
-# Build the package
-poetry build
+poetry run pre-commit install
 ```
 
-### Running Tests
+### Running Examples
+
+The `examples/` directory contains tutorials and utility scripts demonstrating various features of biomapper. Before running examples:
+
+1. Install additional dependencies:
 ```bash
-# Run tests
-poetry run pytest
-
-# Run tests with coverage
-poetry run pytest --cov=biomapper
+poetry install --with examples
 ```
 
-### Code Quality
+2. Set up environment variables:
 ```bash
-# Format code with black
-poetry run black .
+# Create a .env file from the template
+cp .env.example .env
 
-# Run linting
-poetry run flake8 .
-
-# Type checking
-poetry run mypy .
+# Edit .env with your API keys and configurations
+vim .env
 ```
+
+3. Initialize the vector store:
+```bash
+# Create the vector store directory
+mkdir -p vector_store
+
+# Run the setup script
+poetry run python examples/utilities/verify_chromadb_setup.py
+```
+
+4. Run an example:
+```bash
+poetry run python examples/tutorials/tutorial_basic_llm_mapping.py
+```
+
+Refer to the [examples documentation](examples/README.md) for detailed information about each example.
+```
+
+## Project Structure
+
+```
+biomapper/
+├── biomapper/          # Main package source code
+├── docs/              # Documentation
+│   ├── source/        # Sphinx documentation source
+│   │   ├── api/       # API reference
+│   │   ├── guides/    # User guides
+│   │   └── tutorials/ # Tutorial documentation
+│   └── technical_notes/# Technical design notes
+├── examples/          # Example scripts and tutorials
+│   ├── tutorials/     # Step-by-step tutorials
+│   └── utilities/     # Utility scripts
+├── tests/             # Test suite
+├── poetry.lock       # Poetry dependency lock file
+├── pyproject.toml    # Project configuration
+└── README.md         # This file
+```
+
+## Documentation
+
+Full documentation is available at [biomapper.readthedocs.io](https://biomapper.readthedocs.io/), including:
+
+- Getting Started Guide
+- API Reference
+- Tutorials
+- Architecture Overview
+- Example Scripts
+
+
+
+## Contributing
+
+Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+
+
+## Roadmap
+
+- [x] Initial release with core functionality
+- [x] Implement RAG-based mapping capabilities
+- [x] Add support for major chemical/biological databases (ChEBI, UniChem, UniProt)
+- [ ] Enhance RAG-based mapping with additional data sources
+- [ ] Improve compound name normalization
+- [ ] Add support for pathway databases (KEGG, Reactome)
+- [ ] Expand test coverage and documentation
+- [ ] Add more example workflows and use cases
+
 
 ## Project Structure
 
