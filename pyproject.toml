@@ -29,7 +29,7 @@ classifiers = [
 [tool.poetry.dependencies]
 python = "^3.11"
 requests = "^2.25.1"
-numpy = "<2.0.0"
+numpy = ">=2.1.0"
 pandas = "^2.0.0"
 sqlalchemy = "^1.4.0"
 pyyaml = "^6.0.1"
@@ -53,6 +53,9 @@ transformers = "^4.38.2"
 sentence-transformers = "^2.2.2"
 aiohttp = "^3.11.11"
 pyarango = "^2.1.1"
+fastembed = "^0.5.1"
+faiss-cpu = "^1.10.0"
+lxml = "^5.3.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
