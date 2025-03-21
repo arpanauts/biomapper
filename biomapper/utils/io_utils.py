@@ -72,9 +72,11 @@ def load_tabular_file(
     
     # Auto-detect separator if not specified
     if sep is None:
-        if file_path.lower().endswith('.tsv'):
+        # Convert Path objects to string first
+        file_path_str = str(file_path)
+        if file_path_str.lower().endswith('.tsv'):
             sep = '\t'
-        elif file_path.lower().endswith('.csv'):
+        elif file_path_str.lower().endswith('.csv'):
             sep = ','
         else:
             # Default to comma for unknown extensions

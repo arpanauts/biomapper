@@ -9,6 +9,7 @@ from typing import Dict, List, Any, Optional, Tuple
 
 import pandas as pd
 from fastapi import UploadFile, HTTPException, status
+from biomapper import load_tabular_file
 
 from app.core.config import settings
 from app.core.session import session_manager, Session
@@ -124,7 +125,8 @@ class CSVService:
             
         try:
             logger.info(f"Attempting to read CSV file: {session.file_path}")
-            df = pd.read_csv(session.file_path, nrows=0)
+            # Use load_tabular_file to properly handle comments
+            df = load_tabular_file(session.file_path, nrows=0, comment='#')
             columns = df.columns.tolist()
             logger.info(f"Successfully read {len(columns)} columns from {session.file_path}")
             return columns
@@ -165,7 +167,8 @@ class CSVService:
             )
             
         try:
-            df = pd.read_csv(session.file_path, nrows=100)
+            # Use load_tabular_file to properly handle comments
+            df = load_tabular_file(session.file_path, nrows=100, comment='#')
             column_types = {}
             
             for column in df.columns:
@@ -224,7 +227,8 @@ class CSVService:
             
             # Read preview rows
             logger.info(f"Reading preview data ({limit} rows) for session {session.session_id}")
-            df = pd.read_csv(session.file_path, nrows=limit)
+            # Use load_tabular_file to properly handle comments
+            df = load_tabular_file(session.file_path, nrows=limit, comment='#')
             
             # Convert to list of dicts
             rows = df.replace({pd.NA: None}).to_dict(orient="records")

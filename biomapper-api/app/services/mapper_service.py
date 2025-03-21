@@ -10,6 +10,7 @@ import uuid
 
 import pandas as pd
 from fastapi import HTTPException, status
+from biomapper import load_tabular_file
 
 # Mock implementation for testing
 # from biomapper import MetaboliteNameMapper
@@ -84,7 +85,8 @@ class MapperService:
             
         # Validate columns exist in the file
         try:
-            df = pd.read_csv(session.file_path, nrows=0)
+            # Use load_tabular_file to properly handle comments
+            df = load_tabular_file(session.file_path, nrows=0, comment='#')
             file_columns = df.columns.tolist()
             
             invalid_columns = [col for col in id_columns if col not in file_columns]
@@ -142,8 +144,8 @@ class MapperService:
             target_ontologies = job.result["target_ontologies"]
             options = job.result["options"]
             
-            # Read CSV
-            df = pd.read_csv(file_path)
+            # Read CSV with comment handling
+            df = load_tabular_file(file_path, comment='#')
             total_rows = len(df)
             
             # Process each column
@@ -330,8 +332,8 @@ class MapperService:
             )
         
         try:
-            # Read preview rows
-            df = pd.read_csv(output_path, nrows=limit)
+            # Read preview rows with comment handling
+            df = load_tabular_file(output_path, nrows=limit, comment='#')
             
             # Convert to list of dicts
             rows = df.replace({pd.NA: None}).to_dict(orient="records")
