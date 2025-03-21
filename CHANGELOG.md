@@ -2,6 +2,16 @@
 
 All notable changes to Biomapper will be documented in this file.
 
+## [0.5.1] - 2025-03-21
+
+### Enhanced
+- Added support for handling comment lines in CSV/TSV files:
+  - Created centralized `load_tabular_file` utility function in utils/io_utils.py
+  - Automatically skips lines starting with '#' during data loading
+  - Intelligently detects file type (CSV/TSV) and selects appropriate separator
+  - Maintains memory-aware file size limits (50% of available memory)
+  - Works consistently across both frontend and backend components
+
 ## [0.5.0] - 2025-03-21
 
 ### Added
