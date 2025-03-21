@@ -16,6 +16,9 @@ from .mapping.rag.prompts import PromptManager
 from .utils.optimization import DSPyOptimizer
 from .monitoring.langfuse_tracker import LangfuseTracker
 
+# File I/O Utilities
+from .utils.io_utils import load_tabular_file, get_max_file_size
+
 # Legacy imports
 from .standardization import RaMPClient
 from .core import SetAnalyzer
@@ -28,6 +31,9 @@ __all__ = [
     "ChEBIClient",
     "RefMetClient",
     "MetaboAnalystClient",
+    # Utilities
+    "load_tabular_file",
+    "get_max_file_size",
     # RAG Components
     "ChromaCompoundStore",
     "PromptManager",
