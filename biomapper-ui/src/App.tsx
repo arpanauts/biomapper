@@ -151,7 +151,7 @@ function App() {
             size="sm"
           />
           <Group justify="space-between" style={{ flex: 1 }}>
-            <Title order={3}>Biomapper</Title>
+            <Title order={3}>BioMapper</Title>
             <Group>
               {filename && (
                 <Text size="sm" c="dimmed">

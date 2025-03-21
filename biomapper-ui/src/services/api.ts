@@ -45,6 +45,49 @@ apiClient.interceptors.response.use(
 
 // File related API calls
 export const fileApi = {
+  // List files available on the server in a specified directory
+  listServerFiles: async (directoryPath: string, extensions?: string[]) => {
+    try {
+      console.log('API Service: Listing server files in directory:', directoryPath);
+      
+      const response = await apiClient.post('/files/server/list', {
+        directory_path: directoryPath,
+        extensions: extensions || ['.csv', '.tsv']
+      });
+      
+      console.debug('Server files response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error listing server files:', error);
+      throw error;
+    }
+  },
+
+  // Load a file from the server filesystem
+  loadServerFile: async (filePath: string) => {
+    try {
+      console.log('API Service: Loading server file:', filePath);
+      
+      // Log detailed request for debugging
+      console.debug('Request payload:', { file_path: filePath });
+      
+      const response = await apiClient.post('/files/server/load', {
+        file_path: filePath
+      });
+      
+      console.debug('Load server file response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      // Enhanced error logging
+      console.error('Error loading server file:', error);
+      if (error.response) {
+        console.error('Server response:', error.response.data);
+        console.error('Status code:', error.response.status);
+      }
+      throw error;
+    }
+  },
+  
   // Upload a file to the server with progress tracking
   uploadFile: async (file: File, onProgress?: (progressEvent: ProgressEvent) => void) => {
     try {

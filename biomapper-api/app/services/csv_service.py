@@ -4,6 +4,7 @@ Service for handling CSV file operations.
 import os
 import logging
 from pathlib import Path
+import glob
 from typing import Dict, List, Any, Optional, Tuple
 
 import pandas as pd
@@ -251,4 +252,166 @@ class CSVService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Error reading CSV file: {str(e)}",
+            )
+    
+    async def list_server_files(self, directory_path: str, extensions: List[str] = None) -> List[Dict[str, Any]]:
+        """
+        List files in the specified server directory with optional extension filtering.
+        
+        Args:
+            directory_path: Path to the directory to search
+            extensions: List of file extensions to include (e.g., ['.csv', '.tsv'])
+            
+        Returns:
+            List of file information dictionaries with name, path, size, and last modified date
+            
+        Raises:
+            HTTPException: If directory does not exist or is not accessible
+        """
+        try:
+            logger.info(f"Checking directory: {directory_path}")
+            
+            # Check if the directory path is empty
+            if not directory_path or directory_path.isspace():
+                logger.error("Empty directory path provided")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Directory path cannot be empty"
+                )
+                
+            # Check if directory exists and has correct permissions
+            if not os.path.exists(directory_path):
+                logger.error(f"Directory does not exist: {directory_path}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Directory does not exist: {directory_path}"
+                )
+                
+            if not os.path.isdir(directory_path):
+                logger.error(f"Path is not a directory: {directory_path}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Path is not a directory: {directory_path}"
+                )
+                
+            # Check if directory is readable
+            if not os.access(directory_path, os.R_OK):
+                logger.error(f"Directory is not readable: {directory_path}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Directory is not readable: {directory_path}"
+                )
+                
+            if extensions is None:
+                extensions = ['.csv', '.tsv']
+                
+            # Convert extensions to lowercase for case-insensitive matching
+            extensions = [ext.lower() if not ext.startswith('.') else ext.lower() for ext in extensions]
+            extensions = [ext if ext.startswith('.') else f'.{ext}' for ext in extensions]
+            
+            logger.info(f"Listing files in {directory_path} with extensions {extensions}")
+            file_list = []
+            for ext in extensions:
+                pattern = os.path.join(directory_path, f'*{ext}')
+                logger.debug(f"Searching with pattern: {pattern}")
+                files = glob.glob(pattern)
+                
+                for file_path in files:
+                    # Skip directories with matching extensions
+                    if os.path.isdir(file_path):
+                        continue
+                        
+                    file_stat = os.stat(file_path)
+                    file_list.append({
+                        'name': os.path.basename(file_path),
+                        'path': file_path,
+                        'size': file_stat.st_size,
+                        'modified': file_stat.st_mtime,
+                        'extension': os.path.splitext(file_path)[1].lower()
+                    })
+            
+            # Sort by name
+            file_list.sort(key=lambda x: x['name'])
+            logger.info(f"Found {len(file_list)} files in {directory_path}")
+            return file_list
+        
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception(f"Error listing server files from {directory_path}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to list server files: {str(e)}"
+            )
+    
+    async def load_server_file(self, file_path: str) -> Tuple[Session, Path]:
+        """
+        Load a file from the server filesystem into the session.
+        
+        Args:
+            file_path: Path to the file on the server
+            
+        Returns:
+            Tuple of (session, file_path)
+            
+        Raises:
+            HTTPException: If file does not exist, is not accessible, or is invalid
+        """
+        try:
+            if not os.path.exists(file_path) or not os.path.isfile(file_path):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"File does not exist or is not accessible: {file_path}"
+                )
+            
+            # Check file extension
+            file_ext = os.path.splitext(file_path)[1].lower()
+            if file_ext not in ['.csv', '.tsv']:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Unsupported file type: {file_ext}. Only .csv and .tsv files are supported."
+                )
+            
+            # Check file size
+            file_size = os.path.getsize(file_path)
+            if file_size > settings.MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"File too large. Maximum size: {settings.MAX_UPLOAD_SIZE / (1024 * 1024)}MB"
+                )
+            
+            # Create session
+            session = session_manager.create_session()
+            filename = os.path.basename(file_path)
+            
+            # We'll create a symlink to the actual file in the session directory
+            # This avoids copying large files unnecessarily
+            session_dir = session.session_dir
+            target_path = session_dir / filename
+            
+            # Create a symbolic link to the original file
+            # This way we don't need to copy large files
+            os.symlink(file_path, target_path)
+            
+            logger.info(f"Created session {session.session_id} with symlink to file {file_path}")
+            
+            # Update session with file info
+            session.file_path = target_path
+            session.metadata = {
+                "filename": filename,
+                "content_type": "text/csv" if file_ext == ".csv" else "text/tab-separated-values",
+                "file_size": file_size,
+                "source_path": file_path,
+                "is_server_file": True
+            }
+            
+            return session, target_path
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception(f"Error loading server file {file_path}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to load server file: {str(e)}"
             )
