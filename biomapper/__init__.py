@@ -6,6 +6,7 @@ from .standardization.metabolite import MetaboliteNameMapper
 # API Clients
 from .mapping.clients.chebi_client import ChEBIClient
 from .mapping.clients.refmet_client import RefMetClient
+from .mapping.clients.metaboanalyst_client import MetaboAnalystClient
 
 # RAG Components
 from .mapping.rag.store import ChromaCompoundStore
@@ -26,6 +27,7 @@ __all__ = [
     # API Clients
     "ChEBIClient",
     "RefMetClient",
+    "MetaboAnalystClient",
     # RAG Components
     "ChromaCompoundStore",
     "PromptManager",
