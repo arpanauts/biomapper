@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "biomapper"
-version = "0.4.0"
+version = "0.5.0"
 description = "A unified Python toolkit for biological data harmonization and ontology mapping"
 authors = ["Trent Leslie <trent.leslie@phenomehealth.org>"]
 license = "MIT"
@@ -76,6 +76,7 @@ sphinx-autodoc-typehints = "^3.0.0"
 myst-parser = "^4.0.0"
 pytest-asyncio = "^0.21.1"
 phenome-arivale = {git = "https://git.phenome.health/trent.leslie/phenome-arivale"}
+sphinxcontrib-mermaid = "^1.0.0"
 
 [tool.poetry.extras]
 api = ["fastapi", "uvicorn"]  # For potential REST API functionality

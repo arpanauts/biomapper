@@ -18,6 +18,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx_autodoc_typehints",
     "myst_parser",
+    "sphinxcontrib.mermaid",
 ]
 
 # Templates and excludes
