@@ -2,6 +2,14 @@
 
 All notable changes to Biomapper will be documented in this file.
 
+## [0.5.2] - 2025-03-24
+
+### Fixed
+- Improved Poetry configuration for better dependency management
+- Made DSPy integration more resilient with graceful fallback for missing components
+- Enhanced restart script to properly handle biomapper installation in editable mode
+- Fixed environment setup to ensure consistent behavior across development setups
+
 ## [0.5.1] - 2025-03-21
 
 ### Enhanced
