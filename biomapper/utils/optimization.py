@@ -2,7 +2,12 @@
 from typing import Optional, Dict, List, Any, Protocol
 from unittest.mock import Mock
 
-from dspy.teleprompt import BootstrapFewShot  # type: ignore
+# Try importing BootstrapFewShot, but provide a Mock if it's not available
+try:
+    from dspy.teleprompt import BootstrapFewShot  # type: ignore
+except ImportError:
+    # If BootstrapFewShot is not available in this dspy version, create a mock
+    BootstrapFewShot = Mock
 
 from biomapper.schemas.rag_schema import OptimizationMetrics
 
