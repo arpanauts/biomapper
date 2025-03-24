@@ -1,38 +1,35 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
 
-[project]
+[tool.poetry]
 name = "biomapper-api"
 version = "0.1.0"
 description = "API layer for Biomapper Web UI"
 readme = "README.md"
-requires-python = ">=3.11,<4.0"
-license = { text = "MIT" }
-dependencies = [
-    "fastapi>=0.104.1",
-    "uvicorn>=0.24.0",
-    "pydantic>=2.5.1",
-    "python-multipart>=0.0.6",
-    "pandas>=2.1.1",
-    "python-dotenv>=1.0.0",
-    "uuid>=1.30",
-    "biomapper @ file:///home/ubuntu/biomapper/dist/biomapper-0.4.0-py3-none-any.whl",
-    "psutil (>=7.0.0,<8.0.0)",
-]
+authors = ["Biomapper Team <biomapper@example.com>"]
+packages = [{include = "app"}]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.4.3",
-    "pytest-asyncio>=0.21.1",
-    "httpx>=0.25.1",
-    "black>=23.11.0",
-    "isort>=5.12.0",
-    "ruff>=0.1.5",
-]
+[tool.poetry.dependencies]
+python = ">=3.11,<4.0"
+fastapi = ">=0.104.1"
+uvicorn = ">=0.24.0"
+pydantic = ">=2.5.1"
+python-multipart = ">=0.0.6"
+pandas = ">=2.1.1"
+python-dotenv = ">=1.0.0"
+uuid = ">=1.30"
+psutil = ">=7.0.0,<8.0.0"
+# Reference to local biomapper package in development mode
+biomapper = {path = "/home/ubuntu/biomapper", develop = true}
 
-[tool.setuptools]
-packages = ["app"]
+[tool.poetry.group.dev.dependencies]
+pytest = ">=7.4.3"
+pytest-asyncio = ">=0.21.1"
+httpx = ">=0.25.1"
+black = ">=23.11.0"
+isort = ">=5.12.0"
+ruff = ">=0.1.5"
 
 [tool.black]
 line-length = 88
