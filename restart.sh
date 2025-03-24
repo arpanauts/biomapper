@@ -72,7 +72,13 @@ echo
 # Start the backend API server
 echo "🚀 Starting the Biomapper API server..."
 cd /home/ubuntu/biomapper/biomapper-api
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > api.log 2>&1 &
+
+# First, ensure the biomapper package is installed in editable mode to the API's environment
+echo "Installing biomapper in editable mode to the API environment..." > api.log 2>&1
+poetry add --editable /home/ubuntu/biomapper >> api.log 2>&1
+
+# Start the API server using the poetry environment explicitly
+poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload >> api.log 2>&1 &
 API_PID=$!
 echo "✅ API server started on port 8000 (PID: $API_PID)"
 echo
