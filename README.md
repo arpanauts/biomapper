@@ -203,6 +203,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] Implement SQLite mapping cache with bidirectional transitivity
 - [x] Develop SPOKE knowledge graph integration with bidirectional sync
 - [x] Create resource metadata system for intelligent operation routing
+- [ ] Develop comprehensive RAG performance evaluation framework
+- [ ] Establish gold-standard benchmarks for ontological mapping
 - [ ] Enhance RAG-based mapping with additional data sources
 - [ ] Improve compound name normalization
 - [ ] Implement FastAPI web interface for mapping operations
