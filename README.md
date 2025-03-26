@@ -1,29 +1,67 @@
-# biomapper
+# Biomapper
 
 A unified Python toolkit for biological data harmonization and ontology mapping. `biomapper` provides a single interface for standardizing identifiers and mapping between various biological ontologies, making multi-omic data integration more accessible and reproducible.
 
 [Documentation](https://biomapper.readthedocs.io/) | [Examples](examples/) | [Contributing](CONTRIBUTING.md)
+
+## Architecture Overview
+
+```mermaid
+graph TD
+    subgraph UserInterfaces["User Interfaces"]
+        CLI["Command-Line Interface"]
+        API["FastAPI Web Interface"]
+        SDK["Python SDK"]
+    end
+    
+    subgraph BiomapperCore["Biomapper Core"]
+        MD["Metadata Dispatcher"] -->|"Route Based on<br>Resource Metadata"|Cache
+        MD -->|"Falls Back To"|SPOKE
+        MD -->|"Last Resort"|APIs
+        
+        subgraph MappingResources["Mapping Resources"]
+            Cache["SQLite Mapping Cache"] <-->|"Bidirectional<br>Sync"|SPOKE
+            SPOKE["SPOKE Knowledge Graph<br>(ArangoDB)"]
+            SPOKE <-->|"Extends"|EG["Extension Graph<br>(Additional Ontologies)"]
+            APIs["External APIs"]
+        end
+        
+        RM["Resource Metadata"] --> MD
+        Cache --> RM
+        SPOKE --> RM
+        APIs --> RM
+    end
+    
+    UserInterfaces --> BiomapperCore
+```
 
 ## Features
 
 ### Core Functionality
 - **ID Standardization**: Unified interface for standardizing biological identifiers
 - **Ontology Mapping**: Comprehensive ontology mapping using major biological databases and AI-powered techniques
+- **High-Performance Caching**: SQLite-based mapping cache with bidirectional transitivity 
+- **Knowledge Graph Integration**: Seamless integration with SPOKE graph database
+- **Intelligent Resource Routing**: Metadata-driven orchestration of mapping resources
 - **Data Validation**: Robust validation of input data and mappings
 - **Extensible Architecture**: Easy integration of new data sources and mapping services
 
 ### Supported Systems
 
+#### Knowledge Graph & Caching
+- **SPOKE**: Integration with the Scalable Precision Medicine Open Knowledge Engine
+- **SQLite Mapping Cache**: High-performance local caching with bidirectional transitivity
+
 #### ID Standardization Tools
-- RaMP-DB: Integration with the Rapid Mapping Database for metabolites and pathways
+- **RaMP-DB**: Integration with the Rapid Mapping Database for metabolites and pathways
 
 #### Mapping Services
-- ChEBI: Chemical Entities of Biological Interest database integration
-- UniChem: Cross-referencing of chemical structure identifiers
-- UniProt: Protein-focused mapping capabilities
-- RefMet: Reference list of metabolite names and identifiers
-- RAG-Based Mapping: AI-powered mapping using Retrieval Augmented Generation
-- Multi-Provider RAG: Combining multiple data sources for improved mapping accuracy
+- **ChEBI**: Chemical Entities of Biological Interest database integration
+- **UniChem**: Cross-referencing of chemical structure identifiers
+- **UniProt**: Protein-focused mapping capabilities
+- **RefMet**: Reference list of metabolite names and identifiers
+- **RAG-Based Mapping**: AI-powered mapping using Retrieval Augmented Generation
+- **Multi-Provider RAG**: Combining multiple data sources for improved mapping accuracy
 
 ## Installation
 
@@ -162,30 +200,58 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [x] Initial release with core functionality
 - [x] Implement RAG-based mapping capabilities
 - [x] Add support for major chemical/biological databases (ChEBI, UniChem, UniProt)
+- [x] Implement SQLite mapping cache with bidirectional transitivity
+- [x] Develop SPOKE knowledge graph integration with bidirectional sync
+- [x] Create resource metadata system for intelligent operation routing
 - [ ] Enhance RAG-based mapping with additional data sources
 - [ ] Improve compound name normalization
+- [ ] Implement FastAPI web interface for mapping operations
 - [ ] Add support for pathway databases (KEGG, Reactome)
+- [ ] Integrate with biomedical datasets (Arivale, UKBB)
 - [ ] Expand test coverage and documentation
-- [ ] Add more example workflows and use cases
 
 
 ## Project Structure
 
 ```
 biomapper/
-├── biomapper/           # Main package directory
-│   ├── core/           # Core functionality
-│   │   ├── metadata.py # Metadata handling
-│   │   └── validators.py # Data validation
-│   ├── standardization/# ID standardization components
-│   ├── mapping/        # Ontology mapping components
-│   ├── utils/          # Utility functions
-│   └── schemas/        # Data schemas and models
-├── tests/              # Test files
-├── docs/               # Documentation
-├── scripts/            # Utility scripts
-├── pyproject.toml      # Poetry configuration and dependencies
-└── poetry.lock        # Lock file for dependencies
+├── biomapper/                # Main package directory
+│   ├── core/                # Core abstract classes and base functionality
+│   ├── cache/               # Mapping cache components
+│   │   ├── manager.py      # Cache manager implementation
+│   │   ├── mapper.py       # Cache-aware entity mapper
+│   │   ├── config.py       # Cache configuration 
+│   │   ├── monitoring.py   # Performance monitoring
+│   │   └── cli.py          # Command-line interface
+│   ├── db/                  # Database components
+│   │   ├── models.py       # SQLAlchemy ORM models
+│   │   ├── models_metadata.py # Resource metadata models
+│   │   ├── session.py      # Database connection management
+│   │   └── maintenance.py  # Database maintenance utilities
+│   ├── transitivity/       # Transitivity components
+│   │   ├── builder.py      # Transitive relationship builder
+│   │   └── confidence.py   # Confidence propagation
+│   ├── integration/        # Integration with external systems
+│   │   └── spoke_cache_sync.py # SPOKE-cache synchronization
+│   ├── metadata/           # Resource metadata system
+│   │   ├── manager.py      # Resource metadata manager
+│   │   └── dispatcher.py   # Mapping operation dispatcher
+│   ├── spoke/              # SPOKE knowledge graph components
+│   ├── standardization/    # ID standardization components
+│   ├── mapping/            # Ontology mapping components
+│   │   ├── clients/        # Database API clients
+│   │   └── rag/            # RAG-based mapping components
+│   ├── utils/              # Utility functions
+│   └── schemas/            # Data schemas and models
+├── db/                     # Database migration scripts
+│   └── migrations/         # Alembic migration files
+├── tests/                  # Test suite
+├── docs/                   # Documentation
+├── roadmap/                # Implementation plans and roadmap
+├── examples/               # Example scripts
+├── scripts/                # Utility scripts
+├── pyproject.toml          # Poetry configuration and dependencies
+└── poetry.lock            # Lock file for dependencies
 ```
 
 ## License
