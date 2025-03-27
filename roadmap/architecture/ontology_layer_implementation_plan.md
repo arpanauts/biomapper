@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document outlines the implementation plan for enhancing Biomapper with a hybrid graph-based ontology layer that combines SPOKE (Scalable Precision Medicine Open Knowledge Engine) with a custom extension graph. This architecture will provide comprehensive coverage of biological entity mappings while ensuring performance, flexibility, and resilience to SPOKE updates.
+This document outlines the implementation plan for enhancing Biomapper with a generalized hybrid graph-based ontology layer that works with multiple knowledge graph sources, including but not limited to SPOKE (Scalable Precision Medicine Open Knowledge Engine). This architecture will provide comprehensive coverage of biological entity mappings while ensuring performance, flexibility, and independence from any specific licensed knowledge graph.
 
 ## Table of Contents
 
@@ -22,75 +22,87 @@ This document outlines the implementation plan for enhancing Biomapper with a hy
 
 The current Biomapper implementation:
 - Provides direct mapping for metabolites via API clients (ChEBI, RefMet, etc.)
-- Includes basic SPOKE integration via SPOKEDBClient and SPOKEMapper
+- Includes basic knowledge graph integration capabilities (initially focused on SPOKE)
 - Uses retrieval augmented generation (RAG) for semantic mapping
 - Lacks a centralized mapping registry for persistent storage of discovered mappings
-- Has no mechanism to handle SPOKE version updates
+- Has no abstraction layer for different knowledge graph sources
 
 ### Limitations to Address
 
 - Repeated API calls to external services for the same mapping requests
 - No persistent storage of mapping relationships
-- No supplementation for ontologies missing from SPOKE (e.g., FDA UNII)
-- No mechanism to maintain mappings across SPOKE version updates
+- Limited capability to work with different knowledge graph sources
+- Dependency on specific knowledge graphs that may require licenses
+- No standardized configuration for knowledge graph schema mapping
 
 ## Architecture Overview
 
 ### High-Level Design
 
 ```
-┌─────────────────┐    ┌────────────────────┐
-│                 │    │                    │
-│  SPOKE Graph    │    │  Extension Graph   │
-│  (ArangoDB)     │<-->│  (ArangoDB)        │
-│                 │    │                    │
-└─────────────────┘    └────────────────────┘
-         ↑                       ↑
-         │                       │
-         ↓                       ↓
-┌─────────────────────────────────────────┐
-│                                         │
-│         Unified Ontology Layer          │
-│                                         │
-└─────────────────────────────────────────┘
-                   ↑
-                   │
-                   ↓
-┌─────────────────────────────────────────┐
-│                                         │
-│     SQLite/PostgreSQL Mapping Cache     │
-│                                         │
-└─────────────────────────────────────────┘
+┌─────────────────┐    ┌────────────────────┐    ┌─────────────────┐
+│                 │    │                    │    │                 │
+│  Knowledge      │    │  Extension Graph   │    │  Custom         │
+│  Graph Sources  │<-->│  (ArangoDB)        │<-->│  Knowledge      │
+│  (Configurable) │    │                    │    │  Graphs         │
+└─────────────────┘    └────────────────────┘    └─────────────────┘
+         ↑                       ↑                        ↑
+         │                       │                        │
+         ↓                       ↓                        ↓
+┌───────────────────────────────────────────────────────────────┐
+│                                                               │
+│               Generalized Knowledge Graph Layer               │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
+                              ↑
+                              │
+                              ↓
+┌───────────────────────────────────────────────────────────────┐
+│                                                               │
+│                 Unified Ontology Layer                        │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
+                              ↑
+                              │
+                              ↓
+┌───────────────────────────────────────────────────────────────┐
+│                                                               │
+│               SQLite/PostgreSQL Mapping Cache                 │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Components
 
-1. **SPOKE Integration**: Connection to SPOKE knowledge graph
+1. **Knowledge Graph Integration**: Abstracted connection to various knowledge graph sources
 2. **Extension Graph**: Custom ArangoDB instance for supplemental ontologies
-3. **Unified Ontology Layer**: Coordinating layer between graphs and applications
-4. **Mapping Cache**: SQL-based storage for performance optimization
-5. **Version Management**: Tools to handle SPOKE updates
+3. **Generalized Knowledge Graph Layer**: Abstraction layer for different graph implementations
+4. **Unified Ontology Layer**: Coordinating layer between graphs and applications
+5. **Mapping Cache**: SQL-based storage for performance optimization
+6. **Configuration System**: Tools to manage different knowledge graph schemas
 
 ## Component Specifications
 
-### 1. SPOKE Integration Layer
+### 1. Knowledge Graph Integration Layer
 
-**Purpose**: Connect to and query SPOKE knowledge graph
+**Purpose**: Provide a generalized interface to connect to and query various knowledge graph sources
 
 **Key Classes**:
-- `SPOKEDBClient`: Client for ArangoDB connections (existing)
-- `SPOKEVersionAdapter`: Interface for version-specific SPOKE queries
-- `SPOKENodeFetcher`: Utility for retrieving and parsing SPOKE nodes
+- `KnowledgeGraphClient`: Protocol for all graph clients (abstract base)
+- `ArangoDBGraphClient`: Implementation for ArangoDB-based graphs
+- `SPOKEGraphClient`: Reference implementation for SPOKE (extends ArangoDBGraphClient)
+- `GraphConfigurationManager`: Manages configuration for different graph sources
 
 **Features**:
-- Version detection and adaptation
-- Query optimization for common entity types
+- Pluggable client implementation system
+- Standard query interface across different graph sources
+- Configuration-driven schema mapping
 - Error handling and resilience
 - Connection pooling for performance
 
 ### 2. Extension Graph
 
-**Purpose**: Store supplemental ontologies and relationships not covered by SPOKE
+**Purpose**: Store supplemental ontologies and relationships not covered by other knowledge graphs
 
 **Key Classes**:
 - `ExtensionGraphClient`: Client for custom ArangoDB instance
@@ -98,28 +110,47 @@ The current Biomapper implementation:
 - `DataImporter`: Tools for importing external ontologies
 
 **Features**:
-- Schema compatible with SPOKE for seamless integration
+- Compatible schema with configurable mapping
 - Support for custom ontologies (UNII, etc.)
 - Automated data import pipelines
 - Versioning of imported datasets
+- Ability to function as a standalone knowledge graph
 
-### 3. Unified Ontology Layer
+### 3. Generalized Knowledge Graph Layer
 
-**Purpose**: Provide unified access to both SPOKE and extension graph
+**Purpose**: Provide abstraction over various knowledge graph implementations
+
+**Key Classes**:
+- `KnowledgeGraphFactory`: Creates appropriate client implementations based on configuration
+- `SchemaMapper`: Maps between different graph schemas based on configuration
+- `GraphQueryBuilder`: Builds appropriate queries for different graph implementations
+- `GraphClientRegistry`: Registry of available graph clients and capabilities
+
+**Features**:
+- Abstraction of specific knowledge graph implementations
+- Dynamic client creation based on configuration
+- Standard query interface regardless of underlying graph
+- Runtime capability discovery
+
+### 4. Unified Ontology Layer
+
+**Purpose**: Provide a single interface for ontology operations across all graph sources
 
 **Key Classes**:
 - `UnifiedOntologyLayer`: Primary API for applications
-- `MappingResolver`: Handles mapping requests across graphs
+- `MappingResolver`: Handles mapping requests across different graphs
 - `PathFinder`: Discovers relationships between entities
 - `OntologyRegistry`: Central registry of available ontologies
 
 **Features**:
 - Single interface for all mapping operations
-- Transparent routing to appropriate graph
+- Transparent routing to appropriate knowledge graph
 - Cross-graph path discovery
 - Prioritization strategies for conflicting mappings
+- Fallback mechanisms when primary sources are unavailable
+- Graceful degradation when licensed sources aren't available
 
-### 4. Mapping Cache
+### 5. Mapping Cache
 
 **Purpose**: Optimize performance through SQL-based caching
 
@@ -127,63 +158,69 @@ The current Biomapper implementation:
 - `MappingStore`: SQL database interface
 - `CacheManager`: Cache invalidation and refresh
 - `MappingSchema`: Database schema definition
+- `StatisticsCollector`: Records performance metrics by source
 
 **Features**:
 - Fast lookups for frequent mappings
 - Source tracking for each mapping
 - Confidence scoring
 - TTL-based expiration
+- Performance metrics to inform intelligent routing
 
-### 5. Version Management
+### 6. Configuration System
 
-**Purpose**: Handle SPOKE version updates
+**Purpose**: Manage configuration for different knowledge graph sources
 
 **Key Classes**:
-- `VersionDetector`: Detects SPOKE version
-- `OntologyMigrator`: Migrates mappings between versions
-- `ValidationService`: Validates mappings against new versions
+- `KnowledgeGraphConfig`: Configuration for knowledge graph connections
+- `SchemaConfiguration`: Mapping between graph schemas and standardized ontologies
+- `CapabilityRegistry`: Tracks which ontologies are available in which knowledge graphs
+- `ConfigurationValidator`: Validates configuration syntax and semantics
 
 **Features**:
-- Automated version change detection
-- Selective cache invalidation
-- Validation of existing mappings
-- Metrics on version compatibility
+- Declarative configuration of knowledge graph sources
+- Schema mapping configuration
+- Environment-specific overrides
+- Dynamic reconfiguration
+- Version compatibility tracking
 
 ## Implementation Phases
 
-### Phase 1: Foundation (Weeks 1-4)
+### Phase 1: Knowledge Graph Abstraction (Weeks 1-4)
 
-1. **Implement SPOKE Version Adapter**
-   - Create version detection mechanism
-   - Develop adapter for current SPOKE version
-   - Test with existing SPOKEDBClient
+1. **Design Knowledge Graph Client Protocol**
+   - Define abstract interfaces for knowledge graph operations
+   - Create configuration schema for knowledge graph mapping
+   - Implement validation for configuration formats
 
-2. **Create Mapping Cache**
+2. **Implement Reference Graph Clients**
+   - Create ArangoDBGraphClient as base implementation
+   - Implement SPOKEGraphClient as reference (optional dependency)
+   - Develop testing mock clients for development without licensed resources
+
+3. **Create Mapping Cache**
    - Design and implement SQL schema
    - Create MappingStore class
    - Add caching to existing mappers
 
-3. **Set Up Extension Graph**
-   - Configure ArangoDB instance
-   - Define compatible schema
-   - Create client and basic CRUD operations
-
 ### Phase 2: Core Functionality (Weeks 5-8)
 
-1. **Develop Unified Ontology Layer**
+1. **Develop Generalized Knowledge Graph Layer**
+   - Build factory pattern for client creation
+   - Implement schema mapping based on configuration
+   - Create unified query interface
+
+2. **Implement Unified Ontology Layer**
    - Build primary API interface
-   - Implement routing logic
+   - Implement routing logic with fallbacks
    - Create relationship discovery tools
+   - Add graceful degradation when knowledge graphs are unavailable
 
-2. **Add First Supplemental Ontology**
-   - Import FDA UNII data to extension graph
-   - Create drug-ingredient mappings
-   - Test cross-graph queries
-
-3. **Implement Version Management**
-   - Create version detection
-   - Build basic migration tools
-   - Test with simulated version change
+3. **Configure Extension Graph**
+   - Set up ArangoDB instance with configurable schema
+   - Implement standalone operation capability
+   - Create data import pipelines
+   - Test with and without SPOKE availability
 
 ### Phase 3: Integration and Enhancement (Weeks 9-12)
 
