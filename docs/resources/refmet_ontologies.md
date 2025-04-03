@@ -2,7 +2,17 @@
 
 ## Overview
 
-RefMet (Reference list of Metabolite nomenclature) is a database that provides standardized metabolite nomenclature and classification. Developed by the Metabolomics Workbench, RefMet offers consistent naming of metabolites, classification based on chemical structure, and mapping to other databases. This document catalogs the ontological information available in RefMet that can be leveraged in Biomapper's metadata cache.
+RefMet (Reference list of Metabolite nomenclature) is a standardized reference nomenclature for both discrete metabolite structures and metabolite species identified in metabolomics experiments. Developed by the Metabolomics Workbench, RefMet addresses the critical need for consistent metabolite naming to enable comparison across different experiments and studies.
+
+### Purpose and Scope
+
+RefMet was created to overcome limitations of using identifiers like PubChem IDs and InChIKeys alone, which can vary depending on salt forms and stereochemical details. It is particularly valuable for metabolite species (especially lipids) that are often reported by MS methods as isobaric mixtures (such as PC 34:1 and TG 54:2) rather than discrete structures.
+
+The database was built from:
+- Over 700,000 metabolite names
+- Extracted from 3,500+ MS and NMR studies on the Metabolomics Workbench
+- Curated specifically for analytical chemistry applications
+- Linked to a comprehensive metabolite classification system using LIPID MAPS and ClassyFire
 
 ## Available Identifiers and Classification
 
@@ -135,14 +145,39 @@ RefMet complements SPOKE, RaMP DB, UniChem, ChEBI, and other resources in these 
 4. **Metabolomics Workbench Integration**: Direct connection to experimental metabolomics data
 5. **Metabolite Sets**: Groups metabolites by biochemical pathways and functions
 
-## Access Patterns
+## Access Patterns and Tools
 
-RefMet can be accessed through:
+RefMet provides multiple access options:
 
-1. **REST API**: Programmatic access via Metabolomics Workbench
-2. **Batch Downloads**: Complete database available for download
-3. **Web Interface**: Browser-based search and navigation
-4. **SQL Database**: Direct database access for partners
+### Web Interfaces
+1. **Browse/Search/Download**: Direct access to RefMet database
+2. **Classification Viewer**: View RefMet classification hierarchy
+3. **Name Conversion Interface**: Map metabolite names to RefMet nomenclature
+4. **Core Structures Browser**: View core structures of RefMet sub-classes
+5. **Lipid Notation**: Specialized tools for lipid m/z calculation
+
+### Mobile Applications
+1. **NMDR Metabolite Summary App**: Search studies by analytical technique, sample source, species, and metabolite class
+2. **RefMet Search App**: Search by name and/or neutral mass
+3. **RefMet Name Conversion App**: Convert metabolite names to RefMet nomenclature with structure display and m/z calculation
+4. **RefMet MS Search App**: Search using m/z values
+5. **Lipid Mass/Formula App**: Calculate lipid neutral mass and m/z for over 160 lipid species
+
+### Programmatic Access
+1. **R Package**: Available on GitHub for batch conversion and metadata access
+   - Map metabolite names to RefMet nomenclature
+   - Access RefMet metadata
+   - Perform plotting and saving functions
+   - Run as Shiny apps on local R installations
+
+2. **Python Script**: Convert metabolite names to RefMet nomenclature
+   - REFMET_post.py for batch processing
+
+3. **REST API**: Programmatic access via Metabolomics Workbench
+
+4. **Batch Downloads**: Complete database available for download
+
+5. **SQL Database**: Direct database access for partners
 
 ## Use Cases in Biomapper
 
@@ -153,3 +188,20 @@ RefMet is particularly valuable for:
 3. **Cross-database Mapping**: Connecting metabolite identifiers across resources
 4. **Metabolomics Data Integration**: Supporting analysis of metabolomics experiments
 5. **Name Resolution**: Disambiguating complex metabolite nomenclature
+6. **Lipid Nomenclature**: Handling isobaric mixtures reported in MS data
+7. **Meta-Analysis Support**: Facilitating cross-study comparisons 
+8. **Systems Biology Applications**: Supporting integration with pathway and network analysis
+
+## Implementation Recommendations
+
+When integrating RefMet into the Biomapper metadata cache:
+
+1. **Name Conversion Pipeline**: Implement the RefMet name conversion functionality using their Python or R tools
+2. **Classification Integration**: Store the hierarchical classification from LIPID MAPS and ClassyFire
+3. **Completeness Awareness**: Note that RefMet is a work-in-progress and many metabolite names from experiments may not currently map to RefMet identifiers
+4. **Mobile-Friendly API**: Consider implementing APIs similar to the mobile applications for enhanced usability
+5. **Batch Processing**: Support batch conversion for metabolite name lists
+
+## Citation
+
+The information in this document is derived from the RefMet documentation provided by Metabolomics Workbench.
