@@ -2,22 +2,16 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, Optional
 import requests
 
-if TYPE_CHECKING:
-    from libchebipy import ChebiEntity  # type: ignore
+try:
+    from libchebipy import ChebiEntity, search as chebi_search  # type: ignore
+except ImportError:
+    ChebiEntity = Any
 
     def chebi_search(query: str) -> list[Any]:
-        ...
-else:
-    try:
-        from libchebipy import ChebiEntity, search as chebi_search  # type: ignore
-    except ImportError:
-        ChebiEntity = Any
-
-        def chebi_search(query: str) -> list[Any]:
-            raise ImportError("libchebipy not installed")
+        raise ImportError("libchebipy not installed")
 
 
 logger = logging.getLogger(__name__)
@@ -152,8 +146,8 @@ class ChEBIClient:
             raise ChEBIError(f"Entity lookup failed: {str(e)}") from e
 
     def search_by_name(
-        self, name: str, max_results: int | None = None
-    ) -> list[ChEBIResult] | None:
+        self, name: str, max_results: Optional[int] = None
+    ) -> Optional[list[ChEBIResult]]:
         """Search ChEBI by a compound name, returning a list of ChEBIResult objects.
 
         Args:

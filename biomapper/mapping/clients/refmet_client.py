@@ -188,7 +188,7 @@ class RefMetClient:
 
     def _process_response(
         self, response_text: str
-    ) -> Optional[dict[str, Optional[str]]]:
+    ) -> Optional[Dict[str, Optional[str]]]:
         """Process the RefMet response text."""
         try:
             df = pd.read_csv(io.StringIO(response_text), sep="\t")
