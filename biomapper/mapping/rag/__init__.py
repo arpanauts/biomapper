@@ -1,6 +1,7 @@
 from typing import Optional
 
-from biomapper.mapping.rag.store import ChromaCompoundStore
+# Temporarily commented out to avoid chromadb dependency
+# from biomapper.mapping.rag.store import ChromaCompoundStore
 from biomapper.mapping.rag.prompts import PromptManager
 from biomapper.utils.optimization import DSPyOptimizer
 from biomapper.schemas.store_schema import VectorStoreConfig
@@ -29,7 +30,9 @@ class RAGCompoundMapper:
         self.traces = TraceManager(self.tracker)
 
         # Initialize RAG components
-        self.store = ChromaCompoundStore(store_config)
+        # Temporarily commented out to avoid chromadb dependency
+        # self.store = ChromaCompoundStore(store_config)
+        self.store = None
         self.prompt_manager = PromptManager()
         self.optimizer = DSPyOptimizer()
         self.embedding_manager = HuggingFaceEmbeddingManager()
@@ -92,7 +95,9 @@ class RAGCompoundMapper:
         try:
             # Get relevant documents from vector store
             query_embedding = self.embedding_manager.embed_text(query)
-            docs = self.store.get_relevant_compounds(query_embedding)
+            # Temporarily commented out to avoid chromadb dependency
+            # docs = self.store.get_relevant_compounds(query_embedding)
+            docs = []
 
             # Convert CompoundDocument objects to dictionaries
             doc_dicts = [
