@@ -8,7 +8,7 @@ metabolite information across various chemical databases.
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple, Any
+from typing import Dict, List, Optional, Set, Tuple, Any, Union
 from pathlib import Path
 
 import pandas as pd
@@ -379,10 +379,10 @@ class UniChemClient:
 
     def map_csv(
         self,
-        input_path: str | Path,
+        input_path: Union[str, Path],
         id_columns: Dict[str, str],
-        target_sources: List[str] | None = None,
-        output_path: str | Path | None = None,
+        target_sources: Optional[List[str]] = None,
+        output_path: Optional[Union[str, Path]] = None,
         prefix_ids: bool = True,
     ) -> MappingResult:
         """Map compound IDs in a CSV file using UniChem."""

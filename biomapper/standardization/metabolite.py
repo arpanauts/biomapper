@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Callable, Any, Tuple
+from typing import Dict, List, Optional, Callable, Any, Tuple, Union
 import re
 from collections import defaultdict
 
@@ -58,7 +58,7 @@ class MetaboliteMapping:
 class MetaboliteClassifier:
     """Classifier for metabolite names."""
 
-    def _check_ratio_patterns(self, name: str) -> tuple[str | None, str | None]:
+    def _check_ratio_patterns(self, name: str) -> Tuple[Optional[str], Optional[str]]:
         """Check for ratio patterns in metabolite name."""
         ratio_patterns = [
             r"ratio\s+of\s+(.+?)\s+to\s+(.+)",
@@ -73,7 +73,7 @@ class MetaboliteClassifier:
         
         return None, None
 
-    def _check_concentration_patterns(self, name: str) -> tuple[str | None, str | None]:
+    def _check_concentration_patterns(self, name: str) -> Tuple[Optional[str], Optional[str]]:
         """Check for concentration patterns in metabolite name."""
         concentration_patterns = [
             r"concentration\s+of\s+(.+?)\s+in\s+(.+)",
@@ -96,7 +96,7 @@ class MetaboliteClassifier:
         
         return None, None
 
-    def _check_composite_patterns(self, name: str) -> tuple[str | None, str | None]:
+    def _check_composite_patterns(self, name: str) -> Tuple[Optional[str], Optional[str]]:
         """Check for composite patterns in metabolite name."""
         composite_patterns = [
             r"(.+?)\s+(?:plus|minus|and)\s+(.+)",
@@ -113,7 +113,7 @@ class MetaboliteClassifier:
 
     def _extract_lipoprotein_info(
         self, text: str
-    ) -> Tuple[str | None, str | None, str]:
+    ) -> Tuple[Optional[str], Optional[str], str]:
         """
         Extract lipoprotein info, returning (lipo_class, size_descriptor, leftover).
         E.g. "HDL cholesterol" => ("HDL", None, "cholesterol")
@@ -387,7 +387,7 @@ class MetaboliteNameMapper:
         return results
 
     def map_from_file(
-        self, input_file: Path, name_column: str, output_file: Path | None = None
+        self, input_file: Path, name_column: str, output_file: Optional[Path] = None
     ) -> pd.DataFrame:
         """Map metabolite names from a file.
 
@@ -420,7 +420,7 @@ class MetaboliteNameMapper:
 
         return output_df
 
-    def get_mapping_summary(self, mappings: List[MetaboliteMapping]) -> dict[str, Any]:
+    def get_mapping_summary(self, mappings: List[MetaboliteMapping]) -> Dict[str, Any]:
         """Get a summary of mapping results."""
         total = len(mappings)
         mapped_any = sum(1 for m in mappings if m.refmet_id or m.chebi_id)
