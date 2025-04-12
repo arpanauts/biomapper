@@ -80,7 +80,21 @@ class UniChemClient:
             "chebi": 7,
             "kegg": 6,
             "inchikey": "inchikey",
-        }
+        ,
+            "lipidmaps": 18,
+            "zinc": 19,
+            "chemspider": 10,
+            "atlas": 29,
+            "gtopdb": 21,
+            "emolecules": 38,
+            "cas": 9,
+            "bindingdb": 25,
+            "molport": 33,
+            "comptox": 46,
+            "brenda": 12,
+            "metabolights": 39,
+            "selleck": 37,
+            }
 
     def _get_empty_result(self) -> Dict[str, List[Any]]:
         """Return an empty result dictionary with all source types."""
@@ -91,6 +105,20 @@ class UniChemClient:
             "kegg_ids": [],
             "hmdb_ids": [],
             "drugbank_ids": [],
+        ,
+            "lipidmaps_ids": [],
+            "zinc_ids": [],
+            "chemspider_ids": [],
+            "atlas_ids": [],
+            "gtopdb_ids": [],
+            "emolecules_ids": [],
+            "cas_ids": [],
+            "bindingdb_ids": [],
+            "molport_ids": [],
+            "comptox_ids": [],
+            "brenda_ids": [],
+            "metabolights_ids": [],
+            "selleck_ids": [],
         }
 
     def _process_compound_result(
@@ -119,6 +147,33 @@ class UniChemClient:
             elif src_id == 3:
                 result["drugbank_ids"].append(compound_id)
 
+        
+            elif src_id == 18:
+                result["lipidmaps_ids"].append(compound_id)
+            elif src_id == 19:
+                result["zinc_ids"].append(compound_id)
+            elif src_id == 10:
+                result["chemspider_ids"].append(compound_id)
+            elif src_id == 29:
+                result["atlas_ids"].append(compound_id)
+            elif src_id == 21:
+                result["gtopdb_ids"].append(compound_id)
+            elif src_id == 38:
+                result["emolecules_ids"].append(compound_id)
+            elif src_id == 9:
+                result["cas_ids"].append(compound_id)
+            elif src_id == 25:
+                result["bindingdb_ids"].append(compound_id)
+            elif src_id == 33:
+                result["molport_ids"].append(compound_id)
+            elif src_id == 46:
+                result["comptox_ids"].append(compound_id)
+            elif src_id == 12:
+                result["brenda_ids"].append(compound_id)
+            elif src_id == 39:
+                result["metabolights_ids"].append(compound_id)
+            elif src_id == 37:
+                result["selleck_ids"].append(compound_id)
         return result
 
     def get_source_information(self) -> Dict[str, Any]:
