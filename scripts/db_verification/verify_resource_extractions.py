@@ -11,6 +11,7 @@ import json
 import sys
 import time
 import logging
+import random
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import re
@@ -67,6 +68,17 @@ class ResourceVerification:
 class ResourceVerifier:
     """Class to verify resources and their property extraction configurations."""
     
+    # API rate limits in seconds between requests (inverse of requests per second)
+    API_RATE_LIMITS = {
+        "KEGG": 0.334,     # 3 requests per second as per documentation
+        "PubChem": 0.2,    # 5 requests per second (documented rate limit)
+        "ChEBI": 1.0,      # Conservative default
+        "UniChem": 1.0,    # Conservative default
+        "RefMet": 1.0,     # Conservative default
+        "RaMP-DB": 1.0,    # Conservative default
+        "default": 1.0     # Conservative default for any other API
+    }
+    
     def __init__(self, db_path: Path = None):
         """Initialize the resource verifier."""
         self.db_path = db_path or Path('data/metamapper.db')
@@ -78,6 +90,10 @@ class ResourceVerifier:
         self.cursor = self.conn.cursor()
         
         self.results: Dict[int, ResourceVerification] = {}
+        
+        # Rate limiting variables
+        self.last_request_time = {}
+        self.request_count = {}
         
     def get_all_resources(self) -> List[Dict[str, Any]]:
         """Get all resources from the database."""
@@ -259,7 +275,8 @@ class ResourceVerifier:
                     # SPOKE search would be ArangoDB specific
                     search_results[term] = {"message": "SPOKE search implementation is database-specific"}
                 
-                time.sleep(1)  # Wait a bit between searches to avoid rate limiting
+                # Apply rate limiting based on resource API
+                self.apply_rate_limit(resource_name)
                 
             except Exception as e:
                 search_results[term] = {"error": str(e)}
@@ -340,7 +357,8 @@ class ResourceVerifier:
                     # SPOKE lookup would be ArangoDB specific
                     id_results[id_value] = {"message": "SPOKE get_by_id implementation is database-specific"}
                 
-                time.sleep(1)  # Wait a bit between retrievals to avoid rate limiting
+                # Apply rate limiting based on resource API
+                self.apply_rate_limit(resource_name)
                 
             except Exception as e:
                 id_results[id_value] = {"error": str(e)}
@@ -372,6 +390,35 @@ class ResourceVerifier:
         
         # For other objects, convert to string
         return str(obj)
+    
+    def apply_rate_limit(self, resource_name: str):
+        """Apply rate limiting based on the resource API's limits.
+        
+        Args:
+            resource_name: The name of the resource to apply rate limiting for
+        """
+        # Get the appropriate rate limit for this resource
+        rate_limit = self.API_RATE_LIMITS.get(resource_name, self.API_RATE_LIMITS["default"])
+        
+        # Initialize the last request time if not already set
+        if resource_name not in self.last_request_time:
+            self.last_request_time[resource_name] = 0.0
+            self.request_count[resource_name] = 0
+            
+        # Calculate the time since the last request
+        current_time = time.time()
+        elapsed = current_time - self.last_request_time[resource_name]
+        
+        # If we need to wait to respect the rate limit
+        if elapsed < rate_limit:
+            # Add a small random factor to avoid synchronized requests
+            sleep_time = rate_limit - elapsed + (random.random() * 0.1)
+            logger.debug(f"Rate limiting {resource_name}: sleeping for {sleep_time:.3f} seconds")
+            time.sleep(sleep_time)
+            
+        # Update the request tracking variables
+        self.last_request_time[resource_name] = time.time()
+        self.request_count[resource_name] = self.request_count.get(resource_name, 0) + 1
     
     def extract_property(self, data: Any, config: Dict[str, Any]) -> Any:
         """Extract a property from data using the extraction configuration."""
