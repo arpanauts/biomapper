@@ -6,6 +6,7 @@
 - Added a comprehensive rate limiting framework in the `ResourceVerifier` class to handle different API limits for each resource
 - Enhanced the `_parse_compound_entry` method in the KEGG client to better handle KEGG's text format
 - Improved KEGG property extraction configurations, increasing success rate from 18.2% to 63.6%
+- Prioritized extraction patterns for ontological database IDs, which are critical for the metamapper's primary function
 - Redesigned the RefMet client to utilize a local CSV file (~187,000 entries) for faster and more reliable lookups
 - Fixed RefMet API endpoint URLs to align with the Metabolomics Workbench REST API specifications
 - Implemented multi-level fallback strategies in RefMet client (local CSV → REST API → legacy endpoints)
@@ -24,6 +25,8 @@
   - SPOKE (ArangoDB) client is missing implementation
 - The local RefMet CSV file with ~187,000 entries is now utilized for faster lookups
 - Rate limiting is properly implemented for both KEGG (3 requests/second) and other APIs with appropriate defaults
+- Currently focused on metabolite entities, but infrastructure needs to be extended to other entity types
+- The project has a solid foundation for extracting ontological database IDs, which is the primary objective for building the mapping paths table
 
 ## 3. Technical Context
 
@@ -37,6 +40,7 @@
 - Discovered that KEGG's text format requires more robust regex patterns without anchors (^) for reliable extraction
 - Identified that some properties (HMDB ID, InChI, SMILES) are not consistently present in KEGG compound entries
 - Updated patterns to use specific data type patterns (e.g., `[\d\.]+` for numeric fields)
+- Prioritized patterns for extracting ontological database IDs, which are critical for the mapping functionality
 
 ### RefMet Integration Strategy
 - Identified distinction between RefMet standardized nomenclature and Metabolomics Workbench repository
@@ -45,6 +49,16 @@
   2. REST API endpoints with the "refmet" context as fallback
   3. Legacy database endpoints as last resort
 - Added multiple search strategies (exact match, partial match, term decomposition)
+
+### UniChem Integration Potential
+- Identified numerous additional ontological databases in UniChem (25+ sources including DrugBank, HMDB, LipidMaps)
+- These represent significant expansion opportunities for the mapping system
+- Each database adds new identifier mapping capabilities to the system
+
+### Database Schema Considerations
+- Current focus is on building comprehensive mapping paths in the metamapper SQLite database
+- These mapping paths will be used when direct records aren't available in the mapping cache
+- Need to expand resources table to include an entity_type field to support entities beyond metabolites
 
 ## 4. Next Steps
 
@@ -68,7 +82,38 @@
   - Fine-tune rate limits based on observed API performance
   - Consider implementing adaptive rate limiting that adjusts based on response times
 
+- Add entity_type field to the resources table:
+  - Support entities beyond metabolites (proteins, clinical labs, etc.)
+  - Design a schema that allows flexible entity type categorization
+
+- Implement additional UniChem ontological databases:
+  - Prioritize high-value sources based on compound coverage and relevance
+  - Leverage UniChem's extensive database connections (25+ sources)
+
+- Integrate RAG approach into the mapping framework:
+  - Determine whether RAG should be a resource option or fallback mechanism
+  - Consider adding indicators in the mapping_paths table for RAG utilization
+
+- Focus on expanding the mapping_paths table:
+  - This is the primary end goal for metamapper development
+  - Ensure paths prioritize ontological database ID extraction capabilities
+
 ## 5. Open Questions & Considerations
+
+- What's the best approach for implementing the entity_type field in the resources table?
+  - Enumerated types vs. free-form text
+  - How to handle entity-specific validation and processing
+  - Whether to create separate tables for entity-specific attributes
+
+- How should we integrate RAG capabilities into the mapping process?
+  - As a last-resort fallback in the mapping_paths
+  - As a separate mapping resource with its own extraction patterns
+  - As an optional enhancement layer on top of traditional mapping
+
+- What's the optimal strategy for incorporating the 25+ additional ontological databases from UniChem?
+  - Which databases should be prioritized based on coverage and relevance
+  - How to efficiently batch import these databases
+  - How to maintain and update these connections over time
 
 - Should we implement a caching layer for API responses to reduce external requests?
 - Is it worth implementing a proxy service or queue for high-volume API interactions?
