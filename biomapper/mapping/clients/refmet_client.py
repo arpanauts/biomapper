@@ -32,6 +32,22 @@ class RefMetConfig:
     backoff_factor: float = 0.5
 
 
+class RefMetResult:
+    """Result from RefMet entity lookup."""
+    
+    def __init__(self, data: Dict[str, Any]):
+        self.refmet_id = data.get("refmet_id", "")
+        self.name = data.get("name", "")
+        self.formula = data.get("formula", "")
+        self.exact_mass = data.get("exact_mass", "")
+        self.inchikey = data.get("inchikey", "")
+        self.pubchem_id = data.get("pubchem_id", "")
+        self.chebi_id = data.get("chebi_id", "")
+        self.hmdb_id = data.get("hmdb_id", "")
+        self.kegg_id = data.get("kegg_id", "")
+        self.raw_data = data  # Store the original data
+
+
 class RefMetClient:
     """Client for interacting with the RefMet REST API."""
 
@@ -186,6 +202,89 @@ class RefMetClient:
             logger.warning(f"RefMet search failed for '{name}': {str(e)}")
             return None
 
+    def get_entity_by_id(self, refmet_id: str) -> Optional[RefMetResult]:
+        """Get RefMet entity by ID.
+        
+        Args:
+            refmet_id: RefMet ID in format 'REFMET:123' or '123'
+            
+        Returns:
+            RefMetResult object or None if the entity is not found
+            
+        Raises:
+            RefMetError: If the request fails
+        """
+        try:
+            # Clean ID format - handle REFMET: prefix if present
+            clean_id = refmet_id.replace("REFMET:", "")
+            
+            # RefMet doesn't have a direct ID lookup API endpoint, so we use the metabolite name endpoint
+            # and filter by ID in the results
+            url = f"{self.config.base_url}/refmet_all.php"
+            
+            try:
+                response = self.session.get(url, timeout=self.config.timeout)
+                response.raise_for_status()
+                
+                # Parse the TSV data
+                df = pd.read_csv(io.StringIO(response.text), sep="\t")
+                
+                # Find the row with matching RefMet ID
+                matching_rows = df[df["RefMet_ID"] == clean_id]
+                
+                if matching_rows.empty:
+                    logger.warning(f"No RefMet entity found for ID: {refmet_id}")
+                    return None
+                    
+                # Get the first matching row
+                row = matching_rows.iloc[0]
+                
+                # Process the result
+                result = self._create_result_from_row(row)
+                return RefMetResult(result) if result else None
+                
+            except Exception as e:
+                logger.error(f"RefMet API request failed: {str(e)}")
+                raise RefMetError(f"API request failed: {str(e)}") from e
+                
+        except Exception as e:
+            logger.error(f"RefMet entity lookup failed: {str(e)}")
+            raise RefMetError(f"Entity lookup failed: {str(e)}") from e
+    
+    def _create_result_from_row(self, row) -> Dict[str, Any]:
+        """Create a result dictionary from a DataFrame row.
+        
+        Args:
+            row: Pandas DataFrame row with RefMet data
+            
+        Returns:
+            Dictionary with processed RefMet data
+        """
+        # Get RefMet ID and add prefix if needed
+        refmet_id = str(row.get("RefMet_ID", ""))
+        if refmet_id and not refmet_id.startswith("REFMET:"):
+            refmet_id = f"REFMET:{refmet_id}"
+        
+        # Get ChEBI ID and add prefix if it's a valid ID
+        chebi_id = row.get("ChEBI_ID", "")
+        if pd.notna(chebi_id) and str(chebi_id).strip() and str(chebi_id).strip() != "-":
+            chebi_id = f"CHEBI:{chebi_id}"
+        else:
+            chebi_id = ""
+            
+        # Create the result dictionary
+        return {
+            "refmet_id": refmet_id,
+            "name": str(row.get("Standardized name", "")),
+            "formula": str(row.get("Formula", "")),
+            "exact_mass": str(row.get("Exact mass", "")),
+            "inchikey": str(row.get("INCHI_KEY", "")),
+            "pubchem_id": str(row.get("PubChem_CID", "")),
+            "chebi_id": chebi_id,
+            "hmdb_id": str(row.get("HMDB_ID", "")),
+            "kegg_id": str(row.get("KEGG_ID", "")),
+        }
+
     def _process_response(
         self, response_text: str
     ) -> Optional[Dict[str, Optional[str]]]:
@@ -196,27 +295,8 @@ class RefMetClient:
                 return None
 
             row = df.iloc[0]
-            refmet_id = row.get("RefMet_ID", "")
-            if not refmet_id or pd.isna(refmet_id):
-                return None
+            return self._create_result_from_row(row)
 
-            # Ensure REFMET: prefix
-            if not refmet_id.startswith("REFMET:"):
-                refmet_id = f"REFMET:{refmet_id}"
-
-            return {
-                "refmet_id": refmet_id,
-                "name": str(row.get("Standardized name", "")),
-                "formula": str(row.get("Formula", "")),
-                "exact_mass": str(row.get("Exact mass", "")),
-                "inchikey": str(row.get("INCHI_KEY", "")),
-                "pubchem_id": str(row.get("PubChem_CID", "")),
-                "chebi_id": f"CHEBI:{row['ChEBI_ID']}"
-                if pd.notna(row.get("ChEBI_ID"))
-                else None,
-                "hmdb_id": str(row.get("HMDB_ID", "")),
-                "kegg_id": str(row.get("KEGG_ID", "")),
-            }
         except Exception as e:
             logger.error(f"Error processing RefMet response: {e}")
             return None
