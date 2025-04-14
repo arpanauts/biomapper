@@ -10,7 +10,8 @@ Arivale was a scientific wellness company that collected comprehensive multi-omi
 - **Metabolite Names**: Common and systematic names for metabolites
 - **HMDB IDs**: Human Metabolome Database identifiers
 - **PubChem CIDs**: PubChem Compound IDs
-- **InChIKeys**: Chemical structure hashes
+- **CAS Numbers**: Chemical Abstract Service numbers
+- **KEGG IDs**: KEGG identifiers
 - **Internal Arivale IDs**: Proprietary identifiers used in Arivale datasets
 
 ### Genomics
