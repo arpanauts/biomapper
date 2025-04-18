@@ -17,6 +17,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 
 # Default path to the SQLite database
 DEFAULT_DB_PATH = os.path.join(os.path.dirname(__file__), '../../data/metamapper.db')
+print(f"Using database path: {os.path.abspath(DEFAULT_DB_PATH)}")
 
 
 def connect_to_database(db_path=None):
