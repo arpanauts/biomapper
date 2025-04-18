@@ -185,3 +185,8 @@ arivale_ukbb_comparison/
 tests_*.py*
 #tutorial_*.py*
 vector_store/
+
+# SQLite database files
+data/metamapper.db
+data/metamapper.db-*
+CLAUDE.md
