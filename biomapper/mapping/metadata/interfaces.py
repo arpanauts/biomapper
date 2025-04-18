@@ -209,3 +209,65 @@ class KnowledgeGraphClient(Protocol):
             List of supported entity types
         """
         ...
+
+
+@runtime_checkable
+class StepExecutor(Protocol):
+    """Interface for executing mapping steps."""
+    
+    async def execute_step(
+        self,
+        source_id: str,
+        source_type: str,
+        target_type: str,
+        step_config: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Execute a mapping step.
+        
+        Args:
+            source_id: The source ID to map.
+            source_type: The source ontology type.
+            target_type: The target ontology type.
+            step_config: Step configuration dictionary.
+            
+        Returns:
+            List of mapping results.
+        """
+        ...
+
+
+class EndpointAdapter(ABC):
+    """Base class for endpoint adapters that extract IDs from endpoints."""
+    
+    @abstractmethod
+    async def extract_ids(
+        self,
+        value: str,
+        endpoint_id: int,
+        ontology_type: str,
+        **kwargs
+    ) -> List[Dict[str, Any]]:
+        """Extract IDs of a specific ontology type from a value.
+        
+        Args:
+            value: The value to extract IDs from.
+            endpoint_id: The endpoint ID.
+            ontology_type: The ontology type to extract.
+            **kwargs: Additional keyword arguments.
+            
+        Returns:
+            List of extraction results.
+        """
+        pass
+    
+    @abstractmethod
+    def get_supported_extractions(self, endpoint_id: int) -> List[str]:
+        """Get supported extraction ontology types for an endpoint.
+        
+        Args:
+            endpoint_id: The endpoint ID.
+            
+        Returns:
+            List of supported ontology type strings.
+        """
+        pass
