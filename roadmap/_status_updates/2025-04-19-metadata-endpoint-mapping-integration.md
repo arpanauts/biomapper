@@ -27,6 +27,52 @@ Outstanding issues:
 
 ## 3. Technical Context
 
+### Design Sketch (MVP Endpoint-to-Endpoint Mapping)
+
+```mermaid
+flowchart TD
+    subgraph Endpoints
+        A[MetabolitesCSV]
+        B[SPOKE]
+        C[OtherEndpoint]
+    end
+    subgraph Extraction & Adapters
+        A1[CSV ID Extractor]
+        B1[SPOKE Adapter]
+        C1[Other Adapter]
+    end
+    subgraph PathDiscovery
+        PD[RelationshipPathFinder]
+    end
+    subgraph Execution
+        SE[StepExecutor]
+        RE[RelationshipMappingExecutor]
+    end
+    subgraph DB
+        MC[(mapping_cache)]
+        RP[(relationship_mapping_paths)]
+    end
+
+    A -- Extract IDs --> A1
+    B -- (if target) --> B1
+    C -- (if used) --> C1
+    A1 -- Source IDs --> PD
+    PD -- Discovers Path --> RP
+    PD -- Path Steps --> RE
+    RE -- Executes Steps --> SE
+    SE -- Uses Adapter(s) --> B1
+    SE -- Uses Adapter(s) --> C1
+    SE -- Result --> RE
+    RE -- Final Mapping --> MC
+    MC -- Cached Results --> RE
+
+    %% Generalization for new endpoints
+    C1 -.-> SE
+    C -.-> C1
+```
+
+This diagram shows the flow for endpoint-to-endpoint mapping, starting from extracting IDs from MetabolitesCSV, discovering mapping paths, executing mapping steps (potentially via adapters), and caching results. The structure generalizes to any new endpoint pairs by adding adapters and relationships.
+
 ### Architecture Decisions
 - **Modular Component Design**: Separated path discovery (PathFinder) from mapping execution (MappingExecutor) and step execution (StepExecutor)
 - **Adapter Pattern**: Used adapters for resource-specific mapping operations, allowing easy addition of new resources

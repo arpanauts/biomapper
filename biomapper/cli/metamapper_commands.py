@@ -301,5 +301,10 @@ def check_cache(
     asyncio.run(_check_cache())
 
 
+# Add this function to register the command group
+def register_commands(cli):
+    cli.add_command(metamapper_cli)
+
+
 if __name__ == "__main__":
     metamapper_cli()

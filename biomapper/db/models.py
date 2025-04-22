@@ -9,6 +9,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 Base = declarative_base()
 
@@ -143,3 +144,83 @@ class TransitiveJobLog(Base):
     def __repr__(self) -> str:
         """String representation of the job log."""
         return f"<TransitiveJobLog {self.id} date={self.job_date} status={self.status}>"
+
+
+class Endpoint(Base):
+    """Represents a data source or target endpoint."""
+    __tablename__ = "endpoints"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)
+    description = Column(Text)
+    type = Column(String) # e.g., 'database', 'api', 'file'
+    # Relationships defined below if needed after other models
+
+class MappingResource(Base):
+    """Represents a resource used for mapping between ontologies."""
+    __tablename__ = "mapping_resources"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)
+    description = Column(Text)
+    resource_type = Column(String) # e.g., 'api', 'database', 'internal_logic'
+    api_endpoint = Column(String) # URL if applicable
+    # Relationships defined below if needed
+
+class EndpointRelationship(Base):
+    """Defines a relationship between two endpoints."""
+    __tablename__ = "endpoint_relationships"
+
+    id = Column(Integer, primary_key=True)
+    source_endpoint_id = Column(Integer, ForeignKey("endpoints.id"), nullable=False)
+    target_endpoint_id = Column(Integer, ForeignKey("endpoints.id"), nullable=False)
+    description = Column(Text)
+    # Relationships
+    source_endpoint = relationship("Endpoint", foreign_keys=[source_endpoint_id])
+    target_endpoint = relationship("Endpoint", foreign_keys=[target_endpoint_id])
+
+class OntologyPreference(Base):
+    """Specifies preferred ontologies for a relationship or endpoint."""
+    __tablename__ = "ontology_preferences"
+
+    id = Column(Integer, primary_key=True)
+    relationship_id = Column(Integer, ForeignKey("endpoint_relationships.id"), nullable=True)
+    endpoint_id = Column(Integer, ForeignKey("endpoints.id"), nullable=True) # For default endpoint ontology
+    ontology_name = Column(String, nullable=False)
+    priority = Column(Integer, default=0) # Lower number means higher priority
+    # Relationships
+    endpoint_relationship = relationship("EndpointRelationship")
+    endpoint = relationship("Endpoint")
+
+class MappingPath(Base):
+    """Defines a sequence of steps to map between two ontologies."""
+    __tablename__ = "mapping_paths"
+
+    id = Column(Integer, primary_key=True)
+    source_type = Column(String, nullable=False)
+    target_type = Column(String, nullable=False)
+    path_steps = Column(Text, nullable=False) # JSON containing step details
+    performance_score = Column(Float, nullable=True)
+    success_rate = Column(Float, nullable=True)
+    usage_count = Column(Integer, default=0)
+    last_used = Column(DateTime)
+    last_discovered = Column(DateTime)
+
+    @property
+    def steps(self) -> List[Dict[str, Any]]:
+        """Get the path steps as a list of dictionaries."""
+        if not self.path_steps:
+            return []
+        try:
+            return json.loads(self.path_steps)
+        except json.JSONDecodeError:
+            # Handle potential malformed JSON, perhaps log an error
+            return []
+
+    @steps.setter
+    def steps(self, steps_list: List[Dict[str, Any]]) -> None:
+        """Set the path steps from a list of dictionaries."""
+        self.path_steps = json.dumps(steps_list) if steps_list else '[]'
+
+    def __repr__(self) -> str:
+        return f"<MappingPath {self.id}: {self.source_type} -> {self.target_type}>"

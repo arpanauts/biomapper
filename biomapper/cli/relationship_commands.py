@@ -230,34 +230,43 @@ def map_from_data(relationship_id, hmdb, chebi, pubchem, kegg, name, cas):
     
     async def run():
         db_manager = DatabaseManager()
-        session = db_manager.get_session()
         
-        try:
-            executor = RelationshipMappingExecutor(session)
-            results = await executor.map_from_endpoint_data(
+        # Use async context manager for session
+        async with await db_manager.create_async_session() as session:
+            # Discover paths first (if needed, or assume they exist for mapping)
+            pathfinder = RelationshipPathFinder(session)
+            await pathfinder.discover_paths_for_relationship(relationship_id)
+
+            # Execute mapping
+            mapper = RelationshipMappingExecutor(session)
+            source_data = {
+                'hmdb': hmdb,
+                'chebi': chebi,
+                'pubchem': pubchem,
+                'kegg': kegg,
+                'name': name,
+                'cas': cas
+            }
+            click.echo(f"Attempting to map data for relationship {relationship_id}:")
+            click.echo(f"Source data: {source_data}")
+            
+            results = await mapper.map_from_endpoint_data(
                 relationship_id=relationship_id,
                 source_data=source_data
             )
             
-            if not results:
-                click.echo("No mapping results found.")
-                return
-            
-            click.echo("Mapping results:")
-            for result in results:
-                source_type = result.get("source_type", "unknown")
-                source_id = result.get("source_id", "unknown")
-                target_id = result.get("target_id", "unknown")
-                target_type = result.get("target_type", "unknown")
-                confidence = result.get("confidence", "unknown")
-                click.echo(f"  {source_type}:{source_id} → {target_type}:{target_id} (confidence: {confidence})")
-        
-        except Exception as e:
-            click.echo(f"Error mapping data: {e}")
-        
-        finally:
-            session.close()
+            if results:
+                click.echo("\nMapping Results:")
+                for item in results:
+                    click.echo(
+                        f"  Input: {item['source_id']} ({item['source_type']}) -> "
+                        f"Output: {item['target_id']} ({item['target_type']}) "
+                        f"[Confidence: {item['confidence']:.2f}]"
+                    )
+            else:
+                click.echo("\nNo mapping results found.")
     
+    # Execute the async function
     asyncio.run(run())
 
 # Add the command group to biomapper CLI

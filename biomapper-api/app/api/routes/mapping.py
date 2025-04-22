@@ -14,6 +14,9 @@ from app.models.mapping import (
     JobStatus, 
     MappingResults,
     MappingResultSummary,
+    RelationshipMappingRequest,
+    RelationshipMappingResponse,
+    MappingResult
 )
 from app.services.mapper_service import MapperService
 
@@ -191,4 +194,34 @@ async def download_results(
         iterfile(),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={download_filename}"},
+    )
+
+
+@router.post("/relationship", response_model=RelationshipMappingResponse)
+async def map_with_relationship(
+    request: RelationshipMappingRequest,
+    mapper_service: MapperService = Depends(get_mapper_service),
+) -> RelationshipMappingResponse:
+    """
+    Map data using a relationship and the endpoint adapter extraction mechanism.
+    
+    This endpoint uses the newly integrated CSVAdapter and RelationshipMappingExecutor
+    to map values from one endpoint to another using defined relationships.
+    
+    Args:
+        request: The relationship mapping request
+        mapper_service: Mapper service dependency
+        
+    Returns:
+        Mapping results
+    """
+    results = await mapper_service.map_relationship(
+        relationship_id=request.relationship_id,
+        source_data=request.source_data
+    )
+    
+    return RelationshipMappingResponse(
+        relationship_id=request.relationship_id,
+        source_data=request.source_data,
+        results=results
     )

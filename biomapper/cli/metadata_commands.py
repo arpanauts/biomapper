@@ -15,7 +15,6 @@ from typing import Dict, Any, Optional
 
 from biomapper.mapping.metadata.initialize import initialize_metadata_system, verify_metadata_schema, get_metadata_db_path
 from biomapper.mapping.metadata.manager import ResourceMetadataManager
-from biomapper.mapping.metadata.dispatcher import MappingDispatcher
 
 # Configure logging
 logging.basicConfig(
@@ -254,9 +253,8 @@ def map_entity(db_path, source_id, source_type, target_type, resource):
         click.echo(f"Database does not exist at {db_path}. Run 'metadata init' first.")
         return
         
-    # Initialize metadata manager and dispatcher
+    # Initialize metadata manager
     manager = ResourceMetadataManager(db_path)
-    dispatcher = MappingDispatcher(manager)
     
     # This is just a demo, in practice you would load the proper adapters
     click.echo("NOTE: This command requires properly configured resource adapters.")
@@ -318,6 +316,11 @@ def optimize_priorities(db_path):
     click.echo("Optimization not implemented in this demo version.")
     
     manager.close()
+
+
+# Add this function to register the command group
+def register_commands(cli):
+    cli.add_command(metadata_cli)
 
 
 if __name__ == "__main__":

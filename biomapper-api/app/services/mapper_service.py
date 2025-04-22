@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 import uuid
+import json
 
 import pandas as pd
 from fastapi import HTTPException, status
@@ -14,6 +15,27 @@ from biomapper import load_tabular_file
 
 # Mock implementation for testing
 # from biomapper import MetaboliteNameMapper
+
+# Import the RelationshipMappingExecutor for endpoint-to-endpoint mapping
+try:
+    from biomapper.mapping.relationships.executor import RelationshipMappingExecutor
+except ImportError:
+    # Mock for development/testing if not available
+    class RelationshipMappingExecutor:
+        """Mock of RelationshipMappingExecutor for testing."""
+        
+        async def map_from_endpoint_data(self, relationship_id, source_data):
+            """Mock implementation of map_from_endpoint_data."""
+            return [
+                {
+                    "source_id": list(source_data.values())[0],
+                    "source_type": list(source_data.keys())[0],
+                    "target_id": f"mapped_{list(source_data.values())[0]}",
+                    "target_type": "SPOKE",
+                    "confidence": 0.95,
+                    "path_id": 1
+                }
+            ]
 
 # This is a placeholder for testing the UI without the full biomapper package
 class MockMetaboliteNameMapper:
@@ -43,7 +65,7 @@ class MockMetaboliteNameMapper:
 from app.core.config import settings
 from app.core.session import Session
 from app.models.job import Job
-from app.models.mapping import MappingStatus
+from app.models.mapping import MappingStatus, MappingResult
 
 
 class MapperService:
@@ -54,6 +76,8 @@ class MapperService:
         self.jobs: Dict[str, Job] = {}
         # Initialize the mock mapper instance
         self.mapper = MockMetaboliteNameMapper()
+        # Initialize the relationship mapping executor
+        self.relationship_executor = None
         
     async def create_job(
         self, 
@@ -347,4 +371,60 @@ class MapperService:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Error reading result file: {str(e)}",
+            )
+    
+    async def map_relationship(self, relationship_id: int, source_data: Dict[str, Any]) -> List[MappingResult]:
+        """
+        Map data using a relationship and the endpoint adapter extraction mechanism.
+        
+        Args:
+            relationship_id: ID of the relationship to use
+            source_data: Source data dictionary (e.g., {'HMDB': 'HMDB0000123', 'NAME': 'Glucose'})
+            
+        Returns:
+            List of mapping results
+            
+        Raises:
+            HTTPException: If relationship not found or mapping fails
+        """
+        # Initialize the relationship executor if not already done
+        if self.relationship_executor is None:
+            try:
+                self.relationship_executor = RelationshipMappingExecutor()
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to initialize relationship mapping executor: {str(e)}",
+                )
+        
+        try:
+            # Execute the mapping using the RelationshipMappingExecutor
+            results = await self.relationship_executor.map_from_endpoint_data(
+                relationship_id=relationship_id,
+                source_data=source_data
+            )
+            
+            if not results:
+                return []
+                
+            # Convert to MappingResult objects
+            mapping_results = []
+            for result in results:
+                mapping_results.append(
+                    MappingResult(
+                        source_id=result.get("source_id", ""),
+                        source_type=result.get("source_type", ""),
+                        target_id=result.get("target_id", ""),
+                        target_type=result.get("target_type", ""),
+                        confidence=result.get("confidence", 0.0),
+                        path_id=result.get("path_id") or result.get("path")
+                    )
+                )
+            
+            return mapping_results
+            
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error executing relationship mapping: {str(e)}",
             )

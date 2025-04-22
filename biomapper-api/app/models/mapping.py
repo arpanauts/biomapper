@@ -62,3 +62,29 @@ class MappingResults(BaseModel):
     preview: List[Dict[str, Any]]
     download_url: str
     completed_at: datetime
+
+
+class RelationshipMappingRequest(BaseModel):
+    """Request model for endpoint-to-endpoint relationship mapping."""
+    relationship_id: int = Field(..., description="ID of the relationship to use for mapping")
+    source_data: Dict[str, Any] = Field(
+        ..., description="Source data containing values to be mapped (e.g., HMDB IDs, names, etc.)"
+    )
+
+
+class MappingResult(BaseModel):
+    """Model for a single mapping result."""
+    source_id: str
+    source_type: str
+    target_id: str
+    target_type: str
+    confidence: float
+    path_id: Optional[int] = None
+
+
+class RelationshipMappingResponse(BaseModel):
+    """Response model for endpoint-to-endpoint relationship mapping."""
+    relationship_id: int
+    source_data: Dict[str, Any]
+    results: List[MappingResult]
+    timestamp: datetime = Field(default_factory=datetime.now)

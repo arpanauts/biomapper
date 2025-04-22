@@ -84,7 +84,7 @@ api = ["fastapi", "uvicorn"]  # For potential REST API functionality
 full = ["fastapi", "uvicorn"]  # Remove visualization packages from full extras
 
 [tool.poetry.scripts]
-biomapper = "biomapper.cli:main"
+biomapper = "biomapper.cli.main:cli"
 
 [build-system]
 requires = ["poetry-core"]
