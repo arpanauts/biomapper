@@ -19,9 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, and_
 from sqlalchemy.orm import sessionmaker
 from biomapper.db.models import (
-    Endpoint, MappingResource, EndpointRelationship, OntologyPreference, MappingPath, EntityMapping, Base
+    Endpoint, MappingResource, EndpointRelationship, OntologyPreference, MappingPath, EntityMapping, Base, EndpointRelationshipMember
 )
 from biomapper.mapping.resources.clients.unichem_client import map_with_unichem
+from biomapper.resources.adapters.spoke_adapter import SpokeClient
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,13 @@ class RelationshipMappingExecutor:
         Returns:
             List of mapping results
         """
+        final_entity = None
+        final_ontology = None
+        ontology_path_id = None
+        aggregated_confidence = 0.0
+        target_endpoint_info = None # Store target endpoint details
+        validated_in_target = False # Flag for validation status
+
         async with self.db_session as session:
             try:
                 # 1. Determine Source Ontology if not provided
@@ -148,30 +156,36 @@ class RelationshipMappingExecutor:
                     return []
                 
                 ontology_path_id = best_path.id
-                target_ontology = best_path.target_ontology_type # Get target from the path itself
-                logger.debug(f"Selected mapping path ID: {ontology_path_id} ({source_ontology} -> {target_ontology})")
+                final_ontology = best_path.target_ontology_type # Get target from the path itself
+                logger.debug(f"Selected mapping path ID: {ontology_path_id} ({source_ontology} -> {final_ontology})")
+
+                # 2b. Get Target Endpoint Info
+                target_endpoint_info = await self._get_target_endpoint_info(session, relationship_id)
+                target_endpoint_type = target_endpoint_info.get("type") if target_endpoint_info else None
 
                 # 3. Check full path cache first (still uses raw SQL temporarily)
-                cached_result = await self._check_cache(session, source_entity, source_ontology, target_ontology)
+                cached_result = await self._check_cache(session, source_entity, source_ontology, final_ontology)
                 if cached_result:
-                    logger.info(f"Full path cache hit for {source_ontology}:{source_entity} -> {target_ontology}")
-                    # Convert raw SQL result dict to expected format
+                    logger.info(f"Full path cache hit for {source_ontology}:{source_entity} -> {final_ontology}")
                     if cached_result.confidence >= confidence_threshold:
                         # Use refactored helper
                         await self._update_path_usage(session, ontology_path_id)
                         await session.commit() # Commit path usage update
+                        metadata = json.loads(cached_result.metadata or '{}')
+                        # Add validation status if available in cache metadata
+                        metadata['validated_in_target'] = metadata.get('validated_in_target', False)
                         return [{
                             "source_id": cached_result.source_id,
                             "source_type": cached_result.source_type,
                             "target_id": cached_result.target_id,
                             "target_type": cached_result.target_type,
                             "confidence": cached_result.confidence,
-                            "path": ontology_path_id, 
+                            "path": ontology_path_id,
                             "mapping_source": "cache",
-                            "metadata": json.loads(cached_result.metadata or '{}')
+                            "metadata": metadata
                         }]
                     else:
-                         logger.debug(f"Full path cache hit for {source_ontology}:{source_entity} -> {target_ontology}, but confidence {cached_result.confidence} < {confidence_threshold}")
+                         logger.debug(f"Full path cache hit below confidence threshold.")
 
                 # 4. Get the ontology path steps (Use refactored helper)
                 ontology_path = best_path
@@ -242,43 +256,74 @@ class RelationshipMappingExecutor:
                         aggregated_confidence = 0.0
                         break
 
-                # 6. Process final result (Store still raw SQL temporarily)
-                final_results = []
-                if aggregated_confidence >= confidence_threshold and current_ontology == target_ontology:
-                    final_target_id = current_entity
-                    logger.info(f"Mapping successful: {source_ontology}:{source_entity} -> {target_ontology}:{final_target_id} (Confidence: {aggregated_confidence}) - Storing full path result.")
-                    
-                    await self._store_cache(
-                        session,
-                        source_entity=source_entity,
-                        source_type=source_ontology,
-                        target_entity=final_target_id,
-                        target_type=target_ontology,
-                        confidence=aggregated_confidence,
-                        mapping_source="derived",
-                        is_derived=True,
-                        derivation_path=[ontology_path_id]
-                    )
-                    
-                    # Use refactored helper
-                    await self._update_path_usage(session, ontology_path_id)
+                # 6. *** SPOKE Validation Step ***
+                final_entity = current_entity # Result from the last successful step
 
-                    final_results.append({
+                if final_entity is not None:
+                    if target_endpoint_type == 'spoke':
+                        logger.info(f"Target endpoint is SPOKE. Validating {final_ontology}:{final_entity} exists in SPOKE.")
+                        try:
+                            # Pass session and relationship_id here
+                            spoke_client = await self._get_spoke_client(session, relationship_id)
+                            if not spoke_client:
+                                raise ValueError("Failed to initialize SpokeClient for validation.")
+
+                            # Use the helper method to determine the SPOKE node type
+                            spoke_node_type = self._get_spoke_entity_type_for_ontology(final_ontology)
+                            logger.debug(f"Using SPOKE entity type '{spoke_node_type}' for validation based on ontology '{final_ontology}'")
+
+                            entity_exists = await spoke_client.get_entity(final_entity, spoke_node_type)
+
+                            if not entity_exists:
+                                logger.warning(f"Validation FAILED: {final_ontology}:{final_entity} (Type: {spoke_node_type}) not found in SPOKE endpoint.")
+                                validated_in_target = False
+                                # Invalidate the result if validation fails
+                                final_entity = None
+                                aggregated_confidence = 0.0
+                            else:
+                                logger.info(f"Validation SUCCESS: {final_ontology}:{final_entity} found in SPOKE endpoint.")
+                                validated_in_target = True
+
+                        except Exception as e:
+                            logger.error(f"Error during SPOKE validation step (client init or query) for {final_ontology}:{final_entity}: {e}")
+                            validated_in_target = False
+                    else:
+                         # Not SPOKE, so no validation performed/needed in this step
+                         logger.debug(f"Target endpoint is '{target_endpoint_type}', skipping SPOKE validation.")
+                         # validated_in_target remains False
+
+
+                # 7. Final Result Processing & Caching
+                if final_entity is not None and aggregated_confidence >= confidence_threshold:
+                    logger.info(f"Mapping successful: {source_ontology}:{source_entity} -> {final_ontology}:{final_entity} (Confidence: {aggregated_confidence:.4f}) Validation: {validated_in_target}")
+
+                    # Prepare metadata including validation status
+                    metadata = {"validated_in_target": validated_in_target}
+
+                    # Store the final validated result in cache
+                    await self._store_cache(session, source_entity, source_ontology, final_entity, final_ontology, aggregated_confidence, ontology_path_id, metadata=metadata)
+
+                    # Update path usage
+                    await self._update_path_usage(session, ontology_path_id)
+                    await session.commit()
+
+                    # Construct and return result
+                    return [{
                         "source_id": source_entity,
                         "source_type": source_ontology,
-                        "target_id": final_target_id,
-                        "target_type": target_ontology,
+                        "target_id": final_entity,
+                        "target_type": final_ontology, # Use the overall target ontology
                         "confidence": aggregated_confidence,
                         "path": ontology_path_id,
-                        "mapping_source": "executor",
-                        "metadata": {"steps": step_results}
-                    })
+                        "mapping_source": "computed",
+                        "metadata": metadata # Include validation status
+                    }]
                 else:
-                     logger.warning(f"Mapping failed or confidence too low for {source_ontology}:{source_entity}. Final confidence: {aggregated_confidence}, Target reached: {current_ontology == target_ontology}")
-
-
-                await session.commit()
-                return final_results
+                    # Mapping failed, confidence too low, or validation failed
+                    logger.info(f"Mapping did not produce a valid result above threshold for relationship {relationship_id}, source {source_ontology}:{source_entity}")
+                    # Do not commit cache or path usage if the path failed or result invalid
+                    await session.rollback() # Rollback any potential step caches from this failed path
+                    return []
 
             except Exception as e:
                 logger.error(f"Error during mapping for relationship {relationship_id}, entity {source_entity}: {e}")
@@ -536,3 +581,81 @@ class RelationshipMappingExecutor:
         except Exception as e:
             logger.error(f"Error finding best path for relationship {relationship_id} from {source_ontology_type}: {e}")
             return None
+
+    # Updated helper to fetch connection_info
+    async def _get_target_endpoint_info(self, session: AsyncSession, relationship_id: int) -> Optional[Dict[str, Any]]:
+        """Gets the target endpoint details, including connection info, for a relationship."""
+        stmt = (
+            select(Endpoint.endpoint_id, Endpoint.name, Endpoint.type, Endpoint.connection_info) # Added connection_info
+            .join(EndpointRelationshipMember, Endpoint.endpoint_id == EndpointRelationshipMember.endpoint_id)
+            .where(EndpointRelationshipMember.relationship_id == relationship_id)
+            .where(EndpointRelationshipMember.role == 'target')
+        )
+        result = await session.execute(stmt)
+        endpoint = result.fetchone()
+        if endpoint:
+            return {
+                "endpoint_id": endpoint.endpoint_id,
+                "name": endpoint.name,
+                "type": endpoint.type,
+                "connection_info": endpoint.connection_info # Include connection_info
+            }
+        logger.warning(f"Could not find target endpoint for relationship {relationship_id}")
+        return None
+
+    # Updated helper method to get SpokeClient using connection_info
+    async def _get_spoke_client(self, session: AsyncSession, relationship_id: int) -> Optional[SpokeClient]:
+         """Gets or initializes the SpokeClient using config from the target endpoint's connection_info."""
+         target_info = await self._get_target_endpoint_info(session, relationship_id)
+         if not target_info or target_info.get("type") != 'spoke':
+             logger.error(f"Target endpoint for relationship {relationship_id} not found or is not SPOKE.")
+             return None
+
+         endpoint_id = target_info.get("endpoint_id")
+         connection_info_str = target_info.get("connection_info")
+
+         if not endpoint_id:
+              logger.error(f"Could not retrieve endpoint ID for SPOKE target in relationship {relationship_id}.")
+              return None
+         if not connection_info_str:
+             logger.error(f"Missing connection_info for SPOKE endpoint {endpoint_id}.")
+             return None
+
+         try:
+             # Parse the connection_info JSON string
+             config = json.loads(connection_info_str)
+             if not isinstance(config, dict):
+                  raise TypeError("Parsed connection_info is not a dictionary.")
+
+             # Pass the parsed config dictionary directly to SpokeClient constructor
+             spoke_client = SpokeClient(config)
+             logger.info(f"Successfully initialized SpokeClient for endpoint {endpoint_id}")
+             return spoke_client
+         except json.JSONDecodeError:
+             logger.exception(f"Failed to parse connection_info JSON for endpoint {endpoint_id}: {connection_info_str}")
+             return None
+         except Exception as e:
+             logger.exception(f"Failed to initialize SpokeClient for endpoint {endpoint_id} from connection_info: {e}")
+             return None
+
+    def _get_spoke_entity_type_for_ontology(self, ontology_type: str) -> str:
+        """Maps ontology types to SPOKE entity types."""
+        # Ensure comparison is case-insensitive
+        ontology_type_upper = ontology_type.upper()
+        mapping = {
+            "CHEBI": "Compound",
+            "HMDB": "Compound",
+            "PUBCHEM": "Compound", # Assuming PubChem CID maps to Compound
+            "KEGG": "Compound", # Assuming KEGG Compound maps to Compound
+            "INCHIKEY": "Compound", # SPOKE might index by InChIKey directly
+            "UNIPROT": "Protein",
+            "ENTREZ": "Gene",
+            # Add more mappings based on SPOKE's schema and supported IDs
+        }
+        # Default to 'Compound' if no specific mapping is found,
+        # or potentially raise an error if strict mapping is required.
+        default_type = "Compound"
+        entity_type = mapping.get(ontology_type_upper, default_type)
+        if entity_type == default_type and ontology_type_upper not in mapping:
+            logger.warning(f"No specific SPOKE entity type mapping found for ontology '{ontology_type}'. Defaulting to '{default_type}'.")
+        return entity_type

@@ -9,7 +9,13 @@ This document outlines the steps required to add a new mapping resource (e.g., a
     *   Provide a descriptive `name` (e.g., 'MyNewResource API').
     *   Specify the `resource_type` (e.g., 'api', 'db', 'local_file', 'algorithm').
     *   Add a brief `description`.
-    *   (Optional) Define base URL, configuration details in `config_details` (JSON) if applicable.
+    *   Note: General configuration *about* the resource itself goes here.
+*   **Define Endpoint Configuration (If applicable):** If your resource acts as an *endpoint* (like SPOKE) or requires specific connection details (like a file path or API key), ensure there is a corresponding entry in the `endpoints` table. 
+    *   The `connection_info` column in the `endpoints` table stores critical connection parameters as a **JSON string**. 
+    *   **Example (`endpoints` table):**
+        *   For a file-based resource: `connection_info = '{"file_path": "/path/to/data.csv", "delimiter": ","}'`
+        *   For an API: `connection_info = '{"url": "https://api.example.com/v1", "api_key": "${EXAMPLE_API_KEY}"}'` (Note the use of environment variable placeholders if needed).
+    *   **Verification:** During development, it's crucial to check the actual `connection_info` stored in `metamapper.db` (e.g., using `sqlite3 "SELECT name, connection_info FROM endpoints;"`).
 *   **Add Ontology Types:** If the resource introduces or primarily works with ontology types not already present, add them to the relevant table (if we create a dedicated ontology type table, otherwise ensure consistent naming).
 
 ## 2. Client Implementation
@@ -21,7 +27,9 @@ This document outlines the steps required to add a new mapping resource (e.g., a
         *   `input_ontology` (str): The ontology type of the input entity.
         *   `target_ontology` (str): The desired ontology type for the output.
         *   (Optional) `session` (AsyncSession) if database access is needed within the client.
-        *   (Optional) Configuration parameters if needed.
+        *   **`config` (Dict[str, Any]):** If the resource requires connection details, the client's `__init__` method or primary mapping function should accept a configuration dictionary. This dictionary is **automatically parsed** from the `connection_info` JSON string stored in the corresponding `endpoints` table entry.
+    *   **Using Configuration:** Inside the client, access parameters directly from the `config` dictionary (e.g., `api_url = config.get('url')`, `api_key = config.get('api_key')`). Handle potential environment variable placeholders (like `${VAR_NAME}`) if necessary, possibly using `os.path.expandvars`. 
+    *   **Document Configuration:** Clearly document the expected keys and structure of the `config` dictionary in the client's docstrings.
     *   Implement the interaction with the resource (API calls, database queries, file parsing, algorithm execution).
     *   Handle authentication, request limits, error conditions gracefully.
     *   Parse the response to extract the mapped entity/entities and a confidence score (float between 0.0 and 1.0).
