@@ -6,6 +6,7 @@ from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
+from sqlalchemy import create_engine
 
 from alembic import context
 
@@ -51,15 +52,19 @@ def run_migrations_online():
     In this scenario we need to create an Engine
     and associate a connection with the context.
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    # Explicitly get the database URL from the main options in alembic.ini
+    database_url = config.get_main_option('sqlalchemy.url')
+    if not database_url:
+        raise ValueError("Database URL not found in alembic.ini")
+
+    # Create the engine
+    connectable = create_engine(database_url)
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, 
+            target_metadata=target_metadata,
+            render_as_batch=True  # Enable batch mode for SQLite
         )
 
         with context.begin_transaction():

@@ -1,7 +1,7 @@
 """Add endpoint health monitoring tables
 
 Revision ID: endpoint_health_monitoring
-Revises: 20250414_endpoint_mapping_schema
+Revises: 02_endpoint_mapping_schema
 Create Date: 2025-04-18
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic
 revision = 'endpoint_health_monitoring'
-down_revision = '20250414_endpoint_mapping_schema'
+down_revision = '02_endpoint_mapping_schema'
 branch_labels = None
 depends_on = None
 

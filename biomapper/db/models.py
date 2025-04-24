@@ -154,6 +154,7 @@ class Endpoint(Base):
     name = Column(String, unique=True, nullable=False)
     description = Column(Text)
     type = Column(String) # e.g., 'database', 'api', 'file'
+    connection_details = Column(Text, nullable=True) # Store as JSON string or similar
     # Relationships defined below if needed after other models
 
 class MappingResource(Base):
