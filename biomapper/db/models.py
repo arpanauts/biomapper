@@ -1,99 +1,22 @@
-"""SQLAlchemy models for the mapping cache database."""
+"""SQLAlchemy models for the metamapper configuration database (metamapper.db)."""
 
 import datetime
-import json
-from typing import Any, Dict, List, Optional, Union
+from typing import Optional
 
 from sqlalchemy import (
-    Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, String, Table, Text, UniqueConstraint
+    Column,
+    Integer,
+    String,
+    DateTime,
+    ForeignKey,
+    Boolean,
+    Text,
 )
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 
 Base = declarative_base()
-
-
-class EntityMapping(Base):
-    """Entity mapping model for bidirectional mappings between ontologies."""
-
-    __tablename__ = "entity_mappings"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    source_id = Column(String, nullable=False)
-    source_type = Column(String, nullable=False)
-    target_id = Column(String, nullable=False)
-    target_type = Column(String, nullable=False)
-    confidence = Column(Float)
-    mapping_source = Column(String)  # api, spoke, rag, ramp, etc.
-    is_derived = Column(Boolean, default=False)
-    derivation_path = Column(Text)  # JSON array of mapping IDs
-    last_updated = Column(DateTime, default=datetime.datetime.utcnow)
-    usage_count = Column(Integer, default=1)
-    expires_at = Column(DateTime)
-
-    # Bidirectional uniqueness constraint
-    __table_args__ = (
-        UniqueConstraint('source_id', 'source_type', 'target_id', 'target_type', name='uix_mapping'),
-        Index('idx_source_lookup', 'source_id', 'source_type'),
-        Index('idx_target_lookup', 'target_id', 'target_type'),
-        Index('idx_usage_count', 'usage_count', postgresql_using='btree'),
-        Index('idx_expiration', 'expires_at')
-    )
-
-    # Relationships
-    metadata_items = relationship("MappingMetadata", back_populates="mapping", cascade="all, delete-orphan")
-
-    def __repr__(self) -> str:
-        """String representation of the mapping."""
-        return f"<EntityMapping {self.source_type}:{self.source_id} -> {self.target_type}:{self.target_id}>"
-    
-    @property
-    def derivation_path_list(self) -> List[int]:
-        """Get the derivation path as a list of mapping IDs."""
-        if not self.derivation_path:
-            return []
-        return json.loads(self.derivation_path)
-    
-    @derivation_path_list.setter
-    def derivation_path_list(self, path: List[int]) -> None:
-        """Set the derivation path from a list of mapping IDs."""
-        self.derivation_path = json.dumps(path) if path else None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert the mapping to a dictionary."""
-        return {
-            "id": self.id,
-            "source_id": self.source_id,
-            "source_type": self.source_type,
-            "target_id": self.target_id,
-            "target_type": self.target_type,
-            "confidence": self.confidence,
-            "mapping_source": self.mapping_source,
-            "is_derived": self.is_derived,
-            "derivation_path": self.derivation_path_list,
-            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
-            "usage_count": self.usage_count,
-            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
-            "metadata": {item.key: item.value for item in self.metadata_items}
-        }
-
-
-class MappingMetadata(Base):
-    """Metadata associated with entity mappings."""
-
-    __tablename__ = "mapping_metadata"
-
-    mapping_id = Column(Integer, ForeignKey("entity_mappings.id", ondelete="CASCADE"), primary_key=True)
-    key = Column(String, primary_key=True)
-    value = Column(Text)
-
-    # Relationship
-    mapping = relationship("EntityMapping", back_populates="metadata_items")
-
-    def __repr__(self) -> str:
-        """String representation of the metadata."""
-        return f"<MappingMetadata {self.mapping_id}:{self.key}={self.value}>"
 
 
 class EntityTypeConfig(Base):
@@ -157,6 +80,7 @@ class Endpoint(Base):
     connection_details = Column(Text, nullable=True) # Store as JSON string or similar
     # Relationships defined below if needed after other models
 
+
 class MappingResource(Base):
     """Represents a resource used for mapping between ontologies."""
     __tablename__ = "mapping_resources"
@@ -167,6 +91,7 @@ class MappingResource(Base):
     resource_type = Column(String) # e.g., 'api', 'database', 'internal_logic'
     api_endpoint = Column(String) # URL if applicable
     # Relationships defined below if needed
+
 
 class EndpointRelationship(Base):
     """Defines a relationship between two endpoints."""
@@ -180,6 +105,7 @@ class EndpointRelationship(Base):
     source_endpoint = relationship("Endpoint", foreign_keys=[source_endpoint_id])
     target_endpoint = relationship("Endpoint", foreign_keys=[target_endpoint_id])
 
+
 class OntologyPreference(Base):
     """Specifies preferred ontologies for a relationship or endpoint."""
     __tablename__ = "ontology_preferences"
@@ -192,6 +118,7 @@ class OntologyPreference(Base):
     # Relationships
     endpoint_relationship = relationship("EndpointRelationship")
     endpoint = relationship("Endpoint")
+
 
 class MappingPath(Base):
     """Defines a sequence of steps to map between two ontologies."""
@@ -208,7 +135,7 @@ class MappingPath(Base):
     last_discovered = Column(DateTime)
 
     @property
-    def steps(self) -> List[Dict[str, Any]]:
+    def steps(self) -> list:
         """Get the path steps as a list of dictionaries."""
         if not self.path_steps:
             return []
@@ -219,9 +146,96 @@ class MappingPath(Base):
             return []
 
     @steps.setter
-    def steps(self, steps_list: List[Dict[str, Any]]) -> None:
+    def steps(self, steps_list: list) -> None:
         """Set the path steps from a list of dictionaries."""
         self.path_steps = json.dumps(steps_list) if steps_list else '[]'
 
     def __repr__(self) -> str:
         return f"<MappingPath {self.id}: {self.source_type} -> {self.target_type}>"
+
+
+class PropertyExtractionConfig(Base):
+    """Configuration for extracting properties from mapping resources."""
+    __tablename__ = "property_extraction_configs"
+
+    id = Column(Integer, primary_key=True)
+    resource_id = Column(Integer, ForeignKey("mapping_resources.id"), nullable=False)
+    ontology_type = Column(String, nullable=False)
+    property_name = Column(String, nullable=False) # e.g., 'pref_name', 'synonym', 'description'
+    extraction_method = Column(String, nullable=False) # e.g., 'json_path', 'regex', 'xpath'
+    extraction_pattern = Column(String, nullable=False) # The actual pattern/path
+    result_type = Column(String) # Expected data type, e.g., 'string', 'list'
+    transform_function = Column(String, nullable=True) # Optional function to apply post-extraction
+    priority = Column(Integer, default=0) # For selecting among multiple patterns for the same property
+    is_active = Column(Boolean, default=True)
+    # entity_type = Column(String, default='metabolite') # Consider if needed, matches backup schema
+    # ns_prefix = Column(String) # Consider if needed, matches backup schema
+    # ns_uri = Column(String) # Consider if needed, matches backup schema
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    resource = relationship("MappingResource")
+
+    __table_args__ = (UniqueConstraint('resource_id', 'ontology_type', 'property_name', name='uix_prop_extract'),)
+
+    def __repr__(self) -> str:
+        return f"<PropertyExtractionConfig id={self.id} resource={self.resource_id} ontology={self.ontology_type} property={self.property_name}>"
+
+
+class EndpointPropertyConfig(Base):
+    """Configuration for extracting properties from endpoints."""
+    __tablename__ = "endpoint_property_configs"
+
+    config_id = Column(Integer, primary_key=True)
+    endpoint_id = Column(Integer, ForeignKey("endpoints.id"), nullable=False)
+    ontology_type = Column(String, nullable=False) # The ontology type *within* the endpoint data
+    property_name = Column(String, nullable=False) # The property name to extract
+    extraction_method = Column(String, nullable=False) # e.g., 'column_name', 'json_path'
+    extraction_pattern = Column(String, nullable=False) # The column name or path
+    transform_method = Column(String, nullable=True) # Optional transformation
+
+    endpoint = relationship("Endpoint")
+
+    __table_args__ = (UniqueConstraint('endpoint_id', 'ontology_type', 'property_name', name='uix_endpoint_prop_extract'),)
+
+    def __repr__(self) -> str:
+        return f"<EndpointPropertyConfig id={self.config_id} endpoint={self.endpoint_id} ontology={self.ontology_type} property={self.property_name}>"
+
+
+class OntologyCoverage(Base):
+    """Defines which mapping resources support which ontology transitions."""
+    __tablename__ = "ontology_coverage"
+
+    resource_id = Column(Integer, ForeignKey("mapping_resources.id"), primary_key=True)
+    source_type = Column(String, primary_key=True)
+    target_type = Column(String, primary_key=True)
+    support_level = Column(String, nullable=False) # e.g., 'direct', 'api_lookup', 'inferred'
+
+    resource = relationship("MappingResource")
+
+    def __repr__(self) -> str:
+        return f"<OntologyCoverage resource={self.resource_id} {self.source_type}->{self.target_type} ({self.support_level})>"
+
+
+class RelationshipMappingPath(Base):
+    """Links EndpointRelationships to specific MappingPaths for given ontology types."""
+    __tablename__ = "relationship_mapping_paths"
+
+    id = Column(Integer, primary_key=True)
+    relationship_id = Column(Integer, ForeignKey("endpoint_relationships.id"), nullable=False)
+    source_ontology = Column(String, nullable=False)
+    target_ontology = Column(String, nullable=False)
+    ontology_path_id = Column(Integer, ForeignKey("mapping_paths.id"), nullable=False)
+    performance_score = Column(Float, nullable=True)
+    success_rate = Column(Float, default=1.0)
+    usage_count = Column(Integer, default=0)
+    last_used = Column(DateTime, nullable=True)
+    last_discovered = Column(DateTime, default=func.now())
+
+    endpoint_relationship = relationship("EndpointRelationship")
+    mapping_path = relationship("MappingPath", foreign_keys=[ontology_path_id])
+
+    __table_args__ = (UniqueConstraint('relationship_id', 'source_ontology', 'target_ontology', name='uix_rel_map_path'),)
+
+    def __repr__(self) -> str:
+        return f"<RelationshipMappingPath id={self.id} rel={self.relationship_id} {self.source_ontology}->{self.target_ontology} via path={self.ontology_path_id}>"

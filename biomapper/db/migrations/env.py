@@ -13,8 +13,8 @@ from alembic import context
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
 
-# Import SQLAlchemy models
-from biomapper.db.models import Base
+# Import SQLAlchemy models for the mapping cache
+from biomapper.db.cache_models import Base
 
 # This is the Alembic Config object
 config = context.config
