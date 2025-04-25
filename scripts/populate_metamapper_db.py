@@ -5,7 +5,8 @@ import logging
 import os
 from pathlib import Path
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 # Assuming db.session provides get_session and Base, and models are in db.models
 from biomapper.db.models import (
@@ -15,6 +16,9 @@ from biomapper.db.models import (
     MappingPath,
     OntologyPreference,
     EndpointRelationship,
+    PropertyExtractionConfig,
+    EndpointPropertyConfig,
+    OntologyCoverage,
 )
 
 # Configure logging
@@ -59,6 +63,9 @@ async def populate_data(session: AsyncSession):
         "unichem": MappingResource(name="UniChem", description="EBI compound identifier mapping service", resource_type="api"),
         "refmet": MappingResource(name="RefMet", description="Reference metabolite nomenclature", resource_type="ontology"),
         "ramp_db": MappingResource(name="RaMP DB", description="Rapid Mapping Database for metabolites and pathways", resource_type="database"),
+        # New resources:
+        "uniprot_name": MappingResource(name="UniProt_NameSearch", description="Maps protein/gene names/symbols to UniProtKB Accession IDs using the UniProt /uniprotkb/search API.", resource_type="api"),
+        "umls_search": MappingResource(name="UMLS_Metathesaurus", description="Maps terms to UMLS Concept Unique Identifiers (CUIs) using the UMLS UTS /search API. Requires API key.", resource_type="api"),
     }
     session.add_all(resources.values())
     await session.flush() # Flush to get IDs
@@ -108,6 +115,95 @@ async def populate_data(session: AsyncSession):
     session.add_all(preferences)
     await session.flush()
 
+    logging.info("Populating Property Extraction Configs...")
+    prop_extract_configs = [
+        # --- UniProt Name Search --- 
+        # Expects: NAME (e.g., from protein endpoint), Returns: UNIPROTKB_AC
+        PropertyExtractionConfig(
+            resource_id=resources["uniprot_name"].id, 
+            ontology_type="UNIPROTKB_AC", # What we get OUT
+            property_name="identifier", # The primary identifier
+            extraction_method="client_method", # Client handles extraction
+            extraction_pattern="find_uniprot_id", # Method name
+            result_type="string"
+        ),
+        # --- UMLS Metathesaurus Search ---
+        # Expects: TERM, Returns: CUI
+        PropertyExtractionConfig(
+            resource_id=resources["umls_search"].id,
+            ontology_type="CUI", # What we get OUT
+            property_name="identifier", # The primary identifier
+            extraction_method="client_method",
+            extraction_pattern="find_cui", # Placeholder method name
+            result_type="string"
+        ),
+        # Add configs for existing resources if needed...
+    ]
+    session.add_all(prop_extract_configs)
+    await session.flush()
+
+    logging.info("Populating Endpoint Property Configs...")
+    endpoint_prop_configs = [
+        # --- UKBB Protein Endpoint --- 
+        # How to get the NAME property (which is a PROTEIN_NAME) from this endpoint
+        EndpointPropertyConfig(
+            endpoint_id=endpoints["ukbb_protein"].id,
+            ontology_type="PROTEIN_NAME", # The type of thing this property represents
+            property_name="name", # The generic property name (e.g., used in mapping requests)
+            extraction_method="column_name", # Method to get it from the TSV
+            extraction_pattern="Protein Name" # Actual column header in the TSV (Guessing!)
+        ),
+        # --- Arivale Protein Endpoint ---
+        EndpointPropertyConfig(
+            endpoint_id=endpoints["arivale_protein"].id,
+            ontology_type="PROTEIN_NAME", 
+            property_name="name", 
+            extraction_method="column_name", 
+            extraction_pattern="Protein Name" # Actual column header in the TSV (Guessing!)
+        ),
+         # Add configs for other endpoints if needed...
+    ]
+    session.add_all(endpoint_prop_configs)
+    await session.flush()
+
+    logging.info("Populating Ontology Coverage...")
+    ontology_coverage_configs = [
+        # UniProt Name Search covers NAME -> UNIPROTKB_AC via API lookup
+        OntologyCoverage(
+            resource_id=resources["uniprot_name"].id,
+            source_type="PROTEIN_NAME",
+            target_type="UNIPROTKB_AC",
+            support_level="api_lookup"
+        ),
+        # UMLS Search covers TERM -> CUI via API lookup
+        OntologyCoverage(
+            resource_id=resources["umls_search"].id,
+            source_type="TERM", # Generic term
+            target_type="CUI",
+            support_level="api_lookup"
+        ),
+        # Add coverage for existing resources...
+        # e.g., UniChem covers PUBCHEM -> CHEBI
+        OntologyCoverage(
+            resource_id=resources["unichem"].id,
+            source_type="PUBCHEM",
+            target_type="CHEBI",
+            support_level="api_lookup"
+        ),
+        OntologyCoverage(
+            resource_id=resources["unichem"].id,
+            source_type="CHEBI",
+            target_type="PUBCHEM",
+            support_level="api_lookup"
+        ),
+        # ... add others as needed ...
+    ]
+    session.add_all(ontology_coverage_configs)
+    await session.flush()
+
+    # Note: We are not populating RelationshipMappingPath yet as specific
+    # relationships using these paths haven't been defined.
+
     await session.commit()
     logging.info("Database population complete.")
 
@@ -129,7 +225,10 @@ async def main():
 
     # Create engine and session specifically for this script, pointing to the config DB
     engine = create_async_engine(db_url, echo=False)
-    AsyncSessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+    # Use sessionmaker configured for async
+    AsyncSessionLocal = sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
 
     async with AsyncSessionLocal() as session:
         await populate_data(session)
