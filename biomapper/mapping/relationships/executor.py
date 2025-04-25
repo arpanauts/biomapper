@@ -28,6 +28,8 @@ from biomapper.db.models import (
     Base
 )
 from biomapper.mapping.resources.clients.unichem_client import map_with_unichem
+from biomapper.mapping.clients.uniprot_name_client import UniProtNameClient
+from biomapper.mapping.clients.umls_client import UMLSClient
 from biomapper.mapping.adapters.spoke_adapter import SpokeClient
 
 logger = logging.getLogger(__name__)
@@ -154,9 +156,32 @@ class RelationshipMappingExecutor:
             except Exception as e:
                 logger.error(f"Error mapping with UniChem: {e}", exc_info=True)
                 return None, 0.0
+        elif resource_name == 'UniProt_NameSearch':
+            logger.debug(f"Using UniProt Name Search client for step: {source_type} -> {target_type}")
+            try:
+                client = UniProtNameClient(session=self.http_session)
+                # Assuming find_uniprot_id takes the name (current_value) and returns (value, confidence)
+                mapped_value, confidence = await client.find_uniprot_id(current_value)
+                logger.debug(f"UniProt client returned: {mapped_value} (Confidence: {confidence})")
+            except Exception as e:
+                 logger.error(f"Error mapping with UniProt Name Search: {e}", exc_info=True)
+                 return None, 0.0
+        elif resource_name == 'UMLS_Metathesaurus':
+            logger.debug(f"Using UMLS Metathesaurus client for step: {source_type} -> {target_type}")
+            try:
+                client = UMLSClient(session=self.http_session)
+                # Assuming find_cui takes the term (current_value) and returns (value, confidence)
+                # NOTE: find_cui method needs implementation in UMLSClient
+                mapped_value, confidence = await client.find_cui(current_value)
+                logger.debug(f"UMLS client returned: {mapped_value} (Confidence: {confidence})")
+            except AttributeError:
+                logger.error(f"UMLSClient does not have the 'find_cui' method implemented yet.", exc_info=True)
+                return None, 0.0
+            except Exception as e:
+                 logger.error(f"Error mapping with UMLS Metathesaurus: {e}", exc_info=True)
+                 return None, 0.0
         else:
-            logger.warning(f"No mapping implementation found for resource ID {resource_id} ({source_type} -> {target_type}). Returning None.")
-            # For now, return None if no specific handler exists
+            logger.warning(f"No mapping implementation found for resource '{resource_name}' (ID: {resource_id}). Step: {source_type} -> {target_type}. Returning None.")
             return None, 0.0
 
         return mapped_value, confidence
