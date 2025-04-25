@@ -4,14 +4,15 @@ This document outlines the steps required to add a new mapping resource (e.g., a
 
 ## 1. Database Setup
 
-*   **Add Resource Entry:** Add a new row to the `mapping_resources` table in the `metamapper.db` database. 
-    *   Assign a unique `id`.
-    *   Provide a descriptive `name` (e.g., 'MyNewResource API').
+*   **Add Resource Entry:** Add a new row to the `mapping_resources` table in the `metamapper.db` database.
+    *   Assign a unique `id` (typically auto-assigned during population).
+    *   Provide a descriptive `name` (e.g., 'UniProt_IDMapper', 'UniProt_NameSearch', 'MyNewResource'). This name is used by the executor to identify the resource logic.
     *   Specify the `resource_type` (e.g., 'api', 'db', 'local_file', 'algorithm').
     *   Add a brief `description`.
+    *   **Important Note on APIs:** If a single external API provides multiple *distinct mapping functions* via different endpoints (e.g., one endpoint maps ID -> OtherID, another maps Name -> ID), each distinct function should generally be treated as a **separate `MappingResource`** entry. This ensures clarity in `MappingPath` definitions and simplifies the executor's dispatch logic.
     *   Note: General configuration *about* the resource itself goes here.
-*   **Define Endpoint Configuration (If applicable):** If your resource acts as an *endpoint* (like SPOKE) or requires specific connection details (like a file path or API key), ensure there is a corresponding entry in the `endpoints` table. 
-    *   The `connection_info` column in the `endpoints` table stores critical connection parameters as a **JSON string**. 
+*   **Define Endpoint Configuration (If applicable):** If your resource acts as an *endpoint* (like SPOKE) or requires specific connection details (like a file path or API key), ensure there is a corresponding entry in the `endpoints` table.
+    *   The `connection_info` column in the `endpoints` table stores critical connection parameters as a **JSON string**.
     *   **Example (`endpoints` table):**
         *   For a file-based resource: `connection_info = '{"file_path": "/path/to/data.csv", "delimiter": ","}'`
         *   For an API: `connection_info = '{"url": "https://api.example.com/v1", "api_key": "${EXAMPLE_API_KEY}"}'` (Note the use of environment variable placeholders if needed).
@@ -20,15 +21,15 @@ This document outlines the steps required to add a new mapping resource (e.g., a
 
 ## 2. Client Implementation
 
-*   **Create Client Module:** Create a new Python file in `biomapper/mapping/resources/clients/`, named appropriately (e.g., `my_new_resource_client.py`).
-*   **Implement Mapping Logic:** 
+*   **Create Client Module:** Create a new Python file in `biomapper/mapping/clients/`, named appropriately (e.g., `my_new_resource_client.py`).
+*   **Implement Mapping Logic:**
     *   Define a primary function or class method that will perform the mapping. This function should accept standard arguments:
         *   `input_entity` (str): The identifier to map.
         *   `input_ontology` (str): The ontology type of the input entity.
         *   `target_ontology` (str): The desired ontology type for the output.
         *   (Optional) `session` (AsyncSession) if database access is needed within the client.
         *   **`config` (Dict[str, Any]):** If the resource requires connection details, the client's `__init__` method or primary mapping function should accept a configuration dictionary. This dictionary is **automatically parsed** from the `connection_info` JSON string stored in the corresponding `endpoints` table entry.
-    *   **Using Configuration:** Inside the client, access parameters directly from the `config` dictionary (e.g., `api_url = config.get('url')`, `api_key = config.get('api_key')`). Handle potential environment variable placeholders (like `${VAR_NAME}`) if necessary, possibly using `os.path.expandvars`. 
+    *   **Using Configuration:** Inside the client, access parameters directly from the `config` dictionary (e.g., `api_url = config.get('url')`, `api_key = config.get('api_key')`). Handle potential environment variable placeholders (like `${VAR_NAME}`) if necessary, possibly using `os.path.expandvars`.
     *   **Document Configuration:** Clearly document the expected keys and structure of the `config` dictionary in the client's docstrings.
     *   Implement the interaction with the resource (API calls, database queries, file parsing, algorithm execution).
     *   Handle authentication, request limits, error conditions gracefully.
@@ -38,7 +39,7 @@ This document outlines the steps required to add a new mapping resource (e.g., a
 ## 3. Integration with Executor
 
 *   **Update Dispatcher:** Modify the `RelationshipMappingExecutor._execute_mapping_step` method in `biomapper/mapping/relationships/executor.py`.
-    *   Add a condition (e.g., `elif resource_id == YOUR_NEW_RESOURCE_ID:`) to the dispatcher logic.
+    *   Add a condition (e.g., `elif resource_id == YOUR_NEW_RESOURCE_ID:`) to the dispatcher logic. *(Note: Dispatching based on `resource_name` might be more robust against changes in population order in the future, but the current implementation often relies on the `resource_id` retrieved alongside the resource details)*.
     *   Inside the condition, import and call your new client function/method, passing the required arguments.
     *   Ensure the return value from your client is correctly handled.
 

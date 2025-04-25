@@ -14,6 +14,8 @@ This directory contains API documentation for the various resources used by Biom
 | [PubChem](./pubchem_api_documentation.md) | PUG REST API | Not Required | Chemical compounds | Structure search, property retrieval | ID 6 |
 | SPOKE | ArangoDB queries | N/A (local) | Compounds, Genes, Proteins, Diseases, Pathways | Comprehensive knowledge graph | ID 8 |
 | MetabolitesCSV | File-based | N/A (local) | Metabolites | CSV data (proxy for Arivale data) | ID 7 |
+| [UniProt](./uniprot_api_documentation.md) | REST API | Not Required | Proteins | ID mapping, sequence search | ID 13 |
+| [UMLS](./umls_api_documentation.md) | REST API | Not Required | Medical concepts | Terminology services, concept mapping | ID 14 |
 
 ## Ontological Coverage
 
@@ -55,14 +57,36 @@ The following access methods are implemented for extracting data from these reso
 | **PubChem** | PUG REST API | 5 req/sec, 400 req/min | JSON, XML, SDF | JSON Path patterns |
 | **SPOKE** | ArangoDB queries | N/A (local) | JSON | JSON Path patterns |
 | **Extension Graph** | ArangoDB queries | N/A (local) | JSON | JSON Path patterns |
+| **UniProt** | REST API | None documented | JSON | JSON Path patterns |
+| **UMLS** | REST API | None documented | JSON | JSON Path patterns |
+
+## External Mapping Resources & APIs
+
+Detailed documentation on the external APIs and resources used for mapping:
+
+*   **ChEBI:** [Chemical Entities of Biological Interest API](./chebi_api_documentation.md)
+*   **KEGG:** [Kyoto Encyclopedia of Genes and Genomes API](./kegg_api_documentation.md)
+*   **PubChem:** [PubChem PUG REST API](./pubchem_api_documentation.md)
+*   **RaMP-DB:** [Relational Database of Metabolomics Pathways API](./rampdb_api_documentation.md)
+*   **RefMet:** [Reference Metabolomics API](./refmet_api_documentation.md)
+*   **UniChem:** [Structure-based Chemical Identifier Mapping API](./unichem_api_documentation.md)
+*   **UniProt:** [UniProt REST API (ID Mapping & Search)](./uniprot_api_documentation.md)
+*   **UMLS:** [UMLS Terminology Services (UTS) REST API](./umls_api_documentation.md)
+
+## Biomapper-Specific Ontologies & Data Sources
+
+Documentation on ontologies or data formats specific to data sources integrated with Biomapper:
+
+*   **Arivale:** [Arivale Ontology Details](./arivale_ontologies.md)
+*   **Extension Graph:** [Extension Graph Ontology Details](./extension_graph_ontologies.md)
+*   **SPOKE:** [SPOKE Ontology Details](./spoke_ontologies.md)
 
 ## Next Steps
 
 Based on the documented resources, the following steps are planned:
 
-1. **Automated Testing**: Develop tests for API connectivity and response parsing
-2. **Error Handling**: Implement robust error handling and retry mechanisms
-3. **Rate Limiting**: Add adaptive rate limiting to respect API usage policies
-4. **Caching Layer**: Implement local caching to reduce API calls
-5. **Mapping Validation**: Create validation procedures for cross-database mappings
-6. **Documentation Updates**: Maintain up-to-date API documentation as services evolve
+1.  **Implement UniProt Name Client:** Develop a client to query the UniProt search API (`/uniprotkb/search`) to map protein names/symbols to UniProt IDs.
+2.  **Implement UMLS Client:** Develop a client to query the UMLS Terminology Services API (`/search`) to map terms to CUIs, handling the necessary authentication.
+3.  **Database Integration:** Add `UniProt_NameSearch` and `UMLS_Metathesaurus` as resources in the `metamapper.db`.
+4.  **Executor Integration:** Update the `RelationshipMappingExecutor` to dispatch mapping steps to the new UniProt and UMLS clients based on resource ID/name.
+5.  **Define Mapping Paths:** Create new `MappingPath` entries in the database that utilize these new resources (e.g., `Endpoint Ontology (Gene Name) -> UniProt_NameSearch -> UniProtKB ID`, `Endpoint Ontology (Term) -> UMLS_Metathesaurus -> CUI`).
