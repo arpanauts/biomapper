@@ -66,6 +66,8 @@ async def populate_data(session: AsyncSession):
         # New resources:
         "uniprot_name": MappingResource(name="UniProt_NameSearch", description="Maps protein/gene names/symbols to UniProtKB Accession IDs using the UniProt /uniprotkb/search API.", resource_type="api"),
         "umls_search": MappingResource(name="UMLS_Metathesaurus", description="Maps terms to UMLS Concept Unique Identifiers (CUIs) using the UMLS UTS /search API. Requires API key.", resource_type="api"),
+        # Placeholder for future RAG resource
+        # "pubchem_rag": MappingResource(name="PubChemRAG", description="Uses PubChem embeddings for similarity-based mapping fallback.", resource_type="rag"),
     }
     session.add_all(resources.values())
     await session.flush() # Flush to get IDs
@@ -118,13 +120,13 @@ async def populate_data(session: AsyncSession):
     logging.info("Populating Property Extraction Configs...")
     prop_extract_configs = [
         # --- UniProt Name Search --- 
-        # Expects: NAME (e.g., from protein endpoint), Returns: UNIPROTKB_AC
+        # Expects: PROTEIN_NAME or GENE_NAME, Returns: UNIPROTKB_AC
         PropertyExtractionConfig(
             resource_id=resources["uniprot_name"].id, 
             ontology_type="UNIPROTKB_AC", # What we get OUT
             property_name="identifier", # The primary identifier
             extraction_method="client_method", # Client handles extraction
-            extraction_pattern="find_uniprot_id", # Method name
+            extraction_pattern="find_uniprot_id_by_name", # Placeholder method name
             result_type="string"
         ),
         # --- UMLS Metathesaurus Search ---
@@ -134,10 +136,19 @@ async def populate_data(session: AsyncSession):
             ontology_type="CUI", # What we get OUT
             property_name="identifier", # The primary identifier
             extraction_method="client_method",
-            extraction_pattern="find_cui", # Placeholder method name
+            extraction_pattern="find_cui_by_term", # Placeholder method name
             result_type="string"
         ),
         # Add configs for existing resources if needed...
+        # Example: UniChem expects a specific ID type and returns another
+        PropertyExtractionConfig(
+            resource_id=resources["unichem"].id,
+            ontology_type="CHEBI", # What we get OUT (example)
+            property_name="identifier",
+            extraction_method="client_method",
+            extraction_pattern="map_id", # Placeholder method name in UniChem client
+            result_type="string"
+        ),
     ]
     session.add_all(prop_extract_configs)
     await session.flush()
@@ -171,7 +182,13 @@ async def populate_data(session: AsyncSession):
         # UniProt Name Search covers NAME -> UNIPROTKB_AC via API lookup
         OntologyCoverage(
             resource_id=resources["uniprot_name"].id,
-            source_type="PROTEIN_NAME",
+            source_type="PROTEIN_NAME", # Or GENE_NAME
+            target_type="UNIPROTKB_AC",
+            support_level="api_lookup"
+        ),
+        OntologyCoverage(
+            resource_id=resources["uniprot_name"].id,
+            source_type="GENE_NAME",
             target_type="UNIPROTKB_AC",
             support_level="api_lookup"
         ),
@@ -204,34 +221,37 @@ async def populate_data(session: AsyncSession):
     # Note: We are not populating RelationshipMappingPath yet as specific
     # relationships using these paths haven't been defined.
 
-    await session.commit()
-    logging.info("Database population complete.")
+    try:
+        await session.commit()
+        logging.info("Successfully populated database.")
+    except Exception as e:
+        await session.rollback()
+        logging.error(f"Error populating database: {e}")
+        raise
 
 async def main():
-    # Ensure data directory exists
+    """Main function to set up DB and populate data."""
+    # Ensure parent directory exists
     CONFIG_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     # Delete existing DB if it exists
     await delete_existing_db()
 
-    # Set up the database engine
-    db_url = f"sqlite+aiosqlite:///{CONFIG_DB_PATH}" # Use aiosqlite driver
-    temp_engine = create_async_engine(db_url, echo=False)
-    async with temp_engine.begin() as conn:
-        logging.info(f"Creating schema in {CONFIG_DB_PATH}...")
+    # Create engine and session
+    engine = create_async_engine(f"sqlite+aiosqlite:///{CONFIG_DB_PATH}")
+    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+    # Create tables
+    async with engine.begin() as conn:
+        logging.info("Creating database tables...")
         await conn.run_sync(Base.metadata.create_all)
-    await temp_engine.dispose()
-    logging.info("Schema creation/check complete.")
+        logging.info("Database tables created.")
 
-    # Create engine and session specifically for this script, pointing to the config DB
-    engine = create_async_engine(db_url, echo=False)
-    # Use sessionmaker configured for async
-    AsyncSessionLocal = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
-
-    async with AsyncSessionLocal() as session:
+    # Populate data
+    async with async_session() as session:
         await populate_data(session)
+
+    await engine.dispose()
 
 if __name__ == "__main__":
     asyncio.run(main())
