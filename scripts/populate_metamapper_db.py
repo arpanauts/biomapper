@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import json
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -64,8 +65,21 @@ async def populate_data(session: AsyncSession):
         "refmet": MappingResource(name="RefMet", description="Reference metabolite nomenclature", resource_type="ontology"),
         "ramp_db": MappingResource(name="RaMP DB", description="Rapid Mapping Database for metabolites and pathways", resource_type="database"),
         # New resources:
-        "uniprot_name": MappingResource(name="UniProt_NameSearch", description="Maps protein/gene names/symbols to UniProtKB Accession IDs using the UniProt /uniprotkb/search API.", resource_type="api"),
-        "umls_search": MappingResource(name="UMLS_Metathesaurus", description="Maps terms to UMLS Concept Unique Identifiers (CUIs) using the UMLS UTS /search API. Requires API key.", resource_type="api"),
+        "uniprot_name": MappingResource(
+            name="UniProt_NameSearch",
+            description="Maps Gene Names/Symbols to UniProtKB Accession IDs using the UniProt ID Mapping API.",
+            client_class_path="biomapper.mapping.clients.uniprot_name_client.UniProtNameClient", 
+            input_ontology_term="Gene_Name", 
+            output_ontology_term="UniProtKB", 
+            config_template=json.dumps({ 
+                # "api_key": "YOUR_API_KEY_IF_NEEDED"
+            })
+        ),
+        "umls_search": MappingResource(
+            name="UMLS_Metathesaurus",
+            description="Maps UMLS CUIs to other ontology terms using the UMLS Terminology Services (UTS) API.",
+            resource_type="api"
+        ),
         # Placeholder for future RAG resource
         # "pubchem_rag": MappingResource(name="PubChemRAG", description="Uses PubChem embeddings for similarity-based mapping fallback.", resource_type="rag"),
     }

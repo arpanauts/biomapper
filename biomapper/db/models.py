@@ -1,6 +1,7 @@
 """SQLAlchemy models for the metamapper configuration database (metamapper.db)."""
 
 import datetime
+import json
 from typing import Optional
 
 from sqlalchemy import (
@@ -11,6 +12,9 @@ from sqlalchemy import (
     ForeignKey,
     Boolean,
     Text,
+    Float, 
+    UniqueConstraint, 
+    JSON
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
@@ -27,7 +31,7 @@ class EntityTypeConfig(Base):
     source_type = Column(String, primary_key=True)
     target_type = Column(String, primary_key=True)
     ttl_days = Column(Integer, default=365)
-    confidence_threshold = Column(Float, default=0.7)
+    confidence_threshold = Column(Float, default=0.7) # Changed to Float
 
     def __repr__(self) -> str:
         """String representation of the config."""
@@ -39,7 +43,7 @@ class CacheStats(Base):
 
     __tablename__ = "cache_stats"
 
-    stats_date = Column(Date, primary_key=True)
+    stats_date = Column(DateTime, primary_key=True)
     hits = Column(Integer, default=0)
     misses = Column(Integer, default=0)
     direct_lookups = Column(Integer, default=0)
@@ -90,6 +94,13 @@ class MappingResource(Base):
     description = Column(Text)
     resource_type = Column(String) # e.g., 'api', 'database', 'internal_logic'
     api_endpoint = Column(String) # URL if applicable
+    base_url = Column(String) # For API-based resources
+    config_template = Column(Text) # Store potential config keys/structure
+
+    # --- New fields for enhanced architecture ---
+    input_ontology_term = Column(String) # e.g., 'UniProtKB', 'Gene_Name', 'UMLS_CUI'
+    output_ontology_term = Column(String) # e.g., 'UniProtKB', 'Gene_Name', 'UMLS_CUI'
+    client_class_path = Column(String, nullable=True) # Path to the client class, e.g., 'biomapper.mapping.clients.UniProtNameClient'
     # Relationships defined below if needed
 
 
