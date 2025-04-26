@@ -39,24 +39,30 @@
 
 *   **Phase 1: Resource Investigation & Client Implementation (Highest Priority)**
     1.  **Implement `UniProtNameClient` (or enhance existing):**
-        *   **Goal:** Create functionality to query a UniProt API (likely search endpoint) to find UniProt IDs (`UNIPROT`) given protein/gene names (`NAME`).
+        *   **Goal:** Create functionality to query a UniProt API (likely search endpoint) to find UniProt IDs (`UNIPROTKB_AC`) given protein/gene names (`PROTEIN_NAME` or `GENE_NAME`).
         *   **Action:** Design and implement this client/functionality within `/home/ubuntu/biomapper/biomapper/mapping/clients/`. Consider if it should be a new file or added to `uniprot_focused_mapper.py`.
     2.  **Implement `UMLSClient`:**
-        *   **Goal:** Enable mapping from text names (`NAME`) to UMLS CUIs (`UMLS_CUI`) and potentially from CUIs to other identifiers like `LOINC`.
+        *   **Goal:** Enable mapping from text names (`TERM`) to UMLS CUIs (`CUI`) and potentially from CUIs to other identifiers like `LOINC`.
         *   **Action:** Design and implement `clients/umls.py`. Requires obtaining UMLS Terminology Services (UTS) API credentials.
         *   *(Note: Basic structure created. Full authentication logic (TGT/ST handling) will be implemented later, specifically when defining mapping paths that require UMLS.)*
     3.  **Define RAG Integration:**
         *   **Goal:** Specify how the executor calls the RAG component and processes its results (cosine similarity cutoff).
         *   **Action:** Outline the required interface/functions for the RAG component and plan the executor modifications. (Vector DB prep is parallel).
+    4.  **(Concurrent with Client Dev) Add Basic Resource Config to `populate_metamapper_db.py`:**
+        *   **Goal:** Add the essential `MappingResource` entries and placeholder `PropertyExtractionConfig`/`OntologyCoverage` for `UniProt_NameSearch` and `UMLS_Metathesaurus` to the database population script.
+        *   **Action:** Make minimal additions to the script to ensure resource records exist for client development/testing infrastructure. (See Phase 2, Step 4 for full configuration).
 *   **Phase 2: Database Configuration**
-    4.  **Update `populate_metamapper_db.py`:**
-        *   Add `MappingResource` entries for UniProt Name Search, UMLS, PubChemRAG.
-        *   Ensure configuration models (`PropertyExtractionConfig`, etc.) are populated.
-        *   Add `Endpoint` entries for `UKBB_Protein`, `Arivale_Protein`, `Arivale_Chemistry`.
-        *   Define **reversed** `EndpointRelationship` entries (UKBB -> Arivale).
-        *   Define `EndpointOntologyPreference` for target (Arivale) endpoints.
-        *   Define `MappingPath` entries utilizing the new resources and specifying fallback order conceptually.
-        *   Define `RelationshipMappingPath` entries linking relationships to specific mapping paths.
+    4.  **Perform *Full* Update of `populate_metamapper_db.py`:**
+        *   **Goal:** Ensure the `metamapper.db` configuration fully supports the UKBB -> Arivale MVP mapping.
+        *   **Action:**
+            *   Add/Finalize `MappingResource` entries for UniProt Name Search, UMLS, PubChemRAG.
+            *   Finalize `PropertyExtractionConfig` for new resources (using actual client method names) and `OntologyCoverage`.
+            *   Verify/Add `Endpoint` entries for `UKBB_Protein`, `Arivale_Protein`, `Arivale_Chemistry`.
+            *   Verify/Update `EndpointPropertyConfig` for UKBB (`extraction_pattern='Assay'`) and Arivale (`extraction_pattern='gene_name'`) based on file inspection.
+            *   Define `EndpointRelationship` entries for UKBB -> Arivale.
+            *   Define `EndpointOntologyPreference` for target (Arivale) endpoints.
+            *   Define `MappingPath` entries utilizing the new resources and specifying fallback order (e.g., Direct UniProt, Name->UniProt via UniProtClient, potentially UMLS paths).
+            *   Define `RelationshipMappingPath` entries linking relationships to specific mapping paths.
     5.  **Configure `mapping_cache.db` (Alembic):**
         *   **DONE.**
         *   **Details:** Created `cache_models.py` and moved `EntityMapping`/`MappingMetadata` there. Added `EntityMappingProvenance` and `PathExecutionLog`. Configured Alembic (`alembic.ini`, `biomapper/db/migrations/env.py`) to manage `mapping_cache.db` using `cache_models.py`. Cleaned conflicting migration files from `versions/` directory. Generated and applied initial migration `bf1c24ebbbec`.
@@ -76,3 +82,26 @@
 *   What is the specific interface/input/output for the RAG component?
 *   How should partial successes (e.g., mapping found via UMLS but not UniChem) be handled or logged?
 *   Should the `uniprot_focused_mapper.py` (ID-to-ID) be refactored or used alongside the new Name-to-ID functionality?
+
+#### Mapping Resources
+
+- **UniProt Name Search (Gene Name -> UniProtKB ID):**
+  - **Status:** **Completed**
+  - **Notes:** API investigation complete. Client implementation (`UniProtNameClient`) using UniProt ID Mapping API is developed, tested, and functional. Next step: Update its definition in `populate_metamapper_db.py`.
+- **UMLS Metathesaurus (UMLS CUI -> Various):**
+  - **Status:** Client development pending.
+  - **Notes:** Requires UTS API key. Need to implement client for CUI lookups and potentially relation retrieval. Initial resource definition added to `populate_metamapper_db.py`.
+
+### Phase 2: Client Implementation & DB Configuration
+
+- **Status:** In Progress
+- **Tasks:**
+  - Implement clients for selected mapping resources.
+    - `UniProtNameClient`: **Completed**
+    - `UMLSClient`: Pending
+  - Configure `metamapper.db` (`scripts/populate_metamapper_db.py`):
+    - Define Endpoints (UKBB, Arivale): **Basic definitions added.**
+    - Define Mapping Resources (UniProt, UMLS): **Basic definitions added.**
+    - Define Relationships & Ontology Preferences: Pending
+    - **Next Step:** Finalize `UniProt_NameSearch` resource definition in `populate_metamapper_db.py`.
+  - Implement core mapping logic (`MappingExecutor` - if necessary beyond basic resource calls): Pending
