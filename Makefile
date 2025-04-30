@@ -5,7 +5,7 @@ all: check
 
 # Run tests with coverage
 test:
-	pytest --cov=biomapper --cov-report=term-missing tests/
+	poetry run pytest --cov=biomapper --cov-report=term-missing tests/
 
 # Run linting
 lint:
@@ -54,7 +54,7 @@ check:
 	poetry run ruff format . && \
 	poetry run ruff check . && \
 	poetry run mypy --python-version=3.11 . && \
-	pytest --cov=biomapper --cov-report=term-missing tests/ && \
+	poetry run pytest --cov=biomapper --cov-report=term-missing tests/ && \
 	(cd docs && SPHINX_DEBUG=1 make html && cd ..)
 
 # Full check with clean first
