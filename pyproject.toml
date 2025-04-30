@@ -58,6 +58,9 @@ faiss-cpu = "^1.10.0"
 lxml = "^5.3.1"
 aiosqlite = "^0.21.0"
 python-arango = "^8.1.6"
+psutil = "^7.0.0"
+pydantic = "^2.11.4"
+alembic = "^1.15.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
