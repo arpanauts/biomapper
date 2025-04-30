@@ -563,8 +563,8 @@ class MappingExecutor:
                             cached_results = await self._check_cache(
                                 cache_session,
                                 input_identifiers,
-                                source_node.input_ontology_term,
-                                target_node.output_ontology_term,
+                                source_ontology,
+                                target_ontology,
                                 max_age_days=path.cache_duration_days if hasattr(path, 'cache_duration_days') else max_cache_age_days
                             )
 
@@ -582,7 +582,7 @@ class MappingExecutor:
                                     path.id, 
                                     PathExecutionStatus.COMPLETED_FROM_CACHE,
                                     representative_source_id=input_identifiers[0] if input_identifiers else "unknown", # Add example source ID
-                                    source_entity_type=source_node.input_ontology_term # Pass the source ontology type
+                                    source_entity_type=source_ontology # Pass the source ontology type
                                 )
                                 await cache_session.commit()
                             else:
@@ -591,7 +591,7 @@ class MappingExecutor:
                                     path.id, 
                                     PathExecutionStatus.PENDING,
                                     representative_source_id=uncached_identifiers[0] if uncached_identifiers else "unknown", # Add example source ID
-                                    source_entity_type=source_node.input_ontology_term # Pass the source ontology type
+                                    source_entity_type=source_ontology # Pass the source ontology type
                                 )
                                 logger.info(f"Executing path ID {path.id} for {len(uncached_identifiers)} uncached identifiers. Log ID: {path_log.id}")
 
@@ -678,8 +678,8 @@ class MappingExecutor:
                                     await self._cache_results(
                                         cache_session,
                                         path_log.id,
-                                        source_node.input_ontology_term,
-                                        target_node.output_ontology_term,
+                                        source_ontology,
+                                        target_ontology,
                                         results=mapped_results  # Cache only the *newly* mapped results
                                     )
                                 await cache_session.commit()  # Commit log update and new cache entries
