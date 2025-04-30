@@ -17,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Index,
     JSON,
-    Enum
+    Enum,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -25,6 +25,7 @@ from sqlalchemy.ext.declarative import declarative_base
 
 # Create a new Base for cache models, independent of metamapper.db models
 Base = declarative_base()
+
 
 class EntityMapping(Base):
     """Entity mapping model for bidirectional mappings between ontologies."""
@@ -44,18 +45,32 @@ class EntityMapping(Base):
     usage_count = Column(Integer, default=1)
     expires_at = Column(DateTime)
 
+    # New metadata fields for tracking mapping path details
+    confidence_score = Column(
+        Float, nullable=True
+    )  # More detailed confidence score if available
+    mapping_path_details = Column(
+        JSON, nullable=True
+    )  # JSON data about the mapping path
+    hop_count = Column(Integer, nullable=True)  # Number of hops in the path
+    mapping_direction = Column(String, nullable=True)  # 'forward', 'reverse', etc.
+
     # Bidirectional uniqueness constraint
     # Note: Removed postgresql_using='btree' from idx_usage_count for SQLite compatibility
     __table_args__ = (
-        UniqueConstraint('source_id', 'source_type', 'target_id', 'target_type', name='uix_mapping'),
-        Index('idx_source_lookup', 'source_id', 'source_type'),
-        Index('idx_target_lookup', 'target_id', 'target_type'),
-        Index('idx_usage_count', 'usage_count'), 
-        Index('idx_expiration', 'expires_at')
+        UniqueConstraint(
+            "source_id", "source_type", "target_id", "target_type", name="uix_mapping"
+        ),
+        Index("idx_source_lookup", "source_id", "source_type"),
+        Index("idx_target_lookup", "target_id", "target_type"),
+        Index("idx_usage_count", "usage_count"),
+        Index("idx_expiration", "expires_at"),
     )
 
     # Relationships
-    metadata_items = relationship("MappingMetadata", back_populates="mapping", cascade="all, delete-orphan")
+    metadata_items = relationship(
+        "MappingMetadata", back_populates="mapping", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         """String representation of the mapping."""
@@ -75,6 +90,15 @@ class EntityMapping(Base):
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert the mapping to a dictionary."""
+        # Parse the mapping_path_details if it's a JSON string
+        path_details = self.mapping_path_details
+        if path_details and isinstance(path_details, str):
+            try:
+                path_details = json.loads(path_details)
+            except (json.JSONDecodeError, TypeError):
+                # If invalid JSON, keep as-is
+                pass
+
         return {
             "id": self.id,
             "source_id": self.source_id,
@@ -85,18 +109,27 @@ class EntityMapping(Base):
             "mapping_source": self.mapping_source,
             "is_derived": self.is_derived,
             "derivation_path": self.derivation_path_list,
-            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
+            "last_updated": self.last_updated.isoformat()
+            if self.last_updated
+            else None,
             "usage_count": self.usage_count,
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
-            "metadata": {item.key: item.value for item in self.metadata_items}
+            "confidence_score": self.confidence_score,
+            "mapping_path_details": path_details,
+            "hop_count": self.hop_count,
+            "mapping_direction": self.mapping_direction,
+            "metadata": {item.key: item.value for item in self.metadata_items},
         }
+
 
 class MappingMetadata(Base):
     """Metadata associated with entity mappings."""
 
     __tablename__ = "mapping_metadata"
 
-    mapping_id = Column(Integer, ForeignKey("entity_mappings.id", ondelete="CASCADE"), primary_key=True)
+    mapping_id = Column(
+        Integer, ForeignKey("entity_mappings.id", ondelete="CASCADE"), primary_key=True
+    )
     key = Column(String, primary_key=True)
     value = Column(Text)
 
@@ -107,26 +140,39 @@ class MappingMetadata(Base):
         """String representation of the metadata."""
         return f"<MappingMetadata {self.mapping_id}:{self.key}={self.value}>"
 
+
 # --- New Cache Models --- #
+
 
 class EntityMappingProvenance(Base):
     """Links an EntityMapping result to the configuration path that generated it."""
+
     __tablename__ = "entity_mapping_provenance"
     id = Column(Integer, primary_key=True)
-    entity_mapping_id = Column(Integer, ForeignKey("entity_mappings.id", ondelete="CASCADE"), nullable=False, index=True)
+    entity_mapping_id = Column(
+        Integer,
+        ForeignKey("entity_mappings.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     # Link back to the configuration in metamapper.db by ID
     # Assumes RelationshipMappingPath IDs are stable.
     relationship_mapping_path_id = Column(Integer, nullable=False, index=True)
 
     execution_timestamp = Column(DateTime(timezone=True), server_default=func.now())
-    executor_version = Column(String, nullable=True) # Optional: Git commit hash or app version
+    executor_version = Column(
+        String, nullable=True
+    )  # Optional: Git commit hash or app version
 
     # Relationship back to the specific mapping result
-    entity_mapping = relationship("EntityMapping") #, back_populates="provenance") # Need to add provenance relation to EntityMapping if needed
+    entity_mapping = relationship(
+        "EntityMapping"
+    )  # , back_populates="provenance") # Need to add provenance relation to EntityMapping if needed
 
     def __repr__(self):
         return f"<EntityMappingProvenance mapping_id={self.entity_mapping_id} path_id={self.relationship_mapping_path_id}>"
+
 
 class PathExecutionStatus(enum.Enum):
     PENDING = "pending"
@@ -138,14 +184,16 @@ class PathExecutionStatus(enum.Enum):
     NO_PATH_FOUND = "no_path_found"  # Added to match implementation references
     TIMED_OUT = "timed_out"
 
+
 class PathExecutionLog(Base):
     """Logs details about the execution attempt of a specific mapping path for a source entity."""
+
     __tablename__ = "path_execution_logs"
 
     id = Column(Integer, primary_key=True)
     # Link back to the configuration path attempted
     relationship_mapping_path_id = Column(Integer, nullable=False, index=True)
-    source_entity_id = Column(String, nullable=False, index=True)
+    source_entity_id = Column(String, nullable=True, index=True)
     source_entity_type = Column(String, nullable=False, index=True)
     start_time = Column(DateTime(timezone=True), nullable=False, default=func.now())
     end_time = Column(DateTime(timezone=True), nullable=True)
@@ -158,22 +206,44 @@ class PathExecutionLog(Base):
     error_message = Column(Text, nullable=True)
 
     # Index for querying logs by source entity
-    __table_args__ = (Index("idx_log_source_entity", "source_entity_id", "source_entity_type"),)
+    __table_args__ = (
+        Index("idx_log_source_entity", "source_entity_id", "source_entity_type"),
+    )
 
     def __repr__(self):
         return f"<PathExecutionLog path_id={self.relationship_mapping_path_id} source={self.source_entity_type}:{self.source_entity_id} status={self.status}>"
 
+
 # Placeholders for potential future models
 class MappingPathHistory(Base):
     """(Placeholder) Tracks historical performance/usage of MappingPaths from metamapper.db."""
+
     __tablename__ = "mapping_path_history"
     id = Column(Integer, primary_key=True)
     # TBD - Define columns based on desired tracking (e.g., mapping_path_id, date, success_rate, avg_latency)
     pass
 
+
 class PerformanceMetric(Base):
     """(Placeholder) Stores aggregated performance metrics for mapping resources or paths."""
+
     __tablename__ = "performance_metrics"
     id = Column(Integer, primary_key=True)
     # TBD - Define columns based on desired metrics (e.g., resource_id, metric_name, value, timestamp)
     pass
+
+
+class PathLogMappingAssociation(Base):
+    """Association between a mapping log and input/output identifiers."""
+
+    __tablename__ = "path_log_mapping_associations"
+
+    id = Column(Integer, primary_key=True)
+    log_id = Column(
+        Integer, ForeignKey("path_execution_logs.id"), nullable=False, index=True
+    )  # Add index
+    input_identifier = Column(String(255), nullable=False, index=True)  # Add index
+    output_identifier = Column(String(255), nullable=True, index=True)  # Add index
+
+    def __repr__(self):
+        return f"<PathLogMappingAssociation log_id={self.log_id} input={self.input_identifier} output={self.output_identifier}>"
