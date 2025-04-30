@@ -18,25 +18,30 @@ from ..db.models import (
 )
 # Import models for cache DB
 from ..db.cache_models import (
-    Base as CacheBase, 
+    Base as CacheBase, # Import the Base for cache tables
     EntityMapping, 
     EntityMappingProvenance, 
-    PathExecutionLog, 
+    PathExecutionLog as MappingPathExecutionLog,
     PathExecutionStatus
 )
 
 # Define PathLogMappingAssociation which is missing from cache_models.py
-from sqlalchemy import Column, Integer, ForeignKey
+from sqlalchemy import Column, Integer, ForeignKey, String
+from sqlalchemy.ext.declarative import declarative_base
+
+# This class should be moved to cache_models.py later
 class PathLogMappingAssociation(CacheBase):
-    """Association table to track which entity mappings were created or updated by which execution log."""
+    """Association between a mapping log and input/output identifiers."""
+    
     __tablename__ = "path_log_mapping_associations"
     
     id = Column(Integer, primary_key=True)
-    path_execution_log_id = Column(Integer, ForeignKey("path_execution_logs.id", ondelete="CASCADE"), nullable=False)
-    entity_mapping_id = Column(Integer, ForeignKey("entity_mappings.id", ondelete="CASCADE"), nullable=False)
+    log_id = Column(Integer, ForeignKey("path_execution_logs.id"), nullable=False)
+    input_identifier = Column(String(255), nullable=False)
+    output_identifier = Column(String(255), nullable=True)
     
     def __repr__(self):
-        return f"<PathLogMappingAssociation log_id={self.path_execution_log_id} mapping_id={self.entity_mapping_id}>"
+        return f"<PathLogMappingAssociation log_id={self.log_id} input={self.input_identifier} output={self.output_identifier}>"
 
 # Assume config holds the DB URLs
 from ..utils.config import CONFIG_DB_URL, CACHE_DB_URL 
@@ -86,44 +91,40 @@ class MappingExecutor:
             raise
 
         logger.info(f"MappingExecutor initialized with DB: {metamapper_db_url}, CacheDB: {mapping_cache_db_url}")
+        
+    def get_cache_session(self):
+        """Get a cache database session."""
+        return self.async_cache_session()
 
     async def _get_ontology_type(
-        self, meta_session: AsyncSession, endpoint_name: str
+        self, meta_session: AsyncSession, endpoint_name: str, property_name: str = "PrimaryIdentifier"
     ) -> Optional[str]:
-        """Get the primary ontology type for a given endpoint name using OntologyPreference."""
+        """Get the ontology type for a specific property of a given endpoint name."""
         try:
-            # 1. Find the endpoint ID
-            endpoint_stmt = select(Endpoint.id).where(Endpoint.name == endpoint_name)
-            endpoint_result = await meta_session.execute(endpoint_stmt)
-            endpoint_id = endpoint_result.scalar_one_or_none()
-
-            if not endpoint_id:
-                logger.warning(f"Endpoint '{endpoint_name}' not found.")
-                return None
-
-            # 2. Find the highest priority OntologyPreference for this endpoint
-            pref_stmt = (
-                select(OntologyPreference.ontology_name)
-                .where(OntologyPreference.endpoint_id == endpoint_id)
-                .order_by(OntologyPreference.priority.asc()) # Lower number = higher priority
-                .limit(1)
+            # Join Endpoint -> EndpointPropertyConfig -> PropertyExtractionConfig
+            stmt = (
+                select(PropertyExtractionConfig.ontology_type)
+                .join(EndpointPropertyConfig, EndpointPropertyConfig.property_extraction_config_id == PropertyExtractionConfig.id)
+                .join(Endpoint, Endpoint.id == EndpointPropertyConfig.endpoint_id)
+                .where(Endpoint.name == endpoint_name)
+                .where(EndpointPropertyConfig.property_name == property_name)
+                .limit(1) # Should only be one config per endpoint/property pair
             )
-            pref_result = await meta_session.execute(pref_stmt)
-            ontology_type = pref_result.scalar_one_or_none()
+            result = await meta_session.execute(stmt)
+            ontology_type = result.scalar_one_or_none()
 
             if ontology_type:
-                logger.debug(f"Found ontology type '{ontology_type}' via preference for endpoint '{endpoint_name}' (ID: {endpoint_id})")
+                logger.debug(f"Found ontology type '{ontology_type}' for endpoint '{endpoint_name}', property '{property_name}'")
                 return ontology_type
             else:
-                logger.warning(f"No OntologyPreference found for endpoint '{endpoint_name}' (ID: {endpoint_id}).")
-                # Fallback: Could potentially check PropertyExtractionConfig, but let's keep it simple for now.
+                logger.warning(f"No EndpointPropertyConfig found linking endpoint '{endpoint_name}' and property '{property_name}' to a PropertyExtractionConfig.")
                 return None
 
         except SQLAlchemyError as e:
-            logger.error(f"Database error fetching ontology preference for {endpoint_name}: {e}", exc_info=True)
+            logger.error(f"Database error fetching ontology type for {endpoint_name}.{property_name}: {e}", exc_info=True)
             return None
         except Exception as e:
-            logger.error(f"Unexpected error fetching ontology preference for {endpoint_name}: {e}", exc_info=True)
+            logger.error(f"Unexpected error fetching ontology type for {endpoint_name}.{property_name}: {e}", exc_info=True)
             return None
 
     async def _find_mapping_paths(
@@ -217,9 +218,9 @@ class MappingExecutor:
     async def _load_client(self, resource: MappingResource) -> Any:
         """Loads and initializes a client instance."""
         client_class = self._load_client_class(resource.client_class_path)
-        # Pass the parsed config to client init if needed, or handle in map_identifiers
-        # config_for_init = json.loads(resource.config_template or '{}')
-        client_instance = client_class() # Assuming config primarily for map_identifiers
+        # Pass the parsed config to client init if needed
+        config_for_init = json.loads(resource.config_template or '{}')
+        client_instance = client_class(config=config_for_init)
         return client_instance
 
     async def _cache_results(
@@ -246,7 +247,7 @@ class MappingExecutor:
         mappings_to_add_or_update = [] # Collect mappings to add/update
 
         # Retrieve the PathExecutionLog entry first
-        path_log = await cache_session.get(PathExecutionLog, path_log_id)
+        path_log = await cache_session.get(MappingPathExecutionLog, path_log_id)
         if not path_log:
             logger.error(f"PathExecutionLog with ID {path_log_id} not found. Cannot cache results.")
             return
@@ -287,17 +288,26 @@ class MappingExecutor:
                     existing_mapping.last_updated = now
                     mappings_to_add_or_update.append(existing_mapping) # Mark for update
                     # Add association for this execution log
-                    assoc = PathLogMappingAssociation(path_execution_log_id=path_log_id, entity_mapping_id=existing_mapping.id)
+                    assoc = PathLogMappingAssociation(
+                        log_id=path_log_id,
+                        input_identifier=source_id,
+                        output_identifier=target_id_str
+                    )
                     log_mapping_associations.append(assoc)
                 else:
                     # Mapping hasn't changed, but associate with this run if not already done
                     assoc_stmt = select(PathLogMappingAssociation).where(
-                        PathLogMappingAssociation.path_execution_log_id == path_log_id,
-                        PathLogMappingAssociation.entity_mapping_id == existing_mapping.id
+                        PathLogMappingAssociation.log_id == path_log_id,
+                        PathLogMappingAssociation.input_identifier == source_id,
+                        PathLogMappingAssociation.output_identifier == target_id_str
                     )
                     existing_assoc_result = await cache_session.execute(assoc_stmt)
                     if not existing_assoc_result.scalars().first():
-                         assoc = PathLogMappingAssociation(path_execution_log_id=path_log_id, entity_mapping_id=existing_mapping.id)
+                         assoc = PathLogMappingAssociation(
+                             log_id=path_log_id,
+                             input_identifier=source_id,
+                             output_identifier=target_id_str
+                         )
                          log_mapping_associations.append(assoc) # Add association for existing mapping
 
             else:
@@ -339,15 +349,24 @@ class MappingExecutor:
                         
                         if is_new: # Simplified check: assume if added_count > 0, this could be new
                            # Ensure association for new mapping if not already added above
-                           is_already_associated = any(assoc.entity_mapping_id == mapping.id and assoc.path_execution_log_id == path_log_id for assoc in log_mapping_associations)
+                           is_already_associated = any(
+                               assoc.input_identifier == mapping.source_id and 
+                               assoc.output_identifier == mapping.target_id and 
+                               assoc.log_id == path_log_id 
+                               for assoc in log_mapping_associations
+                           )
                            if not is_already_associated:
-                              assoc = PathLogMappingAssociation(path_execution_log_id=path_log_id, entity_mapping_id=mapping.id)
+                              assoc = PathLogMappingAssociation(
+                                  log_id=path_log_id,
+                                  input_identifier=mapping.source_id,
+                                  output_identifier=mapping.target_id
+                              )
                               log_mapping_associations.append(assoc)
 
 
                 if log_mapping_associations:
                      # Deduplicate associations before adding
-                    unique_assocs = { (a.path_execution_log_id, a.entity_mapping_id): a for a in log_mapping_associations }.values()
+                    unique_assocs = { (a.log_id, a.input_identifier, a.output_identifier): a for a in log_mapping_associations }.values()
                     if unique_assocs:
                         cache_session.add_all(list(unique_assocs))
                         await cache_session.flush() # Flush associations
@@ -391,49 +410,36 @@ class MappingExecutor:
         :return: Dictionary mapping source IDs to target IDs (or None if not found/stale)
         """
         logger.debug(f"Checking cache for {len(source_ids)} source IDs: {source_type} -> {target_type}")
-
-        # Initialize result with all IDs set to None (not found)
         result = {source_id: None for source_id in source_ids}
+        if not source_ids: return result
 
-        # If no source IDs to check, return immediately
-        if not source_ids:
-            return result
-
-        # Construct query based on criteria
         stmt = select(EntityMapping).where(
             EntityMapping.source_id.in_(source_ids),
             EntityMapping.source_type == source_type,
             EntityMapping.target_type == target_type
         )
-
-        # Add time filter if max_age_days specified
         if max_age_days is not None:
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=max_age_days)
             stmt = stmt.where(EntityMapping.last_updated >= cutoff_date)
             logger.debug(f"Applying cache max age filter: >= {cutoff_date}")
 
-        # Execute query
         query_result = await cache_session.execute(stmt)
         mappings = query_result.scalars().all()
 
-        # Process results - use the most recent mapping if duplicates exist for a source_id
-        # (although ideally duplicates shouldn't happen for the same source/target type combo)
         processed_mappings: Dict[str, Tuple[datetime, str]] = {}
         for mapping in mappings:
             if mapping.source_id not in processed_mappings or mapping.last_updated > processed_mappings[mapping.source_id][0]:
                  processed_mappings[mapping.source_id] = (mapping.last_updated, mapping.target_id)
 
         cache_hits = 0
-        for source_id, (created_at, target_id) in processed_mappings.items():
+        for source_id, (_, target_id) in processed_mappings.items():
             result[source_id] = target_id
             cache_hits += 1
-            logger.debug(f"Cache hit: Found mapping for {source_id} ({source_type} -> {target_type}) -> {target_id}")
 
         if cache_hits > 0:
             logger.info(f"Cache hit: Found {cache_hits}/{len(source_ids)} mappings in cache for {source_type} -> {target_type}")
         else:
             logger.debug(f"Cache miss: No valid mappings found in cache for {source_type} -> {target_type}")
-
         return result
 
     async def execute_mapping(
@@ -460,32 +466,22 @@ class MappingExecutor:
             input_identifiers = input_data
         elif input_identifiers is None and input_data is None:
             input_identifiers = []
-        results: Optional[Dict[str, Any]] = None
-        log_entry: Optional[PathExecutionLog] = None # To store the log entry
-        cached_results: Dict[str, Optional[str]] = {}
-        identifiers_to_map: List[str] = input_identifiers # Default if cache not used
-        final_results: Dict[str, Optional[List[str]]] = {} # To combine cache and new results (Values should be lists)
-        start_time = datetime.now(timezone.utc) # Define start time here
-
-        final_status = PathExecutionStatus.FAILURE
-        path_log = None
-        error_message = None # Initialize error message
-        selected_path = None # Initialize selected_path
 
         try:
             # Session for metamapper DB (config)
             async with self.async_session() as meta_session:
                 logger.info(f"Executing mapping: {source_endpoint_name}.{source_property_name} -> {target_endpoint_name}.{target_property_name}")
 
-                # Corrected calls to _get_ontology_type
-                source_ontology = await self._get_ontology_type(meta_session, source_endpoint_name)
-                target_ontology = await self._get_ontology_type(meta_session, target_endpoint_name)
+                # Corrected calls to _get_ontology_type, passing property names
+                source_ontology = await self._get_ontology_type(meta_session, source_endpoint_name, source_property_name)
+                target_ontology = await self._get_ontology_type(meta_session, target_endpoint_name, target_property_name)
 
                 if not source_ontology or not target_ontology:
-                     final_status = "Configuration Error: Could not determine source/target ontology types"
+                     error_message = "Configuration Error: Could not determine source/target ontology types for the specified properties."
+                     logger.error(error_message)
                      # Return structured error immediately
                      return {
-                         "error": final_status,
+                         "error": PathExecutionStatus.FAILURE,
                          "details": {
                              "source_endpoint": source_endpoint_name,
                              "source_property": source_property_name,
@@ -496,348 +492,286 @@ class MappingExecutor:
 
                 logger.info(f"Mapping from {source_ontology} to {target_ontology}")
 
-                # Session for mapping_cache DB (results/provenance)
-                async with self.async_cache_session() as cache_session:
+                # --- Get Endpoints and Validate Ontologies ---
+                async with self.async_session() as config_session:
+                    source_endpoint_res = await config_session.execute(
+                        select(Endpoint).where(Endpoint.name == source_endpoint_name)
+                    )
+                    source_endpoint = source_endpoint_res.scalar_one_or_none()
 
-                    # --- Get Endpoints and Validate Ontologies --- (Moved ID fetching here)
-                    async with self.async_session() as config_session:
-                        source_endpoint_res = await config_session.execute(
-                            select(Endpoint).where(Endpoint.name == source_endpoint_name)
-                        )
-                        source_endpoint = source_endpoint_res.scalar_one_or_none()
+                    target_endpoint_res = await config_session.execute(
+                        select(Endpoint).where(Endpoint.name == target_endpoint_name)
+                    )
+                    target_endpoint = target_endpoint_res.scalar_one_or_none()
 
-                        target_endpoint_res = await config_session.execute(
-                            select(Endpoint).where(Endpoint.name == target_endpoint_name)
-                        )
-                        target_endpoint = target_endpoint_res.scalar_one_or_none()
+                    if not source_endpoint or not target_endpoint:
+                        error_message = "Source or target endpoint not found."
+                        logger.error(error_message)
+                        # Need to return here as we cannot proceed
+                        normalized_results = {id: None for id in input_identifiers}
+                        return { 
+                            "request_params": { 
+                                "source_endpoint_name": source_endpoint_name, 
+                                "target_endpoint_name": target_endpoint_name, 
+                                "source_identifiers": input_identifiers, 
+                                "source_ontology_type": source_ontology, 
+                                "target_ontology_type": target_ontology, 
+                            }, 
+                            "status": PathExecutionStatus.FAILURE.value, 
+                            "error": error_message, 
+                            "selected_path_id": None, 
+                            "selected_path_name": None, 
+                            "results": normalized_results
+                        }
+                    
+                # --- Find the best path --- 
+                path = await self._find_best_path(meta_session, source_ontology, target_ontology)
+                if not path:
+                    error_message = f"No mapping path found from {source_ontology} to {target_ontology}"
+                    logger.error(error_message)
+                    return {
+                        "status": PathExecutionStatus.NO_PATH_FOUND.value,
+                        "error": error_message,
+                        "results": {id: None for id in input_identifiers}
+                    }
 
-                        if not source_endpoint or not target_endpoint:
-                            error_message = "Source or target endpoint not found."
-                            logger.error(error_message)
-                            final_status = PathExecutionStatus.FAILURE
-                            # Need to return here as we cannot proceed
-                            normalized_results = {id: None for id in input_identifiers}
-                            return { 
-                                "request_params": { 
-                                    "source_endpoint_name": source_endpoint_name, 
-                                    "target_endpoint_name": target_endpoint_name, 
-                                    "source_identifiers": input_identifiers, 
-                                    "source_ontology_type": source_ontology, 
-                                    "target_ontology_type": target_ontology, 
-                                }, 
-                                "status": final_status.value, 
-                                "error": error_message, 
-                                "selected_path_id": None, 
-                                "selected_path_name": None, 
-                                "results": normalized_results
-                            }
-                        
-                        # Store IDs for later use
-                        source_endpoint_id = source_endpoint.id
-                        target_endpoint_id = target_endpoint.id
+                source_node = None
+                target_node = None
+                for step in path.steps:
+                    if step.step_order == 1:
+                        source_node = step.mapping_resource
+                    if step.step_order == max(s.step_order for s in path.steps):
+                        target_node = step.mapping_resource
 
-                        # Validate input/output types against endpoints (Optional but good practice)
-                        # ... (validation logic can be added here)
+                if not source_node or not target_node:
+                    error_message = f"Path {path.id} has invalid configuration - missing source or target node"
+                    logger.error(error_message)
+                    return {
+                        "status": PathExecutionStatus.FAILURE.value,
+                        "error": error_message,
+                        "results": {id: None for id in input_identifiers}
+                    }
 
-                    # --- Cache Check --- 
-                    if use_cache and self.async_cache_session: # Ensure factory exists
+                # Initialize final result dictionary and path_log
+                final_results: Dict[str, Optional[str]] = {}
+                path_log = None
+
+                try:
+                    async with self.get_cache_session() as cache_session:
                         try:
-                            # Create session if needed (might be created earlier if cache check happened)
-                            if not cache_session:
-                                cache_session = self.async_cache_session()
-
-                            # Perform cache check (read-only, no transaction needed here)
+                            # 1. Check cache
                             cached_results = await self._check_cache(
-                                cache_session=cache_session, # Correct keyword argument
-                                source_ids=list(input_identifiers),
-                                source_type=source_ontology,
-                                target_type=target_ontology,
-                                max_age_days=max_cache_age_days
+                                cache_session,
+                                input_identifiers,
+                                source_node.input_ontology_term,
+                                target_node.output_ontology_term,
+                                max_age_days=path.cache_duration_days if hasattr(path, 'cache_duration_days') else max_cache_age_days
                             )
-                            logger.debug(f"Cache check returned: {cached_results}") # DEBUG
-                            logger.debug(f"Cache check for {len(input_identifiers)} identifiers returned {len(cached_results)} results.")
-                            # Determine which identifiers still need mapping
-                            identifiers_to_map = [
-                                id for id in input_identifiers if cached_results.get(id) is None
-                            ]
-                            logger.debug(f"Identifiers needing mapping after cache check: {identifiers_to_map}") # DEBUG
-                            logger.debug(f"Cached identifiers ({len(cached_results)}): {list(cached_results.keys())}")
-                            logger.debug(f"Uncached identifiers ({len(identifiers_to_map)}): {list(identifiers_to_map)}")
 
-                            if not identifiers_to_map:
+                            # 2. Initialize final_results with valid cached hits
+                            # Use .get() for safety, default to None if key not found (shouldn't happen with init)
+                            final_results = {k: v for k, v in cached_results.items() if v is not None}
+                            uncached_identifiers = [id for id in input_identifiers if cached_results.get(id) is None]
+
+                            # 3. Execute path for uncached identifiers
+                            if not uncached_identifiers:
                                 logger.info("All identifiers found in cache.")
-                        except Exception as e:
-                            logger.error(f"Error during cache check: {e}", exc_info=True)
-                            # No rollback needed for read-only check failure
-                            identifiers_to_map = list(input_identifiers)
-                            logger.warning("Proceeding without cache results due to error during check.")
-                    else:
-                        # Not using cache or no factory configured
-                        identifiers_to_map = list(input_identifiers)
-                        logger.debug(f"Cache not used. Processing all {len(identifiers_to_map)} identifiers.")
+                                # Create log entry even if only cache was used
+                                path_log = await self._create_mapping_log(
+                                    cache_session, 
+                                    path.id, 
+                                    PathExecutionStatus.COMPLETED_FROM_CACHE,
+                                    representative_source_id=input_identifiers[0] if input_identifiers else "unknown", # Add example source ID
+                                    source_entity_type=source_node.input_ontology_term # Pass the source ontology type
+                                )
+                                await cache_session.commit()
+                            else:
+                                path_log = await self._create_mapping_log(
+                                    cache_session, 
+                                    path.id, 
+                                    PathExecutionStatus.PENDING,
+                                    representative_source_id=uncached_identifiers[0] if uncached_identifiers else "unknown", # Add example source ID
+                                    source_entity_type=source_node.input_ontology_term # Pass the source ontology type
+                                )
+                                logger.info(f"Executing path ID {path.id} for {len(uncached_identifiers)} uncached identifiers. Log ID: {path_log.id}")
 
-                    # --- Step 2: Find Path --- 
-                    # Session for metamapper DB (config)
-                    async with self.async_session() as meta_session:
-                        logger.debug(f"Finding path for {len(identifiers_to_map)} uncached identifiers from {source_ontology} to {target_ontology}")
-                        selected_path = await self._find_best_path(meta_session, source_ontology, target_ontology)
-
-                        # --- Step 3: Execute Path (if necessary and path exists) ---
-                        final_status = PathExecutionStatus.PENDING # Default status
-                        error_message = None # Default error message
-                        final_results: Dict[str, Optional[List[str]]] = {} # Initialize empty
-                        if 'cached_results' in locals() and cached_results: # Pre-populate if cache was used
-                            for source_id, cached_target_id in cached_results.items():
-                                if cached_target_id is not None:
-                                    final_results[source_id] = [cached_target_id] # Wrap cached string in a list
-                                else:
-                                    final_results[source_id] = None # Keep None as None
-                        loop_error_details = None # Initialize error details
- 
-                        async with self.async_cache_session() as cache_session: # Re-enter cache session for logging/updates
-                            try:
-                                path_log = None # Initialize path_log here for the scope
-                                # loop_error_details already initialized outside this try
-
-                                # --- Create Initial PathExecutionLog ---
-                                if selected_path and identifiers_to_map:
-                                    start_time = datetime.now(timezone.utc)
-                                    representative_source_id = identifiers_to_map[0]
-                                    path_log = PathExecutionLog(
-                                        relationship_mapping_path_id=selected_path.id,
-                                        source_entity_id=representative_source_id,
-                                        source_entity_type=source_ontology,
-                                        start_time=start_time,
-                                        status=PathExecutionStatus.PENDING,
-                                    )
-                                    cache_session.add(path_log)
-                                    await cache_session.flush() # Get ID
-                                    logger.info(f"Executing path ID {selected_path.id} for {len(identifiers_to_map)} uncached identifiers. Log ID: {path_log.id}")
-                                else:
-                                     start_time = datetime.now(timezone.utc) # Still need a start time for duration if no path execution
-
-                                # --- Execute Steps --- 
-                                if selected_path and identifiers_to_map:
-                                    current_results: Dict[str, Optional[List[str]]] = { orig_id: [orig_id] for orig_id in identifiers_to_map }
-                                    final_step_results: Dict[str, Optional[List[str]]] = {}
-
-                                    for step in sorted(selected_path.steps, key=lambda s: s.step_order):
-                                        step_input_set: Set[str] = set()
-                                        for id_list in current_results.values():
-                                            if id_list: step_input_set.update(id_list)
-                                        step_input_values: List[str] = sorted(list(step_input_set))
+                                # Initialize current results with input identifiers and execute path
+                                current_results: Dict[str, Optional[List[str]]] = {orig_id: [orig_id] for orig_id in uncached_identifiers}
+                                path_status = PathExecutionStatus.PENDING
+                                
+                                for step in sorted(path.steps, key=lambda s: s.step_order):
+                                    step_input_set: Set[str] = set()
+                                    for original_id, id_list in current_results.items():
+                                        if id_list:
+                                            step_input_set.update(id_list)
+                                    
+                                    step_input_values = sorted(list(step_input_set))
+                                    if not step_input_values:
+                                        logger.warning(f"Skipping step {step.step_order} due to no input values.")
+                                        continue
+                                    
+                                    logger.info(f"Executing Step {step.step_order}: Resource '{step.mapping_resource.name}'")
+                                    try:
+                                        client_instance = await self._load_client(step.mapping_resource)
+                                        step_results = await client_instance.map_identifiers(step_input_values)
                                         
-                                        if not step_input_values:
-                                            logger.warning(f"Skipping step {step.step_order} due to no input values.")
-                                            continue
-
-                                        logger.info(f"Executing Step {step.step_order}: Resource '{step.mapping_resource.name}'")
-                                        step_error_message = None
-                                        try:
-                                            client_instance = await self._load_client(step.mapping_resource)
-                                            step_results = await client_instance.map_identifiers(identifiers=step_input_values)
-                                            logger.debug(f"Step {step.step_order} raw results: {step_results}")
-                                        except Exception as client_exec_err:
-                                            step_error_message = f"Client Error ({step.mapping_resource.name}, Step {step.step_order}): {type(client_exec_err).__name__}: {client_exec_err}"
-                                            logger.error(f"Error during step {step.step_order}: {step_error_message}", exc_info=True)
-                                            step_results = {input_val: None for input_val in step_input_values}
-
-                                        if step_error_message:
-                                            loop_error_details = {"step": step.step_order, "error": step_error_message}
-                                            final_status = PathExecutionStatus.FAILURE
-                                            # Attempt to update log immediately
-                                            if path_log:
-                                                try:
-                                                    async with self.async_cache_session() as error_log_session:
-                                                        path_log.end_time = datetime.now(timezone.utc)
-                                                        path_log.duration_ms = int((path_log.end_time - start_time).total_seconds() * 1000)
-                                                        path_log.status = final_status
-                                                        path_log.error_message = json.dumps(loop_error_details)
-                                                        await error_log_session.merge(path_log)
-                                                        await error_log_session.commit() # Commit error log state
-                                                except Exception as log_upd_err:
-                                                    logger.error(f"Failed to update PathExecutionLog on step error: {log_upd_err}", exc_info=True)
-                                            break # Stop path execution
-
                                         # Process step results and update current_results for next step
-                                        next_current_results: Dict[str, Optional[List[str]]] = {}
+                                        next_current_results = {}
                                         for original_id, current_id_list in current_results.items():
-                                            if current_id_list is None: next_current_results[original_id] = None; continue
-                                            aggregated_outputs_for_orig_id: Set[str] = set()
+                                            if current_id_list is None:
+                                                next_current_results[original_id] = None
+                                                continue
+                                            
+                                            aggregated_outputs_for_orig_id = set()
                                             found_mapping = False
                                             for current_id in current_id_list:
                                                 output_for_current_id = step_results.get(current_id)
-                                                if output_for_current_id: aggregated_outputs_for_orig_id.update(output_for_current_id); found_mapping = True
-                                                elif output_for_current_id is None: found_mapping = True
-                                            if found_mapping: next_current_results[original_id] = sorted(list(aggregated_outputs_for_orig_id)) if aggregated_outputs_for_orig_id else None
-                                            else: next_current_results[original_id] = None
+                                                if output_for_current_id:
+                                                    aggregated_outputs_for_orig_id.update(output_for_current_id)
+                                                    found_mapping = True
+                                                elif output_for_current_id is None:
+                                                    found_mapping = True
+                                            
+                                            if found_mapping:
+                                                next_current_results[original_id] = sorted(list(aggregated_outputs_for_orig_id)) if aggregated_outputs_for_orig_id else None
+                                            else:
+                                                next_current_results[original_id] = None
+                                        
                                         current_results = next_current_results
-                                        logger.debug(f"State after Step {step.step_order}: {current_results}")
-
-                                        # Store final step results
-                                        if step.step_order == max(s.step_order for s in selected_path.steps):
-                                            final_step_results = current_results
-                                            logger.info(f"Final step ({step.step_order}) completed.")
-
-                                # --- Combine results (cached + executed path results) ---
-                                if 'final_step_results' in locals() and final_step_results:
-                                    final_results.update(final_step_results)
-
-                                # --- Determine Final Status (if no loop error occurred) ---
-                                if not loop_error_details:
-                                    original_input_ids_set = set(input_identifiers)
-                                    successfully_mapped_ids = {k for k, v in final_results.items() if v is not None and k in original_input_ids_set}
-
-                                    if successfully_mapped_ids == original_input_ids_set:
-                                        final_status = PathExecutionStatus.SUCCESS
-                                    elif successfully_mapped_ids:
-                                        final_status = PathExecutionStatus.PARTIAL_SUCCESS
-                                    elif not identifiers_to_map and cached_results: # All cached, successful implicitly
-                                         final_status = PathExecutionStatus.SUCCESS
-                                    elif selected_path and not successfully_mapped_ids: # Path executed but no results
-                                         final_status = PathExecutionStatus.NO_MAPPING_FOUND
-                                    elif not selected_path and identifiers_to_map: # No path found for items needing mapping
-                                        final_status = PathExecutionStatus.NO_PATH_FOUND
-                                        error_message = f"No valid mapping path found from {source_ontology} to {target_ontology}."
-                                    elif not selected_path and not identifiers_to_map: # All cached, no path needed
-                                         final_status = PathExecutionStatus.SUCCESS
-                                    else: # Fallback/unexpected case
-                                        final_status = PathExecutionStatus.FAILURE 
-                                        error_message = error_message or "Unknown state determining final status."
-                                    logger.info(f"Final status determined as: {final_status.name}")
-
-                                # --- Finalize PathExecutionLog (if execution was attempted) ---
-                                if path_log:
-                                    path_log.end_time = datetime.now(timezone.utc)
-                                    path_log.duration_ms = int((path_log.end_time - start_time).total_seconds() * 1000)
-                                    path_log.status = final_status
-                                    if loop_error_details and not path_log.error_message: # Log loop error if not already set
-                                        path_log.error_message = json.dumps(loop_error_details)
-                                    await cache_session.merge(path_log)
-                                    # Commit log changes only if no outer exception occurs
-                                    # Commit happens outside the loop error handling block for success/partial/no_mapping cases
-                                    if final_status != PathExecutionStatus.FAILURE: 
-                                        await cache_session.commit() 
-
-                                # --- Cache Results --- 
-                                if final_results and final_status != PathExecutionStatus.FAILURE:
-                                    await self._cache_results(
-                                        cache_session=cache_session,
-                                        path_log_id=path_log.id if path_log else None,
-                                        source_ontology=source_ontology,
-                                        target_ontology=target_ontology,
-                                        results=final_results
-                                    )
-
-                            except ClientError as ce:
-                                logger.error(f"ClientError within cache session: {ce}", exc_info=True)
-                                await cache_session.rollback()
-                                final_status = PathExecutionStatus.FAILURE
-                                error_message = f"Client Error ({getattr(ce, 'client_name', 'UnknownClient')}): {ce}"
-                                if not final_results: final_results = {id: None for id in input_identifiers}
-                            except Exception as e:
-                                logger.error(f"Unexpected error within cache session: {type(e).__name__}: {e}", exc_info=True)
-                                await cache_session.rollback()
-                                final_status = PathExecutionStatus.FAILURE
-                                error_message = f"Executor Error: {type(e).__name__}: {e}"
-                                if not final_results: final_results = {id: None for id in input_identifiers}
+                                    except Exception as e:
+                                        logger.error(f"Error during step {step.step_order}: {e}", exc_info=True)
+                                        path_status = PathExecutionStatus.FAILURE
+                                        # Update path log with error
+                                        path_log.status = path_status
+                                        path_log.end_time = datetime.now(timezone.utc)
+                                        path_log.error_message = str(e)
+                                        break
                                 
-                         # End of 'async with cache_session'
- 
-                    # --- Final Return Statement (inside meta_session, after cache_session block) --- #
-                    path_id = selected_path.id if selected_path else None
-                    
-                    # MERGE RESULTS: Combine cached and new results correctly into the final format
-                    final_results_structured: Dict[str, Optional[List[str]]] = {}
-                    
-                    # 1. Add cached results (wrapping strings in lists)
-                    if 'cached_results' in locals() and cached_results:
-                        for src_id, cached_tgt_id in cached_results.items():
-                            if cached_tgt_id is not None:
-                                final_results_structured[src_id] = [cached_tgt_id] # Wrap string in list
-                            else:
-                                final_results_structured[src_id] = None # Keep None
+                                # 4. Update final_results with newly mapped results
+                                mapped_results = {}
+                                for orig_id, id_list in current_results.items():
+                                    if id_list and len(id_list) > 0:
+                                        # Just take the first result for simplicity
+                                        mapped_results[orig_id] = id_list[0]
+                                    else:
+                                        mapped_results[orig_id] = None
+                                
+                                # Update final_results with newly mapped results
+                                final_results.update(mapped_results)
+                                logger.info(f"Mapping step finished. Total results: {len(final_results)}. Status: {path_status}")
 
-                    # 2. Add/Update with results from the path execution
-                    if 'final_results' in locals() and final_results: 
-                        final_results_structured.update(final_results)
+                                # Update path log
+                                if path_status != PathExecutionStatus.FAILURE:
+                                    # Check if all source IDs were successfully mapped
+                                    if all(mapped_results.get(id) is not None for id in uncached_identifiers):
+                                        path_status = PathExecutionStatus.SUCCESS
+                                    elif any(mapped_results.get(id) is not None for id in uncached_identifiers):
+                                        path_status = PathExecutionStatus.PARTIAL_SUCCESS
+                                    else:
+                                        path_status = PathExecutionStatus.NO_MAPPING_FOUND
+                                
+                                path_log.status = path_status
+                                path_log.end_time = datetime.now(timezone.utc)
 
-                    return {
-                        "request_params": {
-                            "source_endpoint_name": source_endpoint_name,
-                            "target_endpoint_name": target_endpoint_name,
-                            "source_identifiers": input_identifiers,
-                            "source_ontology_type": source_ontology,
-                            "target_ontology_type": target_ontology,
-                        },
-                        "status": final_status.value, # Use the final status determined within the blocks
-                        "error": error_message,
-                        "selected_path_id": path_id,
-                        "selected_path_name": selected_path.name if selected_path else None,
-                        "results": final_results_structured # Return the correctly merged and formatted results
-                    }
-                # End of 'async with meta_session'
-        except NoPathFoundError as npfe:
-            logger.warning(f"NoPathFoundError encountered: {npfe}")
-            final_status = PathExecutionStatus.NO_PATH_FOUND
-            error_message = str(npfe)
-            # Ensure final_results is initialized for return structure
-            if 'final_results' not in locals() or final_results is None:
-                final_results = {id: None for id in input_identifiers} if 'input_identifiers' in locals() else {}
-            
-            # Normalize results for consistent return format
-            normalized_results = {}
-            for source_id, target_value in final_results.items():
-                if target_value is None:
-                    normalized_results[source_id] = None
-                elif isinstance(target_value, list) and len(target_value) > 0:
-                    normalized_results[source_id] = target_value[0]  # Take the first result
-                else:
-                    normalized_results[source_id] = target_value
-                    
-            return { # Return error structure
-                "request_params": {
-                    "source_endpoint_name": source_endpoint_name if 'source_endpoint_name' in locals() else 'Unknown',
-                    "target_endpoint_name": target_endpoint_name if 'target_endpoint_name' in locals() else 'Unknown',
-                    "source_identifiers": input_identifiers if 'input_identifiers' in locals() else [],
-                    "source_ontology_type": source_ontology if 'source_ontology' in locals() else 'Unknown',
-                    "target_ontology_type": target_ontology if 'target_ontology' in locals() else 'Unknown',
-                },
-                "status": final_status.value,
-                "error": error_message,
-                "selected_path_id": None,
-                "selected_path_name": None,
-                "results": normalized_results
+                                # 5. Cache the newly mapped results
+                                if mapped_results:  # Only cache if there are new results
+                                    await self._cache_results(
+                                        cache_session,
+                                        path_log.id,
+                                        source_node.input_ontology_term,
+                                        target_node.output_ontology_term,
+                                        results=mapped_results  # Cache only the *newly* mapped results
+                                    )
+                                await cache_session.commit()  # Commit log update and new cache entries
+
+                        except Exception as e:
+                            logger.error(f"Error during mapping execution for path {path.id}: {e}", exc_info=True)
+                            if path_log:
+                                path_log.status = PathExecutionStatus.FAILED
+                                path_log.end_time = datetime.now(timezone.utc)
+                            await cache_session.rollback()
+                            # Keep potentially partial final_results from cache
+
+                except Exception as e:
+                    logger.error(f"Outer execution error in execute_mapping (e.g., DB connection): {e}", exc_info=True)
+                    # Ensure final_results is initialized if outer error occurs early
+                    if not final_results:
+                         final_results = {}
+
+        except Exception as e:
+            logger.error(f"Global error in execute_mapping: {e}", exc_info=True)
+            return {
+                "status": PathExecutionStatus.FAILURE.value,
+                "error": str(e),
+                "results": {id: None for id in input_identifiers}
             }
-        except Exception as outer_exc:
-            logger.error(f"Outer exception during mapping execution: {type(outer_exc).__name__}: {outer_exc}", exc_info=True)
-            final_status = PathExecutionStatus.FAILURE
-            error_message = f"System Error: {type(outer_exc).__name__}: {outer_exc}"
-            # Ensure final_results is initialized for return structure
-            if 'final_results' not in locals() or final_results is None:
-                final_results = {id: None for id in input_identifiers} if 'input_identifiers' in locals() else {}
+
+        # Return the aggregated results
+        return final_results if final_results else {}
                 
-            # Normalize results for consistent return format
-            normalized_results = {}
-            for source_id, target_value in final_results.items():
-                if target_value is None:
-                    normalized_results[source_id] = None
-                elif isinstance(target_value, list) and len(target_value) > 0:
-                    normalized_results[source_id] = target_value[0]  # Take the first result
-                else:
-                    normalized_results[source_id] = target_value
-                    
-            return { # Return error structure
-                "request_params": {
-                    "source_endpoint_name": source_endpoint_name if 'source_endpoint_name' in locals() else 'Unknown',
-                    "target_endpoint_name": target_endpoint_name if 'target_endpoint_name' in locals() else 'Unknown',
-                    "source_identifiers": input_identifiers if 'input_identifiers' in locals() else [],
-                    "source_ontology_type": source_ontology if 'source_ontology' in locals() else 'Unknown',
-                    "target_ontology_type": target_ontology if 'target_ontology' in locals() else 'Unknown',
-                },
-                "status": final_status.value,
-                "error": error_message,
-                "selected_path_id": selected_path.id if 'selected_path' in locals() and selected_path else None, # Path might be known even on outer error
-                "selected_path_name": selected_path.name if 'selected_path' in locals() and selected_path else None,
-                "results": normalized_results
-            }
+    async def _create_mapping_log(
+        self,
+        session: AsyncSession,
+        path_id: int,
+        execution_status: PathExecutionStatus,
+        error_message: Optional[str] = None,
+        representative_source_id: str = "unknown",
+        source_entity_type: str = None,
+    ) -> MappingPathExecutionLog:
+        """Create a mapping execution log entry.
+        
+        Args:
+            session: Database session
+            path_id: ID of the mapping path
+            execution_status: Status of the execution
+            error_message: Error message if any
+            representative_source_id: Example source ID for this mapping
+            source_entity_type: Type of the source entity
+            
+        Returns:
+            Created mapping log entry
+        """
+        now = datetime.now(timezone.utc)
+        mapping_log = MappingPathExecutionLog(
+            relationship_mapping_path_id=path_id,
+            status=execution_status,
+            error_message=error_message,
+            start_time=now,
+            source_entity_id=representative_source_id,
+            source_entity_type=source_entity_type,
+        )
+        session.add(mapping_log)
+        await session.flush()
+        return mapping_log
+        
+    async def _update_execution_metadata(
+        self,
+        session: AsyncSession,
+        mapping_log: MappingPathExecutionLog,
+        input_identifiers: List[str],
+        results: Optional[Dict[str, Optional[str]]] = None,
+    ) -> None:
+        """Update execution metadata with input/output mapping associations.
+        
+        Args:
+            session: Database session
+            mapping_log: Mapping execution log entry
+            input_identifiers: List of input identifiers
+            results: Mapping results dictionary
+        """
+        if not results:
+            return
+            
+        # Create mapping associations
+        associations = []
+        for input_id, output_id in results.items():
+            association = PathLogMappingAssociation(
+                log_id=mapping_log.id,
+                input_identifier=input_id,
+                output_identifier=output_id,
+            )
+            associations.append(association)
+            
+        if associations:
+            session.add_all(associations)
+            await session.flush()

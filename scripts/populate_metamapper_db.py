@@ -69,7 +69,7 @@ async def populate_data(session: AsyncSession):
             name="UniProt_NameSearch",
             description="Maps Gene Names/Symbols to UniProtKB Accession IDs using the UniProt ID Mapping API.",
             client_class_path="biomapper.mapping.clients.uniprot_name_client.UniProtNameClient", 
-            input_ontology_term="UNIPROT_NAME", 
+            input_ontology_term="GENE_NAME", 
             output_ontology_term="UNIPROTKB_AC", 
             config_template=json.dumps({ 
                 # "api_key": "YOUR_API_KEY_IF_NEEDED"
@@ -92,7 +92,7 @@ async def populate_data(session: AsyncSession):
             }),
         ),
         "arivale_lookup": MappingResource(
-            name="Arivale_Metadata_Lookup",
+            name="Arivale_UniProt_Lookup", # Renamed for clarity
             description="Direct lookup from UniProtKB AC to Arivale Protein ID using the Arivale metadata file",
             client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
             input_ontology_term="UNIPROTKB_AC",
@@ -100,6 +100,18 @@ async def populate_data(session: AsyncSession):
             config_template=json.dumps({
                 "file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv",
                 "key_column": "uniprot",
+                "value_column": "name"
+            }),
+        ),
+        "arivale_genename_lookup": MappingResource(
+            name="Arivale_GeneName_Lookup",
+            description="Direct lookup from Gene Name to Arivale Protein ID using the Arivale metadata file",
+            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
+            input_ontology_term="GENE_NAME", # Input is Gene Name
+            output_ontology_term="ARIVALE_PROTEIN_ID", # Output is Arivale ID
+            config_template=json.dumps({
+                "file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv",
+                "key_column": "gene_name", # Use gene_name column as key
                 "value_column": "name"
             }),
         ),
@@ -196,41 +208,22 @@ async def populate_data(session: AsyncSession):
                 )
             ]
         ),
-        # --- Path for UKBB -> Arivale Protein ---
-        # Assuming UKBB uses Gene_Name and Arivale uses UniProtKB_AC based on executor code
+        # --- Path for UKBB -> Arivale Protein (NEW: Direct UniProt AC) ---
         MappingPath(
-            name="UKBB_GENE_NAME_to_Arivale_UniProtAC",
-            source_type="GENE_NAME", # From UKBB_Protein EndpointPropertyConfig
-            target_type="UNIPROTKB_AC", # From Arivale_Protein EndpointPropertyConfig
-            priority=5, # High priority for this specific mapping
-            description="Map Gene Name to UniProt AC using UniProt Name Client.",
+            name="UKBB_to_Arivale_Protein_via_UniProt",
+            source_type="UNIPROTKB_AC", # Start with UniProt AC from UKBB
+            target_type="ARIVALE_PROTEIN_ID", # End with Arivale Protein ID
+            priority=1, # Highest priority
+            description="Maps UKBB UniProt AC directly to Arivale protein identifiers using the Arivale metadata file",
             steps=[
                 MappingPathStep(
-                    mapping_resource_id=resources["uniprot_name"].id, # Use the UniProt resource
+                    mapping_resource_id=resources["arivale_lookup"].id, # Use the UniProt lookup resource
                     step_order=1,
-                    description="UniProt: GENE_NAME -> UNIPROTKB_AC"
+                    description="Arivale UniProt Lookup: UNIPROTKB_AC -> ARIVALE_PROTEIN_ID"
                 )
             ]
         ),
-        MappingPath(
-            name="UKBB_GENE_NAME_to_Arivale_Protein",
-            source_type="GENE_NAME", 
-            target_type="ARIVALE_PROTEIN_ID",
-            priority=5, # High priority for this specific mapping
-            description="Maps UKBB gene names to Arivale protein identifiers via UniProt accessions",
-            steps=[
-                MappingPathStep(
-                    mapping_resource_id=resources["uniprot_name"].id,
-                    step_order=1,
-                    description="UniProt: GENE_NAME -> UNIPROTKB_AC"
-                ),
-                MappingPathStep(
-                    mapping_resource_id=resources["arivale_lookup"].id, # Use the new lookup resource
-                    step_order=2,
-                    description="Arivale Lookup: UNIPROTKB_AC -> ARIVALE_PROTEIN_ID"
-                )
-            ]
-        ),
+        # --- Path for UKBB -> Ensembl Gene ---
         MappingPath(
             name="UKBB_GENE_NAME_to_EnsemblGene",
             source_type="GENE_NAME",
@@ -282,7 +275,7 @@ async def populate_data(session: AsyncSession):
         OntologyPreference(relationship_id=ukbb_arivale_protein_rel.id, ontology_name="UNIPROTKB_AC", priority=1), # Specify target ontology, not the resource
         # --- Add Endpoint-specific Preferences (Overrides Relationship defaults if needed) ---
         # UKBB Protein primarily uses UNIPROT_NAME for its 'PrimaryIdentifier'
-        OntologyPreference(endpoint_id=endpoints["ukbb_protein"].id, ontology_name="UNIPROT_NAME", priority=0),
+        OntologyPreference(endpoint_id=endpoints["ukbb_protein"].id, ontology_name="UNIPROTKB_AC", priority=0),
         # Arivale Protein primarily uses UNIPROTKB_AC for its 'PrimaryIdentifier'
         OntologyPreference(endpoint_id=endpoints["arivale_protein"].id, ontology_name="UNIPROTKB_AC", priority=0),
     ]
@@ -321,16 +314,16 @@ async def populate_data(session: AsyncSession):
             extraction_pattern="map_id", # Placeholder method name in UniChem client
             result_type="string"
         ),
-        # Config for extracting primary identifier (Assay column) from UKBB TSV
+        # Config for extracting UKBB UniProt column (MODIFIED) (index 3)
         PropertyExtractionConfig(
-            resource_id=None, # Not tied to a specific mapping resource
-            ontology_type="GENE_NAME", # Type of the identifier being extracted
+            resource_id=None, # No resource needed, direct extraction
+            ontology_type="UNIPROTKB_AC", # CHANGED from GENE_NAME
             property_name="PrimaryIdentifier", # Standard name for the main ID
             extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "Assay"}), # Actual column name
+            extraction_pattern=json.dumps({"column_name": "UniProt"}), # CHANGED from "Assay"
             result_type="string"
         ),
-        # Config for extracting UniProt AC from Arivale TSV
+        # Config for extracting UniProt AC from Arivale TSV (index 4)
         PropertyExtractionConfig(
             resource_id=None,
             ontology_type="UNIPROTKB_AC", # Type of the identifier being extracted
@@ -397,13 +390,7 @@ async def populate_data(session: AsyncSession):
         # UniProt Name Search covers NAME -> UNIPROTKB_AC via API lookup
         OntologyCoverage(
             resource_id=resources["uniprot_name"].id,
-            source_type="UNIPROT_NAME", # Consistent uppercase
-            target_type="UNIPROTKB_AC",
-            support_level="api_lookup"
-        ),
-        OntologyCoverage(
-            resource_id=resources["uniprot_name"].id,
-            source_type="GENE_NAME",
+            source_type="GENE_NAME", # Consistent uppercase
             target_type="UNIPROTKB_AC",
             support_level="api_lookup"
         ),

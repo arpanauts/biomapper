@@ -3,6 +3,7 @@ import csv
 import json
 import logging
 import os
+import argparse
 from pathlib import Path
 import pandas as pd
 from typing import Dict, List, Optional, Tuple
@@ -17,7 +18,6 @@ from biomapper.db.cache_models import PathExecutionStatus # Corrected import pat
 from biomapper.utils.config import CONFIG_DB_URL
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
@@ -94,78 +94,42 @@ async def load_identifiers_from_endpoint(session: AsyncSession, endpoint_name: s
             logger.error(f"Input file not found at path: {file_path}")
             return "", Path(""), []
 
-        identifiers = set()
-        logger.info(f"Reading identifiers from '{identifier_col}' column in {file_path}")
-        with open(file_path, 'r', newline='', encoding='utf-8') as tsvfile:
-            dialect = csv.Sniffer().sniff(tsvfile.read(1024))
-            tsvfile.seek(0)
-            reader = csv.DictReader(tsvfile, dialect=dialect)
+        # Use pandas to read the TSV file, similar to check_uniprot_overlap.py
+        df = pd.read_csv(file_path, sep='\t', comment='#', usecols=[identifier_col], dtype=str)
+        
+        # Check if the required column exists (pandas handles this implicitly during load if usecols is specific)
+        # However, an explicit check after load is good practice if usecols wasn't used or column name might be wrong
+        if identifier_col not in df.columns:
+             logger.error(f"Identifier column '{identifier_col}' not found in DataFrame from {file_path}. Available columns: {df.columns.tolist()}")
+             return "", Path(""), []
+        
+        # Extract, strip, filter NaNs/empty, and get unique identifiers
+        identifiers = set(df[identifier_col].dropna().astype(str).str.strip())
+        # Remove any potential empty strings after stripping
+        identifiers.discard('') 
 
-            if identifier_col not in reader.fieldnames:
-                logger.error(f"Identifier column '{identifier_col}' (from config) not found in file {file_path}. Available columns: {reader.fieldnames}")
-                return "", Path(""), []
-
-            for row in reader:
-                identifier = row.get(identifier_col)
-                if identifier:
-                    identifiers.add(identifier.strip())
-
-        logger.info(f"Loaded {len(identifiers)} unique identifiers from {file_path}")
+        logger.info(f"Loaded {len(identifiers)} unique identifiers from {file_path} using pandas")
         return identifier_col, file_path, list(identifiers)
 
     except FileNotFoundError:
         logger.error(f"Input file not found at path: {file_path}")
+    except pd.errors.EmptyDataError:
+        logger.error(f"Pandas Error: File {file_path} is empty.")
         return "", Path(""), []
-    except KeyError:
-        logger.error(f"Identifier column '{identifier_col}' (from config) caused KeyError in file {file_path}.")
-        return "", Path(""), []
-    except csv.Error as e:
-        logger.error(f"Error reading CSV/TSV file {file_path}: {e}")
+    except ValueError as e:
+        # Catch potential errors if identifier_col isn't in the file (though usecols should handle this)
+        logger.error(f"Pandas/ValueError reading {file_path} with column '{identifier_col}': {e}")
         return "", Path(""), []
     except Exception as e:
         logger.exception(f"An unexpected error occurred while loading identifiers for {endpoint_name}: {e}", exc_info=True)
         return "", Path(""), []
 
-def load_arivale_mapping_lookup(arivale_tsv_path: Path) -> Dict[str, str]:
-    """Loads the Arivale metadata and creates a UniProt AC -> Arivale Name lookup.
-
-    Args:
-        arivale_tsv_path: Path to the Arivale proteomics_metadata.tsv file.
-
-    Returns:
-        A dictionary mapping UniProt Accession IDs to Arivale 'name' identifiers.
-    """
-    logger.info(f"Loading Arivale mapping lookup from {arivale_tsv_path}...")
-    try:
-        # Skip comment lines starting with '#' and use tab separator
-        df_arivale = pd.read_csv(arivale_tsv_path, sep='\t', comment='#')
-        # Ensure required columns exist
-        if 'uniprot' not in df_arivale.columns or 'name' not in df_arivale.columns:
-            raise ValueError("Arivale TSV missing required columns: 'uniprot' and/or 'name'")
-
-        # Drop rows where 'uniprot' is missing, as they can't be used for mapping
-        df_arivale.dropna(subset=['uniprot'], inplace=True)
-
-        # Handle potential duplicate UniProt IDs - keep the first occurrence
-        # Log a warning if duplicates are found
-        if df_arivale['uniprot'].duplicated().any():
-            duplicates = df_arivale[df_arivale['uniprot'].duplicated()]['uniprot'].unique()
-            logger.warning(f"Duplicate UniProt IDs found in Arivale data. Keeping first occurrence. Duplicates: {list(duplicates)}")
-            df_arivale.drop_duplicates(subset=['uniprot'], keep='first', inplace=True)
-
-        # Create the lookup dictionary
-        lookup = pd.Series(df_arivale['name'].values, index=df_arivale['uniprot']).to_dict()
-        logger.info(f"Created Arivale lookup with {len(lookup)} UniProt entries.")
-        return lookup
-
-    except FileNotFoundError:
-        logger.error(f"Arivale TSV file not found at: {arivale_tsv_path}")
-        raise
-    except Exception as e:
-        logger.error(f"Error loading or processing Arivale TSV: {e}", exc_info=True)
-        raise
-
-async def main():
+async def main(log_level_str: str): # Pass log level to main
+    # Optional: Set logger level specifically if needed inside main too
+    # numeric_level = getattr(logging, log_level_str.upper(), None)
+    # if isinstance(numeric_level, int):
+    #     logger.setLevel(numeric_level)
+        
     logger.info(f"Starting mapping process: {SOURCE_ENDPOINT_NAME} -> {TARGET_ENDPOINT_NAME}")
 
     # Create Executor
@@ -186,100 +150,102 @@ async def main():
         logger.error("Could not retrieve source identifiers, column name, or file path. Exiting.")
         return
 
-    logger.info(f"Executing Step 1: Mapping UKBB Identifiers ({SOURCE_ENDPOINT_NAME}) to UniProtKB ACs...")
+    logger.info(f"Executing end-to-end mapping: {SOURCE_ENDPOINT_NAME} -> {TARGET_ENDPOINT_NAME}...")
     try:
-        # Step 1: UKBB Identifier -> UniProtKB AC
-        # Note: The execute_mapping currently seems hardcoded to find the path
-        # between the source and target endpoints and use the appropriate client.
-        # For UKBB->Arivale (Protein), it should find the UniProtNameClient.
+        # Execute the full mapping using the executor
         mapping_response = await executor.execute_mapping(
             source_endpoint_name=SOURCE_ENDPOINT_NAME,
-            target_endpoint_name=TARGET_ENDPOINT_NAME, # Used internally by executor to find path/client
-            input_identifiers=identifiers_to_map, # Use updated parameter name
-            source_property_name="PrimaryIdentifier", # Specify source property
-            target_property_name="PrimaryIdentifier"  # Specify target property
+            target_endpoint_name=TARGET_ENDPOINT_NAME, # Executor finds the path
+            input_identifiers=identifiers_to_map,
+            source_property_name="PrimaryIdentifier", # Source property
+            target_property_name="PrimaryIdentifier",  # Target property
         )
 
     except Exception as e:
-        logger.error(f"Mapping execution failed during Step 1: {e}", exc_info=True)
+        logger.error(f"Mapping execution failed: {e}", exc_info=True)
         return
 
-    # Handle potential None or error dict from executor
+    # Handle potential errors in mapping_response
     if mapping_response is None:
         logger.error("Mapping execution returned None.")
         return
-    # Only treat as error if 'error' key exists AND is not None
-    if isinstance(mapping_response, dict) and "error" in mapping_response and mapping_response["error"] is not None:
+    
+    # Check if response is an error dictionary (has 'error' key)
+    if isinstance(mapping_response, dict) and "error" in mapping_response:
         logger.error(f"Mapping execution failed: {mapping_response['error']}")
         return
+    
+    # Ensure response is a dictionary
     if not isinstance(mapping_response, dict):
         logger.error(f"Mapping execution returned unexpected type: {type(mapping_response)}. Expected dict.")
         return
-    if mapping_response.get("status") == PathExecutionStatus.FAILURE.value:
-        logger.error(f"Mapping execution failed with status FAILURE. Error: {mapping_response.get('error')}")
-        return
-    if mapping_response.get("status") == PathExecutionStatus.NO_PATH_FOUND.value:
-        logger.error(f"Mapping execution failed: No path found. Error: {mapping_response.get('error')}")
-        return
+    
+    # Use the mapping_response directly as our mapping_results
+    # The updated execute_mapping method returns the results directly
+    mapping_results = mapping_response
+    
+    logger.info(f"Got mapping response with {len(mapping_results)} entries")
+    
+    # Combine results - the executor gives final mapping now
+    if mapping_results:
+        logger.info("Processing mapping results...")
+        # Count successful mappings (where value is not None)
+        successful_mappings = sum(1 for v in mapping_results.values() if v is not None)
+        total_inputs = len(identifiers_to_map)
+        failed_mappings = total_inputs - successful_mappings
+        logger.info(f"Successfully mapped {successful_mappings} out of {total_inputs} identifiers.")
+        if failed_mappings > 0:
+            logger.warning(f"{failed_mappings} source identifiers could not be fully mapped to a target identifier.")
 
-    # Extract the actual results from the response dictionary
-    mapping_results = mapping_response.get("results", {})
-    if not mapping_results:
+        # Convert results to DataFrame with more descriptive column names
+        mapping_df = pd.DataFrame.from_dict(mapping_results, orient='index', columns=['Arivale_Protein_ID'])
+    else:
         logger.warning("Mapping execution returned no results.")
+        # Create an empty DataFrame or handle as appropriate
+        mapping_df = pd.DataFrame(index=identifiers_to_map, columns=['Arivale_Protein_ID'])
+        mapping_df.index.name = 'UKBB_UniProtKB_AC'
+        failed_mappings = len(identifiers_to_map)
+        logger.warning(f"{failed_mappings} source identifiers could not be mapped.")
 
-    # Load Arivale UniProt -> Arivale Name lookup
-    try:
-        arivale_lookup = load_arivale_mapping_lookup(ARIVALE_TSV_PATH)
-    except Exception:
-        # Error already logged in load_arivale_mapping_lookup
-        logger.error("Failed to load Arivale mapping data. Exiting.")
-        return
+    # Prepare DataFrame for output with more descriptive column names
+    mapping_df.index.name = 'UKBB_UniProtKB_AC'
+    mapping_df = mapping_df.reset_index()
 
-    # Perform UniProt -> Arivale mapping and combine results
-    final_results = []
-    unmapped_count_step1 = 0
-    unmapped_count_step2 = 0
+    # Output to CSV
+    logger.info(f"Writing {len(mapping_df)} mapping results to {OUTPUT_FILE}")
+    mapping_df.to_csv(OUTPUT_FILE, index=False)
 
-    logger.info(f"Combining results and mapping UniProt IDs to Arivale Names...")
-    for ukbb_id in identifiers_to_map: # Iterate in original order
-        # mapping_results contains {ukbb_id: [list_of_uniprot_ids]} or {ukbb_id: None}
-        uniprot_id_list = mapping_results.get(ukbb_id)
-        # Extract the first ID if the list is not empty, otherwise None
-        uniprot_id = uniprot_id_list[0] if uniprot_id_list else None
-        arivale_name = None
+    # Log summary of failures again for clarity
+    if failed_mappings > 0:
+        logger.info(f"{failed_mappings} source identifiers ended with no successful mapping in the output file.")
 
-        if uniprot_id:
-            # Lookup UniProt ID in Arivale data
-            arivale_name = arivale_lookup.get(uniprot_id)
-            if not arivale_name:
-                unmapped_count_step2 += 1
-                logger.info(f"UniProt ID '{uniprot_id}' (from UKBB ID '{ukbb_id}') not found in Arivale lookup.")
-        else:
-            unmapped_count_step1 += 1
-            logger.info(f"UKBB ID '{ukbb_id}' did not map to a UniProt ID.")
-
-        final_results.append({
-            'ukbb_identifier': ukbb_id,
-            'uniprot_id': uniprot_id,
-            'arivale_name': arivale_name
-        })
-
-    # Write results to output CSV
-    try:
-        df_results = pd.DataFrame(final_results)
-        logger.info(f"Writing {len(df_results)} mapping results to {OUTPUT_FILE}")
-        df_results.to_csv(OUTPUT_FILE, index=False)
-
-        if unmapped_count_step1 > 0:
-            logger.info(f"{unmapped_count_step1} identifiers could not be mapped to UniProt IDs.")
-        if unmapped_count_step2 > 0:
-            logger.info(f"{unmapped_count_step2} UniProt IDs could not be mapped to an Arivale Name.")
-
-        logger.info(f"Mapping complete. Results written to {OUTPUT_FILE}")
-
-    except Exception as e:
-        logger.error(f"Failed to write output CSV. Exception Type: {type(e).__name__}, Error: {e}", exc_info=True)
+    logger.info(f"Mapping complete. Results written to {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="Map UKBB Protein identifiers to Arivale Protein identifiers.")
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: INFO)"
+    )
+    args = parser.parse_args()
+
+    # Configure logging based on parsed argument
+    log_level_numeric = getattr(logging, args.log_level.upper())
+    logging.basicConfig(
+        level=log_level_numeric, # Use the numeric level
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    # Get the root logger and set its level (optional but good practice)
+    # root_logger = logging.getLogger()
+    # root_logger.setLevel(log_level_numeric)
+
+    # Explicitly set the level for the mapping_executor logger
+    executor_logger = logging.getLogger('biomapper.core.mapping_executor')
+    executor_logger.setLevel(log_level_numeric)
+
+    # Run the main async function
+    asyncio.run(main(args.log_level)) # Pass log level string if needed by main

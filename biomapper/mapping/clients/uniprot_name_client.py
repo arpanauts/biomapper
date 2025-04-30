@@ -145,6 +145,7 @@ class UniProtNameClient:
         Returns:
             A dictionary mapping original IDs to UniProtKB ACs (or None if not found).
         """
+        logger.debug(f"UniProtNameClient received {len(identifiers)} IDs to map: {identifiers[:10]}...")
         all_results: Dict[str, Optional[List[str]]] = {}
         if not identifiers:
             return {}
@@ -164,8 +165,8 @@ class UniProtNameClient:
                 else:
                     all_results[original_id] = result
 
-        mapped_count = sum(1 for v in all_results.values() if v is not None)
-        logger.info(f"Finished UniProt search. Found mappings for {mapped_count}/{len(identifiers)} identifiers.")
+        logger.debug(f"UniProtNameClient finished mapping. Result dict keys: {list(all_results.keys())[:10]}...")
+        logger.info(f"Finished UniProt search. Found mappings for {sum(1 for v in all_results.values() if v is not None)}/{len(identifiers)} identifiers.")
         return all_results
 
 # Example Usage (Optional - for testing)
