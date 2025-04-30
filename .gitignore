@@ -45,6 +45,7 @@ MANIFEST
 *.bin
 #vector_store/
 hmdb_metabolites.xml
+mapping_cache.db
 
 # Keep specific txt files
 !hmdb_metabolites_sample.txt
