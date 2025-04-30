@@ -7,7 +7,8 @@ import unittest
 from pathlib import Path
 
 from biomapper.cache.manager import CacheManager
-from biomapper.db.models import EntityMapping, MappingMetadata, CacheStats
+from biomapper.db.models import CacheStats, EntityTypeConfig
+from biomapper.db.cache_models import EntityMapping, MappingMetadata
 from biomapper.db.session import DatabaseManager
 
 

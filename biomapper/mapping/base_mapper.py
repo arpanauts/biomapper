@@ -12,7 +12,6 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, Union
 
 from biomapper.mapping.metadata.manager import ResourceMetadataManager
-from biomapper.mapping.metadata.dispatcher import MappingDispatcher
 from biomapper.mapping.adapters.cache_adapter import CacheResourceAdapter
 
 
@@ -44,7 +43,6 @@ class AbstractEntityMapper(ABC):
         
         # Initialize resource metadata components
         self.metadata_manager = ResourceMetadataManager(db_path)
-        self.dispatcher = MappingDispatcher(self.metadata_manager)
         self._resources_initialized = False
     
     async def initialize_resources(self):
@@ -65,7 +63,6 @@ class AbstractEntityMapper(ABC):
         # Setup SQLite cache adapter
         cache_config = self.config.get("sqlite_cache", {"db_path": self._get_default_cache_path()})
         cache_adapter = CacheResourceAdapter(cache_config, "sqlite_cache")
-        await self.dispatcher.add_resource_adapter("sqlite_cache", cache_adapter)
         
         # Setup SPOKE adapter if configuration is available
         spoke_config = self.config.get("spoke_graph")
@@ -73,7 +70,7 @@ class AbstractEntityMapper(ABC):
             from biomapper.mapping.adapters.spoke_adapter import SpokeResourceAdapter
             spoke_adapter = SpokeResourceAdapter(spoke_config, "spoke_graph")
             try:
-                await self.dispatcher.add_resource_adapter("spoke_graph", spoke_adapter)
+                pass
             except Exception as e:
                 self.logger.warning(f"Failed to initialize SPOKE adapter: {e}")
     
@@ -119,19 +116,19 @@ class AbstractEntityMapper(ABC):
         await self.initialize_resources()
         
         # Perform the mapping operation
-        results = await self.dispatcher.map_entity(
-            source_id=source_id,
-            source_type=source_type,
-            target_type=target_type,
-            preferred_resource=preferred_resource,
-            **kwargs
-        )
+        # results = await self.dispatcher.map_entity(
+        #     source_id=source_id,
+        #     source_type=source_type,
+        #     target_type=target_type,
+        #     preferred_resource=preferred_resource,
+        #     **kwargs
+        # )
         
         # Filter by confidence threshold
-        if confidence_threshold > 0:
-            results = [r for r in results if r.get("confidence", 0) >= confidence_threshold]
+        # if confidence_threshold > 0:
+        #     results = [r for r in results if r.get("confidence", 0) >= confidence_threshold]
             
-        return results
+        # return results
     
     async def batch_map_entities(
         self,
@@ -158,23 +155,23 @@ class AbstractEntityMapper(ABC):
         await self.initialize_resources()
         
         # Perform the batch mapping operation
-        results = await self.dispatcher.batch_map_entities(
-            source_ids=source_ids,
-            source_type=source_type,
-            target_type=target_type,
-            **kwargs
-        )
+        # results = await self.dispatcher.batch_map_entities(
+        #     source_ids=source_ids,
+        #     source_type=source_type,
+        #     target_type=target_type,
+        #     **kwargs
+        # )
         
         # Filter by confidence threshold
-        if confidence_threshold > 0:
-            filtered_results = {}
-            for source_id, mappings in results.items():
-                filtered_results[source_id] = [
-                    m for m in mappings if m.get("confidence", 0) >= confidence_threshold
-                ]
-            return filtered_results
+        # if confidence_threshold > 0:
+        #     filtered_results = {}
+        #     for source_id, mappings in results.items():
+        #         filtered_results[source_id] = [
+        #             m for m in mappings if m.get("confidence", 0) >= confidence_threshold
+        #         ]
+        #     return filtered_results
             
-        return results
+        # return results
     
     async def get_resource_performance(
         self, 

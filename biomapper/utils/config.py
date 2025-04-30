@@ -1,6 +1,7 @@
 """Configuration utilities for biomapper."""
 
 import os
+import pathlib
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -28,3 +29,11 @@ def get_spoke_config(config_path: Optional[str] = None) -> SPOKEConfig:
         max_retries=int(os.getenv("SPOKE_MAX_RETRIES", "3")),
         backoff_factor=float(os.getenv("SPOKE_BACKOFF_FACTOR", "0.5"))
     )
+
+
+# --- Database Configuration ---
+# Resolve the project root directory based on this file's location
+PROJECT_ROOT = pathlib.Path(__file__).parent.parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
+CONFIG_DB_URL = f"sqlite+aiosqlite:///{DATA_DIR}/metamapper.db"
+CACHE_DB_URL = f"sqlite+aiosqlite:///{DATA_DIR}/mapping_cache.db"

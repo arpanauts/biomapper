@@ -9,7 +9,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, func
 
-from ..db.models import EntityMapping, MappingMetadata, EntityTypeConfig, CacheStats
+# Import metamapper configuration models needed by cache manager
+from ..db.models import EntityTypeConfig, CacheStats
+# Import cache-specific models
+from ..db.cache_models import EntityMapping, MappingMetadata
 from ..db.session import get_session
 
 # Configure logging

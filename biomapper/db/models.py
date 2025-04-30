@@ -16,7 +16,7 @@ from sqlalchemy import (
     UniqueConstraint, 
     JSON
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 
@@ -136,33 +136,44 @@ class MappingPath(Base):
     __tablename__ = "mapping_paths"
 
     id = Column(Integer, primary_key=True)
-    source_type = Column(String, nullable=False)
-    target_type = Column(String, nullable=False)
-    path_steps = Column(Text, nullable=False) # JSON containing step details
-    performance_score = Column(Float, nullable=True)
+    source_type = Column(String, nullable=False) # e.g., 'Gene_Name'
+    target_type = Column(String, nullable=False) # e.g., 'UniProtKB_AC'
+    name = Column(String, unique=True, nullable=False) # User-friendly name
+    description = Column(Text)
+    priority = Column(Integer, default=0) # Lower number means higher priority
+    is_active = Column(Boolean, default=True)
+    performance_score = Column(Float, nullable=True) # Metric combining speed, success rate, etc.
     success_rate = Column(Float, nullable=True)
-    usage_count = Column(Integer, default=0)
     last_used = Column(DateTime)
     last_discovered = Column(DateTime)
 
-    @property
-    def steps(self) -> list:
-        """Get the path steps as a list of dictionaries."""
-        if not self.path_steps:
-            return []
-        try:
-            return json.loads(self.path_steps)
-        except json.JSONDecodeError:
-            # Handle potential malformed JSON, perhaps log an error
-            return []
+    # Add relationship to steps
+    steps = relationship("MappingPathStep", back_populates="mapping_path", order_by="MappingPathStep.step_order", cascade="all, delete-orphan")
 
-    @steps.setter
-    def steps(self, steps_list: list) -> None:
-        """Set the path steps from a list of dictionaries."""
-        self.path_steps = json.dumps(steps_list) if steps_list else '[]'
+    def __repr__(self):
+        return f"<MappingPath id={self.id} name='{self.name}' {self.source_type}->{self.target_type}>"
+
+
+class MappingPathStep(Base):
+    """Represents a single step within a MappingPath."""
+    __tablename__ = "mapping_path_steps"
+
+    id = Column(Integer, primary_key=True)
+    mapping_path_id = Column(Integer, ForeignKey("mapping_paths.id"), nullable=False)
+    mapping_resource_id = Column(Integer, ForeignKey("mapping_resources.id"), nullable=False)
+    step_order = Column(Integer, nullable=False)
+    # Optional: Store specific configuration overrides for this step
+    config_override = Column(JSON, nullable=True)
+    description = Column(Text, nullable=True) # Optional description for this step
+
+    # Relationships
+    mapping_path = relationship("MappingPath", back_populates="steps")
+    mapping_resource = relationship("MappingResource")
+
+    __table_args__ = (UniqueConstraint('mapping_path_id', 'step_order', name='uix_path_step_order'),)
 
     def __repr__(self) -> str:
-        return f"<MappingPath {self.id}: {self.source_type} -> {self.target_type}>"
+        return f"<MappingPathStep id={self.id} path={self.mapping_path_id} order={self.step_order} resource={self.mapping_resource_id}>"
 
 
 class PropertyExtractionConfig(Base):
@@ -170,7 +181,7 @@ class PropertyExtractionConfig(Base):
     __tablename__ = "property_extraction_configs"
 
     id = Column(Integer, primary_key=True)
-    resource_id = Column(Integer, ForeignKey("mapping_resources.id"), nullable=False)
+    resource_id = Column(Integer, ForeignKey("mapping_resources.id"), nullable=True)
     ontology_type = Column(String, nullable=False)
     property_name = Column(String, nullable=False) # e.g., 'pref_name', 'synonym', 'description'
     extraction_method = Column(String, nullable=False) # e.g., 'json_path', 'regex', 'xpath'
@@ -194,23 +205,21 @@ class PropertyExtractionConfig(Base):
 
 
 class EndpointPropertyConfig(Base):
-    """Configuration for extracting properties from endpoints."""
+    """Links an Endpoint and a specific property name to a PropertyExtractionConfig."""
     __tablename__ = "endpoint_property_configs"
 
-    config_id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True)
     endpoint_id = Column(Integer, ForeignKey("endpoints.id"), nullable=False)
-    ontology_type = Column(String, nullable=False) # The ontology type *within* the endpoint data
-    property_name = Column(String, nullable=False) # The property name to extract
-    extraction_method = Column(String, nullable=False) # e.g., 'column_name', 'json_path'
-    extraction_pattern = Column(String, nullable=False) # The column name or path
-    transform_method = Column(String, nullable=True) # Optional transformation
+    property_name = Column(String(100), nullable=False)
+    property_extraction_config_id = Column(Integer, ForeignKey("property_extraction_configs.id"), nullable=False)
 
     endpoint = relationship("Endpoint")
+    property_extraction_config = relationship("PropertyExtractionConfig")
 
-    __table_args__ = (UniqueConstraint('endpoint_id', 'ontology_type', 'property_name', name='uix_endpoint_prop_extract'),)
+    __table_args__ = (UniqueConstraint('endpoint_id', 'property_name', name='uix_endpoint_prop_name'),)
 
     def __repr__(self) -> str:
-        return f"<EndpointPropertyConfig id={self.config_id} endpoint={self.endpoint_id} ontology={self.ontology_type} property={self.property_name}>"
+        return f"<EndpointPropertyConfig id={self.id} endpoint={self.endpoint_id} property={self.property_name} config_id={self.property_extraction_config_id}>"
 
 
 class OntologyCoverage(Base):

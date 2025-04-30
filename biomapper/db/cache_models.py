@@ -129,9 +129,13 @@ class EntityMappingProvenance(Base):
         return f"<EntityMappingProvenance mapping_id={self.entity_mapping_id} path_id={self.relationship_mapping_path_id}>"
 
 class PathExecutionStatus(enum.Enum):
+    PENDING = "pending"
     SUCCESS = "success"
     FAILURE = "failure"
     PARTIAL = "partial"
+    PARTIAL_SUCCESS = "partial_success"  # Added to match implementation references
+    NO_MAPPING_FOUND = "no_mapping_found"  # Added to match test references
+    NO_PATH_FOUND = "no_path_found"  # Added to match implementation references
     TIMED_OUT = "timed_out"
 
 class PathExecutionLog(Base):
