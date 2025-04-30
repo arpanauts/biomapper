@@ -1096,17 +1096,15 @@ class MappingExecutor:
                                         )
                                         continue
 
+                                    is_reversed_step = getattr(path, "is_reverse", False)
                                     logger.info(
-                                        f"Executing Step {step.step_order}: Resource '{step.mapping_resource.name}'"
+                                        f"Executing Step {step.step_order}: Resource '{step.mapping_resource.name}' (direction: {'reverse' if is_reversed_step else 'forward'})"
                                     )
                                     try:
-                                        client_instance = await self._load_client(
-                                            step.mapping_resource
-                                        )
-                                        step_results = (
-                                            await client_instance.map_identifiers(
-                                                step_input_values
-                                            )
+                                        step_results = await self._execute_mapping_step(
+                                            step,
+                                            step_input_values,
+                                            is_reverse=is_reversed_step
                                         )
 
                                         # Process step results and update current_results for next step
@@ -1220,7 +1218,7 @@ class MappingExecutor:
                                         source_ontology,
                                         target_ontology,
                                         results=mapped_results,  # Cache only the *newly* mapped results
-                                        mapping_direction=mapping_direction,  # Pass direction
+                                        mapping_direction=effective_direction,  # Use effective direction based on path
                                     )
                                 await (
                                     cache_session.commit()
@@ -1275,17 +1273,15 @@ class MappingExecutor:
                                     )
                                     continue
 
+                                is_reversed_step = getattr(path, "is_reverse", False)
                                 logger.info(
-                                    f"Executing Step {step.step_order}: Resource '{step.mapping_resource.name}'"
+                                    f"Executing Step {step.step_order}: Resource '{step.mapping_resource.name}' (direction: {'reverse' if is_reversed_step else 'forward'})"
                                 )
                                 try:
-                                    client_instance = await self._load_client(
-                                        step.mapping_resource
-                                    )
-                                    step_results = (
-                                        await client_instance.map_identifiers(
-                                            step_input_values
-                                        )
+                                    step_results = await self._execute_mapping_step(
+                                        step,
+                                        step_input_values,
+                                        is_reverse=is_reversed_step
                                     )
 
                                     # Process step results and update current_results for next step
