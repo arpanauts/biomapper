@@ -20,27 +20,32 @@ logger = logging.getLogger(__name__)
 
 class RAGError(Exception):
     """Base exception for RAG-related errors."""
+
     pass
 
 
 class EmbeddingError(RAGError):
     """Error during text embedding."""
+
     pass
 
 
 class RetrievalError(RAGError):
     """Error during document retrieval."""
+
     pass
 
 
 class GenerationError(RAGError):
     """Error during text generation."""
+
     pass
 
 
 @dataclass
 class Document:
     """Base document for RAG retrieval."""
+
     content: str
     metadata: Dict[str, Any]
     embedding: Optional[np.ndarray] = None
@@ -55,7 +60,7 @@ class BaseVectorStore(Generic[T], ABC):
     @abstractmethod
     async def add_documents(self, documents: List[T]) -> None:
         """Add documents to the store.
-        
+
         Args:
             documents: List of documents to add
         """
@@ -63,13 +68,10 @@ class BaseVectorStore(Generic[T], ABC):
 
     @abstractmethod
     async def get_relevant(
-        self,
-        query_embedding: np.ndarray,
-        k: int = 5,
-        threshold: float = 0.0
+        self, query_embedding: np.ndarray, k: int = 5, threshold: float = 0.0
     ) -> List[T]:
         """Get relevant documents for a query embedding.
-        
+
         Args:
             query_embedding: Query embedding vector
             k: Number of documents to retrieve
@@ -92,7 +94,7 @@ class BaseEmbedder(ABC):
     @abstractmethod
     async def embed_text(self, text: str) -> np.ndarray:
         """Embed text into a vector.
-        
+
         Args:
             text: Text to embed
 
@@ -107,7 +109,7 @@ class BaseEmbedder(ABC):
     @abstractmethod
     async def embed_batch(self, texts: List[str]) -> List[np.ndarray]:
         """Embed multiple texts.
-        
+
         Args:
             texts: List of texts to embed
 
@@ -125,13 +127,10 @@ class BasePromptManager(ABC):
 
     @abstractmethod
     async def get_prompt(
-        self,
-        query: str,
-        context: List[Document],
-        **kwargs: Any
+        self, query: str, context: List[Document], **kwargs: Any
     ) -> str:
         """Get prompt for generation.
-        
+
         Args:
             query: User query
             context: Retrieved documents
@@ -156,7 +155,7 @@ class BaseRAGMapper(ABC):
         store_config: Optional[VectorStoreConfig] = None,
     ) -> None:
         """Initialize RAG mapper.
-        
+
         Args:
             vector_store: Vector store for document retrieval
             embedder: Text embedder
@@ -174,7 +173,7 @@ class BaseRAGMapper(ABC):
 
     async def map_query(self, query: str, **kwargs: Any) -> LLMMapperResult:
         """Map a query using RAG.
-        
+
         Args:
             query: Query to map
             **kwargs: Additional mapping parameters
@@ -194,7 +193,7 @@ class BaseRAGMapper(ABC):
             docs = await self.vector_store.get_relevant(
                 query_embedding,
                 k=kwargs.get("k", 5),
-                threshold=kwargs.get("threshold", 0.0)
+                threshold=kwargs.get("threshold", 0.0),
             )
             retrieval_latency = (time.time() - retrieval_start) * 1000
 
@@ -222,7 +221,9 @@ class BaseRAGMapper(ABC):
             return LLMMapperResult(
                 query_term=query,
                 matches=matches,
-                best_match=max(matches, key=lambda m: float(m.confidence)) if matches else None,
+                best_match=max(matches, key=lambda m: float(m.confidence))
+                if matches
+                else None,
                 metrics=metrics.dict(),
                 trace_id=trace_id or "",
             )
@@ -245,18 +246,15 @@ class BaseRAGMapper(ABC):
                     "answer_faithfulness": 0.0,
                 },
                 trace_id=trace_id or "",
-                error=str(e)
+                error=str(e),
             )
 
     @abstractmethod
     async def _generate_matches(
-        self,
-        prompt: str,
-        context: List[Document],
-        **kwargs: Any
+        self, prompt: str, context: List[Document], **kwargs: Any
     ) -> List[Match]:
         """Generate matches from prompt and context.
-        
+
         Args:
             prompt: Generated prompt
             context: Retrieved documents

@@ -28,7 +28,7 @@ class ChromaVectorStore(BaseVectorStore[ChromaDocument]):
         settings: Optional[ChromaSettings] = None,
     ) -> None:
         """Initialize ChromaVectorStore.
-        
+
         Args:
             config: Vector store configuration
             settings: ChromaDB settings
@@ -62,7 +62,7 @@ class ChromaVectorStore(BaseVectorStore[ChromaDocument]):
 
     async def add_documents(self, documents: List[ChromaDocument]) -> None:
         """Add documents to the vector store.
-        
+
         Args:
             documents: List of documents to add
 
@@ -107,7 +107,7 @@ class ChromaVectorStore(BaseVectorStore[ChromaDocument]):
         where_document: Optional[Dict[str, Any]] = None,
     ) -> List[ChromaDocument]:
         """Get relevant documents for a query embedding.
-        
+
         Args:
             query_embedding: Query embedding vector
             k: Number of documents to retrieve
@@ -127,7 +127,9 @@ class ChromaVectorStore(BaseVectorStore[ChromaDocument]):
 
             # Convert filters to ChromaDB format
             chroma_where = cast(Where, where) if where else None
-            chroma_where_document = cast(WhereDocument, where_document) if where_document else None
+            chroma_where_document = (
+                cast(WhereDocument, where_document) if where_document else None
+            )
 
             # Query collection
             results = self.collection.query(

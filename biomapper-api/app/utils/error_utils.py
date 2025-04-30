@@ -8,9 +8,9 @@ from fastapi import HTTPException, status
 
 class APIError(Exception):
     """Base API error class."""
-    
+
     def __init__(
-        self, 
+        self,
         status_code: int,
         detail: str,
         error_code: Optional[str] = None,
@@ -25,7 +25,7 @@ class APIError(Exception):
 
 class NotFoundError(APIError):
     """Resource not found error."""
-    
+
     def __init__(
         self,
         detail: str,
@@ -42,7 +42,7 @@ class NotFoundError(APIError):
 
 class ValidationError(APIError):
     """Input validation error."""
-    
+
     def __init__(
         self,
         detail: str,
@@ -59,7 +59,7 @@ class ValidationError(APIError):
 
 class MappingError(APIError):
     """Error during mapping operation."""
-    
+
     def __init__(
         self,
         detail: str,

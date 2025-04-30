@@ -16,15 +16,15 @@ class MetaboliteLLMAnalyzer(BaseLLMAnalyzer):
         self,
         mapping_results: Dict[str, Any],
         spoke_results: Optional[Dict[str, Any]] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> AnalysisResult:
         """Analyze mapping and SPOKE results for metabolites.
-        
+
         Args:
             mapping_results: Results from metabolite mapping
             spoke_results: Optional results from SPOKE analysis
             context: Optional additional context
-            
+
         Returns:
             AnalysisResult containing:
                 - Identified relationships between metabolites
@@ -37,27 +37,25 @@ class MetaboliteLLMAnalyzer(BaseLLMAnalyzer):
             data={
                 "mapping": mapping_results,
                 "spoke": spoke_results,
-                "context": context or {}
-            }
+                "context": context or {},
+            },
         )
-        
+
         # Run LLM analysis
         raw_results = await self._run_llm_analysis(prompts)
-        
+
         # Process and structure results
         return await self._process_llm_results(raw_results)
 
     async def generate_prompts(
-        self,
-        analysis_type: str,
-        data: Dict[str, Any]
+        self, analysis_type: str, data: Dict[str, Any]
     ) -> List[str]:
         """Generate analysis-specific prompts.
-        
+
         Args:
             analysis_type: Type of analysis to perform
             data: Data to analyze
-            
+
         Returns:
             List of prompts for LLM
         """
@@ -74,8 +72,7 @@ class MetaboliteLLMAnalyzer(BaseLLMAnalyzer):
         pass
 
     async def _process_llm_results(
-        self,
-        raw_results: List[Dict[str, Any]]
+        self, raw_results: List[Dict[str, Any]]
     ) -> AnalysisResult:
         """Process raw LLM results into structured analysis."""
         # Implementation details

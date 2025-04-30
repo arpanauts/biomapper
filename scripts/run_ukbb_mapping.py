@@ -4,24 +4,31 @@ import pandas as pd
 from biomapper.core.mapping_executor import MappingExecutor
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
-INPUT_FILE_PATH = "/procedure/data/local_data/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv"
+INPUT_FILE_PATH = (
+    "/procedure/data/local_data/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv"
+)
 IDENTIFIER_COLUMN = "Assay"
 SOURCE_ENDPOINT_NAME = "UKBB_Protein"
-TARGET_ENDPOINT_NAME = "UKBB_Protein" # Mapping within the same endpoint context
-SOURCE_PROPERTY_NAME = "PrimaryIdentifier" # Corresponds to GENE_NAME
-TARGET_PROPERTY_NAME = "EnsemblGeneID"   # Corresponds to ENSEMBL_GENE
+TARGET_ENDPOINT_NAME = "UKBB_Protein"  # Mapping within the same endpoint context
+SOURCE_PROPERTY_NAME = "PrimaryIdentifier"  # Corresponds to GENE_NAME
+TARGET_PROPERTY_NAME = "EnsemblGeneID"  # Corresponds to ENSEMBL_GENE
 # -------------------
+
 
 async def main():
     """Reads identifiers from the UKBB file and runs mapping."""
-    logger.info(f"Reading identifiers from {INPUT_FILE_PATH}, column '{IDENTIFIER_COLUMN}'")
+    logger.info(
+        f"Reading identifiers from {INPUT_FILE_PATH}, column '{IDENTIFIER_COLUMN}'"
+    )
 
     try:
-        df = pd.read_csv(INPUT_FILE_PATH, sep='\t', usecols=[IDENTIFIER_COLUMN])
+        df = pd.read_csv(INPUT_FILE_PATH, sep="\t", usecols=[IDENTIFIER_COLUMN])
         # Get unique, non-null identifiers
         input_ids = df[IDENTIFIER_COLUMN].dropna().unique().tolist()
         logger.info(f"Read {len(input_ids)} unique identifiers.")
@@ -29,7 +36,9 @@ async def main():
         logger.error(f"Error: Input file not found at {INPUT_FILE_PATH}")
         return
     except KeyError:
-        logger.error(f"Error: Column '{IDENTIFIER_COLUMN}' not found in {INPUT_FILE_PATH}")
+        logger.error(
+            f"Error: Column '{IDENTIFIER_COLUMN}' not found in {INPUT_FILE_PATH}"
+        )
         return
     except Exception as e:
         logger.error(f"Error reading input file: {e}")
@@ -43,7 +52,9 @@ async def main():
     executor = MappingExecutor()
 
     logger.info("Starting mapping execution...")
-    logger.info(f"Mapping from {SOURCE_ENDPOINT_NAME}:{SOURCE_PROPERTY_NAME} to {TARGET_ENDPOINT_NAME}:{TARGET_PROPERTY_NAME}")
+    logger.info(
+        f"Mapping from {SOURCE_ENDPOINT_NAME}:{SOURCE_PROPERTY_NAME} to {TARGET_ENDPOINT_NAME}:{TARGET_PROPERTY_NAME}"
+    )
 
     # Execute the mapping
     mapping_results = await executor.execute_mapping(
@@ -51,7 +62,7 @@ async def main():
         target_endpoint_name=TARGET_ENDPOINT_NAME,
         input_identifiers=input_ids,
         source_property_name=SOURCE_PROPERTY_NAME,
-        target_property_name=TARGET_PROPERTY_NAME
+        target_property_name=TARGET_PROPERTY_NAME,
     )
 
     logger.info("Mapping execution finished.")
@@ -79,6 +90,7 @@ async def main():
     #     count += 1
     #     if count >= 10:
     #         break
+
 
 if __name__ == "__main__":
     # Ensure the script can find the biomapper package

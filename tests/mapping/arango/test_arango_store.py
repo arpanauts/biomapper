@@ -13,7 +13,7 @@ async def arango():
         password="ph",
         database="spoke_human",
         host="localhost",
-        port=8529
+        port=8529,
     )
     await store.connect()
     yield store
@@ -25,11 +25,11 @@ async def test_connection():
     """Test connection management."""
     store = ArangoStore()
     assert not store.is_connected
-    
+
     await store.connect()
     assert store.is_connected
     assert store.db is not None
-    
+
     await store.close()
     assert not store.is_connected
     assert store.db is None
@@ -63,21 +63,13 @@ async def test_get_node(arango: ArangoStore):
 async def test_get_node_by_property(arango: ArangoStore):
     """Test getting nodes by property."""
     # Test with a known property
-    node = await arango.get_node_by_property(
-        "Compound",
-        "hmdb_id",
-        "your_test_hmdb_id"
-    )
+    node = await arango.get_node_by_property("Compound", "hmdb_id", "your_test_hmdb_id")
     assert node is not None
     assert node.type == "Compound"
     assert node.name == "expected_name"
 
     # Test with nonexistent property
-    node = await arango.get_node_by_property(
-        "Compound",
-        "hmdb_id",
-        "nonexistent"
-    )
+    node = await arango.get_node_by_property("Compound", "hmdb_id", "nonexistent")
     assert node is None
 
 
@@ -93,15 +85,13 @@ async def test_get_neighbors(arango: ArangoStore):
 
     # Filter by edge type
     neighbors = await arango.get_neighbors(
-        "your_test_node_id",
-        edge_types=["expected_edge_type"]
+        "your_test_node_id", edge_types=["expected_edge_type"]
     )
     assert len(neighbors) > 0
 
     # Filter by node type
     neighbors = await arango.get_neighbors(
-        "your_test_node_id",
-        node_types=["expected_node_type"]
+        "your_test_node_id", node_types=["expected_node_type"]
     )
     assert len(neighbors) > 0
 
@@ -110,12 +100,10 @@ async def test_get_neighbors(arango: ArangoStore):
 async def test_find_paths(arango: ArangoStore):
     """Test finding paths between nodes."""
     query = ArangoQuery(
-        start_node_type="Compound",
-        end_node_type="Protein",
-        max_path_length=2
+        start_node_type="Compound", end_node_type="Protein", max_path_length=2
     )
     result = await arango.find_paths(query)
-    
+
     assert len(result.paths) > 0
     assert len(result.nodes) > 0
     assert len(result.edges) > 0

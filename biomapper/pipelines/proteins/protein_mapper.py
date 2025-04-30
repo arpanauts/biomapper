@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ProteinDocument(DomainDocument):
     """Standard protein document."""
+
     name: str
     uniprot_id: Optional[str] = None
     uniprot_name: Optional[str] = None
@@ -40,22 +41,20 @@ class ProteinDocument(DomainDocument):
 
 class ProteinMapper(APIMapper[ProteinDocument]):
     """Maps protein names to standard identifiers using UniProt API."""
-    
+
     def __init__(self, api_client: BaseAPIClient):
         """Initialize mapper with UniProt client."""
         super().__init__(api_client)
-        
+
     async def map_entity(
-        self,
-        text: str,
-        context: Optional[Dict[str, Any]] = None
+        self, text: str, context: Optional[Dict[str, Any]] = None
     ) -> MappingResult:
         """Map protein name using UniProt.
-        
+
         Args:
             text: Protein name or identifier to map
             context: Optional context (e.g., organism)
-            
+
         Returns:
             Mapping result
         """
@@ -64,10 +63,10 @@ class ProteinMapper(APIMapper[ProteinDocument]):
             query = text
             if context and "organism" in context:
                 query = f"{text} AND organism:{context['organism']}"
-                
+
             response = await self.client.search(query)
             return await self._process_response(text, response, context)
-            
+
         except Exception as e:
             logger.error(f"Error mapping protein {text}: {e}")
             return MappingResult(
@@ -75,14 +74,11 @@ class ProteinMapper(APIMapper[ProteinDocument]):
                 mapped_entity=None,
                 confidence=0.0,
                 source="api",
-                metadata={"error": str(e)}
+                metadata={"error": str(e)},
             )
-    
+
     async def _process_response(
-        self,
-        input_text: str,
-        response: APIResponse,
-        context: Optional[Dict[str, Any]]
+        self, input_text: str, response: APIResponse, context: Optional[Dict[str, Any]]
     ) -> MappingResult:
         """Process UniProt API response into mapping result."""
         if not response.success or not response.data:
@@ -91,9 +87,9 @@ class ProteinMapper(APIMapper[ProteinDocument]):
                 mapped_entity=None,
                 confidence=0.0,
                 source="api",
-                metadata={"error": response.error or "No data"}
+                metadata={"error": response.error or "No data"},
             )
-            
+
         # Create protein document from response
         data = response.data
         protein = ProteinDocument(
@@ -103,9 +99,9 @@ class ProteinMapper(APIMapper[ProteinDocument]):
             gene_name=data.get("gene_name"),
             organism=data.get("organism"),
             sequence=data.get("sequence"),
-            metadata=data
+            metadata=data,
         )
-        
+
         # Calculate confidence based on match quality
         # Better confidence if we have ID and sequence
         protein.confidence = 0.5  # Base confidence for name match
@@ -113,11 +109,11 @@ class ProteinMapper(APIMapper[ProteinDocument]):
             protein.confidence += 0.3
         if protein.sequence:
             protein.confidence += 0.2
-            
+
         return MappingResult(
             input_text=input_text,
             mapped_entity=protein,
             confidence=protein.confidence,
             source="api",
-            metadata=response.data
+            metadata=response.data,
         )

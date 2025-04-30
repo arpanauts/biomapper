@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 # Get database path
-db_path = Path('data/metamapper.db')
+db_path = Path("data/metamapper.db")
 if not db_path.exists():
     print(f"Database file {db_path} not found!")
     sys.exit(1)
@@ -26,7 +26,9 @@ resources = cursor.fetchall()
 print("\nResources in the database:")
 print("=========================")
 for resource in resources:
-    print(f"ID: {resource[0]}, Name: {resource[1]}, Type: {resource[3]}, Status: {resource[4]}")
+    print(
+        f"ID: {resource[0]}, Name: {resource[1]}, Type: {resource[3]}, Status: {resource[4]}"
+    )
     print(f"Description: {resource[2]}")
     print("-" * 50)
 

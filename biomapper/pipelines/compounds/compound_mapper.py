@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class CompoundClass(Enum):
     """Types of compound measurements."""
+
     SIMPLE = "simple"  # Direct compound measurement
     RATIO = "ratio"  # Ratio between two compounds
     CONCENTRATION = "concentration"  # Concentration in specific matrix/tissue
@@ -23,6 +24,7 @@ class CompoundClass(Enum):
 
 class CompoundDocument(DomainDocument):
     """Standard compound document."""
+
     name: str
     compound_class: CompoundClass
     primary_id: Optional[str] = None
@@ -60,29 +62,27 @@ class CompoundDocument(DomainDocument):
 
 class CompoundMapper(APIMapper[CompoundDocument]):
     """Maps compound names to standard identifiers using multiple API clients."""
-    
+
     def __init__(self, api_clients: List[BaseAPIClient]):
         """Initialize mapper with API clients."""
         super().__init__(api_clients[0])  # Use first client as primary
         self.api_clients = api_clients
-        
+
     async def map_entity(
-        self,
-        text: str,
-        context: Optional[Dict[str, Any]] = None
+        self, text: str, context: Optional[Dict[str, Any]] = None
     ) -> MappingResult:
         """Map compound name using multiple API clients.
-        
+
         Args:
             text: Compound name to map
             context: Optional context
-            
+
         Returns:
             Mapping result
         """
         best_result = None
         best_confidence = 0.0
-        
+
         # Try each API client
         for client in self.api_clients:
             try:
@@ -95,24 +95,21 @@ class CompoundMapper(APIMapper[CompoundDocument]):
             except Exception as e:
                 logger.error(f"Error with {client.__class__.__name__}: {e}")
                 continue
-                
+
         if best_result:
             return best_result
-            
+
         # No matches found
         return MappingResult(
             input_text=text,
             mapped_entity=None,
             confidence=0.0,
             source="api",
-            metadata={"error": "No matches found"}
+            metadata={"error": "No matches found"},
         )
-    
+
     async def _process_response(
-        self,
-        input_text: str,
-        response: APIResponse,
-        context: Optional[Dict[str, Any]]
+        self, input_text: str, response: APIResponse, context: Optional[Dict[str, Any]]
     ) -> MappingResult:
         """Process API response into mapping result."""
         if not response.success or not response.data:
@@ -121,16 +118,16 @@ class CompoundMapper(APIMapper[CompoundDocument]):
                 mapped_entity=None,
                 confidence=0.0,
                 source="api",
-                metadata={"error": response.error or "No data"}
+                metadata={"error": response.error or "No data"},
             )
-            
+
         # Create compound document from response
         compound = CompoundDocument(
             name=input_text,
             compound_class=CompoundClass.SIMPLE,  # Default to simple
-            metadata=response.data
+            metadata=response.data,
         )
-        
+
         # Extract IDs and names based on source
         if isinstance(response.data, dict):
             compound.refmet_id = response.data.get("refmet_id")
@@ -139,20 +136,24 @@ class CompoundMapper(APIMapper[CompoundDocument]):
             compound.chebi_name = response.data.get("chebi_name")
             compound.hmdb_id = response.data.get("hmdb_id")
             compound.pubchem_id = response.data.get("pubchem_id")
-            
+
         # Calculate confidence based on number of matched IDs
-        matched_ids = sum(1 for x in [
-            compound.refmet_id,
-            compound.chebi_id,
-            compound.hmdb_id,
-            compound.pubchem_id
-        ] if x is not None)
+        matched_ids = sum(
+            1
+            for x in [
+                compound.refmet_id,
+                compound.chebi_id,
+                compound.hmdb_id,
+                compound.pubchem_id,
+            ]
+            if x is not None
+        )
         compound.confidence = matched_ids / 4.0  # Simple confidence score
-        
+
         return MappingResult(
             input_text=input_text,
             mapped_entity=compound,
             confidence=compound.confidence,
             source="api",
-            metadata=response.data
+            metadata=response.data,
         )

@@ -13,7 +13,7 @@ from biomapper.mapping.metabolite.name import (
     MetaboliteClass,
     MetaboliteMapping,
     MetaboliteNameMapper,
-    Classification
+    Classification,
 )
 
 
@@ -768,6 +768,7 @@ def test_case_and_total_prefix_handling(mapper: MetaboliteNameMapper) -> None:
             assert result.secondary_compound == expected_secondary
         else:
             assert result.secondary_compound is None
+
 
 def test_classify_complex_patterns(mapper: MetaboliteNameMapper) -> None:
     """Test classification of various complex patterns."""

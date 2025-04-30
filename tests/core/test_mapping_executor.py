@@ -8,11 +8,18 @@ import json
 
 from biomapper.core.mapping_executor import MappingExecutor
 from biomapper.db.models import (
-    Endpoint, EndpointPropertyConfig, PropertyExtractionConfig,
-    MappingPath, MappingPathStep, MappingResource
+    Endpoint,
+    EndpointPropertyConfig,
+    PropertyExtractionConfig,
+    MappingPath,
+    MappingPathStep,
+    MappingResource,
 )
 from biomapper.db.cache_models import (
-    EntityMapping, EntityMappingProvenance, PathExecutionLog, PathExecutionStatus
+    EntityMapping,
+    EntityMappingProvenance,
+    PathExecutionLog,
+    PathExecutionStatus,
 )
 
 
@@ -45,7 +52,9 @@ def mock_config_db():
     mock_resource_1 = MagicMock(spec=MappingResource)
     mock_resource_1.id = 1
     mock_resource_1.name = "UniProt_NameSearch"
-    mock_resource_1.client_class_path = "biomapper.mapping.clients.uniprot_name_client.UniProtNameClient"
+    mock_resource_1.client_class_path = (
+        "biomapper.mapping.clients.uniprot_name_client.UniProtNameClient"
+    )
     mock_resource_1.input_ontology_term = "GENE_NAME"
     mock_resource_1.output_ontology_term = "UNIPROTKB_AC"
     mock_resource_1.config_template = "{}"
@@ -54,7 +63,9 @@ def mock_config_db():
     mock_resource_2 = MagicMock(spec=MappingResource)
     mock_resource_2.id = 2
     mock_resource_2.name = "UniProt_IDMapping"
-    mock_resource_2.client_class_path = "biomapper.mapping.clients.uniprot_idmapping_client.UniProtIDMappingClient"
+    mock_resource_2.client_class_path = (
+        "biomapper.mapping.clients.uniprot_idmapping_client.UniProtIDMappingClient"
+    )
     mock_resource_2.input_ontology_term = "UNIPROTKB_AC"
     mock_resource_2.output_ontology_term = "ENSEMBL_GENE"
     mock_resource_2.config_template = "{}"
@@ -112,7 +123,7 @@ def mock_db_session():
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.side_effect = [
         "GENE_NAME",  # First call for source ontology
-        "ENSEMBL_GENE"  # Second call for target ontology
+        "ENSEMBL_GENE",  # Second call for target ontology
     ]
 
     # For the mapping paths query
@@ -128,28 +139,28 @@ def mock_db_session():
 def mock_cache_session():
     """Fixture to mock a cache database session."""
     mock_session = AsyncMock(spec=AsyncSession)
-    
+
     # Setup for _check_cache method results
     mock_entity_mapping = MagicMock(spec=EntityMapping)
     mock_entity_mapping.source_id = "cached_id"
     mock_entity_mapping.target_id = "cached_target"
     mock_entity_mapping.last_updated = datetime.now(timezone.utc)
-    
+
     # Setup execute method return value to properly handle async/await
     # We need to return a coroutine that will resolve to a mock result
     # that has a 'scalars' method that returns an object with 'all' method
     mock_query_result = MagicMock()
     mock_query_result.scalars.return_value.all.return_value = [mock_entity_mapping]
     mock_session.execute.return_value = mock_query_result
-    
+
     # Stub flush to set a simulated ID
     async def mock_flush():
         # Set IDs for any added objects
         for call_args in mock_session.add.call_args_list:
             obj = call_args[0][0]
-            if hasattr(obj, 'id') and obj.id is None:
+            if hasattr(obj, "id") and obj.id is None:
                 obj.id = 999  # Arbitrary ID
-    
+
     mock_session.flush.side_effect = mock_flush
     return mock_session
 
@@ -159,7 +170,7 @@ def mapping_executor():
     """Fixture for a properly initialized MappingExecutor with mock sessions."""
     executor = MappingExecutor(
         metamapper_db_url="sqlite+aiosqlite:///:memory:",
-        mapping_cache_db_url="sqlite+aiosqlite:///:memory:"
+        mapping_cache_db_url="sqlite+aiosqlite:///:memory:",
     )
     return executor
 
@@ -186,13 +197,17 @@ async def test_find_mapping_paths(mapping_executor, mock_db_session, mock_config
 
 
 @pytest.mark.asyncio
-async def test_execute_mapping_success(mapping_executor, mock_db_session, mock_cache_session, mock_config_db):
+async def test_execute_mapping_success(
+    mapping_executor, mock_db_session, mock_cache_session, mock_config_db
+):
     """Test execute_mapping with a successful path execution."""
     # Arrange
     # Prepare path result for this specific test
-    paths_result = MagicMock() # Result object for the path query
-    paths_result.scalars.return_value.unique.return_value.all.return_value = [mock_config_db["path"]]
-     
+    paths_result = MagicMock()  # Result object for the path query
+    paths_result.scalars.return_value.unique.return_value.all.return_value = [
+        mock_config_db["path"]
+    ]
+
     # Sequence the results to match the order of execution in execute_mapping:
     # 1. Source Endpoint ID lookup (_get_ontology_type)
     # 2. Source Ontology Preference lookup (_get_ontology_type)
@@ -201,29 +216,41 @@ async def test_execute_mapping_success(mapping_executor, mock_db_session, mock_c
     # 5. Source Endpoint details lookup (execute_mapping)
     # 6. Target Endpoint details lookup (execute_mapping)
     # 7. _find_mapping_paths
- 
+
     # Mock results for the 7 calls (Result objects should be MagicMock)
     mock_source_endpoint_id_res = MagicMock()
-    mock_source_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db["source_endpoint"].id
+    mock_source_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_endpoint"
+    ].id
     mock_source_ontology_pref_res = MagicMock()
-    mock_source_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db["source_ontology"].ontology_type
+    mock_source_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_ontology"
+    ].ontology_type
     mock_target_endpoint_id_res = MagicMock()
-    mock_target_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db["target_endpoint"].id
+    mock_target_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_endpoint"
+    ].id
     mock_target_ontology_pref_res = MagicMock()
-    mock_target_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db["target_ontology"].ontology_type
+    mock_target_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_ontology"
+    ].ontology_type
     mock_source_endpoint_details_res = MagicMock()
-    mock_source_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db["source_endpoint"]
+    mock_source_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_endpoint"
+    ]
     mock_target_endpoint_details_res = MagicMock()
-    mock_target_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db["target_endpoint"]
+    mock_target_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_endpoint"
+    ]
 
     mock_db_session.execute.side_effect = [
-        mock_source_endpoint_id_res,          # 1
-        mock_source_ontology_pref_res,        # 2
-        mock_target_endpoint_id_res,          # 3
-        mock_target_ontology_pref_res,        # 4
-        mock_source_endpoint_details_res,     # 5
-        mock_target_endpoint_details_res,     # 6
-        paths_result                          # 7
+        mock_source_endpoint_id_res,  # 1
+        mock_source_ontology_pref_res,  # 2
+        mock_target_endpoint_id_res,  # 3
+        mock_target_ontology_pref_res,  # 4
+        mock_source_endpoint_details_res,  # 5
+        mock_target_endpoint_details_res,  # 6
+        paths_result,  # 7
     ]
 
     # Set up input data
@@ -245,11 +272,15 @@ async def test_execute_mapping_success(mapping_executor, mock_db_session, mock_c
     }
 
     # Create a path for mock imports to return the mock clients
-    uniprot_name_client_import_path = "biomapper.mapping.clients.uniprot_name_client.UniProtNameClient"
-    uniprot_idmapping_client_import_path = "biomapper.mapping.clients.uniprot_idmapping_client.UniProtIDMappingClient"
+    uniprot_name_client_import_path = (
+        "biomapper.mapping.clients.uniprot_name_client.UniProtNameClient"
+    )
+    uniprot_idmapping_client_import_path = (
+        "biomapper.mapping.clients.uniprot_idmapping_client.UniProtIDMappingClient"
+    )
 
     # Act
-    with patch('importlib.import_module') as mock_import:
+    with patch("importlib.import_module") as mock_import:
         # Set up the module mock to return our mock clients
         def mock_get_module(module_path):
             module_mock = MagicMock()
@@ -264,16 +295,23 @@ async def test_execute_mapping_success(mapping_executor, mock_db_session, mock_c
         mock_import.side_effect = mock_get_module
 
         # Patch the session makers to return our mock sessions
-        with patch.object(mapping_executor, 'async_session') as mock_session_maker:
+        with patch.object(mapping_executor, "async_session") as mock_session_maker:
             mock_session_maker.return_value.__aenter__.return_value = mock_db_session
 
-            with patch.object(mapping_executor, 'async_cache_session') as mock_cache_session_maker:
-                mock_cache_session_maker.return_value.__aenter__.return_value = mock_cache_session
+            with patch.object(
+                mapping_executor, "async_cache_session"
+            ) as mock_cache_session_maker:
+                mock_cache_session_maker.return_value.__aenter__.return_value = (
+                    mock_cache_session
+                )
 
                 # Execute the mapping
                 result = await mapping_executor.execute_mapping(
-                    "UKBB_Protein", "UKBB_Protein", input_ids,
-                    "PrimaryIdentifier", "EnsemblGeneID"
+                    "UKBB_Protein",
+                    "UKBB_Protein",
+                    input_ids,
+                    "PrimaryIdentifier",
+                    "EnsemblGeneID",
                 )
 
     # Assert
@@ -281,7 +319,7 @@ async def test_execute_mapping_success(mapping_executor, mock_db_session, mock_c
     assert result["status"] == PathExecutionStatus.NO_MAPPING_FOUND.value
     assert result["selected_path_id"] == 8
     assert result["selected_path_name"] == "UKBB_GeneName_to_EnsemblGene"
-    
+
     # The implementation returns None for all mappings in the result structure
     # This is expected behavior based on the current implementation
     assert result["results"]["APP"] is None
@@ -290,7 +328,9 @@ async def test_execute_mapping_success(mapping_executor, mock_db_session, mock_c
 
     # Verify clients were called correctly
     step1_client.map_identifiers.assert_called_once()
-    assert sorted(step1_client.map_identifiers.call_args[1]["identifiers"]) == sorted(input_ids)
+    assert sorted(step1_client.map_identifiers.call_args[1]["identifiers"]) == sorted(
+        input_ids
+    )
 
     step2_client.map_identifiers.assert_called_once()
     # The identifiers passed to step2 may be different in the implementation
@@ -299,56 +339,77 @@ async def test_execute_mapping_success(mapping_executor, mock_db_session, mock_c
 
     # Verify cache operations
     mock_cache_session.add.assert_called()  # Multiple calls for PathExecutionLog and EntityMapping
-    # Implementation might call commit multiple times 
+    # Implementation might call commit multiple times
     assert mock_cache_session.commit.call_count >= 1
 
 
 @pytest.mark.asyncio
-async def test_execute_mapping_no_path(mapping_executor, mock_db_session, mock_cache_session, mock_config_db):
+async def test_execute_mapping_no_path(
+    mapping_executor, mock_db_session, mock_cache_session, mock_config_db
+):
     """Test execute_mapping when no mapping path is found."""
     # Arrange
     # Set up mock_db_session to return ontologies but no paths
-    paths_result = MagicMock() # Result object for the path query
-    paths_result.scalars.return_value.unique.return_value.all.return_value = [] # No paths found
-     
+    paths_result = MagicMock()  # Result object for the path query
+    paths_result.scalars.return_value.unique.return_value.all.return_value = []  # No paths found
+
     # Sequence the results for 7 calls
     mock_source_endpoint_id_res = MagicMock()
-    mock_source_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db["source_endpoint"].id
+    mock_source_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_endpoint"
+    ].id
     mock_source_ontology_pref_res = MagicMock()
-    mock_source_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db["source_ontology"].ontology_type
+    mock_source_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_ontology"
+    ].ontology_type
     mock_target_endpoint_id_res = MagicMock()
-    mock_target_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db["target_endpoint"].id
+    mock_target_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_endpoint"
+    ].id
     mock_target_ontology_pref_res = MagicMock()
-    mock_target_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db["target_ontology"].ontology_type
+    mock_target_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_ontology"
+    ].ontology_type
     mock_source_endpoint_details_res = MagicMock()
-    mock_source_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db["source_endpoint"]
+    mock_source_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_endpoint"
+    ]
     mock_target_endpoint_details_res = MagicMock()
-    mock_target_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db["target_endpoint"]
+    mock_target_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_endpoint"
+    ]
 
     mock_db_session.execute.side_effect = [
-        mock_source_endpoint_id_res,          # 1
-        mock_source_ontology_pref_res,        # 2
-        mock_target_endpoint_id_res,          # 3
-        mock_target_ontology_pref_res,        # 4
-        mock_source_endpoint_details_res,     # 5
-        mock_target_endpoint_details_res,     # 6
-        paths_result                          # 7
+        mock_source_endpoint_id_res,  # 1
+        mock_source_ontology_pref_res,  # 2
+        mock_target_endpoint_id_res,  # 3
+        mock_target_ontology_pref_res,  # 4
+        mock_source_endpoint_details_res,  # 5
+        mock_target_endpoint_details_res,  # 6
+        paths_result,  # 7
     ]
 
     # Set up input data
     input_ids = ["APP", "BRCA1"]
 
     # Act
-    with patch.object(mapping_executor, 'async_session') as mock_session_maker:
+    with patch.object(mapping_executor, "async_session") as mock_session_maker:
         mock_session_maker.return_value.__aenter__.return_value = mock_db_session
 
-        with patch.object(mapping_executor, 'async_cache_session') as mock_cache_session_maker:
-            mock_cache_session_maker.return_value.__aenter__.return_value = mock_cache_session
+        with patch.object(
+            mapping_executor, "async_cache_session"
+        ) as mock_cache_session_maker:
+            mock_cache_session_maker.return_value.__aenter__.return_value = (
+                mock_cache_session
+            )
 
             # Execute the mapping
             result = await mapping_executor.execute_mapping(
-                "UKBB_Protein", "UKBB_Protein", input_ids,
-                "PrimaryIdentifier", "EnsemblGeneID"
+                "UKBB_Protein",
+                "UKBB_Protein",
+                input_ids,
+                "PrimaryIdentifier",
+                "EnsemblGeneID",
             )
 
     # Assert
@@ -359,34 +420,50 @@ async def test_execute_mapping_no_path(mapping_executor, mock_db_session, mock_c
 
 
 @pytest.mark.asyncio
-async def test_execute_mapping_client_error(mapping_executor, mock_db_session, mock_cache_session, mock_config_db):
+async def test_execute_mapping_client_error(
+    mapping_executor, mock_db_session, mock_cache_session, mock_config_db
+):
     """Test execute_mapping when a client throws an error."""
     # Arrange - similar to success test but with client error
-    paths_result = MagicMock() # Result object for the path query
-    paths_result.scalars.return_value.unique.return_value.all.return_value = [mock_config_db["path"]]
-     
+    paths_result = MagicMock()  # Result object for the path query
+    paths_result.scalars.return_value.unique.return_value.all.return_value = [
+        mock_config_db["path"]
+    ]
+
     # Sequence the results for 7 calls
     mock_source_endpoint_id_res = MagicMock()
-    mock_source_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db["source_endpoint"].id
+    mock_source_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_endpoint"
+    ].id
     mock_source_ontology_pref_res = MagicMock()
-    mock_source_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db["source_ontology"].ontology_type
+    mock_source_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_ontology"
+    ].ontology_type
     mock_target_endpoint_id_res = MagicMock()
-    mock_target_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db["target_endpoint"].id
+    mock_target_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_endpoint"
+    ].id
     mock_target_ontology_pref_res = MagicMock()
-    mock_target_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db["target_ontology"].ontology_type
+    mock_target_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_ontology"
+    ].ontology_type
     mock_source_endpoint_details_res = MagicMock()
-    mock_source_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db["source_endpoint"]
+    mock_source_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_endpoint"
+    ]
     mock_target_endpoint_details_res = MagicMock()
-    mock_target_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db["target_endpoint"]
+    mock_target_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_endpoint"
+    ]
 
     mock_db_session.execute.side_effect = [
-        mock_source_endpoint_id_res,          # 1
-        mock_source_ontology_pref_res,        # 2
-        mock_target_endpoint_id_res,          # 3
-        mock_target_ontology_pref_res,        # 4
-        mock_source_endpoint_details_res,     # 5
-        mock_target_endpoint_details_res,     # 6
-        paths_result                          # 7
+        mock_source_endpoint_id_res,  # 1
+        mock_source_ontology_pref_res,  # 2
+        mock_target_endpoint_id_res,  # 3
+        mock_target_ontology_pref_res,  # 4
+        mock_source_endpoint_details_res,  # 5
+        mock_target_endpoint_details_res,  # 6
+        paths_result,  # 7
     ]
 
     # Set up input data
@@ -400,7 +477,7 @@ async def test_execute_mapping_client_error(mapping_executor, mock_db_session, m
     step2_client = AsyncMock()
 
     # Act
-    with patch('importlib.import_module') as mock_import:
+    with patch("importlib.import_module") as mock_import:
         # Set up the module mock to return our mock clients
         def mock_get_module(module_path):
             module_mock = MagicMock()
@@ -415,16 +492,23 @@ async def test_execute_mapping_client_error(mapping_executor, mock_db_session, m
         mock_import.side_effect = mock_get_module
 
         # Patch the session makers
-        with patch.object(mapping_executor, 'async_session') as mock_session_maker:
+        with patch.object(mapping_executor, "async_session") as mock_session_maker:
             mock_session_maker.return_value.__aenter__.return_value = mock_db_session
 
-            with patch.object(mapping_executor, 'async_cache_session') as mock_cache_session_maker:
-                mock_cache_session_maker.return_value.__aenter__.return_value = mock_cache_session
+            with patch.object(
+                mapping_executor, "async_cache_session"
+            ) as mock_cache_session_maker:
+                mock_cache_session_maker.return_value.__aenter__.return_value = (
+                    mock_cache_session
+                )
 
                 # Execute the mapping
                 result = await mapping_executor.execute_mapping(
-                    "UKBB_Protein", "UKBB_Protein", input_ids,
-                    "PrimaryIdentifier", "EnsemblGeneID"
+                    "UKBB_Protein",
+                    "UKBB_Protein",
+                    input_ids,
+                    "PrimaryIdentifier",
+                    "EnsemblGeneID",
                 )
 
     # Assert
@@ -433,7 +517,7 @@ async def test_execute_mapping_client_error(mapping_executor, mock_db_session, m
     # The important part is that the status is FAILURE
 
     # Verify first client was called but not the second one
-    # The current implementation might behave differently, but we 
+    # The current implementation might behave differently, but we
     # still expect step1_client to be called at least once
     assert step1_client.map_identifiers.call_count >= 1
     # If step2_client is called, that's implementation specific -
@@ -441,38 +525,54 @@ async def test_execute_mapping_client_error(mapping_executor, mock_db_session, m
 
     # Verify we still tried to log the error in the cache
     mock_cache_session.add.assert_called()  # Called for PathExecutionLog
-    mock_cache_session.commit.assert_called() # Should commit the failure log
+    mock_cache_session.commit.assert_called()  # Should commit the failure log
 
 
 @pytest.mark.asyncio
-async def test_execute_mapping_partial_results(mapping_executor, mock_db_session, mock_cache_session, mock_config_db):
+async def test_execute_mapping_partial_results(
+    mapping_executor, mock_db_session, mock_cache_session, mock_config_db
+):
     """Test execute_mapping with partially successful mapping (some IDs map, others don't)."""
     # Arrange
-    paths_result = MagicMock() # Result object for the path query
-    paths_result.scalars.return_value.unique.return_value.all.return_value = [mock_config_db["path"]]
-     
+    paths_result = MagicMock()  # Result object for the path query
+    paths_result.scalars.return_value.unique.return_value.all.return_value = [
+        mock_config_db["path"]
+    ]
+
     # Sequence the results for 7 calls
     mock_source_endpoint_id_res = MagicMock()
-    mock_source_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db["source_endpoint"].id
+    mock_source_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_endpoint"
+    ].id
     mock_source_ontology_pref_res = MagicMock()
-    mock_source_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db["source_ontology"].ontology_type
+    mock_source_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_ontology"
+    ].ontology_type
     mock_target_endpoint_id_res = MagicMock()
-    mock_target_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db["target_endpoint"].id
+    mock_target_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_endpoint"
+    ].id
     mock_target_ontology_pref_res = MagicMock()
-    mock_target_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db["target_ontology"].ontology_type
+    mock_target_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_ontology"
+    ].ontology_type
     mock_source_endpoint_details_res = MagicMock()
-    mock_source_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db["source_endpoint"]
+    mock_source_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_endpoint"
+    ]
     mock_target_endpoint_details_res = MagicMock()
-    mock_target_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db["target_endpoint"]
+    mock_target_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_endpoint"
+    ]
 
     mock_db_session.execute.side_effect = [
-        mock_source_endpoint_id_res,          # 1
-        mock_source_ontology_pref_res,        # 2
-        mock_target_endpoint_id_res,          # 3
-        mock_target_ontology_pref_res,        # 4
-        mock_source_endpoint_details_res,     # 5
-        mock_target_endpoint_details_res,     # 6
-        paths_result                          # 7
+        mock_source_endpoint_id_res,  # 1
+        mock_source_ontology_pref_res,  # 2
+        mock_target_endpoint_id_res,  # 3
+        mock_target_ontology_pref_res,  # 4
+        mock_source_endpoint_details_res,  # 5
+        mock_target_endpoint_details_res,  # 6
+        paths_result,  # 7
     ]
 
     # Set up input data - one will map successfully, one will fail at step 1
@@ -492,7 +592,7 @@ async def test_execute_mapping_partial_results(mapping_executor, mock_db_session
     }
 
     # Act
-    with patch('importlib.import_module') as mock_import:
+    with patch("importlib.import_module") as mock_import:
         # Set up the module mock to return our mock clients
         def mock_get_module(module_path):
             module_mock = MagicMock()
@@ -507,23 +607,32 @@ async def test_execute_mapping_partial_results(mapping_executor, mock_db_session
         mock_import.side_effect = mock_get_module
 
         # Patch the session makers
-        with patch.object(mapping_executor, 'async_session') as mock_session_maker:
+        with patch.object(mapping_executor, "async_session") as mock_session_maker:
             mock_session_maker.return_value.__aenter__.return_value = mock_db_session
 
-            with patch.object(mapping_executor, 'async_cache_session') as mock_cache_session_maker:
-                mock_cache_session_maker.return_value.__aenter__.return_value = mock_cache_session
+            with patch.object(
+                mapping_executor, "async_cache_session"
+            ) as mock_cache_session_maker:
+                mock_cache_session_maker.return_value.__aenter__.return_value = (
+                    mock_cache_session
+                )
 
                 # Execute the mapping
                 result = await mapping_executor.execute_mapping(
-                    "UKBB_Protein", "UKBB_Protein", input_ids,
-                    "PrimaryIdentifier", "EnsemblGeneID"
+                    "UKBB_Protein",
+                    "UKBB_Protein",
+                    input_ids,
+                    "PrimaryIdentifier",
+                    "EnsemblGeneID",
                 )
 
     # Assert
-    assert result["status"] == PathExecutionStatus.NO_MAPPING_FOUND.value # Expect no mapping found for NonExistentGene
+    assert (
+        result["status"] == PathExecutionStatus.NO_MAPPING_FOUND.value
+    )  # Expect no mapping found for NonExistentGene
     assert result["selected_path_id"] == 8
     assert result["selected_path_name"] == "UKBB_GeneName_to_EnsemblGene"
-    
+
     # The implementation returns None for all mappings in the result structure
     # This is expected behavior based on the current implementation
     assert result["results"]["APP"] is None
@@ -531,7 +640,9 @@ async def test_execute_mapping_partial_results(mapping_executor, mock_db_session
 
     # Verify clients were called correctly
     step1_client.map_identifiers.assert_called_once()
-    assert sorted(step1_client.map_identifiers.call_args[1]["identifiers"]) == sorted(input_ids)
+    assert sorted(step1_client.map_identifiers.call_args[1]["identifiers"]) == sorted(
+        input_ids
+    )
     step2_client.map_identifiers.assert_called_once()
     # The identifiers passed to step2 may be different in the implementation
     # We just verify that the step2 client was called with some identifiers
@@ -540,8 +651,8 @@ async def test_execute_mapping_partial_results(mapping_executor, mock_db_session
     # Verify cache operations
     # In the current implementation, there may be fewer calls to add()
     # depending on caching strategy and error handling
-    mock_cache_session.add.assert_called() # Should log the execution
-    # Implementation might call commit multiple times 
+    mock_cache_session.add.assert_called()  # Should log the execution
+    # Implementation might call commit multiple times
     assert mock_cache_session.commit.call_count >= 1
 
     # The implementation's internal details may differ, so we've removed detailed assertions
@@ -549,34 +660,50 @@ async def test_execute_mapping_partial_results(mapping_executor, mock_db_session
 
 
 @pytest.mark.asyncio
-async def test_execute_mapping_empty_input(mapping_executor, mock_db_session, mock_cache_session, mock_config_db):
+async def test_execute_mapping_empty_input(
+    mapping_executor, mock_db_session, mock_cache_session, mock_config_db
+):
     """Test execute_mapping with an empty list of input identifiers."""
     # Arrange
-    paths_result = MagicMock() # Result object for the path query
-    paths_result.scalars.return_value.unique.return_value.all.return_value = [mock_config_db["path"]]
-     
+    paths_result = MagicMock()  # Result object for the path query
+    paths_result.scalars.return_value.unique.return_value.all.return_value = [
+        mock_config_db["path"]
+    ]
+
     # Sequence the results for 7 calls
     mock_source_endpoint_id_res = MagicMock()
-    mock_source_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db["source_endpoint"].id
+    mock_source_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_endpoint"
+    ].id
     mock_source_ontology_pref_res = MagicMock()
-    mock_source_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db["source_ontology"].ontology_type
+    mock_source_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_ontology"
+    ].ontology_type
     mock_target_endpoint_id_res = MagicMock()
-    mock_target_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db["target_endpoint"].id
+    mock_target_endpoint_id_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_endpoint"
+    ].id
     mock_target_ontology_pref_res = MagicMock()
-    mock_target_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db["target_ontology"].ontology_type
+    mock_target_ontology_pref_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_ontology"
+    ].ontology_type
     mock_source_endpoint_details_res = MagicMock()
-    mock_source_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db["source_endpoint"]
+    mock_source_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db[
+        "source_endpoint"
+    ]
     mock_target_endpoint_details_res = MagicMock()
-    mock_target_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db["target_endpoint"]
+    mock_target_endpoint_details_res.scalar_one_or_none.return_value = mock_config_db[
+        "target_endpoint"
+    ]
 
     mock_db_session.execute.side_effect = [
-        mock_source_endpoint_id_res,          # 1
-        mock_source_ontology_pref_res,        # 2
-        mock_target_endpoint_id_res,          # 3
-        mock_target_ontology_pref_res,        # 4
-        mock_source_endpoint_details_res,     # 5
-        mock_target_endpoint_details_res,     # 6
-        paths_result                          # 7
+        mock_source_endpoint_id_res,  # 1
+        mock_source_ontology_pref_res,  # 2
+        mock_target_endpoint_id_res,  # 3
+        mock_target_ontology_pref_res,  # 4
+        mock_source_endpoint_details_res,  # 5
+        mock_target_endpoint_details_res,  # 6
+        paths_result,  # 7
     ]
 
     input_ids = []
@@ -586,7 +713,8 @@ async def test_execute_mapping_empty_input(mapping_executor, mock_db_session, mo
     step2_client = AsyncMock()
 
     # Act
-    with patch('importlib.import_module') as mock_import:
+    with patch("importlib.import_module") as mock_import:
+
         def mock_get_module(module_path):
             module_mock = MagicMock()
             if "uniprot_name_client" in module_path:
@@ -594,23 +722,33 @@ async def test_execute_mapping_empty_input(mapping_executor, mock_db_session, mo
             elif "uniprot_idmapping_client" in module_path:
                 module_mock.UniProtIDMappingClient.return_value = step2_client
             return module_mock
+
         mock_import.side_effect = mock_get_module
 
-        with patch.object(mapping_executor, 'async_session') as mock_session_maker:
+        with patch.object(mapping_executor, "async_session") as mock_session_maker:
             mock_session_maker.return_value.__aenter__.return_value = mock_db_session
-            with patch.object(mapping_executor, 'async_cache_session') as mock_cache_session_maker:
-                mock_cache_session_maker.return_value.__aenter__.return_value = mock_cache_session
+            with patch.object(
+                mapping_executor, "async_cache_session"
+            ) as mock_cache_session_maker:
+                mock_cache_session_maker.return_value.__aenter__.return_value = (
+                    mock_cache_session
+                )
 
                 result = await mapping_executor.execute_mapping(
-                    "UKBB_Protein", "UKBB_Protein", input_ids,
-                    "PrimaryIdentifier", "EnsemblGeneID"
+                    "UKBB_Protein",
+                    "UKBB_Protein",
+                    input_ids,
+                    "PrimaryIdentifier",
+                    "EnsemblGeneID",
                 )
 
     # Assert
-    assert result["status"] == PathExecutionStatus.SUCCESS.value # Empty input is considered a success in implementation
+    assert (
+        result["status"] == PathExecutionStatus.SUCCESS.value
+    )  # Empty input is considered a success in implementation
     assert result["selected_path_id"] == 8
     assert result["selected_path_name"] == "UKBB_GeneName_to_EnsemblGene"
-    assert result["results"] == {} # Expect empty results dictionary
+    assert result["results"] == {}  # Expect empty results dictionary
 
     # Verify clients were NOT called
     step1_client.map_identifiers.assert_not_called()
@@ -620,24 +758,40 @@ async def test_execute_mapping_empty_input(mapping_executor, mock_db_session, mo
     # entry since there's nothing to map, so we'll adjust our expectations
     if mock_cache_session.add.called:
         # If it was called, check that it was called with a PathExecutionLog
-        added_objects = [call_args[0][0] for call_args in mock_cache_session.add.call_args_list]
-        path_log_objects = [obj for obj in added_objects if isinstance(obj, PathExecutionLog)]
-        assert len(path_log_objects) > 0, "Expected at least one PathExecutionLog object was added"
-        
+        added_objects = [
+            call_args[0][0] for call_args in mock_cache_session.add.call_args_list
+        ]
+        path_log_objects = [
+            obj for obj in added_objects if isinstance(obj, PathExecutionLog)
+        ]
+        assert (
+            len(path_log_objects) > 0
+        ), "Expected at least one PathExecutionLog object was added"
+
         # Check attributes on the first log entry
         log_entry = path_log_objects[0]
-        assert log_entry.relationship_mapping_path_id == 8, \
-            f"Expected relationship_mapping_path_id 8, got {log_entry.relationship_mapping_path_id}"
-        assert log_entry.status == PathExecutionStatus.SUCCESS, \
-            f"Expected status SUCCESS, got {log_entry.status}" # No inputs means successful (empty) execution
-            
+        assert (
+            log_entry.relationship_mapping_path_id == 8
+        ), f"Expected relationship_mapping_path_id 8, got {log_entry.relationship_mapping_path_id}"
+        assert (
+            log_entry.status == PathExecutionStatus.SUCCESS
+        ), (
+            f"Expected status SUCCESS, got {log_entry.status}"
+        )  # No inputs means successful (empty) execution
+
         # Check no EntityMapping objects were added
-        entity_mapping_objects = [obj for obj in added_objects if isinstance(obj, EntityMapping)]
-        assert len(entity_mapping_objects) == 0, "No EntityMapping objects should have been added"
-        
+        entity_mapping_objects = [
+            obj for obj in added_objects if isinstance(obj, EntityMapping)
+        ]
+        assert (
+            len(entity_mapping_objects) == 0
+        ), "No EntityMapping objects should have been added"
+
         # Verify a commit was attempted
         mock_cache_session.commit.assert_called()
     else:
         # If add() was never called, that's also fine since there was nothing to map
         # The implementation might skip creating log entries for empty input lists
-        print("Note: mock_cache_session.add() was not called - this is acceptable for empty input")
+        print(
+            "Note: mock_cache_session.add() was not called - this is acceptable for empty input"
+        )

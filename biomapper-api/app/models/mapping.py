@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 class MappingStatus(str, Enum):
     """Status of a mapping job."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -18,8 +19,11 @@ class MappingStatus(str, Enum):
 
 class MappingJobCreate(BaseModel):
     """Request model for creating a mapping job."""
+
     session_id: str
-    id_columns: List[str] = Field(..., description="Columns containing identifiers to map")
+    id_columns: List[str] = Field(
+        ..., description="Columns containing identifiers to map"
+    )
     target_ontologies: List[str] = Field(..., description="Target ontologies to map to")
     options: Optional[Dict[str, Any]] = Field(
         default=None, description="Additional mapping options"
@@ -28,6 +32,7 @@ class MappingJobCreate(BaseModel):
 
 class MappingJobResponse(BaseModel):
     """Response model for mapping job creation."""
+
     job_id: str
     session_id: str
     created_at: datetime
@@ -36,6 +41,7 @@ class MappingJobResponse(BaseModel):
 
 class JobStatus(BaseModel):
     """Response model for job status."""
+
     job_id: str
     status: MappingStatus
     progress: Optional[float] = Field(
@@ -48,6 +54,7 @@ class JobStatus(BaseModel):
 
 class MappingResultSummary(BaseModel):
     """Summary statistics for mapping results."""
+
     total_records: int
     mapped_records: int
     mapping_rate: float
@@ -57,6 +64,7 @@ class MappingResultSummary(BaseModel):
 
 class MappingResults(BaseModel):
     """Response model for mapping results."""
+
     job_id: str
     summary: MappingResultSummary
     preview: List[Dict[str, Any]]
@@ -66,14 +74,19 @@ class MappingResults(BaseModel):
 
 class RelationshipMappingRequest(BaseModel):
     """Request model for endpoint-to-endpoint relationship mapping."""
-    relationship_id: int = Field(..., description="ID of the relationship to use for mapping")
+
+    relationship_id: int = Field(
+        ..., description="ID of the relationship to use for mapping"
+    )
     source_data: Dict[str, Any] = Field(
-        ..., description="Source data containing values to be mapped (e.g., HMDB IDs, names, etc.)"
+        ...,
+        description="Source data containing values to be mapped (e.g., HMDB IDs, names, etc.)",
     )
 
 
 class MappingResult(BaseModel):
     """Model for a single mapping result."""
+
     source_id: str
     source_type: str
     target_id: str
@@ -84,6 +97,7 @@ class MappingResult(BaseModel):
 
 class RelationshipMappingResponse(BaseModel):
     """Response model for endpoint-to-endpoint relationship mapping."""
+
     relationship_id: int
     source_data: Dict[str, Any]
     results: List[MappingResult]

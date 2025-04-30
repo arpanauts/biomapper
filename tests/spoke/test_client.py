@@ -45,7 +45,9 @@ def mock_session(mock_response: AsyncMock) -> AsyncMock:
 
 
 @pytest_asyncio.fixture
-async def client_with_session(config: SPOKEConfig, mock_session: AsyncMock) -> AsyncGenerator[SPOKEDBClient, None]:
+async def client_with_session(
+    config: SPOKEConfig, mock_session: AsyncMock
+) -> AsyncGenerator[SPOKEDBClient, None]:
     """Create a test client with pre-configured session."""
     client = SPOKEDBClient(config)
     client._session = mock_session  # Bypass connect() entirely
@@ -116,7 +118,9 @@ async def test_execute_query_with_bind_vars(client_with_session: SPOKEDBClient) 
 
 
 @pytest.mark.asyncio
-async def test_execute_query_failure(client_with_session: SPOKEDBClient, mock_session: AsyncMock) -> None:
+async def test_execute_query_failure(
+    client_with_session: SPOKEDBClient, mock_session: AsyncMock
+) -> None:
     """Test query execution failure."""
     mock_session.post.side_effect = aiohttp.ClientError("boom")
     with pytest.raises(SPOKEError, match="Query execution failed"):
@@ -124,7 +128,9 @@ async def test_execute_query_failure(client_with_session: SPOKEDBClient, mock_se
 
 
 @pytest.mark.asyncio
-async def test_get_node_by_id(client_with_session: SPOKEDBClient, mock_session: AsyncMock) -> None:
+async def test_get_node_by_id(
+    client_with_session: SPOKEDBClient, mock_session: AsyncMock
+) -> None:
     """Test fetching node by ID."""
     expected_result = {"_id": "test/123", "name": "test"}
     mock_response = Mock()
@@ -140,7 +146,9 @@ async def test_get_node_by_id(client_with_session: SPOKEDBClient, mock_session: 
 
 
 @pytest.mark.asyncio
-async def test_get_nodes_by_property(client_with_session: SPOKEDBClient, mock_session: AsyncMock) -> None:
+async def test_get_nodes_by_property(
+    client_with_session: SPOKEDBClient, mock_session: AsyncMock
+) -> None:
     """Test fetching nodes by property."""
     expected_results = [
         {"_id": "test/1", "name": "test1"},
@@ -154,7 +162,9 @@ async def test_get_nodes_by_property(client_with_session: SPOKEDBClient, mock_se
     mock_session.post.return_value = AsyncMock()
     mock_session.post.return_value.__aenter__.return_value = mock_response
 
-    results = await client_with_session.get_nodes_by_property("test", "name", "test", limit=2)
+    results = await client_with_session.get_nodes_by_property(
+        "test", "name", "test", limit=2
+    )
     assert results == expected_results
 
 
@@ -173,7 +183,9 @@ async def test_context_manager(config: SPOKEConfig, mock_session: AsyncMock) -> 
 
 @pytest.mark.asyncio
 async def test_execute_query_success(
-    client_with_session: SPOKEDBClient, mock_session: AsyncMock, mock_response: AsyncMock
+    client_with_session: SPOKEDBClient,
+    mock_session: AsyncMock,
+    mock_response: AsyncMock,
 ) -> None:
     """Test successful query execution."""
     with patch("aiohttp.ClientSession", return_value=mock_session):
@@ -191,7 +203,7 @@ async def test_execute_query_with_bind_vars(
             "FOR doc IN test FILTER doc.id == @id RETURN doc",
             {"id": "test_id"},
         )
-        
+
         # Verify bind vars were passed correctly
         call_kwargs = mock_session.post.call_args[1]
         assert "json" in call_kwargs

@@ -17,7 +17,7 @@ async def search_compounds(
     content_filters: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Search for compounds using ChromaDB.
-    
+
     Args:
         query: Search query
         k: Number of results to return
@@ -32,8 +32,7 @@ async def search_compounds(
     embedder = ChromaEmbedder()
     store = ChromaVectorStore(
         config=VectorStoreConfig(
-            collection_name=collection_name,
-            persist_directory="vector_store"
+            collection_name=collection_name, persist_directory="vector_store"
         )
     )
 
@@ -51,10 +50,7 @@ async def search_compounds(
     # Format results
     results = []
     for doc in documents:
-        result = {
-            "content": doc.content,
-            **doc.metadata
-        }
+        result = {"content": doc.content, **doc.metadata}
         results.append(result)
 
     return results
@@ -98,7 +94,7 @@ async def main() -> None:
         query=args.query,
         k=args.k,
         collection_name=args.collection,
-        metadata_filters=metadata_filters if metadata_filters else None
+        metadata_filters=metadata_filters if metadata_filters else None,
     )
 
     # Print results
@@ -109,7 +105,7 @@ async def main() -> None:
         print(f"  HMDB ID: {result['hmdb_id']}")
         print(f"  Name: {result['name']}")
         print(f"  Description: {result.get('description', '')[:200]}...")
-        if result.get('synonyms'):
+        if result.get("synonyms"):
             print(f"  Synonyms: {result['synonyms'][:200]}...")
         print()
 

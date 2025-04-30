@@ -43,15 +43,15 @@ class MetaboAnalystResult:
 
 class MetaboAnalystClient:
     """Client for interacting with the MetaboAnalyst REST API.
-    
+
     This client provides access to the MetaboAnalyst 6.0 compound mapping API,
     which allows for conversion between different compound identifiers.
-    
+
     Example:
         ```python
         client = MetaboAnalystClient()
         results = client.map_compounds(
-            ["glucose", "ATP", "caffeine"], 
+            ["glucose", "ATP", "caffeine"],
             input_type="name"
         )
         for result in results:
@@ -95,14 +95,14 @@ class MetaboAnalystClient:
         self, compounds: List[str], input_type: str = "name"
     ) -> List[MetaboAnalystResult]:
         """Map compounds using MetaboAnalyst API.
-        
+
         Args:
             compounds: List of compound identifiers
             input_type: Type of identifiers (name, hmdb, pubchem, chebi, metlin, kegg)
-            
+
         Returns:
             List of MetaboAnalystResult objects
-            
+
         Raises:
             MetaboAnalystError: If the API call fails or returns an error
             ValueError: If input_type is not valid
@@ -137,12 +137,12 @@ class MetaboAnalystClient:
                 headers={"Content-Type": "application/json"},
             )
             response.raise_for_status()
-            
+
             # Parse the response
             data = response.json()
             results = self._parse_response(data, compounds)
             return results
-            
+
         except requests.exceptions.RequestException as e:
             logger.error(f"MetaboAnalyst API request failed: {e}")
             raise MetaboAnalystError(f"API request failed: {e}")
@@ -151,21 +151,21 @@ class MetaboAnalystClient:
         self, response_data: Dict[str, Any], input_compounds: List[str]
     ) -> List[MetaboAnalystResult]:
         """Parse the API response into MetaboAnalystResult objects.
-        
+
         Args:
             response_data: JSON response from the API
             input_compounds: Original list of input compounds
-            
+
         Returns:
             List of MetaboAnalystResult objects
         """
         results = []
-        
+
         # Handle case where API returns an error message
         if "error" in response_data:
             logger.error(f"MetaboAnalyst API returned error: {response_data['error']}")
             raise MetaboAnalystError(f"API error: {response_data['error']}")
-        
+
         # The API returns a list of matched compounds
         if "matches" not in response_data:
             logger.warning("No 'matches' field found in API response")
@@ -174,20 +174,20 @@ class MetaboAnalystClient:
                 MetaboAnalystResult(input_id=compound, match_found=False)
                 for compound in input_compounds
             ]
-        
+
         matches = response_data["matches"]
-        
+
         # Create a mapping from input compound to result
         input_to_result = {}
-        
+
         for match in matches:
             # Extract the input ID (original query)
             input_id = match.get("query", "")
-            
+
             if not input_id:
                 logger.warning(f"Match missing 'query' field: {match}")
                 continue
-                
+
             # Create result object
             result = MetaboAnalystResult(
                 input_id=input_id,
@@ -200,15 +200,17 @@ class MetaboAnalystClient:
                 match_found=True,
                 raw_data=match,
             )
-            
+
             input_to_result[input_id] = result
-        
+
         # Ensure we return results for all input compounds
         for compound in input_compounds:
             if compound in input_to_result:
                 results.append(input_to_result[compound])
             else:
                 # No match found for this compound
-                results.append(MetaboAnalystResult(input_id=compound, match_found=False))
-        
+                results.append(
+                    MetaboAnalystResult(input_id=compound, match_found=False)
+                )
+
         return results

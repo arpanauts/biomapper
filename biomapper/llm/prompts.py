@@ -7,50 +7,50 @@ class PromptTemplates:
 
     def get_pathway_analysis_prompts(self, data: Dict[str, Any]) -> List[str]:
         """Generate prompts for pathway analysis.
-        
+
         Args:
             data: Dictionary containing:
                 - mapping: Metabolite mapping results
                 - spoke: SPOKE pathway analysis results
                 - context: Additional context
-                
+
         Returns:
             List of prompts for pathway analysis
         """
         prompts = []
-        
+
         # System context prompt
         prompts.append(self._get_system_context())
-        
+
         # Pathway analysis prompt
         prompts.append(self._format_pathway_prompt(data))
-        
+
         # Follow-up analysis prompts
         if data.get("spoke"):
             prompts.extend(self._get_spoke_analysis_prompts(data))
-            
+
         return prompts
 
     def get_interaction_analysis_prompts(self, data: Dict[str, Any]) -> List[str]:
         """Generate prompts for metabolite interaction analysis.
-        
+
         Args:
             data: Dictionary containing:
                 - mapping: Metabolite mapping results
                 - spoke: Optional SPOKE analysis results
                 - context: Additional context
-                
+
         Returns:
             List of prompts for interaction analysis
         """
         prompts = []
-        
+
         # System context
         prompts.append(self._get_system_context())
-        
+
         # Interaction analysis
         prompts.append(self._format_interaction_prompt(data))
-        
+
         return prompts
 
     def _get_system_context(self) -> str:

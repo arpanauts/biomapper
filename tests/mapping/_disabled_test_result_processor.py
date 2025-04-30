@@ -17,8 +17,7 @@ from biomapper.mapping.metabolite.name import MetaboliteMapping, MetaboliteClass
 def processor() -> ResultProcessor:
     """Create a result processor instance."""
     return ResultProcessor(
-        high_confidence_threshold=0.8,
-        medium_confidence_threshold=0.5
+        high_confidence_threshold=0.8, medium_confidence_threshold=0.5
     )
 
 
@@ -34,7 +33,7 @@ def mock_name_mapping() -> MetaboliteMapping:
         chebi_id="CHEBI:4167",
         chebi_name="glucose",
         pubchem_id="5793",
-        mapping_source="test"
+        mapping_source="test",
     )
 
 
@@ -47,7 +46,7 @@ def mock_spoke_mapping() -> Dict[str, Any]:
         "node_type": "Compound",
         "properties": {"name": "glucose"},
         "confidence_score": 0.9,
-        "metadata": {"source": "spoke_test"}
+        "metadata": {"source": "spoke_test"},
     }
 
 
@@ -60,10 +59,10 @@ def mock_rag_mapping() -> Dict[str, Any]:
             "target_id": "CHEBI:4167",
             "target_name": "glucose",
             "confidence": "0.85",
-            "metadata": {"source": "rag_test"}
+            "metadata": {"source": "rag_test"},
         },
         "matches": [{"test": "data"}],
-        "metrics": {"latency_ms": 100}
+        "metrics": {"latency_ms": 100},
     }
 
 
@@ -76,8 +75,7 @@ def test_initialization(processor: ResultProcessor) -> None:
 
 
 def test_process_name_mapping_refmet(
-    processor: ResultProcessor,
-    mock_name_mapping: MetaboliteMapping
+    processor: ResultProcessor, mock_name_mapping: MetaboliteMapping
 ) -> None:
     """Test processing RefMet name mapping."""
     result = processor.process_name_mapping(mock_name_mapping)
@@ -92,8 +90,7 @@ def test_process_name_mapping_refmet(
 
 
 def test_process_name_mapping_fallback(
-    processor: ResultProcessor,
-    mock_name_mapping: MetaboliteMapping
+    processor: ResultProcessor, mock_name_mapping: MetaboliteMapping
 ) -> None:
     """Test fallback to ChEBI when RefMet unavailable."""
     mock_name_mapping.refmet_id = None
@@ -107,8 +104,7 @@ def test_process_name_mapping_fallback(
 
 
 def test_process_spoke_mapping(
-    processor: ResultProcessor,
-    mock_spoke_mapping: Dict[str, Any]
+    processor: ResultProcessor, mock_spoke_mapping: Dict[str, Any]
 ) -> None:
     """Test processing SPOKE mapping."""
     result = processor.process_spoke_mapping(mock_spoke_mapping)
@@ -122,14 +118,13 @@ def test_process_spoke_mapping(
 
 
 def test_process_spoke_mapping_with_base(
-    processor: ResultProcessor,
-    mock_spoke_mapping: Dict[str, Any]
+    processor: ResultProcessor, mock_spoke_mapping: Dict[str, Any]
 ) -> None:
     """Test SPOKE mapping with existing base result."""
     base_result = ProcessedResult(
         input_name="glucose",
         compound_class=MetaboliteClass.SIMPLE,
-        primary_compound="glucose"
+        primary_compound="glucose",
     )
 
     result = processor.process_spoke_mapping(mock_spoke_mapping, base_result)
@@ -142,8 +137,7 @@ def test_process_spoke_mapping_with_base(
 
 
 def test_process_rag_mapping(
-    processor: ResultProcessor,
-    mock_rag_mapping: Dict[str, Any]
+    processor: ResultProcessor, mock_rag_mapping: Dict[str, Any]
 ) -> None:
     """Test processing RAG mapping."""
     result = processor.process_rag_mapping(mock_rag_mapping)
@@ -173,18 +167,13 @@ def test_should_try_rag(processor: ResultProcessor) -> None:
 
     # Should try RAG with low confidence
     low_conf_result = ProcessedResult(
-        input_name="test",
-        mapped_id="123",
-        confidence_score=0.3
+        input_name="test", mapped_id="123", confidence_score=0.3
     )
     assert processor.should_try_rag(low_conf_result) is True
 
     # Should not try RAG with high confidence
     high_conf_result = ProcessedResult(
-        input_name="test",
-        mapped_id="123",
-        mapped_name="test",
-        confidence_score=0.9
+        input_name="test", mapped_id="123", mapped_name="test", confidence_score=0.9
     )
     assert processor.should_try_rag(high_conf_result) is False
 
@@ -193,13 +182,13 @@ def test_combine_results(
     processor: ResultProcessor,
     mock_name_mapping: MetaboliteMapping,
     mock_spoke_mapping: Dict[str, Any],
-    mock_rag_mapping: Dict[str, Any]
+    mock_rag_mapping: Dict[str, Any],
 ) -> None:
     """Test combining results from multiple sources."""
     result = processor.combine_results(
         name_result=mock_name_mapping,
         spoke_result=mock_spoke_mapping,
-        rag_result=mock_rag_mapping
+        rag_result=mock_rag_mapping,
     )
 
     assert isinstance(result, ProcessedResult)
@@ -212,8 +201,7 @@ def test_combine_results(
 
 
 def test_combine_results_partial(
-    processor: ResultProcessor,
-    mock_name_mapping: MetaboliteMapping
+    processor: ResultProcessor, mock_name_mapping: MetaboliteMapping
 ) -> None:
     """Test combining results with partial data."""
     result = processor.combine_results(name_result=mock_name_mapping)
@@ -228,7 +216,7 @@ def test_process_batch(
     processor: ResultProcessor,
     mock_name_mapping: MetaboliteMapping,
     mock_spoke_mapping: Dict[str, Any],
-    mock_rag_mapping: Dict[str, Any]
+    mock_rag_mapping: Dict[str, Any],
 ) -> None:
     """Test batch processing of results."""
     names = ["glucose", "fructose"]
@@ -240,7 +228,7 @@ def test_process_batch(
         names,
         name_results=name_results,
         spoke_results=spoke_results,
-        rag_results=rag_results
+        rag_results=rag_results,
     )
 
     assert len(results) == 2
@@ -262,8 +250,7 @@ def test_process_batch_missing_results(processor: ResultProcessor) -> None:
 
 
 def test_metrics_tracking(
-    processor: ResultProcessor,
-    mock_name_mapping: MetaboliteMapping
+    processor: ResultProcessor, mock_name_mapping: MetaboliteMapping
 ) -> None:
     """Test metrics tracking integration."""
     mock_metrics = Mock()

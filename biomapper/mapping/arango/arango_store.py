@@ -27,7 +27,7 @@ class ArangoStore(BaseArango):
         port: int = 8529,
     ) -> None:
         """Initialize ArangoDB connection.
-        
+
         Args:
             username: ArangoDB username
             password: ArangoDB password
@@ -48,9 +48,9 @@ class ArangoStore(BaseArango):
         self.conn = Connection(
             username=self.username,
             password=self.password,
-            arangoURL=f"http://{self.host}:{self.port}"
+            arangoURL=f"http://{self.host}:{self.port}",
         )
-        
+
         # Get or create database
         if not self.conn.hasDatabase(self.database):
             self.conn.createDatabase(name=self.database)
@@ -74,28 +74,30 @@ class ArangoStore(BaseArango):
             type=doc["type"],
             name=doc.get("name", ""),
             properties={
-                k: v for k, v in doc.items()
+                k: v
+                for k, v in doc.items()
                 if k not in ["_key", "_id", "_rev", "type", "name"]
-            }
+            },
         )
 
     def _doc_to_edge(self, doc: Document) -> ArangoEdge:
         """Convert ArangoDB document to ArangoEdge."""
         return ArangoEdge(
             source_id=doc["_from"].split("/")[1],  # Remove "Nodes/" prefix
-            target_id=doc["_to"].split("/")[1],    # Remove "Nodes/" prefix
+            target_id=doc["_to"].split("/")[1],  # Remove "Nodes/" prefix
             type=doc["type"],
             properties={
-                k: v for k, v in doc.items()
+                k: v
+                for k, v in doc.items()
                 if k not in ["_key", "_id", "_rev", "_from", "_to", "type"]
-            }
+            },
         )
 
     async def get_node(self, node_id: str) -> Optional[ArangoNode]:
         """Get a node by its ID."""
         if not self.db:
             raise RuntimeError("Not connected to database")
-        
+
         try:
             doc = self.db["Nodes"][node_id]
             return self._doc_to_node(doc)
@@ -103,10 +105,7 @@ class ArangoStore(BaseArango):
             return None
 
     async def get_node_by_property(
-        self,
-        node_type: str,
-        property_name: str,
-        property_value: Any
+        self, node_type: str, property_name: str, property_value: Any
     ) -> Optional[ArangoNode]:
         """Get a node by a property value."""
         if not self.db:
@@ -119,18 +118,11 @@ class ArangoStore(BaseArango):
             LIMIT 1
             RETURN doc
         """
-        
-        bind_vars = {
-            "node_type": node_type,
-            "property_value": property_value
-        }
-        
-        cursor = self.db.AQLQuery(
-            aql,
-            bindVars=bind_vars,
-            rawResults=True
-        )
-        
+
+        bind_vars = {"node_type": node_type, "property_value": property_value}
+
+        cursor = self.db.AQLQuery(aql, bindVars=bind_vars, rawResults=True)
+
         if cursor:
             doc = cursor[0]
             return ArangoNode(
@@ -138,9 +130,10 @@ class ArangoStore(BaseArango):
                 type=doc["type"],
                 name=doc.get("name", ""),
                 properties={
-                    k: v for k, v in doc.items()
+                    k: v
+                    for k, v in doc.items()
                     if k not in ["_key", "_id", "_rev", "type", "name"]
-                }
+                },
             )
         return None
 
@@ -177,15 +170,9 @@ class ArangoStore(BaseArango):
             RETURN {{edge: edge, neighbor: neighbor}}
         """
 
-        bind_vars = {
-            "node_id": f"Nodes/{node_id}"
-        }
+        bind_vars = {"node_id": f"Nodes/{node_id}"}
 
-        cursor = self.db.AQLQuery(
-            aql,
-            bindVars=bind_vars,
-            rawResults=True
-        )
+        cursor = self.db.AQLQuery(aql, bindVars=bind_vars, rawResults=True)
 
         results = []
         for item in cursor:
@@ -239,14 +226,10 @@ class ArangoStore(BaseArango):
         bind_vars = {
             "start_type": query.start_node_type,
             "end_type": query.end_node_type,
-            "max_depth": query.max_path_length
+            "max_depth": query.max_path_length,
         }
 
-        cursor = self.db.AQLQuery(
-            aql,
-            bindVars=bind_vars,
-            rawResults=True
-        )
+        cursor = self.db.AQLQuery(aql, bindVars=bind_vars, rawResults=True)
 
         # Collect unique nodes and edges
         nodes_dict = {}
@@ -255,7 +238,7 @@ class ArangoStore(BaseArango):
 
         for path in cursor:
             path_nodes = []
-            
+
             # Process vertices
             for vertex in path["vertices"]:
                 node = self._doc_to_node(vertex)
@@ -273,7 +256,7 @@ class ArangoStore(BaseArango):
         return ArangoResult(
             nodes=list(nodes_dict.values()),
             edges=list(edges_dict.values()),
-            paths=paths
+            paths=paths,
         )
 
     async def get_node_types(self) -> Set[str]:
@@ -287,7 +270,7 @@ class ArangoStore(BaseArango):
                 RETURN doc.type
         )
         """
-        
+
         cursor = self.db.AQLQuery(aql, rawResults=True)
         return set(cursor[0])
 
@@ -302,6 +285,6 @@ class ArangoStore(BaseArango):
                 RETURN edge.type
         )
         """
-        
+
         cursor = self.db.AQLQuery(aql, rawResults=True)
         return set(cursor[0])

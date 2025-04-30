@@ -18,7 +18,7 @@ from biomapper.mapping.base import (
 
 class MockProvider(MappingProvider):
     """Mock provider for testing."""
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.validate_calls: List[str] = []
@@ -31,17 +31,19 @@ class MockProvider(MappingProvider):
             raise ValidationError("Mock validation error")
         return True
 
-    async def map_identifier(self, identifier: str, target_type: Optional[str] = None, **kwargs):
+    async def map_identifier(
+        self, identifier: str, target_type: Optional[str] = None, **kwargs
+    ):
         self.map_calls.append(identifier)
         if self.should_fail:
             raise MappingError("Mock mapping error")
         return MappingResult(
-            input_value=identifier,
-            target_id="MOCK:123",
-            confidence_score=0.9
+            input_value=identifier, target_id="MOCK:123", confidence_score=0.9
         )
 
-    async def map_batch(self, identifiers: List[str], target_type: Optional[str] = None, **kwargs):
+    async def map_batch(
+        self, identifiers: List[str], target_type: Optional[str] = None, **kwargs
+    ):
         results = []
         for identifier in identifiers:
             results.append(await self.map_identifier(identifier, target_type, **kwargs))
@@ -54,7 +56,7 @@ def mock_metrics():
     return Mock(
         start_operation=Mock(return_value="trace_123"),
         end_operation=Mock(),
-        record_error=Mock()
+        record_error=Mock(),
     )
 
 
@@ -91,10 +93,7 @@ async def test_metrics_context_error(mock_metrics):
         async with MetricsContext("test_op", mock_metrics):
             raise ValueError("Test error")
 
-    mock_metrics.record_error.assert_called_once_with(
-        "test_op_error",
-        "Test error"
-    )
+    mock_metrics.record_error.assert_called_once_with("test_op_error", "Test error")
 
 
 async def test_provider_validation(provider):
@@ -124,10 +123,10 @@ async def test_provider_batch_mapping(provider):
 async def test_provider_error_handling(provider):
     """Test error handling."""
     provider.should_fail = True
-    
+
     with pytest.raises(ValidationError):
         await provider.validate_identifier("test:123")
-        
+
     with pytest.raises(MappingError):
         await provider.map_identifier("test:123")
 
@@ -135,11 +134,9 @@ async def test_provider_error_handling(provider):
 async def test_operation_tracking(provider):
     """Test operation tracking wrapper."""
     result = await provider._track_operation(
-        "test_op",
-        provider.map_identifier,
-        "test:123"
+        "test_op", provider.map_identifier, "test:123"
     )
-    
+
     assert isinstance(result, MappingResult)
     provider.metrics.start_operation.assert_called_once_with("test_op")
     provider.metrics.end_operation.assert_called_once()

@@ -37,7 +37,7 @@ class MockArango(BaseArango):
                 properties={"uniprot_id": "P19367"},
             ),
         }
-        
+
         self.edges: List[ArangoEdge] = [
             ArangoEdge(
                 source_id="compound1",
@@ -52,7 +52,7 @@ class MockArango(BaseArango):
                 properties={"score": 0.8},
             ),
         ]
-        
+
         self.is_connected = False
 
     async def connect(self) -> None:
@@ -68,15 +68,14 @@ class MockArango(BaseArango):
         return self.nodes.get(node_id)
 
     async def get_node_by_property(
-        self,
-        node_type: str,
-        property_name: str,
-        property_value: Any
+        self, node_type: str, property_name: str, property_value: Any
     ) -> Optional[ArangoNode]:
         """Mock get node by property."""
         for node in self.nodes.values():
-            if (node.type == node_type and
-                node.properties.get(property_name) == property_value):
+            if (
+                node.type == node_type
+                and node.properties.get(property_name) == property_value
+            ):
                 return node
         return None
 
@@ -119,15 +118,21 @@ class MockArango(BaseArango):
         edges = []
 
         # Find start and end nodes
-        start_nodes = [n for n in self.nodes.values() if n.type == query.start_node_type]
+        start_nodes = [
+            n for n in self.nodes.values() if n.type == query.start_node_type
+        ]
         end_nodes = [n for n in self.nodes.values() if n.type == query.end_node_type]
 
         # Look for direct connections
         for start_node in start_nodes:
             for end_node in end_nodes:
                 for edge in self.edges:
-                    if (edge.source_id == start_node.id and edge.target_id == end_node.id or
-                        edge.target_id == start_node.id and edge.source_id == end_node.id):
+                    if (
+                        edge.source_id == start_node.id
+                        and edge.target_id == end_node.id
+                        or edge.target_id == start_node.id
+                        and edge.source_id == end_node.id
+                    ):
                         paths.append([start_node.id, end_node.id])
                         nodes.extend([start_node, end_node])
                         edges.append(edge)
@@ -161,10 +166,10 @@ async def test_connection():
     """Test connection management."""
     arango = MockArango()
     assert not arango.is_connected
-    
+
     await arango.connect()
     assert arango.is_connected
-    
+
     await arango.close()
     assert not arango.is_connected
 
@@ -194,19 +199,11 @@ async def test_get_node(mock_arango: MockArango):
 async def test_get_node_by_property(mock_arango: MockArango):
     """Test getting nodes by property."""
     arango = await mock_arango
-    node = await arango.get_node_by_property(
-        "Compound",
-        "hmdb_id",
-        "HMDB0000122"
-    )
+    node = await arango.get_node_by_property("Compound", "hmdb_id", "HMDB0000122")
     assert node is not None
     assert node.name == "Glucose"
 
-    node = await arango.get_node_by_property(
-        "Compound",
-        "hmdb_id",
-        "nonexistent"
-    )
+    node = await arango.get_node_by_property("Compound", "hmdb_id", "nonexistent")
     assert node is None
 
 
@@ -223,17 +220,11 @@ async def test_get_neighbors(mock_arango: MockArango):
     assert node.name == "Hexokinase"
 
     # Filter by edge type
-    neighbors = await arango.get_neighbors(
-        "compound1",
-        edge_types=["WRONG_TYPE"]
-    )
+    neighbors = await arango.get_neighbors("compound1", edge_types=["WRONG_TYPE"])
     assert len(neighbors) == 0
 
     # Filter by node type
-    neighbors = await arango.get_neighbors(
-        "compound1",
-        node_types=["Protein"]
-    )
+    neighbors = await arango.get_neighbors("compound1", node_types=["Protein"])
     assert len(neighbors) == 1
 
 
@@ -242,12 +233,10 @@ async def test_find_paths(mock_arango: MockArango):
     """Test finding paths between nodes."""
     arango = await mock_arango
     query = ArangoQuery(
-        start_node_type="Compound",
-        end_node_type="Protein",
-        max_path_length=1
+        start_node_type="Compound", end_node_type="Protein", max_path_length=1
     )
     result = await arango.find_paths(query)
-    
+
     assert len(result.paths) == 2  # Two compounds connect to protein
     assert len(result.nodes) == 4  # Two compounds and one protein
     assert len(result.edges) == 2  # Two interaction edges

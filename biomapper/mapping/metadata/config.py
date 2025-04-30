@@ -30,21 +30,23 @@ DEFAULT_CACHE_DURATION = 86400  # 24 hours in seconds
 DEFAULT_PATH_REDISCOVERY_DAYS = 7  # Weekly rediscovery for paths
 DEFAULT_CONNECTION_TIMEOUT = 30  # Default API timeout in seconds
 
+
 def get_metadata_db_path() -> str:
     """
     Get the path to the metadata database file.
-    
+
     This function checks environment variables first, then falls back to default.
-    
+
     Returns:
         str: Path to the metadata database file
     """
     return os.environ.get("BIOMAPPER_METADATA_DB", METADATA_DB_PATH)
 
+
 def get_metadata_db_url() -> str:
     """
     Get the database URL for SQLAlchemy.
-    
+
     Returns:
         str: Database URL
     """

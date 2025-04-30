@@ -12,6 +12,7 @@ from ..mapping.metabolite.name import MetaboliteMapping, MetaboliteClass
 
 class MappingSource(str, Enum):
     """Source of a mapping result."""
+
     REFMET = "refmet"
     CHEBI = "chebi"
     UNICHEM = "unichem"
@@ -21,6 +22,7 @@ class MappingSource(str, Enum):
 
 class ConfidenceLevel(str, Enum):
     """Confidence level in mapping result."""
+
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
@@ -30,6 +32,7 @@ class ConfidenceLevel(str, Enum):
 @dataclass
 class ProcessedResult:
     """Processed and validated mapping result."""
+
     input_name: str
     compound_class: Optional[MetaboliteClass] = None
     primary_compound: Optional[str] = None
@@ -70,9 +73,7 @@ class ResultProcessor:
         self.metrics = metrics
         self.langfuse = langfuse
 
-    def process_name_mapping(
-        self, mapping: MetaboliteMapping
-    ) -> ProcessedResult:
+    def process_name_mapping(self, mapping: MetaboliteMapping) -> ProcessedResult:
         """Process a result from MetaboliteNameMapper.
 
         Args:
@@ -108,7 +109,9 @@ class ResultProcessor:
         # Record metadata
         result.metadata = {
             "mapping_source": mapping.mapping_source or "unknown",
-            "original_class": mapping.compound_class.value if mapping.compound_class else "unknown",
+            "original_class": mapping.compound_class.value
+            if mapping.compound_class
+            else "unknown",
             "has_refmet": bool(mapping.refmet_id),
             "has_chebi": bool(mapping.chebi_id),
             "has_pubchem": bool(mapping.pubchem_id),
@@ -122,17 +125,17 @@ class ResultProcessor:
             self.metrics.record_metrics(
                 {
                     "name_mapping_confidence": result.confidence_score,
-                    "name_mapping_source": result.source.value if result.source else "none"
+                    "name_mapping_source": result.source.value
+                    if result.source
+                    else "none",
                 },
-                trace_id=mapping.metadata.get("trace_id") if mapping.metadata else None
+                trace_id=mapping.metadata.get("trace_id") if mapping.metadata else None,
             )
 
         return result
 
     def process_spoke_mapping(
-        self, 
-        mapping: Dict[str, Any], 
-        base_result: Optional[ProcessedResult] = None
+        self, mapping: Dict[str, Any], base_result: Optional[ProcessedResult] = None
     ) -> ProcessedResult:
         """Process a result from SPOKE mapping.
 
@@ -153,13 +156,15 @@ class ResultProcessor:
             result.mapped_id = spoke_id
             result.source = MappingSource.SPOKE
             result.confidence_score = mapping.get("confidence_score", 0.0)
-            
+
             # Add SPOKE metadata
-            result.metadata.update({
-                "spoke_node_type": mapping.get("node_type"),
-                "spoke_properties": mapping.get("properties", {}),
-                **mapping.get("metadata", {})
-            })
+            result.metadata.update(
+                {
+                    "spoke_node_type": mapping.get("node_type"),
+                    "spoke_properties": mapping.get("properties", {}),
+                    **mapping.get("metadata", {}),
+                }
+            )
 
         # Update confidence level
         result.confidence = self._get_confidence_level(result.confidence_score)
@@ -167,9 +172,7 @@ class ResultProcessor:
         return result
 
     def process_rag_mapping(
-        self,
-        mapping: Dict[str, Any],
-        base_result: Optional[ProcessedResult] = None
+        self, mapping: Dict[str, Any], base_result: Optional[ProcessedResult] = None
     ) -> ProcessedResult:
         """Process a result from RAG mapping.
 
@@ -193,11 +196,13 @@ class ResultProcessor:
             result.confidence_score = float(best_match.get("confidence", 0))
 
             # Add RAG metadata
-            result.metadata.update({
-                "rag_matches": len(mapping.get("matches", [])),
-                "rag_metrics": mapping.get("metrics", {}),
-                **best_match.get("metadata", {})
-            })
+            result.metadata.update(
+                {
+                    "rag_matches": len(mapping.get("matches", [])),
+                    "rag_metrics": mapping.get("metrics", {}),
+                    **best_match.get("metadata", {}),
+                }
+            )
 
         # Update confidence level
         result.confidence = self._get_confidence_level(result.confidence_score)
@@ -235,9 +240,9 @@ class ResultProcessor:
         # 2. Low confidence result
         # 3. Missing key information
         return (
-            result.mapped_id is None or
-            result.confidence_score < self.medium_confidence_threshold or
-            (result.source != MappingSource.RAG and not result.mapped_name)
+            result.mapped_id is None
+            or result.confidence_score < self.medium_confidence_threshold
+            or (result.source != MappingSource.RAG and not result.mapped_name)
         )
 
     def combine_results(
@@ -269,10 +274,17 @@ class ResultProcessor:
 
             # Record metrics if available
             if self.metrics:
-                self.metrics.record_metrics({
-                    "name_mapping_confidence": result.confidence_score,
-                    "name_mapping_source": result.source.value if result.source else "none"
-                }, trace_id=name_result.metadata.get("trace_id") if name_result.metadata else None)
+                self.metrics.record_metrics(
+                    {
+                        "name_mapping_confidence": result.confidence_score,
+                        "name_mapping_source": result.source.value
+                        if result.source
+                        else "none",
+                    },
+                    trace_id=name_result.metadata.get("trace_id")
+                    if name_result.metadata
+                    else None,
+                )
 
         # Add SPOKE data if available
         if spoke_result:
@@ -289,7 +301,7 @@ class ResultProcessor:
             result = ProcessedResult(
                 input_name="unknown",
                 confidence=ConfidenceLevel.UNKNOWN,
-                confidence_score=0.0
+                confidence_score=0.0,
             )
 
         return result

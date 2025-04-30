@@ -28,11 +28,16 @@ def main():
     # Example 1: Map compounds by name
     print("\nExample 1: Map compounds by name")
     print("-" * 40)
-    compounds = ["1,3-Diaminopropane", "2-Ketobutyric acid", "2-Hydroxybutyric acid", "Glucose"]
-    
+    compounds = [
+        "1,3-Diaminopropane",
+        "2-Ketobutyric acid",
+        "2-Hydroxybutyric acid",
+        "Glucose",
+    ]
+
     try:
         results = client.map_compounds(compounds, input_type="name")
-        
+
         # Print the results
         for result in results:
             print_result(result)
@@ -43,10 +48,10 @@ def main():
     print("\nExample 2: Map compounds by HMDB ID")
     print("-" * 40)
     hmdb_ids = ["HMDB0000002", "HMDB0000122", "HMDB0001847"]
-    
+
     try:
         results = client.map_compounds(hmdb_ids, input_type="hmdb")
-        
+
         # Print the results
         for result in results:
             print_result(result)
@@ -57,10 +62,10 @@ def main():
     print("\nExample 3: Map compounds by ChEBI ID")
     print("-" * 40)
     chebi_ids = ["15725", "17234", "27732"]
-    
+
     try:
         results = client.map_compounds(chebi_ids, input_type="chebi")
-        
+
         # Print the results
         for result in results:
             print_result(result)

@@ -27,6 +27,7 @@ app.include_router(health.router, prefix="/api/health", tags=["health"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(mapping.router, prefix="/api/mapping", tags=["mapping"])
 
+
 # Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -39,10 +40,13 @@ async def global_exception_handler(request: Request, exc: Exception):
         },
     )
 
+
 @app.get("/")
 async def root():
     return {"message": "Welcome to Biomapper API. Visit /api/docs for documentation."}
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

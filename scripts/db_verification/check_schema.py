@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 # Get database path
-db_path = Path('data/metamapper.db')
+db_path = Path("data/metamapper.db")
 if not db_path.exists():
     print(f"Database file {db_path} not found!")
     sys.exit(1)

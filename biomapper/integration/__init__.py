@@ -8,12 +8,7 @@ from biomapper.integration.spoke_cache_sync import (
     SpokeCacheSync,
     SyncConfig,
     SyncDirection,
-    sync_entities_from_list
+    sync_entities_from_list,
 )
 
-__all__ = [
-    "SpokeCacheSync",
-    "SyncConfig",
-    "SyncDirection",
-    "sync_entities_from_list"
-]
+__all__ = ["SpokeCacheSync", "SyncConfig", "SyncDirection", "sync_entities_from_list"]

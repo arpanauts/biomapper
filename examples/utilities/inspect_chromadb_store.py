@@ -6,8 +6,7 @@ from chromadb.config import Settings
 
 # Initialize ChromaDB client
 client = chromadb.PersistentClient(
-    path="/home/ubuntu/biomapper/vector_store",
-    settings=Settings(allow_reset=True)
+    path="/home/ubuntu/biomapper/vector_store", settings=Settings(allow_reset=True)
 )
 
 # Get the compounds collection
@@ -21,7 +20,7 @@ print(f"\nCollection 'compounds' contains {count} documents")
 if count > 0:
     print("\nExample documents:")
     results = collection.get(limit=5)
-    for i, (id, metadata) in enumerate(zip(results['ids'], results['metadatas'])):
+    for i, (id, metadata) in enumerate(zip(results["ids"], results["metadatas"])):
         print(f"\nDocument {i+1}:")
         print(f"  ID: {id}")
         print(f"  Metadata: {metadata}")

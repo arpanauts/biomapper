@@ -21,6 +21,7 @@ from biomapper.schemas.rag_schema import Match
 
 class MockDocument(Document):
     """Mock document for testing."""
+
     pass
 
 
@@ -35,10 +36,7 @@ class MockVectorStore(BaseVectorStore[MockDocument]):
         self.docs.extend(documents)
 
     async def get_relevant(
-        self,
-        query_embedding: np.ndarray,
-        k: int = 5,
-        threshold: float = 0.0
+        self, query_embedding: np.ndarray, k: int = 5, threshold: float = 0.0
     ) -> List[MockDocument]:
         self.last_query = query_embedding
         return self.docs[:k]
@@ -66,12 +64,7 @@ class MockEmbedder(BaseEmbedder):
 class MockPromptManager(BasePromptManager):
     """Mock prompt manager for testing."""
 
-    async def get_prompt(
-        self,
-        query: str,
-        context: List[Document],
-        **kwargs
-    ) -> str:
+    async def get_prompt(self, query: str, context: List[Document], **kwargs) -> str:
         return f"Query: {query}\nContext: {len(context)} documents"
 
 
@@ -79,17 +72,14 @@ class MockRAGMapper(BaseRAGMapper):
     """Mock RAG mapper for testing."""
 
     async def _generate_matches(
-        self,
-        prompt: str,
-        context: List[Document],
-        **kwargs
+        self, prompt: str, context: List[Document], **kwargs
     ) -> List[Match]:
         return [
             Match(
                 id="test-1",
                 name="Test Match 1",
                 confidence="0.9",
-                reasoning="Test reasoning"
+                reasoning="Test reasoning",
             )
         ]
 
@@ -118,7 +108,7 @@ def metrics():
     return Mock(
         record_metrics=Mock(),
         start_operation=Mock(return_value="trace-123"),
-        end_operation=Mock()
+        end_operation=Mock(),
     )
 
 
@@ -139,7 +129,7 @@ def mapper(vector_store, embedder, prompt_manager, metrics, langfuse):
         embedder=embedder,
         prompt_manager=prompt_manager,
         metrics=metrics,
-        langfuse=langfuse
+        langfuse=langfuse,
     )
 
 
@@ -147,9 +137,7 @@ def mapper(vector_store, embedder, prompt_manager, metrics, langfuse):
 async def test_document_creation():
     """Test document creation."""
     doc = MockDocument(
-        content="test content",
-        metadata={"key": "value"},
-        embedding=np.random.rand(384)
+        content="test content", metadata={"key": "value"}, embedding=np.random.rand(384)
     )
     assert doc.content == "test content"
     assert doc.metadata["key"] == "value"
@@ -163,15 +151,15 @@ async def test_vector_store_operations(vector_store):
         MockDocument(content=f"doc {i}", metadata={}, embedding=np.random.rand(384))
         for i in range(3)
     ]
-    
+
     await vector_store.add_documents(docs)
     assert len(vector_store.docs) == 3
-    
+
     query = np.random.rand(384)
     results = await vector_store.get_relevant(query, k=2)
     assert len(results) == 2
     assert vector_store.last_query is query
-    
+
     await vector_store.clear()
     assert len(vector_store.docs) == 0
 
@@ -182,7 +170,7 @@ async def test_embedder_operations(embedder):
     embedding = await embedder.embed_text("test")
     assert embedding.shape == (384,)
     assert "test" in embedder.embed_calls
-    
+
     embeddings = await embedder.embed_batch(["test1", "test2"])
     assert len(embeddings) == 2
     assert all(e.shape == (384,) for e in embeddings)
@@ -218,14 +206,11 @@ async def test_rag_mapper_error_handling(mapper, embedder):
     """Test RAG mapper error handling."""
     # Make embedder fail
     embedder.embed_text = AsyncMock(side_effect=EmbeddingError("Test error"))
-    
+
     result = await mapper.map_query("test query")
     assert result.error == "Test error"
     assert not result.matches
     assert result.best_match.confidence == "0.0"
 
     # Verify error was recorded
-    mapper.langfuse.record_error.assert_called_once_with(
-        "trace-123",
-        "Test error"
-    )
+    mapper.langfuse.record_error.assert_called_once_with("trace-123", "Test error")

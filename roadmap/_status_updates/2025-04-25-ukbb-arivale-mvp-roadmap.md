@@ -10,23 +10,27 @@
 *   **Codebase Exploration:** Located the mapping clients directory at `/home/ubuntu/biomapper/biomapper/mapping/clients/`.
 *   **Client Assessment:** Identified existing clients (UniChem, ChEBI, PubChem, KEGG, RefMet, UniProt ID-mapper) and confirmed the need to implement clients/functionality for UMLS and UniProt Name/Symbol search. Analyzed `uniprot_focused_mapper.py` and determined it handles ID-to-ID mapping but not the required Name-to-ID lookup.
 *   **Initial Protein Mapping:** Implemented `UniProtNameClient` (handling composite genes) and basic endpoint configurations in `populate_metamapper_db.py`. Successfully ran a preliminary UKBB->Arivale protein mapping script (`map_ukbb_to_arivale.py`), demonstrating the two-step process (UKBB GeneName -> UniProtKB AC -> Arivale Name) and highlighting limitations (high UniProt->Arivale mismatch, simplistic/hardcoded executor logic).
+*   **MappingExecutor Basic Refactoring:** Completed initial refactoring of the MappingExecutor to support dynamic path selection and client instantiation from `metamapper.db` configuration. Successfully implemented and executed the UKBB-to-Arivale mapping using UniProt accession numbers, with proper caching and logging.
 
 ## 2. Current Project State
 
-*   **Overall:** The project has successfully executed a basic protein mapping, proving individual components (client, DB config) work in isolation. However, this revealed the need to significantly enhance the `MappingExecutor` to be truly configuration-driven and less hardcoded, fulfilling the core architectural goal.
+*   **Overall:** The project has successfully executed a basic protein mapping, demonstrating that the core framework components can work together. The `MappingExecutor` now provides a configuration-driven foundation, but requires further enhancement to support more complex mapping scenarios.
 *   **Component Status:**
     *   `db/models.py`: Core configuration models stable.
     *   `db/cache_models.py`: Schema defined for caching results and provenance.
     *   `mapping_cache.db`: Setup complete via Alembic.
     *   `scripts/populate_metamapper_db.py`: Updated with basic configurations for UKBB_Protein and Arivale_Protein endpoints, including property extraction for relevant identifiers (GeneName, UniProtKB AC, Arivale Name). **Sufficient for current protein framework focus.**
-    *   `biomapper/core/mapping_executor.py`: **Requires significant refactoring.** Current implementation is too simplistic and hardcoded for the UniProt client. Needs enhancement to dynamically determine paths and call clients based on `metamapper.db` configuration.
+    *   `biomapper/core/mapping_executor.py`: **Partially refactored.** Now supports dynamic path finding, client instantiation, and basic caching, but needs further enhancement for more complex mapping strategies.
     *   `mapping/clients/`: `UniProtNameClient` implemented and functional for GeneName->UniProtKB mapping (including composite handling). `UMLSClient` implementation is **deferred**. Existing clients may need adjustments later.
 *   **Outstanding Issues:**
-    *   **Highest Priority:** Refactor `MappingExecutor` to be configuration-driven.
-    *   Implement basic provenance logging to `mapping_cache.db` within the executor.
-    *   Need a defined strategy within the *enhanced* executor for selecting mapping paths (e.g., prioritize direct UniProt). Handling resource failures and complex fallback logic (UMLS, RAG, UniChem 404s) is **deferred** until the core dynamic execution framework is stable.
-    *   `UMLSClient` implementation is **deferred**.
-    *   PubChem RAG vector DB preparation is **deferred**.
+    *   **Highest Priority:** Enhance `MappingExecutor` to support bidirectional and multi-strategy mapping approaches.
+    *   Integrate confidence scoring and mapping metadata to improve provenance tracking.
+    *   Address the remaining NULL constraint issue in the path logging system.
+    *   Move `PathLogMappingAssociation` to `cache_models.py` for better code organization.
+    *   Implement more comprehensive error handling and reporting for mapping failures.
+    *   Enhance the schema to support mapping with multiple ontological resources, fallback strategies, and handling of outdated/merged identifiers.
+    *   `UMLSClient` implementation remains **deferred**.
+    *   PubChem RAG vector DB preparation remains **deferred**.
 
 ## 3. Technical Context
 
@@ -38,107 +42,118 @@
     *   `uniprot_focused_mapper.py` uses the ID mapping API, not suitable for Name -> ID search.
     *   Starting with unstructured text (UKBB `NAME`) necessitates prioritizing text-based resources like UMLS.
     *   Fallback logic in the executor is critical for robustness against external API limitations and incomplete mappings.
+    *   Direct UniProt AC mapping works well but leaves many unmatched entities, demonstrating the need for a more comprehensive approach.
 
 ## 4. Next Steps (Revised Priorities)
 
-**Focus: Build the Core Dynamic Mapping Framework using Protein Use Case**
+**Focus: Enhance the Core Mapping Framework to Support Comprehensive Bidirectional Mapping**
 
-1.  **Refactor `MappingExecutor` (Highest Priority): Detailed Plan**
+1. **Enhance `MappingExecutor` for Comprehensive Mapping (Highest Priority): Detailed Plan**
 
-    *   **Goal:** Transform the executor into a dynamic, configuration-driven engine using `metamapper.db`.
-    *   **Phased Approach:**
+   *   **Goal:** Transform the executor to support bidirectional, multi-strategy ontological mapping.
+   *   **Phased Approach:**
 
-        **Phase 1: Foundation & Pathfinding (with Integrated Testing)**
+      **Phase 1: Bidirectional Mapping Support**
 
-        1.  **Helper Functions for DB Queries:**
-            *   **Goal:** Abstract database interactions.
-            *   **Tasks:** Implement internal methods (`_get_endpoint_ontology`, `_find_mapping_paths`) focusing initially on explicit `MappingPaths`.
-            *   **Testing:** Implement concurrent unit tests (mocking DB session) for query logic.
+      1. **Implement Bidirectional Path Finding:**
+         * **Goal:** Support finding and executing paths in both directions.
+         * **Tasks:** Extend path finding to consider both directions, implement a "reverse" mechanism to try mapping target->source when source->target fails.
+         * **Testing:** Test with test datasets ensuring bidirectional paths are correctly identified and executed.
 
-        2.  **Initial Path Selection Strategy:**
-            *   **Goal:** Implement basic logic to choose a path.
-            *   **Tasks:** Implement simple strategy (direct > shortest). Note future enhancements (confidence, weights).
-            *   **Testing:** Unit test the selection logic.
+      2. **Enhance Metadata Tracking:**
+         * **Goal:** Add metadata to track confidence, path direction, and number of hops.
+         * **Tasks:** Extend entity mapping and provenance models to store confidence scores and path details.
+         * **Testing:** Verify metadata is correctly stored for direct vs. indirect mappings.
 
-        **Phase 2: Dynamic Execution Core (with Adapters, Error Handling & Testing)**
+      **Phase 2: Multi-Strategy Mapping**
 
-        3.  **Client Interaction Strategy (Adapter/Interface):**
-            *   **Goal:** Define a flexible way to interact with diverse clients.
-            *   **Tasks:** Analyze clients, design strategy (Protocol vs. Adapter), define standard `MappingResult`, consider batching.
-            *   **Configuration:** Store client/adapter class, method, params in `MappingResource`.
+      3. **Implement Alternative Path Strategy:**
+         * **Goal:** Support trying multiple paths for unmapped entities.
+         * **Tasks:** Add logic to attempt alternative paths for unmapped identifiers, prioritizing by confidence.
+         * **Testing:** Test with entities that require indirect mapping paths.
 
-        4.  **Dynamic Client Instantiation & Method Call:**
-            *   **Goal:** Load and use the correct client/adapter.
-            *   **Tasks:** Implement dynamic import/instantiation based on DB config. Call standardized method.
-            *   **Testing:** Unit test dynamic loading and dispatch, mocking clients/adapters.
+      4. **Add ID Normalization Support:**
+         * **Goal:** Handle outdated, merged, or variant identifiers.
+         * **Tasks:** Add preprocessing step to check for outdated/merged IDs, extend client interfaces to support variant checks.
+         * **Testing:** Test with known outdated UniProt IDs.
 
-        5.  **Refactor `execute_mapping` Main Loop (with Basic Error Handling):**
-            *   **Goal:** Orchestrate the dynamic mapping robustly.
-            *   **Tasks:** Replace hardcoded logic, loop through path steps, instantiate client/adapter, wrap calls in `try...except`, log failures, implement basic failure logic (terminate path for ID), return results.
-            *   **Testing:** Develop integration tests (mocked DB/clients), cover success/failure, consider TDD.
+      **Phase 3: Enhanced Reporting and Integration**
 
-        **Phase 3: Caching, Integration & Final Testing**
+      5. **Implement Comprehensive Reporting:**
+         * **Goal:** Generate detailed mapping reports with statistics and diagnostics.
+         * **Tasks:** Extend result format to include mapping metadata, success/failure rates, path details.
+         * **Testing:** Generate and verify reports for test datasets.
 
-        6.  **Implement Caching & Provenance Logging:**
-            *   **Goal:** Persist results and execution details.
-            *   **Tasks:** Integrate calls to write to `mapping_cache.db` (`MappingMetadata`, `EntityMapping`, `PathExecutionLog`, `EntityMappingProvenance`) for successes and failures.
+      6. **Integrate with Outer Join Strategy:**
+         * **Goal:** Create a combined dataset showing what matches and what's unique to each endpoint.
+         * **Tasks:** Implement outer join-like result format showing matched pairs and unique entries.
+         * **Testing:** Verify with test datasets covering different overlap scenarios.
 
-        7.  **End-to-End Testing & Refinement:**
-            *   **Goal:** Verify the fully refactored executor.
-            *   **Tasks:** Use test script with actual protein config, verify path selection, execution, results, cache/provenance. Test edge cases.
+2. **Immediate Technical Improvements:**
 
-2.  **Implement Basic Caching in Executor:**
-    *   _(This step is now integrated into Step 6 of the detailed refactoring plan above)_.
+   * **Fix `NULL` constraint in `PathExecutionLog`:** Ensure `source_entity_type` is properly passed to avoid constraint violations.
+   * **Move `PathLogMappingAssociation` to `cache_models.py`:** Improve code organization and maintainability.
+   * **Implement confidence scoring system:** Add a confidence score calculation based on path directness, number of steps, and client reliability.
+   * **Refine error reporting and handling:** Improve how mapping failures are logged and handled.
 
-3.  **Test Refactored Executor:**
-    *   _(This step is now integrated into Steps 1, 2, 4, 5, and 7 of the detailed refactoring plan above)_.
+3. **Enhance Database Schema:**
 
-**Deferred Steps (Post-Core Framework):**
+   * **Extend `EntityMapping` with metadata fields:** Add fields for confidence score, mapping method, and path details.
+   * **Add support for mapping attempts logging:** Track all attempts to map an entity, not just successful ones.
+   * **Create schema for alternative identifier mapping:** Support storing outdated/merged ID relationships.
 
-*   Implement advanced fallback logic (UniProt->UMLS->UniChem->RAG, UniChem 404 handling) within the executor.
-*   Implement `UMLSClient`.
+**Deferred Steps (Post-Enhanced Framework):**
+
+*   Implement `UMLSClient` for text-based entity mapping.
 *   Configure `metamapper.db` for metabolite endpoints and mapping paths.
 *   Implement metabolite mapping use cases.
-*   Integrate RAG component.
-*   Generalize identifier handling (composites, outdated IDs) across clients/executor.
-*   Implement logging/handling for failed mappings (e.g., to a separate table for retries).
+*   Integrate RAG component as a final fallback strategy.
+*   Implement more advanced client adapters to standardize interaction.
 
 ## 5. Open Questions & Considerations
 
-*   How should the executor dynamically determine the correct client *method* to call for a given mapping step? (Standard interface? Configurable method name?)
-*   What is the best strategy for finding/selecting mapping paths in `metamapper.db` (especially multi-step paths)?
-*   How should the initial provenance data (path taken, confidence) be represented and stored in the cache?
+*   How should we define and calculate confidence scores for different mapping paths?
+*   What is the optimal strategy for determining when to try reversed mapping (target → source) vs. continuing with alternative source → target paths?
+*   How can we best represent and store the provenance of multi-step mappings in a way that's both efficient and queryable?
+*   How should we handle conflicts when multiple mapping paths produce different results for the same entity?
+*   What level of automation vs. manual review should be supported for mappings with low confidence scores?
 *   _(Deferred)_ What are the rate limits and authentication requirements for the UMLS UTS API?
 *   _(Deferred)_ What is the specific interface/input/output for the RAG component?
 
 ### Future Considerations
 
-*   **Generalize Identifier Handling:** The current approach handles composite (e.g., `GENE1_GENE2`) and potentially outdated identifiers within specific clients (`UniProtNameClient`). This pattern is common across entity types and resources. Future work should generalize this handling (e.g., via pre-processors, resolver resources, or middleware) to improve reusability and maintainability across Biomapper. (See Memory: 5e6be590-afbc-4008-9edd-106becd63356 for details).
+*   **Generalize Identifier Handling:** The current approach handles composite (e.g., `GENE1_GENE2`) and potentially outdated identifiers within specific clients (`UniProtNameClient`). This pattern is common across entity types and resources. Future work should generalize this handling (e.g., via pre-processors, resolver resources, or middleware) to improve reusability and maintainability across Biomapper.
+
+*   **Intermediary Ontology Mapping Layer:** Develop a systematic approach to document and track all attempted mappings between ontological identifiers, with confidence scores and detailed provenance. This layer would sit between the top-level metamapping (e.g., UKBB->Arivale) and the base-level entity mapping, providing a rich, queryable record of mapping attempts and outcomes.
+
+*   **Unified Mapping Strategy:** Implement a system where direct mappings (highest confidence) are attempted first, followed by progressively more indirect or approximate methods, with clear documentation of the mapping path, number of hops, and confidence scores. This provides both deterministic success metrics and rich diagnostic information.
 
 ---
 
-## Status Summary (As of 2025-04-29)
+## Status Summary (As of 2025-04-30)
 
-*   **UKBB->Arivale Protein Mapping (Basic Script):** Completed.
-*   **`UniProtNameClient`:** Implemented.
-*   **`metamapper.db` Config (Protein):** Basic configuration added.
-*   **`mapping_cache.db` Setup:** Completed.
-*   **`MappingExecutor` Refactoring:** **Required - Highest Priority Next Step.**
-*   **`UMLSClient` Implementation:** Deferred.
-*   **Metabolite Mapping:** Deferred.
-*   **Advanced Fallback Logic (Executor):** Deferred.
-*   **RAG Integration:** Deferred.
+*   **UKBB->Arivale Basic Protein Mapping:** **Completed**
+*   **`UniProtNameClient`:** **Implemented**
+*   **`MappingExecutor` Basic Refactoring:** **Completed**
+*   **Bidirectional Mapping Support:** Pending
+*   **Enhanced Metadata Tracking:** Pending
+*   **Multiple Path Strategy:** Pending
+*   **ID Normalization Support:** Pending
+*   **Comprehensive Reporting:** Pending
+*   **`UMLSClient` Implementation:** **Deferred**
+*   **Metabolite Mapping:** **Deferred**
+*   **RAG Integration:** **Deferred**
 
 - **Tasks:**
-  - Implement clients for selected mapping resources.
-    - `UniProtNameClient`: **Completed**
-    - `UMLSClient`: **Deferred**
-  - Configure `metamapper.db` (`scripts/populate_metamapper_db.py`):
-    - Define Endpoints (UKBB, Arivale): **Basic definitions added.**
-    - Define Mapping Resources (UniProt): **Basic definition added.**
-    - Define Property Extraction (UKBB/Arivale Protein): **Added.**
-    - Define Relationships & Ontology Preferences: Pending (Low priority until executor refactored)
-    - Define Mapping Paths: Pending (Low priority until executor refactored)
-  - Implement core mapping logic (`MappingExecutor`):
-    - **Status:** **Needs Major Refactoring (Highest Priority)**
-    - **Next Step:** Refactor executor for dynamic, config-driven path finding and client execution.
+  - Fix immediate technical issues:
+    - **NULL constraint in PathExecutionLog**: Pending
+    - **Move PathLogMappingAssociation to cache_models.py**: Pending
+    - **Implement confidence scoring system**: Pending
+  - Enhance database schema:
+    - **Extend EntityMapping with metadata fields**: Pending
+    - **Add mapping attempts tracking**: Pending
+    - **Create schema for alternative IDs**: Pending
+  - Implement core bidirectional mapping:
+    - **Bidirectional path finding**: Pending
+    - **Alternative path strategy**: Pending
+    - **Comprehensive reporting**: Pending

@@ -9,14 +9,14 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from app.api.deps import get_mapper_service, get_session
 from app.core.session import Session
 from app.models.mapping import (
-    MappingJobCreate, 
-    MappingJobResponse, 
-    JobStatus, 
+    MappingJobCreate,
+    MappingJobResponse,
+    JobStatus,
     MappingResults,
     MappingResultSummary,
     RelationshipMappingRequest,
     RelationshipMappingResponse,
-    MappingResult
+    MappingResult,
 )
 from app.services.mapper_service import MapperService
 
@@ -31,12 +31,12 @@ async def create_mapping_job(
 ) -> MappingJobResponse:
     """
     Create a new mapping job.
-    
+
     Args:
         job_config: Mapping job configuration
         mapper_service: Mapper service dependency
         session: Session dependency
-        
+
     Returns:
         Created job response
     """
@@ -46,14 +46,14 @@ async def create_mapping_job(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Session ID in request does not match session ID in path",
         )
-    
+
     job = await mapper_service.create_job(
         session=session,
         id_columns=job_config.id_columns,
         target_ontologies=job_config.target_ontologies,
         options=job_config.options,
     )
-    
+
     return MappingJobResponse(
         job_id=job.job_id,
         session_id=job.session_id,
@@ -69,11 +69,11 @@ async def get_job_status(
 ) -> JobStatus:
     """
     Get the status of a mapping job.
-    
+
     Args:
         job_id: ID of the job to check
         mapper_service: Mapper service dependency
-        
+
     Returns:
         Job status
     """
@@ -83,7 +83,7 @@ async def get_job_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Job with ID {job_id} not found",
         )
-    
+
     return JobStatus(
         job_id=job.job_id,
         status=job.status,
@@ -101,11 +101,11 @@ async def get_job_results(
 ) -> MappingResults:
     """
     Get the results of a completed mapping job.
-    
+
     Args:
         job_id: ID of the job to retrieve results for
         mapper_service: Mapper service dependency
-        
+
     Returns:
         Mapping results
     """
@@ -115,19 +115,19 @@ async def get_job_results(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Job with ID {job_id} not found",
         )
-    
+
     if job.status != "completed":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Job is not completed yet. Current status: {job.status}",
         )
-    
+
     # Get results preview
     preview_data = mapper_service.get_job_results_preview(job_id)
-    
+
     # Extract stats from job result
     stats = job.result.get("stats", {})
-    
+
     # Create summary object
     summary = MappingResultSummary(
         total_records=stats.get("total_records", 0),
@@ -136,7 +136,7 @@ async def get_job_results(
         ontologies_used=stats.get("ontologies_used", []),
         column_stats=stats.get("column_stats", {}),
     )
-    
+
     return MappingResults(
         job_id=job.job_id,
         summary=summary,
@@ -153,11 +153,11 @@ async def download_results(
 ) -> StreamingResponse:
     """
     Download the mapped CSV file.
-    
+
     Args:
         job_id: ID of the job to download results for
         mapper_service: Mapper service dependency
-        
+
     Returns:
         StreamingResponse with CSV file
     """
@@ -167,29 +167,31 @@ async def download_results(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Job with ID {job_id} not found",
         )
-    
+
     if job.status != "completed":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Job is not completed yet. Current status: {job.status}",
         )
-    
+
     output_path = job.result.get("output_path")
     if not output_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Job result file not found",
         )
-    
+
     def iterfile():
         with open(output_path, "rb") as f:
             yield from f
-    
+
     # Get original filename
     original_file_path = job.result.get("file_path", "")
-    original_filename = original_file_path.split("/")[-1] if original_file_path else "data.csv"
+    original_filename = (
+        original_file_path.split("/")[-1] if original_file_path else "data.csv"
+    )
     download_filename = f"mapped_{original_filename}"
-    
+
     return StreamingResponse(
         iterfile(),
         media_type="text/csv",
@@ -204,24 +206,23 @@ async def map_with_relationship(
 ) -> RelationshipMappingResponse:
     """
     Map data using a relationship and the endpoint adapter extraction mechanism.
-    
+
     This endpoint uses the newly integrated CSVAdapter and RelationshipMappingExecutor
     to map values from one endpoint to another using defined relationships.
-    
+
     Args:
         request: The relationship mapping request
         mapper_service: Mapper service dependency
-        
+
     Returns:
         Mapping results
     """
     results = await mapper_service.map_relationship(
-        relationship_id=request.relationship_id,
-        source_data=request.source_data
+        relationship_id=request.relationship_id, source_data=request.source_data
     )
-    
+
     return RelationshipMappingResponse(
         relationship_id=request.relationship_id,
         source_data=request.source_data,
-        results=results
+        results=results,
     )

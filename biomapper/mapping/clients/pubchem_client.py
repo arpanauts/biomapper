@@ -76,7 +76,9 @@ class PubChemClient:
 
         return session
 
-    def _make_request(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _make_request(
+        self, url: str, params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Make a request to the PubChem API with rate limiting.
 
         Args:
@@ -96,11 +98,7 @@ class PubChemClient:
 
         try:
             self._last_request_time = time.time()
-            response = self.session.get(
-                url,
-                params=params,
-                timeout=self.config.timeout
-            )
+            response = self.session.get(url, params=params, timeout=self.config.timeout)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
@@ -111,9 +109,7 @@ class PubChemClient:
             raise PubChemError(f"Invalid JSON response: {str(e)}") from e
 
     def get_property(
-        self, 
-        pubchem_id: str, 
-        properties: Union[str, List[str]]
+        self, pubchem_id: str, properties: Union[str, List[str]]
     ) -> Dict[str, Any]:
         """Get property data for a compound.
 
@@ -132,15 +128,15 @@ class PubChemClient:
 
         properties_str = ",".join(properties)
         url = f"{self.config.base_url}/compound/cid/{pubchem_id}/property/{properties_str}/JSON"
-        
+
         try:
             data = self._make_request(url)
             if "PropertyTable" not in data or "Properties" not in data["PropertyTable"]:
                 raise PubChemError(f"No property data found for CID {pubchem_id}")
-            
+
             if not data["PropertyTable"]["Properties"]:
                 raise PubChemError(f"Empty property list for CID {pubchem_id}")
-                
+
             return data["PropertyTable"]["Properties"][0]
         except Exception as e:
             logger.error(f"PubChem property retrieval failed: {str(e)}")
@@ -159,24 +155,27 @@ class PubChemClient:
             PubChemError: If xref retrieval fails
         """
         url = f"{self.config.base_url}/compound/cid/{pubchem_id}/xrefs/RN,HMDB,CHEBI,KEGG/JSON"
-        
+
         try:
             data = self._make_request(url)
-            
-            if "InformationList" not in data or "Information" not in data["InformationList"]:
+
+            if (
+                "InformationList" not in data
+                or "Information" not in data["InformationList"]
+            ):
                 logger.warning(f"No xref data found for CID {pubchem_id}")
                 return {}
-                
+
             xref_data = data["InformationList"]["Information"][0]
-            
+
             # Process and format the xrefs
             xrefs = {}
-            
+
             if "HMDB" in xref_data:
                 xref_hmdb = xref_data["HMDB"]
                 if isinstance(xref_hmdb, list) and xref_hmdb:
                     xrefs["hmdb"] = xref_hmdb[0]
-                    
+
             if "ChEBI" in xref_data:
                 xref_chebi = xref_data["ChEBI"]
                 if isinstance(xref_chebi, list) and xref_chebi:
@@ -184,12 +183,12 @@ class PubChemClient:
                     if not chebi_id.startswith("CHEBI:"):
                         chebi_id = f"CHEBI:{chebi_id}"
                     xrefs["chebi"] = chebi_id
-                    
+
             if "KEGG" in xref_data:
                 xref_kegg = xref_data["KEGG"]
                 if isinstance(xref_kegg, list) and xref_kegg:
                     xrefs["kegg"] = xref_kegg[0]
-                
+
             return xrefs
         except Exception as e:
             logger.warning(f"PubChem xref retrieval failed: {str(e)}")
@@ -209,44 +208,50 @@ class PubChemClient:
         """
         try:
             # Strip CID: prefix if present
-            clean_id = pubchem_id.replace("CID:", "") if pubchem_id.startswith("CID:") else pubchem_id
-            
+            clean_id = (
+                pubchem_id.replace("CID:", "")
+                if pubchem_id.startswith("CID:")
+                else pubchem_id
+            )
+
             # Get basic properties
             props = self.get_property(
-                clean_id, 
+                clean_id,
                 [
-                    "MolecularFormula", 
-                    "MolecularWeight", 
-                    "CanonicalSMILES", 
-                    "InChI", 
-                    "InChIKey", 
-                    "IUPACName"
-                ]
+                    "MolecularFormula",
+                    "MolecularWeight",
+                    "CanonicalSMILES",
+                    "InChI",
+                    "InChIKey",
+                    "IUPACName",
+                ],
             )
-            
+
             # Get cross-references
             xrefs = self.get_compound_xrefs(clean_id)
-            
+
             # Create result object
             result = PubChemResult(
-                pubchem_cid=f"CID:{clean_id}" if not pubchem_id.startswith("CID:") else pubchem_id,
+                pubchem_cid=f"CID:{clean_id}"
+                if not pubchem_id.startswith("CID:")
+                else pubchem_id,
                 name=props.get("IUPACName", ""),
                 formula=props.get("MolecularFormula"),
-                mass=float(props.get("MolecularWeight", 0)) if "MolecularWeight" in props else None,
+                mass=float(props.get("MolecularWeight", 0))
+                if "MolecularWeight" in props
+                else None,
                 smiles=props.get("CanonicalSMILES"),
                 inchi=props.get("InChI"),
                 inchikey=props.get("InChIKey"),
-                xrefs=xrefs
+                xrefs=xrefs,
             )
-            
+
             return result
         except Exception as e:
             logger.error(f"PubChem entity lookup failed: {str(e)}")
             raise PubChemError(f"Entity lookup failed: {str(e)}") from e
 
-    def search_by_name(
-        self, name: str, max_results: int = 5
-    ) -> List[PubChemResult]:
+    def search_by_name(self, name: str, max_results: int = 5) -> List[PubChemResult]:
         """Search PubChem by compound name.
 
         Args:
@@ -263,13 +268,16 @@ class PubChemClient:
             # First search by name to get CIDs
             search_url = f"{self.config.base_url}/compound/name/{name}/cids/JSON"
             search_data = self._make_request(search_url)
-            
-            if "IdentifierList" not in search_data or "CID" not in search_data["IdentifierList"]:
+
+            if (
+                "IdentifierList" not in search_data
+                or "CID" not in search_data["IdentifierList"]
+            ):
                 logger.info(f"No results found for '{name}'")
                 return []
-                
+
             cids = search_data["IdentifierList"]["CID"][:max_results]
-            
+
             results = []
             for cid in cids:
                 try:
@@ -279,7 +287,7 @@ class PubChemClient:
                 except PubChemError as e:
                     logger.warning(f"Failed to get details for CID {cid}: {str(e)}")
                     continue
-            
+
             return results
         except Exception as e:
             logger.error(f"PubChem search failed: {str(e)}")

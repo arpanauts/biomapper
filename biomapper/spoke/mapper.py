@@ -10,6 +10,7 @@ from .client import SPOKEDBClient
 
 class SPOKENodeType(str, Enum):
     """SPOKE node types."""
+
     COMPOUND = "Compound"
     METABOLITE = "Metabolite"
     DRUG = "Drug"
@@ -22,6 +23,7 @@ class SPOKENodeType(str, Enum):
 @dataclass
 class SPOKEMappingResult:
     """Result of mapping an entity to a SPOKE node."""
+
     input_value: str
     spoke_id: Optional[str] = None
     node_type: Optional[SPOKENodeType] = None
@@ -63,10 +65,7 @@ class SPOKEMapper(Generic[T], ABC):
         pass
 
     async def map_entity(
-        self,
-        input_value: str,
-        node_type: Optional[SPOKENodeType] = None,
-        **kwargs: Any
+        self, input_value: str, node_type: Optional[SPOKENodeType] = None, **kwargs: Any
     ) -> SPOKEMappingResult:
         """Map an entity to its SPOKE representation."""
         try:
@@ -111,8 +110,10 @@ class SPOKEMapper(Generic[T], ABC):
     ) -> Optional[SPOKEMappingResult]:
         """Find a SPOKE node using the provided parameters."""
         # Use node_type.value to get the actual collection name
-        collection_name = node_type.value if isinstance(node_type, SPOKENodeType) else str(node_type)
-        
+        collection_name = (
+            node_type.value if isinstance(node_type, SPOKENodeType) else str(node_type)
+        )
+
         query = f"""
         FOR node in {collection_name}
             FILTER {self._build_filter_conditions(query_params)}
@@ -138,8 +139,7 @@ class SPOKEMapper(Generic[T], ABC):
         try:
             # Execute query with keyword args for better test inspection
             result = await self.client.execute_query(
-                query=query,
-                bind_vars={"params": query_params}
+                query=query, bind_vars={"params": query_params}
             )
         except Exception as e:
             # Re-raise so map_entity can catch and store error
@@ -191,14 +191,14 @@ class SPOKEMapper(Generic[T], ABC):
         # Add relationship score (0.01 per relationship, capped at 0.1)
         relationships = node_data.get("relationships", [])
         rel_score = min(0.1, len(relationships) * 0.01)
-        
+
         return min(1.0, base_score + rel_score)
 
     async def map_batch(
         self,
         input_values: List[str],
         node_type: Optional[SPOKENodeType] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> List[SPOKEMappingResult]:
         """Map a batch of entities to SPOKE nodes."""
         results = []

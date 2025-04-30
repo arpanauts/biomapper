@@ -11,7 +11,9 @@ from sqlalchemy import create_engine
 from alembic import context
 
 # Add parent directory to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+)
 
 # Import SQLAlchemy models for the mapping cache
 from biomapper.db.cache_models import Base
@@ -53,7 +55,7 @@ def run_migrations_online():
     and associate a connection with the context.
     """
     # Explicitly get the database URL from the main options in alembic.ini
-    database_url = config.get_main_option('sqlalchemy.url')
+    database_url = config.get_main_option("sqlalchemy.url")
     if not database_url:
         raise ValueError("Database URL not found in alembic.ini")
 
@@ -62,9 +64,9 @@ def run_migrations_online():
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, 
+            connection=connection,
             target_metadata=target_metadata,
-            render_as_batch=True  # Enable batch mode for SQLite
+            render_as_batch=True,  # Enable batch mode for SQLite
         )
 
         with context.begin_transaction():

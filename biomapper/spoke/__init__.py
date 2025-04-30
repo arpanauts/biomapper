@@ -10,10 +10,10 @@ from .client import SPOKEDBClient, SPOKEConfig, SPOKEError
 from .mapper import SPOKEMapper, SPOKENodeType, SPOKEMappingResult
 
 __all__ = [
-    'SPOKEDBClient',
-    'SPOKEConfig',
-    'SPOKEError',
-    'SPOKEMapper',
-    'SPOKENodeType',
-    'SPOKEMappingResult',
+    "SPOKEDBClient",
+    "SPOKEConfig",
+    "SPOKEError",
+    "SPOKEMapper",
+    "SPOKENodeType",
+    "SPOKEMappingResult",
 ]

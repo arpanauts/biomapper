@@ -111,7 +111,7 @@ class TestMetaboAnalystClient:
         """Test API error handling."""
         client = MetaboAnalystClient()
         url = f"{client.config.base_url}/mapcompounds"
-        
+
         # Mock API error response
         error_response = {"error": "Invalid input format"}
         requests_mock.post(url, json=error_response, status_code=400)
@@ -120,11 +120,13 @@ class TestMetaboAnalystClient:
         with pytest.raises(MetaboAnalystError, match="API request failed"):
             client.map_compounds(["glucose"])
 
-    def test_map_compounds_http_error(self, requests_mock: requests_mock.Mocker) -> None:
+    def test_map_compounds_http_error(
+        self, requests_mock: requests_mock.Mocker
+    ) -> None:
         """Test HTTP error handling."""
         client = MetaboAnalystClient()
         url = f"{client.config.base_url}/mapcompounds"
-        
+
         # Mock server error
         requests_mock.post(url, status_code=500)
 
@@ -132,18 +134,20 @@ class TestMetaboAnalystClient:
         with pytest.raises(MetaboAnalystError, match="API request failed"):
             client.map_compounds(["glucose"])
 
-    def test_map_compounds_unexpected_response(self, requests_mock: requests_mock.Mocker) -> None:
+    def test_map_compounds_unexpected_response(
+        self, requests_mock: requests_mock.Mocker
+    ) -> None:
         """Test handling of unexpected API response format."""
         client = MetaboAnalystClient()
         url = f"{client.config.base_url}/mapcompounds"
-        
+
         # Mock unexpected response format
         unexpected_response = {"unexpected_field": "value"}
         requests_mock.post(url, json=unexpected_response)
 
         # Call the client method - should handle gracefully
         results = client.map_compounds(["glucose"])
-        
+
         # Should return non-matched result
         assert len(results) == 1
         assert results[0].input_id == "glucose"

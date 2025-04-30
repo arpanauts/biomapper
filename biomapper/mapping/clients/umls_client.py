@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
+
 class UMLSClient:
     """
     Client for interacting with the UMLS Terminology Services (UTS) API.
@@ -21,9 +22,9 @@ class UMLSClient:
     DEFAULT_CONFIG = {
         "base_url": "https://uts-ws.nlm.nih.gov/rest",
         "version": "current",
-        "api_key": None, # MUST be provided in config
+        "api_key": None,  # MUST be provided in config
         "timeout": 60,
-        "auth_endpoint": "https://utslogin.nlm.nih.gov/cas/v1/api-key"
+        "auth_endpoint": "https://utslogin.nlm.nih.gov/cas/v1/api-key",
     }
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -36,14 +37,14 @@ class UMLSClient:
 
         self.session = requests.Session()
         # TODO: Implement robust session management and authentication (TGT/Service Tickets)
-        self.tgt = self._get_ticket_granting_ticket() # Placeholder
+        self.tgt = self._get_ticket_granting_ticket()  # Placeholder
 
     def _get_ticket_granting_ticket(self) -> Optional[str]:
         """Authenticates with the UMLS API key to get a Ticket-Granting Ticket (TGT)."""
         # Placeholder implementation - Requires parsing HTML or specific auth flow
         # See: https://documentation.uts.nlm.nih.gov/rest/authentication.html
-        params = {'apikey': self.config['api_key']}
-        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        params = {"apikey": self.config["api_key"]}
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
         try:
             # This needs proper implementation - the example below is conceptual
             # response = self.session.post(self.config['auth_endpoint'], data=params, headers=headers)
@@ -52,7 +53,7 @@ class UMLSClient:
             # logger.info("Successfully obtained UMLS TGT.")
             # return tgt
             logger.warning("UMLS TGT retrieval is not fully implemented.")
-            return "dummy-tgt" # Return a dummy value for now
+            return "dummy-tgt"  # Return a dummy value for now
         except requests.exceptions.RequestException as e:
             logger.error(f"Error obtaining UMLS TGT: {e}")
             return None
@@ -64,8 +65,8 @@ class UMLSClient:
         """Gets a single-use Service Ticket (ST) using the TGT."""
         # Placeholder implementation
         # See: https://documentation.uts.nlm.nih.gov/rest/authentication.html
-        params = {'service': self.config['base_url']}
-        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        params = {"service": self.config["base_url"]}
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
         auth_url_with_tgt = f"{self.config['auth_endpoint']}/{tgt}"
         try:
             # response = self.session.post(auth_url_with_tgt, data=params, headers=headers)
@@ -74,14 +75,19 @@ class UMLSClient:
             # logger.debug("Successfully obtained UMLS Service Ticket.")
             # return service_ticket
             logger.warning("UMLS Service Ticket retrieval is not fully implemented.")
-            return "dummy-st" # Return a dummy value for now
+            return "dummy-st"  # Return a dummy value for now
         except requests.exceptions.RequestException as e:
             logger.error(f"Error obtaining UMLS Service Ticket: {e}")
             return None
 
-    def search_term(self, term: str, search_type: str = 'exact', 
-                      input_type: str = 'string', result_type: str = 'CUI', 
-                      page_size: int = 10) -> Optional[List[Dict[str, Any]]]:
+    def search_term(
+        self,
+        term: str,
+        search_type: str = "exact",
+        input_type: str = "string",
+        result_type: str = "CUI",
+        page_size: int = 10,
+    ) -> Optional[List[Dict[str, Any]]]:
         """
         Searches the UMLS Metathesaurus for a given term.
 
@@ -106,36 +112,48 @@ class UMLSClient:
 
         search_url = f"{self.config['base_url']}/search/{self.config['version']}"
         params = {
-            'string': term,
-            'inputType': input_type,
-            'searchType': search_type,
-            'resultType': result_type,
-            'pageSize': page_size,
-            'ticket': service_ticket
+            "string": term,
+            "inputType": input_type,
+            "searchType": search_type,
+            "resultType": result_type,
+            "pageSize": page_size,
+            "ticket": service_ticket,
         }
 
         try:
             logger.debug(f"Querying UMLS Search API: {search_url} with term: {term}")
-            response = self.session.get(search_url, params=params, timeout=self.config['timeout'])
+            response = self.session.get(
+                search_url, params=params, timeout=self.config["timeout"]
+            )
             response.raise_for_status()
             results = response.json()
 
             # The actual results are nested under 'result' -> 'results'
-            if results and 'result' in results and 'results' in results['result']:
-                search_results = results['result']['results']
-                logger.info(f"Found {len(search_results)} UMLS results for term '{term}'.")
-                return search_results # List of dicts, e.g., [{'ui': 'C0003733', 'name': 'Aspirin'}, ...]
+            if results and "result" in results and "results" in results["result"]:
+                search_results = results["result"]["results"]
+                logger.info(
+                    f"Found {len(search_results)} UMLS results for term '{term}'."
+                )
+                return search_results  # List of dicts, e.g., [{'ui': 'C0003733', 'name': 'Aspirin'}, ...]
             else:
-                logger.warning(f"No UMLS results found for term '{term}'. Response: {results}")
-                return [] # Return empty list for no results
+                logger.warning(
+                    f"No UMLS results found for term '{term}'. Response: {results}"
+                )
+                return []  # Return empty list for no results
         except requests.exceptions.HTTPError as e:
-             logger.error(f"HTTP error querying UMLS Search API for term '{term}': {e} - Response: {e.response.text}")
-             return None
+            logger.error(
+                f"HTTP error querying UMLS Search API for term '{term}': {e} - Response: {e.response.text}"
+            )
+            return None
         except requests.exceptions.RequestException as e:
-            logger.error(f"Request error querying UMLS Search API for term '{term}': {e}")
+            logger.error(
+                f"Request error querying UMLS Search API for term '{term}': {e}"
+            )
             return None
         except Exception as e:
-            logger.exception(f"Unexpected error querying UMLS Search API for term '{term}': {e}")
+            logger.exception(
+                f"Unexpected error querying UMLS Search API for term '{term}': {e}"
+            )
             return None
 
     def close_session(self):
@@ -143,9 +161,11 @@ class UMLSClient:
         if self.session:
             self.session.close()
 
+
 # Example Usage (Requires API Key in environment variable UMLS_API_KEY)
 if __name__ == "__main__":
     import os
+
     api_key = os.environ.get("UMLS_API_KEY")
     if not api_key:
         print("Please set the UMLS_API_KEY environment variable to run the example.")
@@ -157,10 +177,10 @@ if __name__ == "__main__":
         # Note: Authentication is stubbed, so this will likely fail or use dummy tickets
         test_term = "aspirin"
         print(f"\nSearching for term: {test_term}")
-        results = client.search_term(test_term, search_type='exact')
+        results = client.search_term(test_term, search_type="exact")
         if results is not None:
             print(f"Found {len(results)} results:")
-            for res in results[:5]: # Print top 5
+            for res in results[:5]:  # Print top 5
                 print(f"  CUI: {res.get('ui')}, Name: {res.get('name')}")
         else:
             print("Search failed.")
@@ -171,7 +191,7 @@ if __name__ == "__main__":
         if results_fail is not None and len(results_fail) == 0:
             print("Correctly found no results.")
         elif results_fail is not None:
-             print(f"Found unexpected results: {results_fail}")
+            print(f"Found unexpected results: {results_fail}")
         else:
             print("Search failed.")
 

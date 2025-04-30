@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 # Get database path
-db_path = Path('data/metamapper.db')
+db_path = Path("data/metamapper.db")
 if not db_path.exists():
     print(f"Database file {db_path} not found!")
     sys.exit(1)
@@ -22,19 +22,19 @@ cursor = conn.cursor()
 try:
     # Update the name
     cursor.execute("UPDATE resources SET name = 'RaMP-DB' WHERE name = 'RaMP'")
-    
+
     if cursor.rowcount > 0:
         print(f"Updated resource name from 'RaMP' to 'RaMP-DB'")
     else:
         print("No resource with name 'RaMP' found")
-    
+
     # Commit changes
     conn.commit()
-    
+
     # Verify the change
     cursor.execute("SELECT id, name, description FROM resources WHERE name = 'RaMP-DB'")
     resource = cursor.fetchone()
-    
+
     if resource:
         print(f"Resource ID {resource[0]} is now named '{resource[1]}': {resource[2]}")
 

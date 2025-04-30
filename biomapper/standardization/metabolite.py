@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class MetaboliteClass(Enum):
     """Enum for different types of metabolite measurements."""
+
     SIMPLE = "simple"  # Direct metabolite measurement
     RATIO = "ratio"  # Ratio between two metabolites
     CONCENTRATION = "concentration"  # Concentration in specific matrix/tissue
@@ -29,6 +30,7 @@ class MetaboliteClass(Enum):
 @dataclass
 class Classification:
     """Result of classifying a metabolite name."""
+
     raw_name: str
     measurement_class: MetaboliteClass
     primary_compound: str
@@ -39,6 +41,7 @@ class Classification:
 @dataclass
 class MetaboliteMapping:
     """Result of mapping a metabolite name."""
+
     input_name: str
     compound_class: MetaboliteClass
     primary_compound: Optional[str] = None
@@ -65,50 +68,54 @@ class MetaboliteClassifier:
             r"(.+?)\s*[/]\s*(.+?)\s+ratio",
             r"(.+?)\s+to\s+(.+?)\s+ratio",
         ]
-        
+
         for pattern in ratio_patterns:
             match = re.search(pattern, name, re.IGNORECASE)
             if match:
                 return match.group(1).strip(), match.group(2).strip()
-        
+
         return None, None
 
-    def _check_concentration_patterns(self, name: str) -> Tuple[Optional[str], Optional[str]]:
+    def _check_concentration_patterns(
+        self, name: str
+    ) -> Tuple[Optional[str], Optional[str]]:
         """Check for concentration patterns in metabolite name."""
         concentration_patterns = [
             r"concentration\s+of\s+(.+?)\s+in\s+(.+)",
             r"(.+?)\s+concentration\s+in\s+(.+)",
             r"(.+?)\s+in\s+(.+)",
         ]
-        
+
         for pattern in concentration_patterns:
             match = re.search(pattern, name, re.IGNORECASE)
             if match:
                 primary = match.group(1).strip()
                 secondary = match.group(2).strip()
-                
+
                 # Check if secondary part contains lipoprotein
                 lipo_class, size, leftover = self._extract_lipoprotein_info(secondary)
                 if lipo_class:
                     return None, None  # Let lipoprotein handler take care of it
-                    
+
                 return primary, secondary
-        
+
         return None, None
 
-    def _check_composite_patterns(self, name: str) -> Tuple[Optional[str], Optional[str]]:
+    def _check_composite_patterns(
+        self, name: str
+    ) -> Tuple[Optional[str], Optional[str]]:
         """Check for composite patterns in metabolite name."""
         composite_patterns = [
             r"(.+?)\s+(?:plus|minus|and)\s+(.+)",
             r"(.+?)\s+(?:\+|\-|\&)\s+(.+)",
         ]
-        
+
         for pattern in composite_patterns:
             match = re.search(pattern, name, re.IGNORECASE)
             if match:
                 # Keep the entire expression as primary compound
                 return name, None
-        
+
         return None, None
 
     def _extract_lipoprotein_info(
@@ -192,11 +199,13 @@ class MetaboliteClassifier:
                 measurement_class=MetaboliteClass.SIMPLE,
                 primary_compound=name_lower,
                 secondary_compound=None,
-                had_total_prefix=False
+                had_total_prefix=False,
             )
 
         # First check if this might be a composite pattern
-        composite_pattern = re.compile(r"\b(?:plus|minus|and|\+|\-|\&)\b", re.IGNORECASE)
+        composite_pattern = re.compile(
+            r"\b(?:plus|minus|and|\+|\-|\&)\b", re.IGNORECASE
+        )
         is_composite_candidate = bool(composite_pattern.search(name_lower))
 
         # Only remove "total" prefix if it's NOT a composite pattern
@@ -214,7 +223,7 @@ class MetaboliteClassifier:
                 measurement_class=MetaboliteClass.RATIO,
                 primary_compound=primary,
                 secondary_compound=secondary,
-                had_total_prefix=had_total_prefix
+                had_total_prefix=had_total_prefix,
             )
 
         # 2. Check concentration patterns
@@ -225,7 +234,7 @@ class MetaboliteClassifier:
                 measurement_class=MetaboliteClass.CONCENTRATION,
                 primary_compound=primary,
                 secondary_compound=secondary,
-                had_total_prefix=had_total_prefix
+                had_total_prefix=had_total_prefix,
             )
 
         # 3. Check composite patterns
@@ -236,7 +245,7 @@ class MetaboliteClassifier:
                 measurement_class=MetaboliteClass.COMPOSITE,
                 primary_compound=primary,
                 secondary_compound=secondary,
-                had_total_prefix=had_total_prefix
+                had_total_prefix=had_total_prefix,
             )
 
         # 4. Check lipoprotein patterns last
@@ -246,22 +255,22 @@ class MetaboliteClassifier:
             # 1. If there's an "in" phrase, extract the part before it
             if " in " in leftover:
                 leftover = leftover.split(" in ")[0]
-            
+
             # 2. Remove any standalone "in" words
             leftover = re.sub(r"\bin\b", "", leftover)
-            
+
             # 3. Clean up any extra whitespace
             leftover = " ".join(leftover.split())
-            
+
             # Combine lipoprotein class with cleaned leftover
             primary = f"{lipo_class.lower()} {leftover}".strip()
-            
+
             return Classification(
                 raw_name=original_name,
                 measurement_class=MetaboliteClass.LIPOPROTEIN,
                 primary_compound=primary,
                 secondary_compound=None,
-                had_total_prefix=had_total_prefix
+                had_total_prefix=had_total_prefix,
             )
 
         # 5. If no patterns match, treat as simple metabolite
@@ -270,7 +279,7 @@ class MetaboliteClassifier:
             measurement_class=MetaboliteClass.SIMPLE,
             primary_compound=name_lower,
             secondary_compound=None,
-            had_total_prefix=had_total_prefix
+            had_total_prefix=had_total_prefix,
         )
 
 
@@ -300,25 +309,33 @@ class MetaboliteNameMapper:
 
                 refmet_name = refmet_result.get("name")
                 inchikey = refmet_result.get("inchikey")
-                pubchem_id = refmet_result.get("pubchem_id")  # Extract PubChem ID from RefMet
+                pubchem_id = refmet_result.get(
+                    "pubchem_id"
+                )  # Extract PubChem ID from RefMet
                 chebi_id = refmet_result.get("chebi_id")
-                
+
                 if chebi_id and not chebi_id.startswith("CHEBI:"):
                     chebi_id = f"CHEBI:{chebi_id}"
 
                 # Get additional IDs from UniChem if we have an InChIKey
                 if inchikey:
                     try:
-                        unichem_result = self.unichem_client.get_compound_info_by_src_id(
-                            inchikey, "inchikey"
+                        unichem_result = (
+                            self.unichem_client.get_compound_info_by_src_id(
+                                inchikey, "inchikey"
+                            )
                         )
                         if unichem_result:
                             chebi_ids = unichem_result.get("chebi_ids", [])
-                            if chebi_ids and not chebi_id:  # Only use if we don't have one from RefMet
+                            if (
+                                chebi_ids and not chebi_id
+                            ):  # Only use if we don't have one from RefMet
                                 chebi_id = f"CHEBI:{chebi_ids[0]}"
 
                             pubchem_ids = unichem_result.get("pubchem_ids", [])
-                            if pubchem_ids and not pubchem_id:  # Only use if we don't have one from RefMet
+                            if (
+                                pubchem_ids and not pubchem_id
+                            ):  # Only use if we don't have one from RefMet
                                 pubchem_id = pubchem_ids[0]
                     except Exception as e:
                         logger.warning(f"UniChem mapping failed for '{name}': {str(e)}")
@@ -333,7 +350,7 @@ class MetaboliteNameMapper:
                     chebi_id=chebi_id,
                     pubchem_id=pubchem_id,
                     inchikey=inchikey,
-                    mapping_source="RefMet"
+                    mapping_source="RefMet",
                 )
 
         except Exception as e:
@@ -352,7 +369,7 @@ class MetaboliteNameMapper:
                     chebi_id=result.chebi_id,
                     chebi_name=result.name,
                     inchikey=result.inchikey,
-                    mapping_source="ChEBI"
+                    mapping_source="ChEBI",
                 )
         except Exception as e:
             logger.warning(f"ChEBI mapping failed for '{name}': {str(e)}")
@@ -366,7 +383,9 @@ class MetaboliteNameMapper:
         )
 
     def map_from_names(
-        self, names: List[str], progress_callback: Optional[Callable[[int, int], None]] = None
+        self,
+        names: List[str],
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> List[MetaboliteMapping]:
         """Map a list of metabolite names to standardized identifiers.
 
@@ -454,9 +473,15 @@ class MetaboliteNameMapper:
         print("=" * 50)
         print("\nOverall Statistics:")
         print(f"Total terms processed: {total}")
-        print(f"Successfully mapped: {summary['mapped_any']} ({summary['mapped_any']/total*100:.1f}%)")
-        print(f"Mapped to RefMet: {summary['mapped_refmet']} ({summary['mapped_refmet']/total*100:.1f}%)")
-        print(f"Mapped to ChEBI: {summary['mapped_chebi']} ({summary['mapped_chebi']/total*100:.1f}%)")
+        print(
+            f"Successfully mapped: {summary['mapped_any']} ({summary['mapped_any']/total*100:.1f}%)"
+        )
+        print(
+            f"Mapped to RefMet: {summary['mapped_refmet']} ({summary['mapped_refmet']/total*100:.1f}%)"
+        )
+        print(
+            f"Mapped to ChEBI: {summary['mapped_chebi']} ({summary['mapped_chebi']/total*100:.1f}%)"
+        )
 
         print("\nBy Mapping Source:")
         for source, count in summary["by_source"].items():

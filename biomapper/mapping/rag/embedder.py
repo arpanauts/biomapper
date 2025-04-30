@@ -12,20 +12,18 @@ class ChromaEmbedder(BaseEmbedder):
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
         """Initialize ChromaEmbedder.
-        
+
         Args:
             model_name: Name of the model to use
         """
         try:
-            self.embedder = SentenceTransformerEmbeddingFunction(
-                model_name=model_name
-            )
+            self.embedder = SentenceTransformerEmbeddingFunction(model_name=model_name)
         except Exception as e:
             raise EmbeddingError(f"Failed to initialize embedder: {e}") from e
 
     async def embed_text(self, text: str) -> np.ndarray:
         """Embed text into a vector.
-        
+
         Args:
             text: Text to embed
 
@@ -44,7 +42,7 @@ class ChromaEmbedder(BaseEmbedder):
 
     async def embed_batch(self, texts: List[str]) -> List[np.ndarray]:
         """Embed multiple texts.
-        
+
         Args:
             texts: List of texts to embed
 

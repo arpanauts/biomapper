@@ -77,10 +77,7 @@ def test_mapping_result_post_init() -> None:
     """Test SPOKEMappingResult post initialization handling of None values."""
     # Test that None values are converted to empty dicts
     result = SPOKEMappingResult(
-        input_value="test",
-        properties=None,
-        metadata=None,
-        relationships=None
+        input_value="test", properties=None, metadata=None, relationships=None
     )
     assert result.properties == {}
     assert result.metadata == {}
@@ -91,15 +88,15 @@ def test_mapping_result_post_init() -> None:
 async def test_map_entity_success(mapper: TestMapper, mock_client: AsyncMock) -> None:
     """Test successful entity mapping."""
     # Mock successful query result
-    mock_client.execute_query.return_value = [{
-        "id": "spoke/123",
-        "type": "Compound",
-        "properties": {"name": "test"},
-        "relationships": [
-            {"type": "SIMILAR_TO", "target": "spoke/456"}
-        ],
-        "metadata": {"match_type": "direct"}
-    }]
+    mock_client.execute_query.return_value = [
+        {
+            "id": "spoke/123",
+            "type": "Compound",
+            "properties": {"name": "test"},
+            "relationships": [{"type": "SIMILAR_TO", "target": "spoke/456"}],
+            "metadata": {"match_type": "direct"},
+        }
+    ]
 
     # Test value
     test_input = "test_compound"
@@ -151,16 +148,21 @@ async def test_map_entity_error(mapper: TestMapper, mock_client: AsyncMock) -> N
 @pytest.mark.asyncio
 async def test_map_batch(mapper: TestMapper, mock_client: AsyncMock) -> None:
     """Test batch mapping of multiple entities."""
+
     # Mock different responses for different inputs
-    async def mock_execute_query(query: str, bind_vars: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def mock_execute_query(
+        query: str, bind_vars: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         if "test1" in str(bind_vars):
-            return [{
-                "id": "spoke/1",
-                "type": "Compound",
-                "properties": {"name": "test1"},
-                "relationships": [],
-                "metadata": {"match_type": "direct"}
-            }]
+            return [
+                {
+                    "id": "spoke/1",
+                    "type": "Compound",
+                    "properties": {"name": "test1"},
+                    "relationships": [],
+                    "metadata": {"match_type": "direct"},
+                }
+            ]
         elif "test2" in str(bind_vars):
             return []  # Not found
         else:
@@ -173,22 +175,24 @@ async def test_map_batch(mapper: TestMapper, mock_client: AsyncMock) -> None:
 
     # Verify results
     assert len(results) == 3
-    
+
     # First entity found
     assert results[0].spoke_id == "spoke/1"
     assert results[0].node_type == SPOKENodeType.COMPOUND
-    
+
     # Second entity not found
     assert results[1].spoke_id is None
     assert "failed_attempts" in results[1].metadata
-    
+
     # Third entity errored
     assert results[2].spoke_id is None
     assert "error" in results[2].metadata
 
 
 @pytest.mark.asyncio
-async def test_find_spoke_node_query(mapper: TestMapper, mock_client: AsyncMock) -> None:
+async def test_find_spoke_node_query(
+    mapper: TestMapper, mock_client: AsyncMock
+) -> None:
     """Test SPOKE node query construction."""
     # Set up test parameters
     query_params = {"name": "test", "id": "123"}
@@ -206,28 +210,29 @@ async def test_find_spoke_node_query(mapper: TestMapper, mock_client: AsyncMock)
     assert "FOR node in Compound" in query
     assert "FILTER" in query
     assert "OUTBOUND node._id GRAPH 'spoke'" in query
-    
+
     # Check bind vars
     bind_vars = call_kwargs["bind_vars"]
     assert bind_vars == {"params": query_params}
 
 
 @pytest.mark.asyncio
-async def test_find_spoke_node_success(mapper: TestMapper, mock_client: AsyncMock) -> None:
+async def test_find_spoke_node_success(
+    mapper: TestMapper, mock_client: AsyncMock
+) -> None:
     """Test successful SPOKE node finding."""
     # Mock successful response
-    mock_client.execute_query.return_value = [{
-        "id": "spoke/123",
-        "type": "Compound",
-        "properties": {"name": "test"},
-        "relationships": [{"type": "SIMILAR_TO", "target": "spoke/456"}],
-        "metadata": {"match_type": "direct"}
-    }]
+    mock_client.execute_query.return_value = [
+        {
+            "id": "spoke/123",
+            "type": "Compound",
+            "properties": {"name": "test"},
+            "relationships": [{"type": "SIMILAR_TO", "target": "spoke/456"}],
+            "metadata": {"match_type": "direct"},
+        }
+    ]
 
-    result = await mapper._find_spoke_node(
-        {"name": "test"},
-        SPOKENodeType.COMPOUND
-    )
+    result = await mapper._find_spoke_node({"name": "test"}, SPOKENodeType.COMPOUND)
 
     assert result is not None
     assert result.spoke_id == "spoke/123"
@@ -237,25 +242,26 @@ async def test_find_spoke_node_success(mapper: TestMapper, mock_client: AsyncMoc
 
 
 @pytest.mark.asyncio
-async def test_find_spoke_node_with_relationships(mapper: TestMapper, mock_client: AsyncMock) -> None:
+async def test_find_spoke_node_with_relationships(
+    mapper: TestMapper, mock_client: AsyncMock
+) -> None:
     """Test SPOKE node finding with relationship processing."""
     # Mock response with multiple relationships
-    mock_client.execute_query.return_value = [{
-        "id": "spoke/123",
-        "type": "Compound",
-        "properties": {"name": "test"},
-        "relationships": [
-            {"type": "SIMILAR_TO", "target": "spoke/456"},
-            {"type": "SIMILAR_TO", "target": "spoke/789"},
-            {"type": "PART_OF", "target": "spoke/999"}
-        ],
-        "metadata": {"match_type": "direct"}
-    }]
+    mock_client.execute_query.return_value = [
+        {
+            "id": "spoke/123",
+            "type": "Compound",
+            "properties": {"name": "test"},
+            "relationships": [
+                {"type": "SIMILAR_TO", "target": "spoke/456"},
+                {"type": "SIMILAR_TO", "target": "spoke/789"},
+                {"type": "PART_OF", "target": "spoke/999"},
+            ],
+            "metadata": {"match_type": "direct"},
+        }
+    ]
 
-    result = await mapper._find_spoke_node(
-        {"name": "test"},
-        SPOKENodeType.COMPOUND
-    )
+    result = await mapper._find_spoke_node({"name": "test"}, SPOKENodeType.COMPOUND)
 
     assert result is not None
     # Check relationship grouping

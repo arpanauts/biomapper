@@ -1389,7 +1389,7 @@ class MappingExecutor:
                                     source_ontology,
                                     target_ontology,
                                     results=mapped_results,  # Cache only the *newly* mapped results
-                                    mapping_direction=mapping_direction,  # Pass direction
+                                    mapping_direction=effective_direction,  # Use effective direction based on path
                                 )
                             await (
                                 cache_session.commit()

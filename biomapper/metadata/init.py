@@ -18,27 +18,27 @@ def register_default_resources(
     config: Optional[Config] = None,
 ) -> Dict[str, str]:
     """Register default resources in the metadata system.
-    
+
     Args:
         metadata_manager: Resource metadata manager
         config: Configuration object
-        
+
     Returns:
         Dict mapping resource names to their types
     """
     if metadata_manager is None:
         metadata_manager = ResourceMetadataManager()
-    
+
     if config is None:
         config = Config()
-    
+
     registered_resources = {}
-    
+
     # Register SQLite cache
     cache_config = config.get("cache", {})
     cache_data_dir = cache_config.get("data_dir")
     cache_db_name = cache_config.get("db_name")
-    
+
     try:
         metadata_manager.register_resource(
             resource_name="sqlite_cache",
@@ -54,7 +54,7 @@ def register_default_resources(
         logger.info("Registered SQLite cache resource")
     except Exception as e:
         logger.error(f"Failed to register SQLite cache: {e}")
-    
+
     # Register SPOKE knowledge graph
     spoke_config = config.get("spoke", {})
     spoke_host = spoke_config.get("host", "localhost")
@@ -62,7 +62,7 @@ def register_default_resources(
     spoke_db = spoke_config.get("database", "spoke")
     spoke_username = spoke_config.get("username")
     spoke_password = spoke_config.get("password")
-    
+
     try:
         metadata_manager.register_resource(
             resource_name="spoke_graph",
@@ -81,10 +81,10 @@ def register_default_resources(
         logger.info("Registered SPOKE graph resource")
     except Exception as e:
         logger.error(f"Failed to register SPOKE graph: {e}")
-    
+
     # Register external API resources
     api_configs = config.get("api", {})
-    
+
     for api_name, api_config in api_configs.items():
         try:
             metadata_manager.register_resource(
@@ -98,7 +98,7 @@ def register_default_resources(
             logger.info(f"Registered {api_name} API resource")
         except Exception as e:
             logger.error(f"Failed to register {api_name} API: {e}")
-    
+
     return registered_resources
 
 
@@ -107,14 +107,14 @@ def register_ontology_coverage(
     ontology_coverage: Optional[Dict[str, List[Dict]]] = None,
 ) -> None:
     """Register default ontology coverage for resources.
-    
+
     Args:
         metadata_manager: Resource metadata manager
         ontology_coverage: Dictionary of resource name to list of ontology coverages
     """
     if metadata_manager is None:
         metadata_manager = ResourceMetadataManager()
-    
+
     if ontology_coverage is None:
         # Default ontology coverage
         ontology_coverage = {
@@ -137,7 +137,7 @@ def register_ontology_coverage(
                 {"ontology_type": "gene_symbol", "support_level": SupportLevel.FULL},
             ],
         }
-    
+
     for resource_name, coverages in ontology_coverage.items():
         for coverage in coverages:
             try:
@@ -162,30 +162,30 @@ def initialize_metadata_system(
     force_init: bool = False,
 ) -> ResourceMetadataManager:
     """Initialize the resource metadata system.
-    
+
     Args:
         config: Configuration object
         force_init: Whether to force initialization even if tables exist
-        
+
     Returns:
         ResourceMetadataManager instance
     """
     if config is None:
         config = Config()
-    
+
     # Initialize metadata manager
     metadata_config = config.get("metadata", {})
     data_dir = metadata_config.get("data_dir")
     db_name = metadata_config.get("db_name")
-    
+
     metadata_manager = ResourceMetadataManager(data_dir=data_dir, db_name=db_name)
-    
+
     # Check if resources already exist
     resources = metadata_manager.list_resources()
-    
+
     if not resources or force_init:
         # Register default resources
         register_default_resources(metadata_manager, config)
         register_ontology_coverage(metadata_manager)
-    
+
     return metadata_manager

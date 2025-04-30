@@ -155,7 +155,7 @@ async def process_compounds(
         rag_results=rag_results,
         confidence_threshold=confidence_threshold,
     )
-    
+
     # Step 4: SPOKE integration (if enabled)
     spoke_analysis = None
     if enable_spoke and spoke_mapper:
@@ -180,8 +180,7 @@ async def process_compounds(
 
     if spoke_analysis:
         pd.DataFrame(spoke_analysis).to_csv(
-            output_dir / "spoke_analysis.csv", 
-            index=False
+            output_dir / "spoke_analysis.csv", index=False
         )
 
     if llm_insights:
@@ -212,32 +211,35 @@ async def main():
     """Run example workflow with command line arguments."""
     parser = argparse.ArgumentParser(description="Biomapper Complete Workflow Tutorial")
     parser.add_argument(
-        "--input", type=Path, required=True,
-        help="Input file with compound names (one per line)"
+        "--input",
+        type=Path,
+        required=True,
+        help="Input file with compound names (one per line)",
     )
     parser.add_argument(
-        "--output", type=Path, default=Path("results"),
-        help="Output directory for results"
+        "--output",
+        type=Path,
+        default=Path("results"),
+        help="Output directory for results",
     )
     parser.add_argument(
-        "--optimize", action="store_true",
-        help="Enable DSPy optimization for RAG"
+        "--optimize", action="store_true", help="Enable DSPy optimization for RAG"
     )
     parser.add_argument(
-        "--confidence", type=float, default=0.8,
-        help="Confidence threshold for matches (0.0-1.0)"
+        "--confidence",
+        type=float,
+        default=0.8,
+        help="Confidence threshold for matches (0.0-1.0)",
     )
     parser.add_argument(
-        "--disable-spoke", action="store_true",
-        help="Disable SPOKE integration"
+        "--disable-spoke", action="store_true", help="Disable SPOKE integration"
     )
     parser.add_argument(
-        "--disable-llm", action="store_true",
-        help="Disable LLM analysis"
+        "--disable-llm", action="store_true", help="Disable LLM analysis"
     )
 
     args = parser.parse_args()
-    
+
     compounds = load_compounds(args.input)
     results = await process_compounds(
         compounds,
@@ -253,6 +255,7 @@ async def main():
         logger.info(f"  {key}: {value}")
 
     logger.info(f"\nResults saved to: {args.output}/")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

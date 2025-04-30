@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 class FileUploadResponse(BaseModel):
     """Response model for file upload."""
+
     session_id: str
     filename: str
     created_at: datetime
@@ -18,12 +19,14 @@ class FileUploadResponse(BaseModel):
 
 class ColumnsResponse(BaseModel):
     """Response model for column retrieval."""
+
     columns: List[str]
     column_types: Optional[Dict[str, str]] = None
-    
-    
+
+
 class CSVPreviewResponse(BaseModel):
     """Response model for CSV preview."""
+
     columns: List[str]
     rows: List[Dict[str, Any]]
     total_rows: int

@@ -16,11 +16,9 @@ from biomapper.core.base_spoke import (
 
 class MockSPOKEMapper(BaseSPOKEMapper):
     """Test implementation of BaseSPOKEMapper."""
-    
+
     async def map_to_spoke(
-        self,
-        entities: List[str],
-        entity_type: str = None
+        self, entities: List[str], entity_type: str = None
     ) -> SPOKEMappingResult:
         mapped = [
             SPOKEEntity(
@@ -29,23 +27,20 @@ class MockSPOKEMapper(BaseSPOKEMapper):
                 node_type="Compound",
                 node_label=f"Test {entity}",
                 properties={},
-                confidence=1.0
+                confidence=1.0,
             )
             for entity in entities[:2]  # Map first 2 entities
         ]
         return SPOKEMappingResult(
             mapped_entities=mapped,
             unmapped_entities=entities[2:],
-            mapping_sources={"test"}
+            mapping_sources={"test"},
         )
 
-    async def analyze_pathways(
-        self,
-        entities: List[SPOKEEntity]
-    ) -> Dict[str, Any]:
+    async def analyze_pathways(self, entities: List[SPOKEEntity]) -> Dict[str, Any]:
         return {
             "pathways": ["Test Pathway"],
-            "enrichment_scores": {"Test Pathway": 0.8}
+            "enrichment_scores": {"Test Pathway": 0.8},
         }
 
 
@@ -53,10 +48,7 @@ class MockSPOKEMapper(BaseSPOKEMapper):
 def spoke_config() -> SPOKEConfig:
     """Fixture for test SPOKE configuration."""
     return SPOKEConfig(
-        base_url="https://test.spoke.db",
-        timeout=30,
-        max_retries=3,
-        backoff_factor=0.5
+        base_url="https://test.spoke.db", timeout=30, max_retries=3, backoff_factor=0.5
     )
 
 
@@ -70,7 +62,7 @@ def spoke_entity_data() -> Dict[str, Any]:
         "node_label": "Test Compound",
         "properties": {"formula": "C6H12O6"},
         "confidence": 0.95,
-        "source": "direct"
+        "source": "direct",
     }
 
 
@@ -82,7 +74,7 @@ def spoke_relation_data() -> Dict[str, Any]:
         "target_id": "SPOKE:456",
         "relation_type": "PARTICIPATES_IN",
         "properties": {"score": 0.8},
-        "confidence": 0.9
+        "confidence": 0.9,
     }
 
 
@@ -93,13 +85,13 @@ def aql_query_data() -> Dict[str, Any]:
         "query_text": "FOR c IN Compound RETURN c",
         "parameters": {"limit": 10},
         "expected_node_types": ["Compound"],
-        "metadata": {"purpose": "test"}
+        "metadata": {"purpose": "test"},
     }
 
 
 class TestSPOKEConfig:
     """Tests for SPOKEConfig."""
-    
+
     def test_valid_config(self, spoke_config):
         """Test valid configuration creation."""
         assert spoke_config.base_url == "https://test.spoke.db"
@@ -127,7 +119,7 @@ class TestSPOKEConfig:
 
 class TestSPOKEEntity:
     """Tests for SPOKEEntity."""
-    
+
     def test_valid_entity(self, spoke_entity_data):
         """Test valid entity creation."""
         entity = SPOKEEntity(**spoke_entity_data)
@@ -153,10 +145,7 @@ class TestSPOKEEntity:
     def test_default_values(self):
         """Test entity default values."""
         entity = SPOKEEntity(
-            input_id="test",
-            spoke_id="test",
-            node_type="Compound",
-            node_label="test"
+            input_id="test", spoke_id="test", node_type="Compound", node_label="test"
         )
         assert entity.confidence == 1.0
         assert entity.properties == {}
@@ -165,7 +154,7 @@ class TestSPOKEEntity:
 
 class TestSPOKERelation:
     """Tests for SPOKERelation."""
-    
+
     def test_valid_relation(self, spoke_relation_data):
         """Test valid relation creation."""
         relation = SPOKERelation(**spoke_relation_data)
@@ -183,16 +172,14 @@ class TestSPOKERelation:
     def test_default_confidence(self):
         """Test default confidence value."""
         relation = SPOKERelation(
-            source_id="test",
-            target_id="test",
-            relation_type="test"
+            source_id="test", target_id="test", relation_type="test"
         )
         assert relation.confidence == 1.0
 
 
 class TestAQLQuery:
     """Tests for AQLQuery."""
-    
+
     def test_valid_query(self, aql_query_data):
         """Test valid query creation."""
         query = AQLQuery(**aql_query_data)
@@ -217,7 +204,7 @@ class TestSPOKEMappingResult:
         result = SPOKEMappingResult(
             mapped_entities=[entity],
             unmapped_entities=["TEST:789"],
-            mapping_sources={"direct", "inferred"}
+            mapping_sources={"direct", "inferred"},
         )
         assert len(result.mapped_entities) == 1
         assert len(result.unmapped_entities) == 1
@@ -231,11 +218,11 @@ class TestSPOKEMappingResult:
                     input_id="test1",
                     spoke_id="test1",
                     node_type="Compound",
-                    node_label="test1"
+                    node_label="test1",
                 )
             ],
             unmapped_entities=["test2"],
-            mapping_sources={"test"}
+            mapping_sources={"test"},
         )
         assert result.mapping_rate == 0.5
 
@@ -250,14 +237,14 @@ class TestSPOKEMappingResult:
 
 class TestBaseSPOKEMapper:
     """Tests for BaseSPOKEMapper."""
-    
+
     @pytest.mark.asyncio
     async def test_mock_mapper(self):
         """Test mock implementation of BaseSPOKEMapper."""
         mapper = MockSPOKEMapper()
         entities = ["TEST1", "TEST2", "TEST3"]
         result = await mapper.map_to_spoke(entities)
-        
+
         assert isinstance(result, SPOKEMappingResult)
         assert len(result.mapped_entities) == 2
         assert len(result.unmapped_entities) == 1
@@ -273,11 +260,11 @@ class TestBaseSPOKEMapper:
                 input_id="test",
                 spoke_id="test",
                 node_type="Compound",
-                node_label="test"
+                node_label="test",
             )
         ]
         result = await mapper.analyze_pathways(entities)
-        
+
         assert "pathways" in result
         assert "enrichment_scores" in result
         assert result["pathways"] == ["Test Pathway"]

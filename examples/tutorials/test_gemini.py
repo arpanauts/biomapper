@@ -8,14 +8,14 @@ load_dotenv()
 # Test prompt
 prompt = {
     "model": "gemini-pro",
-    "messages": [{"content": "What is Phenomics according to Lee Hood?"}]
+    "messages": [{"content": "What is Phenomics according to Lee Hood?"}],
 }
 
 # Make API call
 r = requests.post(
     os.getenv("GEMINI_API_URL"),
     headers={"Authorization": f"Bearer {os.getenv('GEMINI_API_KEY')}"},
-    json=prompt
+    json=prompt,
 )
 
 print(f"Status code: {r.status_code}")

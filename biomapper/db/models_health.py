@@ -5,7 +5,16 @@ import json
 from typing import Any, Dict, List, Optional, Union
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -34,8 +43,13 @@ class EndpointPropertyHealth(Base):
     __table_args__ = (
         # Foreign key constraint is commented out until we ensure the table exists
         # ForeignKey('endpoint_property_configs.endpoint_id', 'endpoint_property_configs.ontology_type', 'endpoint_property_configs.property_name'),
-        UniqueConstraint('endpoint_id', 'ontology_type', 'property_name', name='uix_endpoint_property_health'),
-        Index('idx_endpoint_health', 'endpoint_id'),
+        UniqueConstraint(
+            "endpoint_id",
+            "ontology_type",
+            "property_name",
+            name="uix_endpoint_property_health",
+        ),
+        Index("idx_endpoint_health", "endpoint_id"),
     )
 
     def __repr__(self) -> str:
@@ -72,12 +86,18 @@ class EndpointPropertyHealth(Base):
             "extraction_success_count": self.extraction_success_count,
             "extraction_failure_count": self.extraction_failure_count,
             "success_rate": self.success_rate,
-            "last_success_time": self.last_success_time.isoformat() if self.last_success_time else None,
-            "last_failure_time": self.last_failure_time.isoformat() if self.last_failure_time else None,
+            "last_success_time": self.last_success_time.isoformat()
+            if self.last_success_time
+            else None,
+            "last_failure_time": self.last_failure_time.isoformat()
+            if self.last_failure_time
+            else None,
             "avg_extraction_time_ms": self.avg_extraction_time_ms,
             "error_types": self.error_types_list,
             "sample_size": self.sample_size,
-            "last_updated": self.last_updated.isoformat() if self.last_updated else None
+            "last_updated": self.last_updated.isoformat()
+            if self.last_updated
+            else None,
         }
 
 
@@ -123,5 +143,5 @@ class HealthCheckLog(Base):
             "failure_count": self.failure_count,
             "duration_ms": self.duration_ms,
             "status": self.status,
-            "details": self.details_dict
+            "details": self.details_dict,
         }

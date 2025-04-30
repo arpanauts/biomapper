@@ -241,6 +241,7 @@ async def main(log_level_str: str):  # Pass log level to main
                 use_cache=True,
                 max_cache_age_days=None,
                 mapping_direction="reverse",
+                try_reverse_mapping=True,  # Enable bidirectional search for reverse mapping
             )
             logger.info(f"Got REVERSE mapping response with {len(reverse_mapping_results)} entries")
             reverse_successful = sum(1 for v in reverse_mapping_results.values() if v and v != "NO_MAPPING_FOUND")
@@ -264,7 +265,9 @@ async def main(log_level_str: str):  # Pass log level to main
             target_endpoint_name=TARGET_ENDPOINT_NAME,  
             input_identifiers=source_identifiers,
             source_property_name="PrimaryIdentifier",  
-            target_property_name="PrimaryIdentifier",  
+            target_property_name="PrimaryIdentifier",
+            mapping_direction="forward",
+            try_reverse_mapping=False,  # Don't try reverse for forward mapping
         )
 
     except Exception as e:

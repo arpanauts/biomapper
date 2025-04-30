@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 class ArangoNode(BaseModel):
     """Base model for an ArangoDB node."""
+
     id: str
     type: str
     name: str
@@ -16,6 +17,7 @@ class ArangoNode(BaseModel):
 
 class ArangoEdge(BaseModel):
     """Base model for an ArangoDB edge."""
+
     source_id: str
     target_id: str
     type: str
@@ -24,6 +26,7 @@ class ArangoEdge(BaseModel):
 
 class ArangoQuery(BaseModel):
     """Model for ArangoDB graph queries."""
+
     start_node_type: str
     end_node_type: str
     relationship_types: Optional[List[str]] = None
@@ -33,6 +36,7 @@ class ArangoQuery(BaseModel):
 
 class ArangoResult(BaseModel):
     """Model for ArangoDB query results."""
+
     nodes: List[ArangoNode]
     edges: List[ArangoEdge]
     paths: List[List[str]]  # List of node IDs representing paths
@@ -54,7 +58,7 @@ class BaseArango(ABC):
     @abstractmethod
     async def get_node(self, node_id: str) -> Optional[ArangoNode]:
         """Get a node by its ID.
-        
+
         Args:
             node_id: ID of the node to retrieve
 
@@ -65,13 +69,10 @@ class BaseArango(ABC):
 
     @abstractmethod
     async def get_node_by_property(
-        self,
-        node_type: str,
-        property_name: str,
-        property_value: Any
+        self, node_type: str, property_name: str, property_value: Any
     ) -> Optional[ArangoNode]:
         """Get a node by a property value.
-        
+
         Args:
             node_type: Type of node to search for
             property_name: Name of the property to match
@@ -90,7 +91,7 @@ class BaseArango(ABC):
         node_types: Optional[List[str]] = None,
     ) -> List[Tuple[ArangoEdge, ArangoNode]]:
         """Get neighbors of a node.
-        
+
         Args:
             node_id: ID of the node to get neighbors for
             edge_types: Optional list of edge types to filter by
@@ -107,7 +108,7 @@ class BaseArango(ABC):
         query: ArangoQuery,
     ) -> ArangoResult:
         """Find paths between node types matching the query.
-        
+
         Args:
             query: Query parameters including start/end node types and constraints
 
@@ -134,7 +135,7 @@ class BaseArango(ABC):
         """
         pass
 
-    async def __aenter__(self) -> 'BaseArango':
+    async def __aenter__(self) -> "BaseArango":
         """Async context manager entry."""
         await self.connect()
         return self

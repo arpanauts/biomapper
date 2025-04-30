@@ -20,8 +20,7 @@ from biomapper.mapping.health import PropertyHealthTracker
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -40,17 +39,17 @@ def metamapper_cli():
 def create_relationship(name, description, source, target):
     """Create a relationship between endpoints."""
     db_session = get_session()
-    
+
     try:
         # Insert relationship
         result = db_session.execute(
             """INSERT INTO endpoint_relationships (name, description, created_at)
                VALUES (:name, :description, CURRENT_TIMESTAMP)
                RETURNING relationship_id""",
-            {"name": name, "description": description or f"Maps {source} to {target}"}
+            {"name": name, "description": description or f"Maps {source} to {target}"},
         )
         relationship_id = result.fetchone()[0]
-        
+
         # Add endpoints as members
         db_session.execute(
             """INSERT INTO endpoint_relationship_members 
@@ -60,10 +59,10 @@ def create_relationship(name, description, source, target):
                 "relationship_id": relationship_id,
                 "endpoint_id": source,
                 "role": "source",
-                "priority": 1
-            }
+                "priority": 1,
+            },
         )
-        
+
         db_session.execute(
             """INSERT INTO endpoint_relationship_members 
                (relationship_id, endpoint_id, role, priority)
@@ -72,15 +71,15 @@ def create_relationship(name, description, source, target):
                 "relationship_id": relationship_id,
                 "endpoint_id": target,
                 "role": "target",
-                "priority": 1
-            }
+                "priority": 1,
+            },
         )
-        
+
         db_session.commit()
-        
+
         click.echo(f"Created relationship '{name}' with ID {relationship_id}")
         click.echo(f"Added endpoints {source} (source) and {target} (target)")
-        
+
     except Exception as e:
         db_session.rollback()
         click.echo(f"Error creating relationship: {e}")
@@ -92,7 +91,7 @@ def create_relationship(name, description, source, target):
 def list_relationships():
     """List all endpoint relationships."""
     db_session = get_session()
-    
+
     try:
         # Get relationships
         relationships = db_session.execute(
@@ -103,18 +102,20 @@ def list_relationships():
                GROUP BY r.relationship_id
                ORDER BY r.relationship_id"""
         ).fetchall()
-        
+
         if not relationships:
             click.echo("No relationships found")
             return
-            
+
         click.echo("\nEndpoint Relationships:\n")
         click.echo(f"{'ID':<5} {'Name':<30} {'Members':<10} {'Created':<20}")
         click.echo("-" * 70)
-        
+
         for r in relationships:
-            click.echo(f"{r.relationship_id:<5} {r.name:<30} {r.member_count:<10} {r.created_at}")
-            
+            click.echo(
+                f"{r.relationship_id:<5} {r.name:<30} {r.member_count:<10} {r.created_at}"
+            )
+
             # Get members
             members = db_session.execute(
                 """SELECT m.*, e.name as endpoint_name
@@ -122,14 +123,16 @@ def list_relationships():
                    JOIN endpoints e ON m.endpoint_id = e.endpoint_id
                    WHERE m.relationship_id = :relationship_id
                    ORDER BY m.role""",
-                {"relationship_id": r.relationship_id}
+                {"relationship_id": r.relationship_id},
             ).fetchall()
-            
+
             for m in members:
-                click.echo(f"    - {m.endpoint_name} (ID: {m.endpoint_id}, Role: {m.role})")
-                
+                click.echo(
+                    f"    - {m.endpoint_name} (ID: {m.endpoint_id}, Role: {m.role})"
+                )
+
             click.echo("")
-            
+
     except Exception as e:
         click.echo(f"Error listing relationships: {e}")
     finally:
@@ -141,33 +144,35 @@ def list_relationships():
 @click.option("--force", is_flag=True, help="Force rediscovery of paths")
 def discover_paths(relationship: int, force: bool = False):
     """Discover mapping paths between endpoints for a relationship."""
-    
+
     async def _discover_paths():
         async with await get_session() as session:
             pathfinder = RelationshipPathFinder(session)
-            paths = await pathfinder.discover_relationship_paths(relationship, force_rediscover=force)
-            
+            paths = await pathfinder.discover_relationship_paths(
+                relationship, force_rediscover=force
+            )
+
             if not paths:
                 click.echo("No paths discovered")
                 return
-            
+
             click.echo(f"Discovered {len(paths)} mapping paths:")
             for path in paths:
                 click.echo(f"  {path['source_ontology']} -> {path['target_ontology']}")
-                
+
                 # Get full mapping path details
                 full_path = await pathfinder.get_best_mapping_path(
-                    relationship,
-                    path['source_ontology'],
-                    path['target_ontology']
+                    relationship, path["source_ontology"], path["target_ontology"]
                 )
-                
+
                 if full_path and "path_steps" in full_path:
                     steps = full_path["path_steps"]
                     click.echo(f"    Steps: {len(steps)}")
                     for i, step in enumerate(steps):
-                        click.echo(f"      Step {i+1}: Resource: {step.get('resource')}")
-    
+                        click.echo(
+                            f"      Step {i+1}: Resource: {step.get('resource')}"
+                        )
+
     asyncio.run(_discover_paths())
 
 
@@ -182,30 +187,30 @@ def map_value(
     value: str,
     source_type: str,
     target_type: str,
-    force: bool = False
+    force: bool = False,
 ):
     """Map a value using a relationship path."""
-    click.echo(f"Mapping {value} ({source_type} -> {target_type}) for relationship {relationship}")
-    
+    click.echo(
+        f"Mapping {value} ({source_type} -> {target_type}) for relationship {relationship}"
+    )
+
     async def _map_value():
         async with await get_session() as session:
             mapper = RelationshipMappingExecutor(session)
             results = await mapper.map_with_relationship(
-                relationship,
-                value,
-                source_type,
-                target_type,
-                force_refresh=force
+                relationship, value, source_type, target_type, force_refresh=force
             )
-            
+
             if not results:
                 click.echo("No mapping results found")
                 return
-            
+
             click.echo(f"Found {len(results)} mapping results:")
             for result in results:
-                click.echo(f"  {result['target_id']} ({result['target_type']}) [confidence: {result['confidence']}]")
-    
+                click.echo(
+                    f"  {result['target_id']} ({result['target_type']}) [confidence: {result['confidence']}]"
+                )
+
     asyncio.run(_map_value())
 
 
@@ -213,25 +218,21 @@ def map_value(
 @click.option("--relationship", required=True, help="Relationship ID", type=int)
 @click.option("--value", required=True, help="Source value to map")
 @click.option("--force", is_flag=True, help="Force refresh, bypass cache")
-def map_endpoint_value(
-    relationship: int,
-    value: str,
-    force: bool = False
-):
+def map_endpoint_value(relationship: int, value: str, force: bool = False):
     """Map a value from source endpoint to target endpoint using a relationship."""
     click.echo(f"Mapping {value} between endpoints for relationship {relationship}")
-    
+
     async def _map_endpoint_value():
         async with await get_session() as session:
             pathfinder = RelationshipPathFinder(session)
             mapper = RelationshipMappingExecutor(session, pathfinder)
-            
+
             # Get relationship details
             relationship_info = await pathfinder.get_relationship_by_id(relationship)
             if not relationship_info:
                 click.echo(f"Relationship {relationship} not found")
                 return
-            
+
             # Get source and target endpoint IDs from relationship
             stmt = """
                 SELECT 
@@ -243,31 +244,35 @@ def map_endpoint_value(
             """
             result = await session.execute(stmt, {"relationship_id": relationship})
             rel_data = result.fetchone()
-            
+
             if not rel_data:
-                click.echo(f"Relationship {relationship} not found or missing endpoint data")
+                click.echo(
+                    f"Relationship {relationship} not found or missing endpoint data"
+                )
                 return
-            
+
             source_endpoint_id = rel_data.source_endpoint_id
             target_endpoint_id = rel_data.target_endpoint_id
-            
+
             # Execute the mapping
             results = await mapper.map_endpoint_value(
                 relationship,
                 value,
                 source_endpoint_id,
                 target_endpoint_id,
-                force_refresh=force
+                force_refresh=force,
             )
-            
+
             if not results:
                 click.echo("No mapping results found")
                 return
-            
+
             click.echo(f"Found {len(results)} mapping results:")
             for result in results:
-                click.echo(f"  {result['source_id']} ({result['source_type']}) -> {result['target_id']} ({result['target_type']}) [confidence: {result['confidence']}]")
-    
+                click.echo(
+                    f"  {result['source_id']} ({result['source_type']}) -> {result['target_id']} ({result['target_type']}) [confidence: {result['confidence']}]"
+                )
+
     asyncio.run(_map_endpoint_value())
 
 
@@ -280,24 +285,28 @@ def check_cache(
     source_id: str,
     source_type: str,
     target_type: str,
-    relationship: Optional[int] = None
+    relationship: Optional[int] = None,
 ):
     """Check cache for existing mappings."""
     click.echo(f"Checking cache for {source_id} ({source_type} -> {target_type})")
-    
+
     async def _check_cache():
         async with await get_session() as session:
             mapper = RelationshipMappingExecutor(session)
-            results = await mapper.check_cache(source_id, source_type, target_type, relationship)
-            
+            results = await mapper.check_cache(
+                source_id, source_type, target_type, relationship
+            )
+
             if not results:
                 click.echo("No cached mappings found")
                 return
-            
+
             click.echo(f"Found {len(results)} cached mappings:")
             for result in results:
-                click.echo(f"  {result['target_id']} ({result['target_type']}) [confidence: {result['confidence']}]")
-    
+                click.echo(
+                    f"  {result['target_id']} ({result['target_type']}) [confidence: {result['confidence']}]"
+                )
+
     asyncio.run(_check_cache())
 
 

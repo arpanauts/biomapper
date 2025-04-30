@@ -6,7 +6,11 @@ from unittest.mock import Mock, patch
 from chromadb.api.types import QueryResult
 from chromadb import Settings as ChromaSettings
 
-from biomapper.mapping.rag.chroma import ChromaVectorStore, ChromaDocument, RetrievalError
+from biomapper.mapping.rag.chroma import (
+    ChromaVectorStore,
+    ChromaDocument,
+    RetrievalError,
+)
 from biomapper.schemas.store_schema import VectorStoreConfig
 
 
@@ -86,7 +90,9 @@ async def test_add_documents_no_embeddings(store):
             embedding=None,
         )
     ]
-    with pytest.raises(ValueError, match="Cannot add documents with missing embeddings"):
+    with pytest.raises(
+        ValueError, match="Cannot add documents with missing embeddings"
+    ):
         await store.add_documents(docs)
 
 

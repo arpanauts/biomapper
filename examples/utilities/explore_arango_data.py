@@ -3,16 +3,13 @@
 from pyArango.connection import Connection
 import json
 
+
 def main():
     """Main function to explore data."""
     # Connect to ArangoDB
-    conn = Connection(
-        username="root",
-        password="ph",
-        arangoURL="http://localhost:8529"
-    )
+    conn = Connection(username="root", password="ph", arangoURL="http://localhost:8529")
     db = conn["spoke_human"]
-    
+
     # Get a sample compound node
     aql = """
     FOR doc IN Nodes
@@ -25,7 +22,7 @@ def main():
         compound = cursor[0]
         print("\nSample Compound Node:")
         print(json.dumps(compound, indent=2))
-        
+
         # Get neighbors of this compound
         compound_id = compound["_key"]
         aql = f"""
@@ -41,7 +38,7 @@ def main():
         for item in cursor:
             print("\nEdge:", json.dumps(item["edge"], indent=2))
             print("Neighbor:", json.dumps(item["neighbor"], indent=2))
-    
+
     # Get node types
     aql = """
     RETURN UNIQUE(
@@ -51,7 +48,7 @@ def main():
     """
     cursor = db.AQLQuery(aql, rawResults=True)
     print("\nNode Types:", cursor[0])
-    
+
     # Get edge types
     aql = """
     RETURN UNIQUE(
@@ -61,6 +58,7 @@ def main():
     """
     cursor = db.AQLQuery(aql, rawResults=True)
     print("\nEdge Types:", cursor[0])
+
 
 if __name__ == "__main__":
     main()

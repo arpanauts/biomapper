@@ -71,7 +71,7 @@ class SessionManager:
 
     def get_session(self, session_id: str) -> Optional[Session]:
         """Get a session by ID.
-        
+
         First checks in-memory sessions, then tries to recover from disk if not found.
         """
         # Check in-memory sessions first
@@ -81,34 +81,34 @@ class SessionManager:
                 self.delete_session(session_id)
                 return None
             return session
-            
+
         # Session not found in memory, try to recover from disk
         session_dir = settings.UPLOAD_DIR / session_id
         if session_dir.exists():
             # Look for files in the session directory
-            files = list(session_dir.glob('*'))
+            files = list(session_dir.glob("*"))
             if files:
                 # We found files, recreate the session
                 print(f"Recovering session {session_id} from disk")
                 file_path = files[0]  # Use the first file found
-                
+
                 # Get file metadata
                 metadata = {
                     "file_size": file_path.stat().st_size,
                     "content_type": "text/csv",  # Assume CSV for now
-                    "filename": file_path.name
+                    "filename": file_path.name,
                 }
-                
+
                 # Create and store the recovered session
                 session = Session(
                     session_id=session_id,
                     created_at=datetime.fromtimestamp(file_path.stat().st_mtime),
                     file_path=file_path,
-                    metadata=metadata
+                    metadata=metadata,
                 )
                 self.sessions[session_id] = session
                 return session
-        
+
         # Session truly not found
         return None
 
@@ -132,7 +132,7 @@ class SessionManager:
         # Clean up session directory
         if session.file_path and session.file_path.exists():
             session.file_path.unlink()
-        
+
         session_dir = settings.UPLOAD_DIR / session_id
         if session_dir.exists():
             for file in session_dir.iterdir():
