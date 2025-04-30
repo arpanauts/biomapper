@@ -66,6 +66,18 @@ This document provides a comprehensive status update for the Biomapper project, 
 2.  **(Future) Generalize Reporting:** Refactor reporting logic into reusable utilities if needed for other mapping pairs.
 3.  **(Future) Advanced Reporting:** Add capabilities to filter/analyze results based on new metadata (e.g., confidence thresholds).
 
+### Bidirectional Mapping - Next Steps (Task Split)
+
+With the core implementation complete, the next focus is testing, refinement, and documentation:
+
+*   **Claude:**
+    *   Generate comprehensive unit tests in `tests/core/test_mapping_executor.py` for the `try_reverse_mapping` functionality, covering various path scenarios (forward only, reverse only, both, none).
+    *   Update docstrings in `biomapper/core/mapping_executor.py` for the `try_reverse_mapping` parameter and related modified methods.
+*   **Cascade:**
+    *   Execute `scripts/map_ukbb_to_arivale.py` with `try_reverse_mapping=True`.
+    *   Analyze logs and output CSV for correctness, logging clarity, and performance of reverse mappings.
+    *   Identify specific mapping clients that would benefit from a dedicated `reverse_map_identifiers` implementation.
+
 ## 5. Open Questions & Considerations
 
 *   How should confidence scores be calculated/defined for different mapping paths/clients? (Claude - during Metadata Population / Executor refactor)
