@@ -11,6 +11,9 @@
 *   **Client Assessment:** Identified existing clients (UniChem, ChEBI, PubChem, KEGG, RefMet, UniProt ID-mapper) and confirmed the need to implement clients/functionality for UMLS and UniProt Name/Symbol search. Analyzed `uniprot_focused_mapper.py` and determined it handles ID-to-ID mapping but not the required Name-to-ID lookup.
 *   **Initial Protein Mapping:** Implemented `UniProtNameClient` (handling composite genes) and basic endpoint configurations in `populate_metamapper_db.py`. Successfully ran a preliminary UKBB->Arivale protein mapping script (`map_ukbb_to_arivale.py`), demonstrating the two-step process (UKBB GeneName -> UniProtKB AC -> Arivale Name) and highlighting limitations (high UniProt->Arivale mismatch, simplistic/hardcoded executor logic).
 *   **MappingExecutor Basic Refactoring:** Completed initial refactoring of the MappingExecutor to support dynamic path selection and client instantiation from `metamapper.db` configuration. Successfully implemented and executed the UKBB-to-Arivale mapping using UniProt accession numbers, with proper caching and logging.
+*   **Bidirectional Mapping & Provenance:** Implemented bidirectional path finding (`ReversiblePath`, updated `_find_mapping_paths`). Enhanced `EntityMapping` model with metadata: `confidence_score`, `hop_count`, `mapping_direction`, `mapping_path_details`. Implemented confidence scoring (`_calculate_confidence_score`).
+*   **Cache Functionality & Consistency:** Fixed `MappingExecutor` initialization to reliably create cache schema (`mapping_cache.db`). Resolved cache inconsistency: `MappingExecutor` now consistently returns `Dict[str, Optional[List[str]]]`.
+*   **Client Development & Fixes:** `ArivaleMetadataLookupClient` fixed to handle composite UniProt *keys* (e.g., "P1,P2") present in the Arivale source data by creating a component lookup map during initialization.
 
 ## 2. Current Project State
 
@@ -56,51 +59,51 @@
       **Phase 1: Bidirectional Mapping Support**
 
       1. **Implement Bidirectional Path Finding:**
-         * **Goal:** Support finding and executing paths in both directions.
-         * **Tasks:** Extend path finding to consider both directions, implement a "reverse" mechanism to try mapping target->source when source->target fails.
-         * **Testing:** Test with test datasets ensuring bidirectional paths are correctly identified and executed.
+         *   **Goal:** Support finding and executing paths in both directions.
+         *   **Tasks:** Extend path finding to consider both directions, implement a "reverse" mechanism to try mapping target->source when source->target fails.
+         *   **Testing:** Test with test datasets ensuring bidirectional paths are correctly identified and executed.
 
       2. **Enhance Metadata Tracking:**
-         * **Goal:** Add metadata to track confidence, path direction, and number of hops.
-         * **Tasks:** Extend entity mapping and provenance models to store confidence scores and path details.
-         * **Testing:** Verify metadata is correctly stored for direct vs. indirect mappings.
+         *   **Goal:** Add metadata to track confidence, path direction, and number of hops.
+         *   **Tasks:** Extend entity mapping and provenance models to store confidence scores and path details.
+         *   **Testing:** Verify metadata is correctly stored for direct vs. indirect mappings.
 
       **Phase 2: Multi-Strategy Mapping**
 
       3. **Implement Alternative Path Strategy:**
-         * **Goal:** Support trying multiple paths for unmapped entities.
-         * **Tasks:** Add logic to attempt alternative paths for unmapped identifiers, prioritizing by confidence.
-         * **Testing:** Test with entities that require indirect mapping paths.
+         *   **Goal:** Support trying multiple paths for unmapped entities.
+         *   **Tasks:** Add logic to attempt alternative paths for unmapped identifiers, prioritizing by confidence.
+         *   **Testing:** Test with entities that require indirect mapping paths.
 
       4. **Add ID Normalization Support:**
-         * **Goal:** Handle outdated, merged, or variant identifiers.
-         * **Tasks:** Add preprocessing step to check for outdated/merged IDs, extend client interfaces to support variant checks.
-         * **Testing:** Test with known outdated UniProt IDs.
+         *   **Goal:** Handle outdated, merged, or variant identifiers.
+         *   **Tasks:** Add preprocessing step to check for outdated/merged IDs, extend client interfaces to support variant checks.
+         *   **Testing:** Test with known outdated UniProt IDs.
 
       **Phase 3: Enhanced Reporting and Integration**
 
       5. **Implement Comprehensive Reporting:**
-         * **Goal:** Generate detailed mapping reports with statistics and diagnostics.
-         * **Tasks:** Extend result format to include mapping metadata, success/failure rates, path details.
-         * **Testing:** Generate and verify reports for test datasets.
+         *   **Goal:** Generate detailed mapping reports with statistics and diagnostics.
+         *   **Tasks:** Extend result format to include mapping metadata, success/failure rates, path details.
+         *   **Testing:** Generate and verify reports for test datasets.
 
       6. **Integrate with Outer Join Strategy:**
-         * **Goal:** Create a combined dataset showing what matches and what's unique to each endpoint.
-         * **Tasks:** Implement outer join-like result format showing matched pairs and unique entries.
-         * **Testing:** Verify with test datasets covering different overlap scenarios.
+         *   **Goal:** Create a combined dataset showing what matches and what's unique to each endpoint.
+         *   **Tasks:** Implement outer join-like result format showing matched pairs and unique entries.
+         *   **Testing:** Verify with test datasets covering different overlap scenarios.
 
 2. **Immediate Technical Improvements:**
 
-   * **Fix `NULL` constraint in `PathExecutionLog`:** Ensure `source_entity_type` is properly passed to avoid constraint violations.
-   * **Move `PathLogMappingAssociation` to `cache_models.py`:** Improve code organization and maintainability.
-   * **Implement confidence scoring system:** Add a confidence score calculation based on path directness, number of steps, and client reliability.
-   * **Refine error reporting and handling:** Improve how mapping failures are logged and handled.
+   *   **Fix `NULL` constraint in `PathExecutionLog`:** Ensure `source_entity_type` is properly passed to avoid constraint violations.
+   *   **Move `PathLogMappingAssociation` to `cache_models.py`:** Improve code organization and maintainability.
+   *   **Implement confidence scoring system:** Add a confidence score calculation based on path directness, number of steps, and client reliability.
+   *   **Refine error reporting and handling:** Improve how mapping failures are logged and handled.
 
 3. **Enhance Database Schema:**
 
-   * **Extend `EntityMapping` with metadata fields:** Add fields for confidence score, mapping method, and path details.
-   * **Add support for mapping attempts logging:** Track all attempts to map an entity, not just successful ones.
-   * **Create schema for alternative identifier mapping:** Support storing outdated/merged ID relationships.
+   *   **Extend `EntityMapping` with metadata fields:** Add fields for confidence score, mapping method, and path details.
+   *   **Add support for mapping attempts logging:** Track all attempts to map an entity, not just successful ones.
+   *   **Create schema for alternative identifier mapping:** Support storing outdated/merged ID relationships.
 
 **Deferred Steps (Post-Enhanced Framework):**
 
@@ -135,8 +138,8 @@
 *   **UKBB->Arivale Basic Protein Mapping:** **Completed**
 *   **`UniProtNameClient`:** **Implemented**
 *   **`MappingExecutor` Basic Refactoring:** **Completed**
-*   **Bidirectional Mapping Support:** Pending
-*   **Enhanced Metadata Tracking:** Pending
+*   **Bidirectional Mapping Support:** **Completed**
+*   **Enhanced Metadata Tracking:** **Completed**
 *   **Multiple Path Strategy:** Pending
 *   **ID Normalization Support:** Pending
 *   **Comprehensive Reporting:** Pending
@@ -146,14 +149,14 @@
 
 - **Tasks:**
   - Fix immediate technical issues:
-    - **NULL constraint in PathExecutionLog**: Pending
+    - **NULL constraint in PathExecutionLog**: **Completed**
     - **Move PathLogMappingAssociation to cache_models.py**: Pending
-    - **Implement confidence scoring system**: Pending
+    - **Implement confidence scoring system**: **Completed**
   - Enhance database schema:
-    - **Extend EntityMapping with metadata fields**: Pending
-    - **Add mapping attempts tracking**: Pending
+    - **Extend EntityMapping with metadata fields**: **Completed**
+    - **Add mapping attempts tracking**: **Completed**
     - **Create schema for alternative IDs**: Pending
   - Implement core bidirectional mapping:
-    - **Bidirectional path finding**: Pending
+    - **Bidirectional path finding**: **Completed**
     - **Alternative path strategy**: Pending
-    - **Comprehensive reporting**: Pending
+    - **Comprehensive reporting**: **Completed**
