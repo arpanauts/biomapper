@@ -313,3 +313,66 @@ class RelationshipMappingPath(Base):
 
     def __repr__(self) -> str:
         return f"<RelationshipMappingPath id={self.id} rel={self.relationship_id} {self.source_ontology}->{self.target_ontology} via path={self.ontology_path_id}>"
+
+
+class CompositePatternConfig(Base):
+    """Configuration for handling composite identifiers.
+    
+    This table stores patterns and rules for identifying and processing
+    composite identifiers that contain multiple distinct entities within
+    a single string.
+    """
+    __tablename__ = 'composite_pattern_config'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False, unique=True)
+    description = Column(String, nullable=True)
+    
+    # Ontology type this pattern applies to (e.g., GENE_NAME, UNIPROTKB_AC)
+    ontology_type = Column(String, nullable=False)
+    
+    # Regular expression pattern to identify composite identifiers
+    pattern = Column(String, nullable=False)
+    
+    # Delimiters to split composite identifiers (comma-separated)
+    delimiters = Column(String, nullable=False)
+    
+    # Strategy for mapping a composite identifier: first_match, all_matches, or combined
+    mapping_strategy = Column(String, nullable=False)
+    
+    # When True, components are processed as the same ontology type
+    keep_component_type = Column(Boolean, nullable=False, default=True)
+    
+    # If not keeping the same type, what ontology type to use for components
+    component_ontology_type = Column(String, nullable=True)
+    
+    # Priority (lower number = higher priority)
+    priority = Column(Integer, nullable=False, default=1)
+    
+    def __repr__(self) -> str:
+        return f"<CompositePatternConfig id={self.id} name={self.name} type={self.ontology_type}>"
+
+
+class CompositeProcessingStep(Base):
+    """Steps for processing composite identifiers.
+    
+    This table defines the sequence of operations to apply when processing
+    a composite identifier, such as splitting, cleaning, or transforming components.
+    """
+    __tablename__ = 'composite_processing_step'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    pattern_id = Column(Integer, ForeignKey('composite_pattern_config.id'), nullable=False)
+    pattern = relationship("CompositePatternConfig", backref="processing_steps")
+    
+    # Step type: split, clean, transform, etc.
+    step_type = Column(String, nullable=False)
+    
+    # Parameters for the step (JSON string)
+    parameters = Column(String, nullable=True)
+    
+    # Order in the processing pipeline
+    order = Column(Integer, nullable=False)
+    
+    def __repr__(self) -> str:
+        return f"<CompositeProcessingStep id={self.id} pattern_id={self.pattern_id} type={self.step_type}>"
