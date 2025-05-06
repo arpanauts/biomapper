@@ -247,3 +247,22 @@ class PathLogMappingAssociation(Base):
 
     def __repr__(self):
         return f"<PathLogMappingAssociation log_id={self.log_id} input={self.input_identifier} output={self.output_identifier}>"
+
+
+class MappingSession(Base):
+    """Mapping session tracking for metadata and logging purposes."""
+    
+    __tablename__ = "mapping_sessions"
+    
+    id = Column(Integer, primary_key=True)
+    start_time = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    end_time = Column(DateTime(timezone=True), nullable=True)
+    source_endpoint = Column(String(255), nullable=False, index=True)
+    target_endpoint = Column(String(255), nullable=False, index=True)
+    parameters = Column(Text, nullable=True)  # JSON string of parameters
+    status = Column(String(50), default="running", nullable=False)
+    results_count = Column(Integer, default=0)
+    error_message = Column(Text, nullable=True)
+    
+    def __repr__(self):
+        return f"<MappingSession id={self.id} source={self.source_endpoint} target={self.target_endpoint} status={self.status}>"

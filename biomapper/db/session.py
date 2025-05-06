@@ -11,11 +11,13 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, AsyncEngine
 
+# Import settings
+from biomapper.config import settings
+
 from .models import Base
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
 
 # SQLite pragmas for performance optimization
 @event.listens_for(Engine, "connect")
@@ -37,48 +39,46 @@ class DatabaseManager:
     def __init__(
         self,
         db_url: Optional[str] = None,
-        data_dir: Optional[str] = None,
         echo: bool = False,
     ) -> None:
         """Initialize the database manager.
 
         Args:
-            db_url: SQLAlchemy database URL
-            data_dir: Directory for storing database files
+            db_url: SQLAlchemy database URL. If None, uses settings.cache_db_url.
             echo: Whether to echo SQL statements
         """
         if not db_url:
-            # Check if a specific database path is provided
-            db_path = os.environ.get("BIOMAPPER_DB_PATH")
+            db_url = settings.cache_db_url
+            logger.info(f"Using cache database URL from settings: {db_url}")
+        else:
+            logger.info(f"Using provided cache database URL: {db_url}")
 
-            if db_path:
-                db_url = f"sqlite:///{db_path}"
-                logger.info(f"Using environment-specified SQLite database at {db_path}")
-            else:
-                # Default to a SQLite database in the user's home directory
-                if not data_dir:
-                    data_dir = os.environ.get(
-                        "BIOMAPPER_DATA_DIR",
-                        os.path.join(str(Path.home()), ".biomapper", "data"),
-                    )
-
-                # Create directory if it doesn't exist
-                os.makedirs(data_dir, exist_ok=True)
-
-                # Construct SQLite URL
-                db_path = os.path.join(data_dir, "mapping_cache.db")
-                db_url = f"sqlite:///{db_path}"
-                logger.info(f"Using SQLite database at {db_path}")
+        # Ensure the directory exists if it's a file-based DB
+        if db_url.startswith("sqlite"):
+            db_path_str = db_url.split("///")[1]
+            db_path = Path(db_path_str)
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            logger.debug(f"Ensured directory exists: {db_path.parent}")
 
         # Create engine with specified URL
-        self.engine = create_engine(db_url, echo=echo)
-        self.SessionFactory = sessionmaker(bind=self.engine)
-        self.db_url = db_url
+        # For sync SQLite, remove the async driver prefix if present
+        sync_url = db_url
+        if db_url.startswith("sqlite+aiosqlite"):
+            sync_url = db_url.replace("sqlite+aiosqlite", "sqlite")
+        elif not db_url.startswith("sqlite"):
+             # Assuming other DB types have compatible sync/async URLs or use different handling
+             pass
 
-        # Create async engine (for sqlite, just use the same URL but with aiosqlite)
-        async_url = db_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+        self.engine = create_engine(sync_url, echo=echo)
+        self.SessionFactory = sessionmaker(bind=self.engine)
+        self.db_url = db_url # Store the original (potentially async) URL
+
+        # Create async engine (ensure it has async prefix)
+        async_url = db_url
+        if db_url.startswith("sqlite:///"):
+            async_url = db_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+
         self.async_engine = create_async_engine(async_url, echo=echo)
-        # In SQLAlchemy 1.4, we don't have async_sessionmaker, so we'll create a custom async session
         self._async_session_factory = sessionmaker(
             bind=self.async_engine, class_=AsyncSession, expire_on_commit=False
         )
@@ -123,13 +123,15 @@ _default_manager: Optional[DatabaseManager] = None
 
 
 def get_db_manager(
-    db_url: Optional[str] = None, data_dir: Optional[str] = None, echo: bool = False
+    db_url: Optional[str] = None,
+    echo: bool = False,
 ) -> DatabaseManager:
     """Get the default database manager instance.
 
+    Uses settings.cache_db_url by default.
+
     Args:
-        db_url: SQLAlchemy database URL
-        data_dir: Directory for storing database files
+        db_url: SQLAlchemy database URL (overrides settings.cache_db_url if provided)
         echo: Whether to echo SQL statements
 
     Returns:
@@ -137,44 +139,26 @@ def get_db_manager(
     """
     global _default_manager
 
-    # If BIOMAPPER_DB_PATH is set, always use that
-    db_path = os.environ.get("BIOMAPPER_DB_PATH")
-    if db_path and os.path.exists(db_path) and not db_url:
-        db_url = f"sqlite:///{db_path}"
-        logger.info(f"Using explicitly specified database path: {db_path}")
+    # Determine the target URL: use provided db_url or fallback to settings
+    target_db_url = db_url if db_url is not None else settings.cache_db_url
 
+    # Initialize or re-initialize if needed
     if _default_manager is None:
-        _default_manager = DatabaseManager(db_url, data_dir, echo)
-    # If DB path changed, recreate the manager
-    elif db_path and _default_manager.db_url != f"sqlite:///{db_path}":
-        logger.info(
-            f"Database path changed, recreating manager. Old: {_default_manager.db_url}, New: sqlite:///{db_path}"
+        logger.info("Initializing default DatabaseManager.")
+        _default_manager = DatabaseManager(db_url=target_db_url, echo=echo)
+    elif _default_manager.db_url != target_db_url:
+        logger.warning(
+            f"Target cache DB URL changed, recreating manager. "
+            f"Old: {_default_manager.db_url}, New: {target_db_url}"
         )
         _default_manager.close()
-        _default_manager = DatabaseManager(db_url, data_dir, echo)
-
-    return _default_manager
-
-
-def init_db_manager():
-    """Create and initialize a new database manager explicitly using the current database path."""
-    global _default_manager
-
-    # Clear the existing manager
-    if _default_manager is not None:
-        _default_manager.close()
-        _default_manager = None
-
-    # Get the current database path from environment
-    db_path = os.environ.get("BIOMAPPER_DB_PATH")
-
-    if db_path and os.path.exists(db_path):
-        logger.info(f"Reinitializing database manager with path: {db_path}")
-        _default_manager = DatabaseManager(f"sqlite:///{db_path}", echo=True)
-    else:
-        logger.error(
-            f"Cannot initialize DB manager: {db_path} does not exist or is not set"
-        )
+        _default_manager = DatabaseManager(db_url=target_db_url, echo=echo)
+    # Ensure echo setting is updated if manager exists but echo differs
+    elif _default_manager.engine.echo != echo:
+         logger.info(f"Updating echo setting for existing manager to {echo}")
+         # Recreate engine with new echo setting (simplest way)
+         _default_manager.close()
+         _default_manager = DatabaseManager(db_url=target_db_url, echo=echo)
 
     return _default_manager
 
@@ -197,10 +181,6 @@ async def get_async_session() -> AsyncSession:
     return await get_db_manager().create_async_session()
 
 
-# Async engine for direct use
-async_engine = get_db_manager().async_engine
-
-
 # Function to create async session
 async def async_session_maker() -> AsyncSession:
     """Create a new async session.
@@ -208,4 +188,6 @@ async def async_session_maker() -> AsyncSession:
     Returns:
         SQLAlchemy async session
     """
-    return await get_async_session()
+    # Ensure the manager uses the latest settings
+    manager = get_db_manager(echo=settings.log_level.upper() == "DEBUG")
+    return await manager.create_async_session()

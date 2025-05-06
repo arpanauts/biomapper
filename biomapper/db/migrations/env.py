@@ -17,6 +17,8 @@ sys.path.append(
 
 # Import SQLAlchemy models for the mapping cache
 from biomapper.db.cache_models import Base
+# Import centralized settings
+from biomapper.config import settings
 
 # This is the Alembic Config object
 config = context.config
@@ -36,7 +38,8 @@ def run_migrations_offline():
     here as well.  By skipping the Engine creation
     we don't even need a DBAPI to be available.
     """
-    url = config.get_main_option("sqlalchemy.url")
+    # Use the cache_db_url from settings
+    url = settings.cache_db_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -54,10 +57,8 @@ def run_migrations_online():
     In this scenario we need to create an Engine
     and associate a connection with the context.
     """
-    # Explicitly get the database URL from the main options in alembic.ini
-    database_url = config.get_main_option("sqlalchemy.url")
-    if not database_url:
-        raise ValueError("Database URL not found in alembic.ini")
+    # Use the cache_db_url from settings
+    database_url = settings.cache_db_url
 
     # Create the engine
     connectable = create_engine(database_url)
