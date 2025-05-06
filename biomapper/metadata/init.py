@@ -4,7 +4,7 @@ import logging
 from typing import Dict, List, Optional
 
 from biomapper.cache.manager import CacheManager
-from biomapper.db.models_metadata import ResourceType, SupportLevel
+from biomapper.metadata.models import ResourceType, SupportLevel
 from biomapper.metadata.manager import ResourceMetadataManager
 from biomapper.spoke.client import SPOKEDBClient, SPOKEConfig
 from biomapper.utils.config import Config

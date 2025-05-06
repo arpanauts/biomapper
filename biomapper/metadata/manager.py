@@ -9,16 +9,18 @@ from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from biomapper.db.models_metadata import (
-    ResourceMetadata,
-    OntologyCoverage,
-    PerformanceMetrics,
-    OperationLog,
+# Updated import: Point to metadata.models for Enums and placeholder models
+from biomapper.metadata.models import (
     ResourceType,
     SupportLevel,
     OperationType,
     OperationStatus,
+    ResourceMetadata,  # Placeholder
+    OntologyCoverage,  # Placeholder
+    PerformanceMetrics,  # Placeholder
+    OperationLog,  # Placeholder
 )
+
 from biomapper.db.session import get_db_manager
 
 

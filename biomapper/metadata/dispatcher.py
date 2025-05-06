@@ -5,7 +5,7 @@ import logging
 import time
 from typing import Any, Dict, List, Optional, Protocol, Type, TypeVar, Union
 
-from biomapper.db.models_metadata import OperationType, OperationStatus
+from biomapper.metadata.models import OperationType, OperationStatus
 from biomapper.metadata.manager import ResourceMetadataManager
 
 

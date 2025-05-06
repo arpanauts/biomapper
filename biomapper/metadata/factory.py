@@ -4,7 +4,7 @@ import logging
 from typing import Dict, List, Optional, Type, Union, Any
 
 from biomapper.cache.manager import CacheManager
-from biomapper.db.models_metadata import ResourceType
+from biomapper.metadata.models import ResourceType
 from biomapper.metadata.adapters import CacheResourceAdapter, SpokeResourceAdapter
 from biomapper.metadata.dispatcher import MappingDispatcher
 from biomapper.metadata.init import initialize_metadata_system

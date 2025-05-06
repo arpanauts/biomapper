@@ -6,8 +6,8 @@ import time
 from typing import Any, Dict, List, Optional, Protocol, Type, Union
 
 from biomapper.cache.manager import CacheManager
-from biomapper.db.models_metadata import OperationStatus, OperationType
 from biomapper.metadata.manager import ResourceMetadataManager
+from biomapper.metadata.models import OperationStatus, OperationType
 from biomapper.spoke.client import SPOKEDBClient, SPOKEConfig
 
 

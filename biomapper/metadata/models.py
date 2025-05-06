@@ -21,6 +21,28 @@ class ResourceType(str, Enum):
     SERVICE = "service"
 
 
+class OperationType(str, Enum):
+    """Types of operations for logging."""
+
+    LOOKUP = "lookup"
+    MAP = "map"
+
+
+class OperationStatus(str, Enum):
+    """Status of logged operations."""
+
+    SUCCESS = "success"
+    FAILURE = "failure"
+
+
+class SupportLevel(str, Enum):
+    """Level of ontology support provided by a resource."""
+
+    NONE = "none"
+    PARTIAL = "partial"
+    FULL = "full"
+
+
 @dataclass
 class ResourceCapability:
     """Capability provided by a resource.
@@ -138,3 +160,14 @@ class ResourceRegistration:
             if capability.name == capability_name:
                 return capability
         return None
+
+
+# --- Placeholder definitions for missing SQLAlchemy models ---
+# These were likely defined in the removed biomapper.db.models_metadata
+# Using Any as a placeholder to resolve NameErrors during import/collection.
+# Runtime errors may still occur if code tries to use these as real models.
+
+ResourceMetadata: Any = ...
+OntologyCoverage: Any = ...
+PerformanceMetrics: Any = ...
+OperationLog: Any = ...
