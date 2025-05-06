@@ -47,6 +47,23 @@ MANIFEST
 hmdb_metabolites.xml
 mapping_cache.db
 
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Development and temporary files
+*_test.py
+*.py.new
+*_implementation.py
+*_metadata.py
+*_metadata_readme.md
+biomapper/settings.py  # Using biomapper/config.py instead per MEMORY[7741c86c]
+biomapper-ui/roadmap/  # Development UI files
+dashboard/  # Development dashboard
+docs/prompts/  # Development prompt templates
+
 # Keep specific txt files
 !hmdb_metabolites_sample.txt
 !tests_protein_set.py.txt
