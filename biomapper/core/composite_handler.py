@@ -143,16 +143,15 @@ class CompositeIdentifierHandler:
         # Check against each pattern for this ontology type
         for pattern_config in self._patterns[ontology_type]:
             if re.search(pattern_config.pattern, identifier):
-                # Split the identifier using the delimiters from the pattern
-                delimiters = pattern_config.delimiters.split(',')
-                components = [identifier]
+                # Split the identifier using the delimiter from the pattern
+                # Note: The delimiter is the actual character to split on, not a comma-separated list
+                delimiter = pattern_config.delimiters
                 
-                # Apply each delimiter in sequence
-                for delimiter in delimiters:
-                    new_components = []
-                    for component in components:
-                        new_components.extend([c.strip() for c in component.split(delimiter) if c.strip()])
-                    components = new_components
+                # Split the identifier using the delimiter
+                if delimiter:
+                    components = [c.strip() for c in identifier.split(delimiter) if c.strip()]
+                else:
+                    components = [identifier]
                 
                 return True, components, pattern_config
         

@@ -169,6 +169,83 @@ class TestCompositeMiddleware:
     """Test cases for the CompositeMiddleware class."""
     
     @pytest.fixture
+    def mock_session(self):
+        """Create a mock SQLAlchemy session."""
+        session = MagicMock()
+        
+        # Create mock pattern configurations
+        gene_pattern = MagicMock(spec=CompositePatternConfig)
+        gene_pattern.id = 1
+        gene_pattern.name = "Underscore Separated Genes"
+        gene_pattern.ontology_type = "GENE_NAME"
+        gene_pattern.pattern = r"[A-Za-z0-9]+_[A-Za-z0-9]+"
+        gene_pattern.delimiters = "_"
+        gene_pattern.mapping_strategy = "first_match"
+        gene_pattern.keep_component_type = True
+        gene_pattern.priority = 1
+        
+        uniprot_pattern = MagicMock(spec=CompositePatternConfig)
+        uniprot_pattern.id = 2
+        uniprot_pattern.name = "Comma Separated UniProt IDs"
+        uniprot_pattern.ontology_type = "UNIPROTKB_AC"
+        uniprot_pattern.pattern = r"[A-Z][0-9][A-Z0-9]{3}[0-9],([A-Z][0-9][A-Z0-9]{3}[0-9],?)+"
+        uniprot_pattern.delimiters = ","
+        uniprot_pattern.mapping_strategy = "all_matches"
+        uniprot_pattern.keep_component_type = True
+        uniprot_pattern.priority = 1
+        
+        # Configure mock query results
+        session.query.return_value.order_by.return_value.all.return_value = [
+            gene_pattern, uniprot_pattern
+        ]
+        
+        # Configure mock steps query
+        def filter_side_effect(*args, **kwargs):
+            query = MagicMock()
+            if args[0].left == CompositeProcessingStep.pattern_id:
+                if args[0].right == 1:  # Gene pattern steps
+                    query.order_by.return_value.all.return_value = [
+                        MagicMock(
+                            spec=CompositeProcessingStep,
+                            pattern_id=1,
+                            step_type="split",
+                            parameters='{"delimiter": "_"}',
+                            order=1
+                        ),
+                        MagicMock(
+                            spec=CompositeProcessingStep,
+                            pattern_id=1,
+                            step_type="clean",
+                            parameters='{"strip": true}',
+                            order=2
+                        )
+                    ]
+                elif args[0].right == 2:  # UniProt pattern steps
+                    query.order_by.return_value.all.return_value = [
+                        MagicMock(
+                            spec=CompositeProcessingStep,
+                            pattern_id=2,
+                            step_type="split",
+                            parameters='{"delimiter": ","}',
+                            order=1
+                        ),
+                        MagicMock(
+                            spec=CompositeProcessingStep,
+                            pattern_id=2,
+                            step_type="clean",
+                            parameters='{"strip": true}',
+                            order=2
+                        )
+                    ]
+                else:
+                    query.order_by.return_value.all.return_value = []
+            return query
+        
+        session.query.return_value.filter.side_effect = filter_side_effect
+        
+        return session
+    
+    @pytest.fixture
     def handler_and_middleware(self, mock_session):
         """Create and initialize a handler and middleware for testing."""
         handler = CompositeIdentifierHandler()
