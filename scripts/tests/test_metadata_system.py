@@ -18,7 +18,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from biomapper.metadata.factory import MetadataFactory
 from biomapper.metadata.manager import ResourceMetadataManager
-from biomapper.db.models_metadata import ResourceType, SupportLevel, OperationType
+from biomapper.metadata.models import (
+    ResourceType,
+    SupportLevel,
+    OperationType,
+    OntologyCoverage,
+    ResourceMetadata,
+)
 
 
 # Configure logging
@@ -119,13 +125,13 @@ async def test_mapping_dispatcher(factory: MetadataFactory) -> None:
                     if hasattr(result, "metadata")
                     else "unknown"
                 )
-                logger.info(f"  ✓ Found mapping using {resource} in {response_time}ms")
+                logger.info(f"  Found mapping using {resource} in {response_time}ms")
                 logger.info(f"    Result: {result}")
             else:
-                logger.info(f"  ✗ No mapping found for {compound}")
+                logger.info(f"  No mapping found for {compound}")
 
         except Exception as e:
-            logger.error(f"  ✗ Error mapping {compound}: {e}")
+            logger.error(f"  Error mapping {compound}: {e}")
 
 
 async def test_performance_metrics(metadata_manager: ResourceMetadataManager) -> None:

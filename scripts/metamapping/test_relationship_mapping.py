@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from biomapper.db.session import get_session
 from biomapper.mapping.metadata.manager import ResourceMetadataManager
-from biomapper.mapping.metadata.dispatcher import MappingDispatcher
+from biomapper.metadata.dispatcher import MappingDispatcher
 from biomapper.mapping.health import PropertyHealthTracker, EndpointHealthMonitor
 
 # Configure logging
