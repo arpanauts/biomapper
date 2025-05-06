@@ -97,10 +97,11 @@ class PubChemClient:
             time.sleep(self.config.rate_limit_wait - elapsed)
 
         try:
-            self._last_request_time = time.time()
+            self._last_request_time = int(time.time())
             response = self.session.get(url, params=params, timeout=self.config.timeout)
             response.raise_for_status()
-            return response.json()
+            json_response: Dict[str, Any] = response.json()
+            return json_response
         except requests.RequestException as e:
             logger.error(f"PubChem API request failed: {str(e)}")
             raise PubChemError(f"API request failed: {str(e)}") from e
@@ -137,7 +138,8 @@ class PubChemClient:
             if not data["PropertyTable"]["Properties"]:
                 raise PubChemError(f"Empty property list for CID {pubchem_id}")
 
-            return data["PropertyTable"]["Properties"][0]
+            result: Dict[str, Any] = data["PropertyTable"]["Properties"][0]
+            return result
         except Exception as e:
             logger.error(f"PubChem property retrieval failed: {str(e)}")
             raise PubChemError(f"Property retrieval failed: {str(e)}") from e

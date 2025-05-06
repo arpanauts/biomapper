@@ -1,249 +1,192 @@
 import asyncio
 import logging
-import time
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 
 import aiohttp
 
 logger = logging.getLogger(__name__)
 
-UNIPROT_IDMAPPING_API_BASE_URL = "https://rest.uniprot.org/idmapping"
-POLLING_INTERVAL_SECONDS = 5
-MAX_WAIT_SECONDS = 300  # 5 minutes
-CONCURRENT_REQUESTS = 5  # Limit concurrent checks
+# Use the simpler, synchronous mapping service URL
+UNIPROT_SYNC_IDMAPPING_API_URL = "https://idmapping.uniprot.org/cgi-bin/idmapping_http_client3"
+DEFAULT_REQUEST_TIMEOUT = 30  # Seconds
 
 
 class UniProtIDMappingClient:
-    """Client for mapping identifiers using the UniProt ID Mapping service.
+    """
+    Client for mapping identifiers using the synchronous UniProt ID Mapping service.
 
-    Handles submitting mapping jobs, polling for results, and retrieving them.
-    Maps from UniProtKB AC/ID to a specified target database (e.g., Ensembl).
+    Important behavior notes:
+    1. When mapping from ACC->ACC, the service generally returns the input IDs as-is,
+       rather than resolving secondary IDs to primary IDs.
+    2. For demerged IDs (like P0CG05), it properly returns multiple target IDs.
+    3. For non-existent IDs, it returns no mapping.
+    
+    To handle secondary/obsolete IDs properly, you may need other approaches:
+    - Using the REST API's ID mapping service (asynchronous job method)
+    - Using UniProt's batch retrieval API to get entry status
+    - Storing and maintaining a local mapping of secondary->primary IDs
     """
 
     def __init__(
         self,
-        from_db: str = "UniProtKB_AC-ID",
-        to_db: str = "Ensembl",
-        base_url: str = UNIPROT_IDMAPPING_API_BASE_URL,
-        config: Optional[Dict] = None,
+        from_db: str = "ACC",  # Default to UniProt Accession
+        to_db: str = "ACC",    # Default to UniProt Accession (for primary resolution)
+        base_url: str = UNIPROT_SYNC_IDMAPPING_API_URL,
+        timeout: int = DEFAULT_REQUEST_TIMEOUT,
+        config: Optional[Dict[str, Any]] = None, # Keep for potential future config
     ):
         """
         Initializes the client.
 
         Args:
-            from_db: The database name for the source identifiers (as defined by UniProt).
-            to_db: The database name for the target identifiers (as defined by UniProt).
-            base_url: The base URL for the UniProt ID Mapping API.
-            config: Optional configuration dictionary (currently unused by this client).
+            from_db: The database name for the source identifiers (e.g., 'ACC').
+            to_db: The database name for the target identifiers (e.g., 'ACC').
+            base_url: The base URL for the UniProt synchronous ID Mapping CGI script.
+            timeout: Request timeout in seconds.
+            config: Optional configuration dictionary (currently unused).
         """
         self.base_url = base_url
         self.from_db = from_db
         self.to_db = to_db
-        self.semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
-
-    async def _submit_job(
-        self, session: aiohttp.ClientSession, ids: List[str]
-    ) -> Optional[str]:
-        """Submit a job to the UniProt ID Mapping service."""
-        url = f"{self.base_url}/run"
-        payload = {"ids": ",".join(ids), "from": self.from_db, "to": self.to_db}
-        try:
-            async with session.post(url, data=payload) as response:
-                response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-                data = await response.json()
-                job_id = data.get("jobId")
-                if not job_id:
-                    logger.error(
-                        f"Failed to submit UniProt ID Mapping job. Response: {data}"
-                    )
-                    return None
-                logger.info(f"Submitted UniProt ID Mapping job: {job_id}")
-                return job_id
-        except aiohttp.ClientError as e:
-            logger.error(f"Error submitting UniProt ID Mapping job: {e}")
-            return None
-
-    async def _check_job_status(
-        self, session: aiohttp.ClientSession, job_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """Check the status of a UniProt ID Mapping job."""
-        url = f"{self.base_url}/status/{job_id}"
-        try:
-            async with self.semaphore:  # Limit concurrent status checks
-                async with session.get(url) as response:
-                    # Allow 400, it might mean the job finished and results are ready (or job expired)
-                    if response.status >= 500:
-                        response.raise_for_status()
-                    data = await response.json()
-                    logger.debug(f"Job {job_id} status check response: {data}")
-                    return data
-        except aiohttp.ClientError as e:
-            logger.error(f"Error checking status for job {job_id}: {e}")
-            return None
-
-    async def _get_job_results(
-        self, session: aiohttp.ClientSession, job_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """Retrieve the results for a completed UniProt ID Mapping job."""
-        # Try the new /results/{job_id} endpoint first
-        url_results = f"{self.base_url}/results/{job_id}"
-        try:
-            async with session.get(url_results, params={"format": "json"}) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    logger.info(
-                        f"Retrieved results for job {job_id} via /results endpoint."
-                    )
-                    return data
-                elif response.status == 404:  # Not found, maybe results are at /stream?
-                    logger.warning(
-                        f"Job {job_id} results not found at /results, potentially expired or very large. Status: {response.status}"
-                    )
-                    # We could potentially try /stream here for very large results, but for now, treat as unavailable.
-                    return None
-                else:
-                    # Other errors (e.g., 400 Bad Request might indicate issues)
-                    response.raise_for_status()
-                    return None  # Should not be reached if raise_for_status works
-        except aiohttp.ClientError as e:
-            logger.error(
-                f"Error retrieving results for job {job_id} from {url_results}: {e}"
-            )
-            return None
+        self.timeout = timeout
+        # Semaphore might still be useful to limit concurrent requests if called rapidly
+        self.semaphore = asyncio.Semaphore(5) # Keep a reasonable concurrency limit
 
     async def map_identifiers(
-        self, identifiers: List[str], config: Optional[Dict] = None
-    ) -> Dict[str, Optional[str]]:
-        """Map a list of identifiers using the UniProt ID Mapping service.
+        self, identifiers: List[str], config: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Tuple[Optional[List[str]], Optional[str]]]:
+        """
+        Map a list of identifiers using the synchronous UniProt ID Mapping service.
 
         Args:
-            identifiers: A list of identifiers to map (e.g., UniProtKB ACs).
-            config: Optional configuration dictionary (currently unused by this client).
+            identifiers: A list of identifiers to map (e.g., potentially mixed
+                         primary/secondary UniProtKB ACs).
+            config: Optional configuration dictionary (currently unused).
 
         Returns:
-            A dictionary mapping original input IDs to the *first* mapped target ID found,
-            or None if no mapping was found for an ID.
+            A dictionary mapping each *input* identifier to a tuple containing:
+            1. A list of corresponding *primary* target identifiers found (or None)
+            2. The successful component ID that yielded the match (or None)
         """
         if not identifiers:
             return {}
 
-        async with aiohttp.ClientSession() as session:
-            job_id = await self._submit_job(session, identifiers)
-            if not job_id:
-                return {
-                    identifier: None for identifier in identifiers
-                }  # Job submission failed
+        final_mapping: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {
+            identifier: (None, None) for identifier in identifiers
+        }
+        ids_string = ",".join(identifiers)
+        params = {
+            "from": self.from_db,
+            "to": self.to_db,
+            "ids": ids_string,
+            "async": "NO", # Ensure synchronous mode
+        }
 
-            start_time = time.time()
-            results_data = None  # Initialize results_data to None
-            while True:
-                status_response = await self._check_job_status(session, job_id)
+        request_timeout = aiohttp.ClientTimeout(total=self.timeout)
 
-                if status_response is None:
-                    # Error checking status - break and let final processing handle it
-                    logger.error(f"Failed to get status for job {job_id}.")
-                    break
+        async with self.semaphore: # Limit concurrency
+            try:
+                async with aiohttp.ClientSession(timeout=request_timeout) as session:
+                    logger.debug(f"Querying UniProt Sync ID Mapping: {self.base_url} with params: {params}")
+                    async with session.get(self.base_url, params=params) as response:
+                        if response.status == 200:
+                            text_result = await response.text()
+                            logger.debug(f"UniProt Sync ID Mapping response text:\n{text_result}")
+                            # Parse the tab-separated, potentially semicolon-separated results
+                            # The UniProt CGI client has a special format - we need careful parsing
+                            lines = text_result.strip().split('\n')
+                            count = 0
+                            
+                            # Process result lines until we see error messages
+                            for line in lines:
+                                if not line.strip():
+                                    continue
+                                    
+                                # Check for error message lines
+                                if line.startswith("MSG:"):
+                                    logger.info(f"UniProt message: {line}")
+                                    continue
+                                    
+                                # Parse mapping lines
+                                parts = line.split('\t')
+                                if len(parts) >= 2:  # Some lines may have 3 parts (id, result, extra)
+                                    input_id, output_ids_str = parts[0], parts[1]
+                                    
+                                    if input_id in final_mapping:
+                                        # Split potentially semicolon-separated primary IDs
+                                        primary_ids = [pid.strip() for pid in output_ids_str.split(';') if pid.strip()]
+                                        if primary_ids:
+                                            final_mapping[input_id] = (primary_ids, input_id)
+                                            count += len(primary_ids)
+                                            logger.debug(f"Resolved {input_id} -> {primary_ids}")
+                                        else:
+                                            logger.warning(f"Input ID {input_id} returned empty mapping result part.")
+                                    else:
+                                        logger.warning(f"Mapped ID '{input_id}' from UniProt results was not in the original input list.")
+                                elif len(parts) == 1 and parts[0] in final_mapping:
+                                    # This is likely a non-matched ID line
+                                    logger.debug(f"No match found for input ID: {parts[0]}")
+                                else:
+                                    logger.warning(f"Unexpected line format in UniProt result: '{line}'")
 
-                # Check if results are directly in the status response
-                if "results" in status_response:
-                    logger.info(
-                        f"Job {job_id} results found directly in status response."
-                    )
-                    results_data = status_response
-                    break  # Exit polling loop
-
-                # Otherwise, check the jobStatus field
-                job_status = status_response.get("jobStatus")
-
-                if job_status == "FINISHED":
-                    logger.info(
-                        f"Job {job_id} reported status FINISHED. Retrieving results..."
-                    )
-                    # Results were not in status, so try fetching explicitly
-                    results_data = await self._get_job_results(session, job_id)
-                    break  # Exit polling loop
-                elif job_status in ["RUNNING", "QUEUED"]:
-                    logger.debug(f"Job {job_id} status: {job_status}. Waiting...")
-                    pass  # Continue polling
-                else:
-                    # Includes FAILURE, NOT_FOUND, ERROR, or jobStatus is None etc.
-                    logger.error(
-                        f"Job {job_id} failed or encountered an issue. Status: {job_status}. Response: {status_response}"
-                    )
-                    # results_data remains None
-                    break  # Exit polling loop
-
-                if time.time() - start_time > MAX_WAIT_SECONDS:
-                    logger.error(
-                        f"Job {job_id} timed out after {MAX_WAIT_SECONDS} seconds."
-                    )
-                    # results_data remains None
-                    break  # Exit polling loop
-
-                await asyncio.sleep(POLLING_INTERVAL_SECONDS)
-            # --- End Polling Loop ---
-
-            # Process results
-            final_mapping: Dict[str, Optional[str]] = {
-                identifier: None for identifier in identifiers
-            }
-            if results_data and "results" in results_data:
-                count = 0
-                for item in results_data["results"]:
-                    input_id = item.get("from")
-                    mapped_id_info = item.get("to")
-
-                    if input_id in final_mapping:
-                        # Extract the target ID
-                        target_id: Optional[str] = None
-                        if mapped_id_info:
-                            if isinstance(mapped_id_info, dict) and mapped_id_info.get(
-                                "primaryAccession"
-                            ):
-                                target_id = mapped_id_info["primaryAccession"]
-                            elif isinstance(mapped_id_info, str):
-                                target_id = mapped_id_info  # Handle cases where 'to' is just a string
-
-                        # Update mapping only if a valid target was found and not already mapped
-                        if target_id is not None and final_mapping[input_id] is None:
-                            final_mapping[input_id] = target_id
-                            count += 1
-                            logger.debug(f"Mapped {input_id} -> {target_id}")
-                        elif target_id is not None:
-                            logger.debug(
-                                f"Skipping update for {input_id}, already mapped to {final_mapping[input_id]}"
+                            logger.info(
+                                f"Successfully processed {count} primary mappings "
+                                f"for {len(identifiers)} input identifiers using UniProt Sync API."
                             )
-                        # else: target_id is None (no mapping found for this item)
-                    else:
-                        logger.warning(
-                            f"Mapped ID '{input_id}' from UniProt results was not in the original input list."
-                        )
-                logger.info(
-                    f"Successfully processed {count} mappings out of {len(identifiers)} potential results for job {job_id}."
-                )
-            elif results_data is None:
-                logger.error(
-                    f"No results were obtained for job {job_id} (failed, timed out, or error retrieving)."
-                )
-            else:
-                logger.warning(
-                    f"Job {job_id} finished but results format was unexpected: {results_data}"
-                )
 
-            return final_mapping
+                        # Handle potential errors - UniProt CGI might not return standard error codes reliably
+                        elif response.status >= 400:
+                             error_text = await response.text()
+                             logger.error(
+                                 f"Error querying UniProt Sync ID Mapping: Status {response.status}, "
+                                 f"Message: '{error_text}', Params: {params}"
+                             )
+                        else: # Non-200 success? Unlikely but log
+                             logger.warning(f"Unexpected status code {response.status} from UniProt Sync ID Mapping. Params: {params}")
 
 
-# Example Usage (Optional - for testing)
-async def run_example():
+            except aiohttp.ClientError as e:
+                logger.error(f"HTTP Error querying UniProt Sync ID Mapping: {e}, Params: {params}")
+            except asyncio.TimeoutError:
+                 logger.error(f"Timeout querying UniProt Sync ID Mapping after {self.timeout}s. Params: {params}")
+            except Exception as e:
+                # Catch broader exceptions during request/parsing
+                logger.error(f"Unexpected error during UniProt Sync ID Mapping: {e}", exc_info=True)
+
+        return final_mapping
+
+
+# Example Usage (Optional - for testing the new implementation)
+async def run_example() -> None:
     logging.basicConfig(level=logging.INFO)
-    logger.info("Running UniProt ID Mapping Client Example...")
+    logger.info("Running UniProt Sync ID Mapping Client Example...")
+    # Client defaults to ACC -> ACC resolution
     client = UniProtIDMappingClient()
-    test_ids = ["P05067", "P38398", "P04637", "NONEXISTENTAC"]  # APP, BRCA1, TP53
+
+    # Test cases: Primary, Demerged, Secondary (that keeps its ID), Non-existent
+    test_ids = ["P0DOY2", "P0CG05", "P12345", "NONEXISTENT"] # P0DOY2 (Primary), P0CG05 (Demerged -> P0DOY2, P0DOY3), P12345 (Standard)
+    # The UniProt Sync API handles accessions differently than we expected
+    # It appears to return the same ID for P12345 rather than mapping it to another accession
+
     results = await client.map_identifiers(identifiers=test_ids)
-    print("\n--- Mapping Results (UniProtKB_AC -> Ensembl) ---")
-    for uniprot_ac, ensembl_id in results.items():
-        print(f"  {uniprot_ac}: {ensembl_id}")
+    print("\n--- Mapping Results (ACC -> Primary ACC) ---")
+    for input_id, result_tuple in results.items():
+        primary_ids, component_id = result_tuple
+        print(f"  Input: {input_id} -> Mapped Primary: {primary_ids}, Component: {component_id}")
+
+    # Extract just the primary IDs for cleaner assertion checks
+    primary_results = {k: v[0] for k, v in results.items()}
+    
+    # Verify specific known cases
+    assert primary_results.get("P0DOY2") == ["P0DOY2"], "Primary ID failed"
+    assert sorted(primary_results.get("P0CG05", [])) == sorted(["P0DOY2", "P0DOY3"]), "Demerged ID failed"
+    assert primary_results.get("P12345") == ["P12345"], "Secondary ID mapping failed"
+    assert primary_results.get("NONEXISTENT") is None, "Non-existent ID failed"
+    print("\nBasic assertions passed.")
 
 
 if __name__ == "__main__":
+    # You might need to install nest_asyncio if running in an env like Jupyter
+    # import nest_asyncio
+    # nest_asyncio.apply()
     asyncio.run(run_example())

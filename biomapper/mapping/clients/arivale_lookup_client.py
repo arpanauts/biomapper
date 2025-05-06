@@ -1,81 +1,130 @@
+"""Client to map identifiers using a direct lookup from a local metadata file.
+
+This client loads data from a TSV file and provides mapping between different 
+identifier types (e.g., UniProt IDs to Arivale Protein IDs).
+"""
+
 import asyncio
 import logging
 import pandas as pd
 import csv
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
+
+from biomapper.core.exceptions import ClientInitializationError, ClientExecutionError
+from biomapper.mapping.clients.base_client import (
+    BaseMappingClient,
+    CachedMappingClientMixin,
+    FileLookupClientMixin,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class ArivaleMetadataLookupClient:
-    """Client to map identifiers using a direct lookup from a local metadata file."""
+class ArivaleMetadataLookupClient(
+    CachedMappingClientMixin, FileLookupClientMixin, BaseMappingClient
+):
+    """Client to map identifiers using a direct lookup from a local metadata file.
+    
+    This client:
+    1. Loads mappings from a TSV file specified in the configuration
+    2. Provides bidirectional mapping between identifiers
+    3. Handles composite identifiers (e.g., comma-separated UniProt IDs)
+    4. Uses in-memory caching for better performance
+    
+    The file is expected to have headers and contain at least the key and value
+    columns specified in the configuration.
+    """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
-        """Initializes the client and loads the lookup map from the file.
-
+    def __init__(self, config: Optional[Dict[str, Any]] = None, cache_size: int = 10000):
+        """Initialize the client and load the lookup map from the file.
+        
         Args:
             config: Configuration dictionary containing:
                 - file_path (str): Path to the TSV metadata file.
                 - key_column (str): Column name containing the source identifiers (e.g., UniProt ACs).
                 - value_column (str): Column name containing the target identifiers (e.g., Arivale Protein IDs).
+            cache_size: Maximum number of entries to store in the cache.
         """
+        # Initialize FileLookupClientMixin with explicit keys to match TSV file
+        self._file_path_key = "file_path"
+        self._key_column_key = "key_column"
+        self._value_column_key = "value_column"
+        
+        # Initialize all parent classes with appropriate parameters
+        super().__init__(cache_size=cache_size, config=config)
+        
+        # Initialize lookup maps
         self._lookup_map: Dict[str, str] = {}
-        self._config = config or {}
-
-        file_path = self._config.get("file_path")
-        key_column = self._config.get("key_column")
-        value_column = self._config.get("value_column")
-
-        if not all([file_path, key_column, value_column]):
-            logger.error(
-                f"{self.__class__.__name__}: Missing required configuration: 'file_path', 'key_column', or 'value_column'"
-            )
-            # Consider raising an error or handling this state more explicitly
-            return
-
-        logger.debug(f"ArivaleMetadataLookupClient loading mapping from {file_path}")
+        self._component_lookup_map: Dict[str, str] = {}
+        self._reverse_lookup_map: Dict[str, List[str]] = {}
+        
+        # Load the lookup data from the file
+        self._load_lookup_data()
+        
+        # Mark as initialized
+        self._initialized = True
+        
+    def _load_lookup_data(self) -> None:
+        """Load the lookup data from the file specified in the configuration.
+        
+        This method reads the TSV file, processes the data, and populates the 
+        lookup maps used for mapping identifiers.
+        
+        Raises:
+            ClientInitializationError: If the file cannot be loaded or processed.
+        """
+        file_path = self._get_file_path()
+        key_column = self._get_key_column()
+        value_column = self._get_value_column()
+        
+        logger.debug(f"Loading mapping from {file_path}")
         try:
             logger.info(f"Loading Arivale lookup map from {file_path}")
-            self._file_path = Path(file_path)
-            if not self._file_path.is_file():
-                raise FileNotFoundError(
-                    f"Arivale lookup file not found: {self._file_path}"
+            file_path_obj = Path(file_path)
+            if not file_path_obj.is_file():
+                raise ClientInitializationError(
+                    f"Lookup file not found: {file_path}",
+                    client_name=self.__class__.__name__,
+                    details={"file_path": file_path}
                 )
 
             # Find header row, skipping comments
             header_line_num = 0
-            with open(self._file_path, "r", encoding="utf-8") as f:
+            with open(file_path_obj, "r", encoding="utf-8") as f:
                 for i, line in enumerate(f):
                     if not line.strip().startswith("#"):
                         header_line_num = i
                         break
 
             df = pd.read_csv(
-                self._file_path,
+                file_path_obj,
                 sep="\t",
                 skiprows=header_line_num,
                 quoting=csv.QUOTE_ALL,  # Match check script
                 on_bad_lines="warn",
             )
             logger.debug(
-                f"Arivale client loaded columns: {df.columns.tolist()} using quoting=QUOTE_ALL"
+                f"Client loaded columns: {df.columns.tolist()} using quoting=QUOTE_ALL"
             )
 
             # Verify exact column names seen by pandas
-            uniprot_col_name = "uniprot"  # Assume no quotes based on check script
-            name_col_name = "name"  # Assume no quotes based on check script
-            if uniprot_col_name not in df.columns or name_col_name not in df.columns:
+            if key_column not in df.columns or value_column not in df.columns:
                 logger.error(
-                    f"Required columns '{uniprot_col_name}' or '{name_col_name}' not found in DataFrame. Columns: {df.columns.tolist()}"
+                    f"Required columns '{key_column}' or '{value_column}' not found in DataFrame. "
+                    f"Columns: {df.columns.tolist()}"
                 )
-                raise ValueError("Missing required columns after loading Arivale data.")
+                raise ClientInitializationError(
+                    "Missing required columns after loading data file.",
+                    client_name=self.__class__.__name__,
+                    details={"file_path": file_path, "missing_columns": [key_column, value_column]}
+                )
 
             # Populate the lookup map
             for _, row in df.iterrows():
-                # Access columns *without* extra quotes in the name
-                uniprot_val_raw = str(row[uniprot_col_name])
-                name_val_raw = str(row[name_col_name])
+                # Access columns using the configured names
+                uniprot_val_raw = str(row[key_column])
+                name_val_raw = str(row[value_column])
 
                 # Check for null/empty UniProt ID *before* stripping
                 if pd.isna(uniprot_val_raw) or not str(uniprot_val_raw).strip():
@@ -85,6 +134,10 @@ class ArivaleMetadataLookupClient:
                 key_val = uniprot_val_raw.strip().strip('"')
                 value_val = name_val_raw.strip().strip('"')
 
+                # Skip if value is empty after stripping
+                if not value_val:
+                    continue
+
                 # Treat the entire stripped key_val as the key, do not split.
                 # This matches the check script and UKBB loading logic.
                 k = key_val.strip()
@@ -92,95 +145,254 @@ class ArivaleMetadataLookupClient:
                     if k in self._lookup_map:
                         if self._lookup_map[k] != value_val:
                             logger.warning(
-                                f"Duplicate key '{k}' found in {file_path}. Keeping first value '{self._lookup_map[k]}', ignoring '{value_val}'."
+                                f"Duplicate key '{k}' found in {file_path}. "
+                                f"Keeping first value '{self._lookup_map[k]}', ignoring '{value_val}'."
                             )
                     else:
                         self._lookup_map[k] = value_val
+                        
+                        # Update reverse lookup map
+                        if value_val not in self._reverse_lookup_map:
+                            self._reverse_lookup_map[value_val] = []
+                        if k not in self._reverse_lookup_map[value_val]:
+                            self._reverse_lookup_map[value_val].append(k)
+
+                # Populate component lookup map
+                components = [
+                    comp.strip() for comp in key_val.split(",") if comp.strip()
+                ]
+                for component in components:
+                    if component in self._component_lookup_map:
+                        # Handle cases where a component maps to multiple Arivale IDs
+                        # For now, warn and keep the first mapping found for simplicity
+                        if self._component_lookup_map[component] != value_val:
+                            logger.warning(
+                                f"Component '{component}' from key '{key_val}' maps to new value '{value_val}', "
+                                f"but already mapped to '{self._component_lookup_map[component]}'. Keeping first mapping."
+                            )
+                    else:
+                        self._component_lookup_map[component] = value_val
+                        
+                        # Update reverse lookup for components as well
+                        if value_val not in self._reverse_lookup_map:
+                            self._reverse_lookup_map[value_val] = []
+                        if component not in self._reverse_lookup_map[value_val]:
+                            self._reverse_lookup_map[value_val].append(component)
 
             logger.info(
                 f"Loaded {len(self._lookup_map)} unique key-value pairs into lookup map."
             )
-
-        except FileNotFoundError:
-            logger.error(
-                f"{self.__class__.__name__}: Metadata file not found at {file_path}"
+            logger.info(
+                f"Loaded {len(self._component_lookup_map)} unique component keys into component map."
             )
-            # Consider raising an error
-        except KeyError as e:
-            logger.error(
-                f"{self.__class__.__name__}: Column error in {file_path}: {e}. Check if header names need quotes in 'usecols'."
+            logger.info(
+                f"Created reverse lookup map with {len(self._reverse_lookup_map)} entries."
             )
+            
+            # Preload cache - don't use asyncio.create_task here
+            # as it requires a running event loop which might not be available during init
+            self._cache_preload_needed = True
+            
+        except ClientInitializationError:
+            # Re-raise client initialization errors
+            raise
         except Exception as e:
             logger.error(
                 f"{self.__class__.__name__}: Failed to load lookup map from {file_path}: {e}"
             )
-            # Consider raising an error
+            raise ClientInitializationError(
+                f"Failed to load lookup data: {str(e)}",
+                client_name=self.__class__.__name__,
+                details={"file_path": file_path, "error": str(e)}
+            )
+
+    async def _preload_cache(self) -> None:
+        """Preload the cache with all mappings from the lookup map.
+        
+        This ensures that all lookups will be cache hits, providing the best
+        performance for repeated lookups.
+        """
+        logger.info(f"Preloading cache with {len(self._lookup_map)} entries...")
+        
+        # Create a batch of results to add to the cache
+        cache_entries: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
+        
+        # Add direct lookup entries
+        for key, value in self._lookup_map.items():
+            cache_entries[key] = self.format_result([value], key)
+            
+        # Add component lookup entries
+        for component, value in self._component_lookup_map.items():
+            cache_entries[component] = self.format_result([value], component)
+            
+        # Add all entries to the cache at once
+        await self._add_many_to_cache(cache_entries)
+        
+        # Set cache as initialized
+        self._cache_initialized = True
+        logger.info(f"Cache preloaded with {len(cache_entries)} entries.")
 
     async def map_identifiers(
         self, identifiers: List[str], config: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, List[str]]:
-        """Maps input identifiers (e.g., UniProt ACs) to target identifiers (e.g., Arivale Protein IDs)
-           using the preloaded lookup map.
-
+    ) -> Dict[str, Tuple[Optional[List[str]], Optional[str]]]:
+        """Map identifiers using the loaded Arivale lookup map, handling composite keys.
+        
         Args:
-            identifiers: A list of source identifiers to map.
-            config: Optional configuration (not typically used by this client post-init,
-                    but included for interface compatibility).
-
+            identifiers: List of identifiers to map.
+            config: Optional configuration overrides for this specific call.
+            
         Returns:
-            A dictionary where keys are the input identifiers found in the map,
-            and values are lists containing the single corresponding target identifier.
-            Identifiers not found in the map are excluded.
+            Dictionary mapping original input identifiers to a tuple:
+            (list of mapped target IDs or None, the source ID component that yielded the match or None).
         """
-        logger.debug(
-            f"ArivaleMetadataLookupClient received {len(identifiers)} IDs to map: {identifiers[:10]}..."
-        )
-        if not self._lookup_map:
-            logger.error("Arivale mapping data failed to load. Cannot map identifiers.")
-            return {identifier: None for identifier in identifiers}
-
-        await asyncio.sleep(0)  # Yield control briefly
-
-        results: Dict[str, List[str]] = {}
-
-        found_count = 0
-        miss_count = 0
-        logged_miss_details = False  # Flag to log details only once
-        sample_keys_logged = False  # Flag to log sample keys only once
-
-        if self._lookup_map:
-            sample_map_keys_repr = [repr(k) for k in list(self._lookup_map.keys())[:5]]
-            logger.debug(f"Sample map keys (repr): {sample_map_keys_repr}")
-            logger.debug(
-                f"Type of first map key: {type(list(self._lookup_map.keys())[0]) if self._lookup_map else 'N/A'}"
+        if not self._initialized:
+            raise ClientExecutionError(
+                "Client not properly initialized",
+                client_name=self.__class__.__name__
             )
+            
+        # Preload cache if needed
+        if hasattr(self, "_cache_preload_needed") and self._cache_preload_needed:
+            await self._preload_cache()
+            self._cache_preload_needed = False
+            
+        results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
+        miss_count = 0
+        found_count = 0
+        cache_hit_count = 0
+        
+        # Process each identifier
+        for identifier in identifiers:
+            # Check cache first
+            cached_result = await self._get_from_cache(identifier)
+            if cached_result is not None:
+                results[identifier] = cached_result
+                found_count += 1 if cached_result[0] is not None else 0
+                miss_count += 1 if cached_result[0] is None else 0
+                cache_hit_count += 1
+                continue
+                
+            # Not in cache, process the identifier
+            identifier_stripped = identifier.strip()
+            mapped = False
+            successful_component_id = None
 
-        for i, identifier in enumerate(identifiers):
-            identifier_stripped = identifier.strip()  # Ensure input is also stripped
+            # 1. Try direct match with the stripped identifier
+            direct_match_found = identifier_stripped in self._lookup_map
+            if direct_match_found:
+                result = self.format_result(
+                    [self._lookup_map[identifier_stripped]],
+                    identifier_stripped  # Matched directly
+                )
+                results[identifier] = result
+                mapped = True
+                successful_component_id = identifier_stripped
+                
+                # Add to cache
+                await self._add_to_cache(identifier, result)
+                
+            # 2. If no direct match AND it looks composite, try components
+            elif "," in identifier_stripped or "_" in identifier_stripped:
+                components = [
+                    comp.strip()
+                    for comp in identifier_stripped.split(",")
+                    if comp.strip()
+                ]
+                target_ids_for_components = set()
+                found_component_match = False
+                first_successful_component = None
 
-            if identifier_stripped in self._lookup_map:
-                results[identifier] = [
-                    self._lookup_map[identifier_stripped]
-                ]  # Use original identifier as key in results
-                found_count += 1
-            else:
-                miss_count += 1
-                if miss_count < 5:
-                    logger.debug(
-                        f"Arivale lookup MISS: Identifier '{identifier}' (stripped: '{identifier_stripped}') not in map."
+                for component in components:
+                    component_stripped = component.strip()
+                    component_match_found = (
+                        component_stripped in self._component_lookup_map
                     )
-                    found_case_insensitive = False
-                    for key in self._lookup_map.keys():
-                        if key.lower() == identifier_stripped.lower():
-                            logger.debug(
-                                f"  -> Found case-insensitive match: Map key '{key}' vs Input '{identifier_stripped}'"
-                            )
-                            found_case_insensitive = True
-                            break
-                    if not found_case_insensitive:
-                        logger.debug(f"  -> No case-insensitive match found either.")
+                    if component_match_found:
+                        target_ids_for_components.add(
+                            self._component_lookup_map[component_stripped]
+                        )
+                        if not found_component_match:
+                            first_successful_component = component_stripped  # Record the first component that hit
+                        found_component_match = True
+
+                if found_component_match:
+                    # Use the combined targets from all matching components
+                    # and the first component that yielded a match as the successful ID
+                    result = self.format_result(
+                        sorted(list(target_ids_for_components)),
+                        first_successful_component
+                    )
+                    results[identifier] = result
+                    mapped = True
+                    successful_component_id = first_successful_component
+                    
+                    # Add to cache
+                    await self._add_to_cache(identifier, result)
+
+            # If still not mapped after all checks
+            if not mapped:
+                result = self.format_result(None, None)
+                results[identifier] = result
+                miss_count += 1
+                
+                # Cache misses too to avoid repeated lookups
+                await self._add_to_cache(identifier, result)
+            else:
+                found_count += 1
 
         logger.info(
-            f"Arivale Lookup: Mapped {found_count} (found) / {miss_count} (missed) out of {len(identifiers)} input identifiers."
+            f"Arivale Lookup: Mapped {found_count} (found) / {miss_count} (missed) out of {len(identifiers)} "
+            f"input identifiers. Cache hits: {cache_hit_count}/{len(identifiers)}"
+        )
+        return results
+        
+    async def reverse_map_identifiers(
+        self, identifiers: List[str], config: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Tuple[Optional[List[str]], Optional[str]]]:
+        """Map identifiers in the reverse direction (from Arivale IDs to source IDs).
+        
+        Args:
+            identifiers: List of Arivale identifiers to map back to source identifiers.
+            config: Optional configuration overrides for this specific call.
+            
+        Returns:
+            Dictionary mapping original input identifiers to a tuple:
+            (list of mapped source IDs or None, the target ID that yielded the match or None).
+        """
+        if not self._initialized:
+            raise ClientExecutionError(
+                "Client not properly initialized",
+                client_name=self.__class__.__name__
+            )
+            
+        # Preload cache if needed
+        if hasattr(self, "_cache_preload_needed") and self._cache_preload_needed:
+            await self._preload_cache()
+            self._cache_preload_needed = False
+            
+        results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
+        miss_count = 0
+        found_count = 0
+        
+        # Process each identifier
+        for identifier in identifiers:
+            identifier_stripped = identifier.strip()
+            
+            # Check if the identifier exists in the reverse lookup map
+            if identifier_stripped in self._reverse_lookup_map:
+                # Return all source IDs that map to this target ID
+                results[identifier] = self.format_result(
+                    self._reverse_lookup_map[identifier_stripped],
+                    identifier_stripped
+                )
+                found_count += 1
+            else:
+                # No match found
+                results[identifier] = self.format_result(None, None)
+                miss_count += 1
+                
+        logger.info(
+            f"Arivale Reverse Lookup: Mapped {found_count} (found) / {miss_count} (missed) "
+            f"out of {len(identifiers)} input identifiers."
         )
         return results

@@ -1,7 +1,7 @@
 # /home/ubuntu/biomapper/biomapper/mapping/clients/umls_client.py
 import requests
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union, cast, TypedDict, Iterable
 # from lxml.html import fromstring # Potentially needed for TGT extraction
 
 # TODO: Add configuration model (e.g., Pydantic) for API key, base_url, version
@@ -122,8 +122,18 @@ class UMLSClient:
 
         try:
             logger.debug(f"Querying UMLS Search API: {search_url} with term: {term}")
+            # Convert params to appropriate type for requests
+            request_params = {k: v for k, v in params.items()}
+            # Convert timeout to float for requests
+            timeout_val = (
+                float(self.config["timeout"])
+                if self.config["timeout"] is not None
+                else None
+            )
             response = self.session.get(
-                search_url, params=params, timeout=self.config["timeout"]
+                search_url,
+                params=request_params,
+                timeout=timeout_val,  # type: ignore
             )
             response.raise_for_status()
             results = response.json()
@@ -134,7 +144,10 @@ class UMLSClient:
                 logger.info(
                     f"Found {len(search_results)} UMLS results for term '{term}'."
                 )
-                return search_results  # List of dicts, e.g., [{'ui': 'C0003733', 'name': 'Aspirin'}, ...]
+                # Type cast to ensure correct return type
+                return cast(
+                    List[Dict[str, Any]], search_results
+                )  # List of dicts, e.g., [{'ui': 'C0003733', 'name': 'Aspirin'}, ...]
             else:
                 logger.warning(
                     f"No UMLS results found for term '{term}'. Response: {results}"
@@ -156,7 +169,7 @@ class UMLSClient:
             )
             return None
 
-    def close_session(self):
+    def close_session(self) -> None:
         """Close the underlying requests session."""
         if self.session:
             self.session.close()
