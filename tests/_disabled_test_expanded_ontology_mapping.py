@@ -11,11 +11,12 @@ import logging
 import sys
 from pathlib import Path
 import argparse
+from typing import Dict, List, Optional, Any, Tuple, Union
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
 
-from biomapper.mapping.metadata.engine import MetamappingEngine
+from biomapper.mapping.metadata.engine import MetamappingEngine  # type: ignore
 from biomapper.mapping.clients.pubchem_client import PubChemClient
 from biomapper.mapping.clients.kegg_client import KEGGClient
 from biomapper.mapping.clients.chebi_client import ChEBIClient
@@ -28,7 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def print_entity_details(entity, prefix=""):
+def print_entity_details(entity: Any, prefix: str = "") -> None:
     """Print details of an entity in a readable format."""
     if entity is None:
         print(f"{prefix}No entity found.")
@@ -68,7 +69,7 @@ def print_entity_details(entity, prefix=""):
             print(f"{prefix}    {db.upper()}: {id_value}")
 
 
-async def test_direct_client_searches(compound_name):
+async def test_direct_client_searches(compound_name: str) -> None:
     """Test direct client searches using PubChem, KEGG, and ChEBI clients."""
     print("\n" + "=" * 80)
     print(f"DIRECT CLIENT SEARCHES FOR: {compound_name}")
@@ -111,7 +112,7 @@ async def test_direct_client_searches(compound_name):
         print(f"ChEBI search error: {e}")
 
 
-async def test_metamapping_engine(compound_name):
+async def test_metamapping_engine(compound_name: str) -> None:
     """Test the MetamappingEngine with the expanded ontology coverage."""
     print("\n" + "=" * 80)
     print(f"METAMAPPING ENGINE TESTS FOR: {compound_name}")
@@ -191,7 +192,7 @@ async def test_metamapping_engine(compound_name):
         await engine.close()
 
 
-async def main():
+async def main() -> None:
     """Main function to run the tests."""
     parser = argparse.ArgumentParser(
         description="Test expanded ontology coverage in Biomapper"
@@ -205,8 +206,8 @@ async def main():
     if args.setup:
         print("Running setup scripts for PubChem and KEGG paths...")
         sys.path.append(str(Path(__file__).parent.parent))
-        from scripts.setup_pubchem_paths import setup_pubchem_paths
-        from scripts.setup_kegg_paths import setup_kegg_paths
+        from scripts.setup_pubchem_paths import setup_pubchem_paths  # type: ignore
+        from scripts.setup_kegg_paths import setup_kegg_paths  # type: ignore
 
         await setup_pubchem_paths()
         await setup_kegg_paths()
