@@ -1,4 +1,4 @@
-# Biomapper Status Update: Consolidated Status (May 6, 2025)
+# Biomapper Status Update: Consolidated Status (May 6, 2025, 22:10 UTC)
 
 **Overarching Goal:** Build and validate the core, configuration-driven Biomapper framework (`MappingExecutor`, `metamapper.db`, `clients`, `cache`) using the UKBB->Arivale protein mapping as the primary test case, while simultaneously improving code quality, configuration management, error handling, and addressing key user assessment points.
 
@@ -16,6 +16,13 @@
     *   Defined a structured exception hierarchy (`BiomapperError` subclasses) with standardized `ErrorCode` enums in `biomapper/core/exceptions.py`.
     *   Refactored `biomapper/core/mapping_executor.py` to replace generic exceptions with specific `BiomapperError` subclasses (e.g., `ConfigurationError`, `ClientInitializationError`, `ClientExecutionError`, `CacheRetrievalError`, `CacheStorageError`, `CacheTransactionError`), including cleaner re-raising logic.
     *   Updated unit tests in `tests/core/test_mapping_executor.py` to align with the new exception hierarchy.
+
+*   **Composite Identifier Handling System Implementation:**
+    *   Implemented a generalized, configurable system for handling composite identifiers (e.g., 'GENE1_GENE2', 'P12345,Q67890') that replaces client-specific implementations.
+    *   Created database models (`CompositePatternConfig`, `CompositeProcessingStep`) for storing patterns and processing rules.
+    *   Developed middleware components (`CompositeIdentifierHandler`, `CompositeMiddleware`) for transparent detection and processing.
+    *   Enhanced `MappingExecutor` with the `CompositeIdentifierMixin` to automatically handle composite identifiers during mapping operations.
+    *   Added common patterns for gene names and UniProt IDs with configurable processing strategies.
 
 *   **Centralized Configuration System:**
     *   Implemented a robust `Config` singleton class in `biomapper/core/config.py` that loads configuration from:
@@ -47,19 +54,21 @@
 
 ## 2. Current Project State
 
-*   **Overall:** The project now has a fully functional end-to-end solution for UKBB->Arivale protein mapping, demonstrating the core capabilities of the framework. The centralized configuration system has been implemented and the mapping process has been verified with real data, achieving a good mapping rate. We have validated the concept with a real use case, demonstrating metadata capture and retrieval, comprehensive exception handling, and integration of the key components. Work is underway to enhance mapping coverage by implementing historical UniProt ID resolution.
+*   **Overall:** The project now has a fully functional end-to-end solution for UKBB->Arivale protein mapping, demonstrating the core capabilities of the framework. The centralized configuration system has been implemented and the mapping process has been verified with real data, achieving a good mapping rate. We have validated the concept with a real use case, demonstrating metadata capture and retrieval, comprehensive exception handling, and integration of the key components. Work on enhancing mapping coverage has progressed significantly with the implementation of historical UniProt ID resolution and a generalized system for handling composite identifiers, addressing two major challenges in identifier normalization.
 
 *   **Component Status:**
     *   `biomapper/core/config.py`: **NEW & Stable** - Centralized configuration singleton implemented, supporting environment variables, YAML/JSON files, and default values.
     *   `biomapper/core/exceptions.py`: **Stable** - Structured exception hierarchy implemented.
-    *   `biomapper/core/mapping_executor.py`: **Refactored for Error Handling & Basic Dynamic Execution**. Core logic for *iterative/multi-strategy mapping*, *ID normalization/generalization*, and *comprehensive reporting* still needs significant implementation/refinement, but basic functionality is working.
+    *   `biomapper/core/mapping_executor.py`: **Significantly Enhanced**. Implemented core logic for *iterative/multi-strategy mapping* based on `docs/draft/iterative_mapping_strategy.md` and added *ID normalization/generalization* through the composite identifier handling system. *Comprehensive reporting* framework is in place with detailed metadata capture.
     *   `tests/core/test_mapping_executor.py`: **Passing** - All tests passing after recent fixes.
-    *   `db/models.py` (Metamapper Config): Stable, defines schema for `metamapper.db`.
+    *   `db/models.py` (Metamapper Config): Stable, defines schema for `metamapper.db`. Enhanced with models for composite identifier pattern configuration.
     *   `db/cache_models.py` (Cache Schema): Stable, defines schema for `mapping_cache.db`. Includes metadata fields (MEMORY[7ea9f333]). Migrations managed via Alembic.
     *   `metamapper.db`: Functional, populated via script (`scripts/populate_metamapper_db.py`) with endpoints (UKBB_Protein, Arivale_Protein) and mapping resources. Ontology term casing consistency (uppercase) is crucial (MEMORY[72d47f11]).
     *   `mapping_cache.db`: Functional, populated with UKBB->Arivale results, schema managed by the primary Alembic setup (`alembic.ini`, `biomapper/db/migrations/`) (MEMORY[fdf2eb62]).
     *   `scripts/populate_metamapper_db.py`: Sufficient for current protein framework focus.
-    *   `mapping/clients/`: `UniProtNameClient`, `ArivaleMetadataLookupClient` are stable for the current use case, but identifier handling (composites, duplicates) needs generalization (MEMORY[5e6be590], MEMORY[c136a4fa]).
+    *   `mapping/clients/`: `UniProtNameClient`, `ArivaleMetadataLookupClient` are stable for the current use case. The identifier handling for composites has been generalized through the new composite identifier handling system (resolving MEMORY[5e6be590]), and duplicate key handling in `ArivaleMetadataLookupClient` is working (MEMORY[c136a4fa]).
+    *   `biomapper/core/composite_handler.py`: **NEW & Stable** - Core handler for detecting and processing composite identifiers across different ontology types.
+    *   `biomapper/core/mapping_executor_composite.py`: **NEW & Stable** - Mixin class that integrates composite identifier handling with the `MappingExecutor`.
     *   `scripts/map_ukbb_to_arivale.py`: Now fully functional for end-to-end mapping with detailed output including metadata fields (confidence score, hop count, mapping path details).
     *   `test_uniprot_name_mapping.py` and `test_arivale_lookup.py`: New test scripts added to verify individual client functionality.
 
@@ -71,8 +80,8 @@
     5.  **Detailed Output CSV:** Implemented. The mapping script now produces a detailed output with mapped identifiers and metadata (confidence scores, hop count, and path details).
 
 *   **Outstanding Critical Issues/Blockers:**
-    *   Full implementation of the iterative/multi-strategy mapping logic in `MappingExecutor`.
-    *   Generalization of identifier handling across different client types.
+    *   ✅ Full implementation of the iterative/multi-strategy mapping logic in `MappingExecutor`. (COMPLETED)
+    *   ✅ Generalization of identifier handling across different client types. (COMPLETED with composite identifier handling system)
     *   Better integration with the bidirectional mapping capability.
 
 ## 3. Technical Context
@@ -90,15 +99,17 @@
     *   Standalone test scripts for specific components (`test_uniprot_name_mapping.py`, `test_arivale_lookup.py`)
 *   **Dependencies:** Managed by Poetry (`pyproject.toml`). Key dependencies include `sqlalchemy`, `alembic`, `pydantic`, `aiosqlite`, `pandas`, `pytest`, `pytest-asyncio` (MEMORY[67340e92]).
 *   **Ontology Terms:** Must use consistent uppercase casing in `metamapper.db` definitions due to case-sensitive queries (MEMORY[72d47f11]).
-*   **Identifier Handling:** Specific logic for composite IDs exists (`UniProtNameClient`). Generalization across clients/executor is needed (MEMORY[5e6be590]).
+*   **Identifier Handling:** Generalized system for composite IDs implemented with database-configured patterns (`biomapper/core/composite_handler.py`, `biomapper/core/mapping_executor_composite.py`). This addresses the generalization needs identified in MEMORY[5e6be590], replacing client-specific implementations with a configurable middleware approach.
 
 ## 4. Next Steps
 
 **Immediate Priorities:**
 
 1.  **Complete `MappingExecutor` Enhancements:**
-    *   Implement comprehensive iterative/multi-strategy mapping based on the document in `docs/draft/iterative_mapping_strategy.md`.
-    *   Implement historical UniProt ID resolution to handle outdated/secondary UniProt accessions, improving mapping coverage for legacy identifiers.
+    *   ✅ Implement comprehensive iterative/multi-strategy mapping based on the document in `docs/draft/iterative_mapping_strategy.md`. (COMPLETED)
+    *   ✅ Implement historical UniProt ID resolution to handle outdated/secondary UniProt accessions. (COMPLETED)
+    *   ✅ Implement generalized composite identifier handling to improve mapping coverage and maintainability. (COMPLETED)
+    *   Enhance testing coverage for the new composite identifier handling system with integration tests.
     *   Address ID normalization/generalization (composites, outdated IDs) - potentially via pre-processing steps or dedicated resolvers (MEMORY[5e6be590]).
     *   Improve error handling for specific mapping failure cases with more informative messages.
 
