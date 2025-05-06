@@ -2,11 +2,13 @@
 
 import os
 import sys
+from typing import Optional, Dict, Any, Union, TypeVar, cast
+from os import PathLike
 import pandas as pd
-import psutil
+import psutil  # type: ignore
 
 
-def get_max_file_size():
+def get_max_file_size() -> int:
     """
     Dynamically calculate maximum file size based on available system memory.
 
@@ -24,8 +26,13 @@ def get_max_file_size():
 
 
 def load_tabular_file(
-    file_path, sep=None, comment="#", low_memory=False, nrows=None, **kwargs
-):
+    file_path: Union[str, PathLike[str]],
+    sep: Optional[str] = None,
+    comment: str = "#",
+    low_memory: bool = False,
+    nrows: Optional[int] = None,
+    **kwargs: Any,
+) -> pd.DataFrame:
     """
     Load data from a CSV/TSV file with intelligent handling of comments and separators.
 
@@ -78,7 +85,7 @@ def load_tabular_file(
             sep = ","
 
     # Load the data with comments handled
-    return pd.read_csv(
+    result = pd.read_csv(
         file_path,
         sep=sep,
         comment=comment,
@@ -86,3 +93,4 @@ def load_tabular_file(
         nrows=nrows,
         **kwargs,
     )
+    return cast(pd.DataFrame, result)
