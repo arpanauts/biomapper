@@ -18,13 +18,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 from sqlalchemy import update, and_, func, or_
 from sqlalchemy.orm import sessionmaker
+from biomapper.db.cache_models import (
+    EntityMapping,
+)
 from biomapper.db.models import (
     Endpoint,
     MappingResource,
     EndpointRelationship,
     OntologyPreference,
     MappingPath,
-    EntityMapping,
     Base,
 )
 from biomapper.mapping.resources.clients.unichem_client import map_with_unichem
