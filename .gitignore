@@ -228,3 +228,7 @@ validation_logs.txt
 
 # Generated documentation
 docs/generated/
+
+# Development experiments and temporary sample data
+scripts/dev_experiments/
+temp_sample_data/
