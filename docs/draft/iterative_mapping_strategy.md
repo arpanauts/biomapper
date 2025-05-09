@@ -25,7 +25,8 @@ The strategy is executed by the `MappingExecutor` when tasked with mapping entit
 2.  **Attempt Primary Mapping (Direct):**
     *   The executor gathers source entities (UKBB) that *already possess* the primary shared identifier (`UNIPROTKB_AC`).
     *   It searches for and executes relevant `MappingPath`s that start with this primary shared type and end with a target endpoint identifier type (e.g., `UNIPROTKB_AC` -> `ARIVALE_PROTEIN_ID`).
-    *   Successful mappings (Source Entity -> Target Entity) are recorded.
+    *   It's important to note that a single source entity (e.g., one UKBB protein identified by a unique UniProt AC) can map to *multiple distinct target entities* if those target entities share the same primary identifier (e.g., Arivale proteins derived from different panels or assays but having the same UniProt AC). Each such link (Source Entity -> Specific Target Entity Instance) is considered an individual mapping to be recorded.
+    *   Successful mappings (Source Entity -> Target Entity/Entities) are recorded.
 
 3.  **Identify Unmapped Entities & Secondary Types:**
     *   The executor identifies source entities (UKBB) that were *not* successfully mapped in Step 2 (often because they lacked the primary identifier `UNIPROTKB_AC` initially).
@@ -50,11 +51,41 @@ The strategy is executed by the `MappingExecutor` when tasked with mapping entit
     *   It re-runs the primary mapping logic from Step 2 for these entities (e.g., using the derived `UNIPROTKB_AC` to find an `ARIVALE_PROTEIN_ID`).
     *   Successful mappings are recorded.
 
-6.  **Aggregate Results:** The executor combines the successful mappings from Step 2 (Direct Primary) and Step 5 (Indirect via Secondary Conversion) to produce the final mapping result set.
+6.  **Bidirectional Validation (Optional):** If enabled via the `validate_bidirectional` parameter, the executor performs an additional validation step:
+    *   All target IDs discovered in successful mappings are collected.
+    *   A reverse mapping (target → source) is executed for these IDs.
+    *   Each original mapping is enriched with a `validation_status` field:
+        *   **"Validated"**: When a target ID maps back to its original source ID (bidirectional success).
+        *   **"UnidirectionalSuccess"**: When forward mapping succeeded but the target doesn't map back to the source.
+    *   All forward mappings are preserved in the result, just enriched with validation status.
+    *   This provides a three-tiered status system: "Validated" (bidirectional success), "UnidirectionalSuccess" (forward only), and "Failed" (not in successful mappings).
+    *   When a single source entity maps to multiple target entities (as noted in Step 2), each of these individual forward links is independently validated. The final reconciled output (e.g., from Phase 3) will therefore present each such validated link as a distinct entry. This ensures comprehensive reporting of all identified one-to-many or many-to-many relationships, detailing the validation status for each specific source-target_instance pair.
+
+7.  **Phase 3: Bidirectional Reconciliation:** For comprehensive mapping analysis, a dedicated reconciliation script provides the following enhancements:
+    *   **Advanced Validation Status:** Expands the validation status system to five tiers:
+        *   **"Validated: Bidirectional exact match":** The source entity maps to the target entity, and the target maps back to exactly the same source entity.
+        *   **"Validated: Forward mapping only":** The source entity maps to the target entity, but the target entity does not map back to this source entity.
+        *   **"Validated: Reverse mapping only":** No direct mapping exists from source to target, but the target entity maps back to this source entity.
+        *   **"Conflict":** The source entity maps to the target entity, but the target entity maps back to a different source entity.
+        *   **"Unmapped":** No mapping exists in either direction.
+    *   **One-to-Many Relationship Support:** Explicitly handles and flags one-to-many relationships in both directions:
+        *   **`is_one_to_many_source`:** Flag indicating whether this source entity maps to multiple target entities.
+        *   **`is_one_to_many_target`:** Flag indicating whether this target entity maps to multiple source entities.
+        *   **`is_canonical_mapping`:** Flag indicating the preferred mapping for each source entity (based on validation status and confidence).
+    *   **Dynamic Column Naming:** Generates column names based on the source and target endpoints, allowing for flexible reconciliation between different entity types.
+    *   **Comprehensive Statistics:** Provides detailed mapping statistics, including counts of unique source and target entities, validation status distribution, and one-to-many relationship metrics.
+    *   **Complete Entity Coverage:** Incorporates all entities from both forward and reverse mapping phases, ensuring no entities are omitted from the final analysis.
+    *   **Historical Resolution Tracking:** For UniProtKB mappings, tracks historical identifier resolution information, including original and resolved accessions and resolution type.
+
+    The Phase 3 reconciliation process produces a comprehensive TSV output file and a JSON metadata file, providing complete information about the bidirectional mapping relationships between source and target endpoints. See `phase3_output_column_guide.md` for detailed documentation of the output format.
 
 **Note on Backward Mapping:** The same logic applies when mapping in the reverse direction (e.g., Arivale -> UKBB). The roles of source/target are swapped, and the secondary types considered in Step 3/4 would be those available in the *Arivale* endpoint (like `ENSEMBL_PROTEIN`, `GENE_NAME`, or `ENSEMBL_GENE`). The goal remains converting these back to the primary shared type (`UNIPROTKB_AC`).
 
-Additionally, the `MappingExecutor` supports bidirectional mapping through the `try_reverse_mapping` parameter. When enabled, if no forward mapping path is found, the executor will automatically try to find and execute a path in the reverse direction. This feature is particularly useful for handling cases where one direction has better coverage or more reliable resources.
+The `MappingExecutor` supports two distinct bidirectional features:
+
+1. **Bidirectional Path Finding** (`try_reverse_mapping` parameter): When enabled, if no forward mapping path is found, the executor will automatically try to find and execute a path in the reverse direction. This feature is particularly useful for handling cases where one direction has better coverage or more reliable resources.
+
+2. **Bidirectional Validation** (`validate_bidirectional` parameter): When enabled, performs the validation step described above to verify the quality of mappings by checking if target IDs map back to their source IDs.
 
 ## Implementation Notes
 
@@ -96,7 +127,7 @@ These configurations enable the `MappingExecutor` to attempt mappings using the 
 ```python
 # Conceptual pseudo-code within MappingExecutor.map(source_endpoint, target_endpoint, relationship)
 
-def execute_iterative_mapping(source_entities, source_endpoint, target_endpoint, relationship):
+def execute_iterative_mapping(source_entities, source_endpoint, target_endpoint, relationship, validate_bidirectional=False):
     primary_shared_ontology = get_primary_shared_ontology(relationship)
     source_preferences = get_ontology_preferences(source_endpoint)
 
@@ -155,10 +186,75 @@ def execute_iterative_mapping(source_entities, source_endpoint, target_endpoint,
     add_provenance_to_mappings(indirect_results, derived_primary_ids)
     successful_mappings.update(indirect_results)
 
-    # --- Step 6: Aggregate Results ---
+    # --- Step 6: Bidirectional Validation (Optional) ---
+    if validate_bidirectional:
+        # Extract all target IDs from successful mappings
+        target_ids_to_validate = set()
+        for result in successful_mappings.values():
+            if result and result.get("target_identifiers"):
+                target_ids_to_validate.update(result["target_identifiers"])
+        
+        # Find a reverse mapping path from target back to source
+        reverse_path = find_best_path(
+            primary_target_ontology,  # Using target as source
+            primary_source_ontology,  # Using source as target
+            preferred_direction="forward"
+        )
+        
+        if reverse_path:
+            # Execute reverse mapping
+            reverse_results = execute_path(
+                reverse_path,
+                list(target_ids_to_validate),
+                primary_target_ontology,
+                primary_source_ontology
+            )
+            
+            # Reconcile bidirectional mappings
+            successful_mappings = reconcile_bidirectional_mappings(
+                successful_mappings,
+                reverse_results
+            )
+
+    # --- Step 7: Aggregate Results ---
     return successful_mappings
 
-# Helper functions (get_primary_shared_ontology, get_ontology_preferences, etc.) omitted for brevity
+# Helper function for bidirectional validation
+def reconcile_bidirectional_mappings(forward_mappings, reverse_results):
+    # Create a target-to-source lookup from reverse_results
+    target_to_sources = {}
+    for target_id, result in reverse_results.items():
+        if result and result.get("target_identifiers"):
+            target_to_sources[target_id] = set(result["target_identifiers"])
+    
+    # Check each forward mapping and enrich with validation status
+    enriched_mappings = {}
+    for source_id, result in forward_mappings.items():
+        enriched_result = result.copy()
+        
+        if not result or not result.get("target_identifiers"):
+            enriched_result["validation_status"] = "UnidirectionalSuccess"
+        else:
+            target_ids = result["target_identifiers"]
+            source_validated = False
+            
+            # Check if any of these targets map back to this source
+            for target_id in target_ids:
+                if target_id in target_to_sources:
+                    if source_id in target_to_sources[target_id]:
+                        source_validated = True
+                        break
+            
+            if source_validated:
+                enriched_result["validation_status"] = "Validated"
+            else:
+                enriched_result["validation_status"] = "UnidirectionalSuccess"
+        
+        enriched_mappings[source_id] = enriched_result
+    
+    return enriched_mappings
+
+# Other helper functions (get_primary_shared_ontology, get_ontology_preferences, etc.) omitted for brevity
 ```
 
 ## Benefits
@@ -176,3 +272,4 @@ def execute_iterative_mapping(source_entities, source_endpoint, target_endpoint,
 *   **Enhanced Metadata Tracking:** Further developing the metadata tracking capabilities implemented in `EntityMapping` (`confidence_score`, `hop_count`, `mapping_direction`, `mapping_path_details`) to provide more detailed provenance information for complex mappings.
 *   **Client-Specific Reverse Mappings:** Implementing specialized `reverse_map_identifiers` methods in mapping clients where the current generic approach of inverting forward mappings may not be optimal.
 *   **Compound/Metabolite Support:** Extending the current protein mapping framework to support compound and metabolite identifiers with additional resources like UMLS for text-based entity mapping.
+*   **Advanced Bidirectional Validation:** Building on the current bidirectional validation implementation to provide more sophisticated validation metrics and confidence adjustments based on validation status.
