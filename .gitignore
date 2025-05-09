@@ -205,6 +205,26 @@ tests_*.py*
 vector_store/
 
 # SQLite database files
-data/metamapper.db
+#data/metamapper.db
 data/metamapper.db-*
 CLAUDE.md
+
+# Biomapper specific ignores added by Cascade
+# Backup files for mapping_executor
+biomapper/core/mapping_executor.py.backup
+biomapper/core/mapping_executor.py.bak
+biomapper/core/mapping_executor_bak.py
+biomapper/core/mapping_executor_fix.py
+
+# Local data and output files (excluding metamapper.db)
+data/output/
+data/test_data/
+data/direct_mapping_summary.txt
+data/verified_mapping_summary.txt
+
+# Log files
+debug_output.txt
+validation_logs.txt
+
+# Generated documentation
+docs/generated/
