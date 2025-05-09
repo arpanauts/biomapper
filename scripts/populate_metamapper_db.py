@@ -21,6 +21,9 @@ from biomapper.db.models import (
     PropertyExtractionConfig,
     EndpointPropertyConfig,
     OntologyCoverage,
+    Property,
+    Ontology,
+    MappingSessionLog,
 )
 
 # Configure logging
@@ -49,6 +52,148 @@ async def delete_existing_db():
 async def populate_data(session: AsyncSession):
     """Adds standard configuration data to the database."""
 
+    logging.info("Populating Ontologies...")
+    ontologies = {
+        "uniprotkb_ac": Ontology(
+            name="UNIPROTKB_AC_ONTOLOGY",
+            description="UniProtKB Accession Numbers",
+            identifier_prefix="UniProtKB:",
+            namespace_uri="https://www.uniprot.org/uniprot/",
+            version="2025.01"
+        ),
+        "arivale_protein_id": Ontology(
+            name="ARIVALE_PROTEIN_ID_ONTOLOGY",
+            description="Arivale Protein Identifiers",
+            version="2025.01"
+        ),
+        "gene_name": Ontology(
+            name="GENE_NAME_ONTOLOGY", 
+            description="Gene Names/Symbols",
+            version="2025.01"
+        ),
+        "ensembl_protein": Ontology(
+            name="ENSEMBL_PROTEIN_ONTOLOGY",
+            description="Ensembl Protein Identifiers",
+            identifier_prefix="ENSP:",
+            namespace_uri="https://www.ensembl.org/id/",
+            version="2025.01"
+        ),
+        "ensembl_gene": Ontology(
+            name="ENSEMBL_GENE_ONTOLOGY",
+            description="Ensembl Gene Identifiers",
+            identifier_prefix="ENSG:",
+            namespace_uri="https://www.ensembl.org/id/",
+            version="2025.01"
+        ),
+        "pubchem_id": Ontology(
+            name="PUBCHEM_ID_ONTOLOGY",
+            description="PubChem Compound Identifiers",
+            identifier_prefix="CID:",
+            namespace_uri="https://pubchem.ncbi.nlm.nih.gov/compound/",
+            version="2025.01"
+        ),
+        "chebi_id": Ontology(
+            name="CHEBI_ID_ONTOLOGY",
+            description="Chemical Entities of Biological Interest Identifiers",
+            identifier_prefix="CHEBI:",
+            namespace_uri="https://www.ebi.ac.uk/chebi/searchId.do?chebiId=",
+            version="2025.01"
+        ),
+        "kegg_id": Ontology(
+            name="KEGG_ID_ONTOLOGY",
+            description="KEGG Compound Identifiers",
+            identifier_prefix="KEGG:",
+            namespace_uri="https://www.genome.jp/dbget-bin/www_bget?cpd:",
+            version="2025.01"
+        ),
+    }
+    session.add_all(ontologies.values())
+    await session.flush()  # Flush to get IDs
+
+    logging.info("Populating Properties...")
+    properties = [
+        # UniProtKB AC properties
+        Property(
+            name="UNIPROTKB_AC",
+            description="UniProtKB Accession Number",
+            ontology_id=ontologies["uniprotkb_ac"].id,
+            is_primary=True,
+            data_type="string"
+        ),
+        
+        # Arivale Protein ID properties
+        Property(
+            name="ARIVALE_PROTEIN_ID",
+            description="Arivale Protein Identifier",
+            ontology_id=ontologies["arivale_protein_id"].id,
+            is_primary=True,
+            data_type="string"
+        ),
+        
+        # Gene Name properties
+        Property(
+            name="GENE_NAME",
+            description="Gene Name/Symbol",
+            ontology_id=ontologies["gene_name"].id,
+            is_primary=True,
+            data_type="string"
+        ),
+        
+        # Ensembl Protein properties
+        Property(
+            name="ENSEMBL_PROTEIN",
+            description="Ensembl Protein Identifier",
+            ontology_id=ontologies["ensembl_protein"].id,
+            is_primary=True,
+            data_type="string"
+        ),
+        Property(
+            name="ENSEMBL_PROTEIN_ID",
+            description="Ensembl Protein Identifier (Alternative naming)",
+            ontology_id=ontologies["ensembl_protein"].id,
+            is_primary=False,
+            data_type="string"
+        ),
+        
+        # Ensembl Gene properties
+        Property(
+            name="ENSEMBL_GENE",
+            description="Ensembl Gene Identifier",
+            ontology_id=ontologies["ensembl_gene"].id,
+            is_primary=True,
+            data_type="string"
+        ),
+        
+        # PubChem properties
+        Property(
+            name="PUBCHEM_ID",
+            description="PubChem Compound Identifier",
+            ontology_id=ontologies["pubchem_id"].id,
+            is_primary=True,
+            data_type="string"
+        ),
+        
+        # ChEBI properties
+        Property(
+            name="CHEBI_ID",
+            description="ChEBI Identifier",
+            ontology_id=ontologies["chebi_id"].id,
+            is_primary=True,
+            data_type="string"
+        ),
+        
+        # KEGG properties
+        Property(
+            name="KEGG_ID",
+            description="KEGG Compound Identifier",
+            ontology_id=ontologies["kegg_id"].id,
+            is_primary=True,
+            data_type="string"
+        ),
+    ]
+    session.add_all(properties)
+    await session.flush()  # Flush to get IDs
+
     logging.info("Populating Endpoints...")
     endpoints = {
         "metabolites_csv": Endpoint(
@@ -65,12 +210,14 @@ async def populate_data(session: AsyncSession):
             name="UKBB_Protein",
             description="UK Biobank Protein Biomarkers",
             connection_details='{"path": "/procedure/data/local_data/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv"}',
+            primary_property_name="UNIPROTKB_AC"
         ),  # Updated path
         "arivale_protein": Endpoint(
             name="Arivale_Protein",
             description="Arivale SomaScan Protein Metadata",
             type="protein_tsv",
             connection_details='{"path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv"}',
+            primary_property_name="ARIVALE_PROTEIN_ID"
         ),
         "arivale_chem": Endpoint(
             name="Arivale_Chemistry",
@@ -575,7 +722,7 @@ async def populate_data(session: AsyncSession):
         # Config for extracting Ensembl Protein ID from Arivale TSV (index 9)
         PropertyExtractionConfig(
             resource_id=None,
-            ontology_type="ENSEMBL_PROTEIN",
+            ontology_type="ENSEMBL_PROTEIN_ID",
             property_name="EnsemblProteinID",
             extraction_method="column",
             extraction_pattern=json.dumps({"column_name": "protein_id"}),
@@ -586,56 +733,79 @@ async def populate_data(session: AsyncSession):
     await session.flush()  # Flush to get extraction config IDs
 
     logging.info("Populating Endpoint Property Configs...")
+    # Find the Property objects we need by name
+    property_uniprotkb_ac = next(p for p in properties if p.name == "UNIPROTKB_AC")
+    property_arivale_protein_id = next(p for p in properties if p.name == "ARIVALE_PROTEIN_ID")
+    property_gene_name = next(p for p in properties if p.name == "GENE_NAME")
+    property_ensembl_protein = next(p for p in properties if p.name == "ENSEMBL_PROTEIN")
+    property_ensembl_protein_id = next(p for p in properties if p.name == "ENSEMBL_PROTEIN_ID")
+    property_ensembl_gene = next(p for p in properties if p.name == "ENSEMBL_GENE")
+    
     endpoint_prop_configs = [
+        # UKBB Protein - UniProtKB AC primary identifier
         EndpointPropertyConfig(
             endpoint_id=endpoints["ukbb_protein"].id,
             property_extraction_config_id=prop_extract_configs[3].id,
-            property_name="PrimaryIdentifier",
+            property_name="PrimaryIdentifier",  # The property name in the UI/config
+            ontology_type="UNIPROTKB_AC",       # The ontology type for lookup
+            is_primary_identifier=True,
         ),
-        # Link Arivale endpoint to its UniProt AC extraction config
+        
+        # Arivale Protein - UniProt AC non-primary identifier
         EndpointPropertyConfig(
             endpoint_id=endpoints["arivale_protein"].id,
             property_extraction_config_id=prop_extract_configs[4].id,
             property_name="UniProtKB_Accession",
+            ontology_type="UNIPROTKB_AC",
         ),
-        # Link Arivale endpoint to its PrimaryIdentifier extraction config
+        
+        # Arivale Protein - Primary identifier
         EndpointPropertyConfig(
             endpoint_id=endpoints["arivale_protein"].id,
             property_extraction_config_id=prop_extract_configs[5].id,
             property_name="PrimaryIdentifier",
+            ontology_type="ARIVALE_PROTEIN_ID",
+            is_primary_identifier=True,
         ),
-        # ... potentially add configs for other endpoints/properties ...
-        # Define a property for Ensembl Gene ID (even if no endpoint uses it directly yet)
-        # This allows targeting ENSEMBL_GENE in mapping paths
+        
+        # UKBB Protein - Ensembl Gene ID
         EndpointPropertyConfig(
-            id=4,
             endpoint_id=endpoints["ukbb_protein"].id,
             property_name="EnsemblGeneID",
             property_extraction_config_id=prop_extract_configs[6].id,
+            ontology_type="ENSEMBL_GENE",
         ),
-        # --- Link UKBB to its Gene Name --- (New)
+        
+        # UKBB Protein - Gene Name
         EndpointPropertyConfig(
             endpoint_id=endpoints["ukbb_protein"].id,
             property_extraction_config_id=prop_extract_configs[7].id,
             property_name="GeneName",
+            ontology_type="GENE_NAME",
         ),
-        # --- Link Arivale to its Gene Name --- (New)
+        
+        # Arivale Protein - Gene Name
         EndpointPropertyConfig(
             endpoint_id=endpoints["arivale_protein"].id,
             property_extraction_config_id=prop_extract_configs[8].id,
             property_name="GeneName",
+            ontology_type="GENE_NAME",
         ),
-        # --- Link Arivale to its Ensembl Protein ID --- (New)
+        
+        # Arivale Protein - Ensembl Protein ID
         EndpointPropertyConfig(
             endpoint_id=endpoints["arivale_protein"].id,
             property_extraction_config_id=prop_extract_configs[9].id,
             property_name="EnsemblProteinID",
+            ontology_type="ENSEMBL_PROTEIN_ID",
         ),
-        # --- Link Arivale to its Ensembl Gene ID --- (New, reusing existing config)
+        
+        # Arivale Protein - Ensembl Gene ID
         EndpointPropertyConfig(
             endpoint_id=endpoints["arivale_protein"].id,
             property_extraction_config_id=prop_extract_configs[6].id,
             property_name="EnsemblGeneID",
+            ontology_type="ENSEMBL_GENE",
         ),
     ]
     session.add_all(endpoint_prop_configs)

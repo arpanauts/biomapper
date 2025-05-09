@@ -234,7 +234,7 @@ class ArivaleMetadataLookupClient(
 
     async def map_identifiers(
         self, identifiers: List[str], config: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Tuple[Optional[List[str]], Optional[str]]]:
+    ) -> Dict[str, Any]:
         """Map identifiers using the loaded Arivale lookup map, handling composite keys.
         
         Args:
@@ -242,8 +242,12 @@ class ArivaleMetadataLookupClient(
             config: Optional configuration overrides for this specific call.
             
         Returns:
-            Dictionary mapping original input identifiers to a tuple:
-            (list of mapped target IDs or None, the source ID component that yielded the match or None).
+            A dictionary in the format expected by MappingExecutor:
+            {
+                'primary_ids': List of unique successfully mapped target IDs,
+                'input_to_primary': Dict mapping original input ID to its FIRST mapped target ID,
+                'errors': List of dicts for identifiers that could not be mapped.
+            }
         """
         if not self._initialized:
             raise ClientExecutionError(
@@ -251,104 +255,108 @@ class ArivaleMetadataLookupClient(
                 client_name=self.__class__.__name__
             )
             
-        # Preload cache if needed
         if hasattr(self, "_cache_preload_needed") and self._cache_preload_needed:
             await self._preload_cache()
             self._cache_preload_needed = False
-            
-        results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
+        
+        # Temporary dict to hold results in the client's original format
+        client_format_results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
         miss_count = 0
         found_count = 0
         cache_hit_count = 0
         
-        # Process each identifier
         for identifier in identifiers:
-            # Check cache first
             cached_result = await self._get_from_cache(identifier)
             if cached_result is not None:
-                results[identifier] = cached_result
-                found_count += 1 if cached_result[0] is not None else 0
-                miss_count += 1 if cached_result[0] is None else 0
+                client_format_results[identifier] = cached_result
+                # Update counts based on whether the cached result was a successful mapping
+                if cached_result[0] is not None and len(cached_result[0]) > 0:
+                    found_count += 1
+                else:
+                    miss_count += 1
                 cache_hit_count += 1
                 continue
                 
-            # Not in cache, process the identifier
             identifier_stripped = identifier.strip()
-            mapped = False
-            successful_component_id = None
+            mapped_this_id = False
+            # successful_component_id = None # Not directly needed for the final structure
 
-            # 1. Try direct match with the stripped identifier
             direct_match_found = identifier_stripped in self._lookup_map
             if direct_match_found:
-                result = self.format_result(
+                result_tuple = self.format_result(
                     [self._lookup_map[identifier_stripped]],
-                    identifier_stripped  # Matched directly
+                    identifier_stripped
                 )
-                results[identifier] = result
-                mapped = True
-                successful_component_id = identifier_stripped
+                client_format_results[identifier] = result_tuple
+                mapped_this_id = True
+                await self._add_to_cache(identifier, result_tuple)
                 
-                # Add to cache
-                await self._add_to_cache(identifier, result)
-                
-            # 2. If no direct match AND it looks composite, try components
             elif "," in identifier_stripped or "_" in identifier_stripped:
-                components = [
-                    comp.strip()
-                    for comp in identifier_stripped.split(",")
-                    if comp.strip()
-                ]
+                components = [comp.strip() for comp in identifier_stripped.replace("_", ",").split(",") if comp.strip()]
                 target_ids_for_components = set()
                 found_component_match = False
-                first_successful_component = None
+                first_successful_component_for_input = None
 
                 for component in components:
                     component_stripped = component.strip()
-                    component_match_found = (
-                        component_stripped in self._component_lookup_map
-                    )
+                    component_match_found = component_stripped in self._component_lookup_map
                     if component_match_found:
-                        target_ids_for_components.add(
-                            self._component_lookup_map[component_stripped]
-                        )
+                        target_ids_for_components.add(self._component_lookup_map[component_stripped])
                         if not found_component_match:
-                            first_successful_component = component_stripped  # Record the first component that hit
+                            first_successful_component_for_input = component_stripped
                         found_component_match = True
 
                 if found_component_match:
-                    # Use the combined targets from all matching components
-                    # and the first component that yielded a match as the successful ID
-                    result = self.format_result(
+                    result_tuple = self.format_result(
                         sorted(list(target_ids_for_components)),
-                        first_successful_component
+                        first_successful_component_for_input
                     )
-                    results[identifier] = result
-                    mapped = True
-                    successful_component_id = first_successful_component
-                    
-                    # Add to cache
-                    await self._add_to_cache(identifier, result)
+                    client_format_results[identifier] = result_tuple
+                    mapped_this_id = True
+                    await self._add_to_cache(identifier, result_tuple)
 
-            # If still not mapped after all checks
-            if not mapped:
-                result = self.format_result(None, None)
-                results[identifier] = result
+            if not mapped_this_id:
+                result_tuple = self.format_result(None, None)
+                client_format_results[identifier] = result_tuple
                 miss_count += 1
-                
-                # Cache misses too to avoid repeated lookups
-                await self._add_to_cache(identifier, result)
+                await self._add_to_cache(identifier, result_tuple)
             else:
                 found_count += 1
 
+        # Transform client_format_results into the executor's expected format
+        final_primary_ids_set = set()
+        final_input_to_primary = {}
+        final_errors = []
+
+        for original_id, result_tuple_val in client_format_results.items():
+            mapped_ids_list, _ = result_tuple_val # We don't need successful_component for the final structure here
+            if mapped_ids_list and len(mapped_ids_list) > 0:
+                # Take the first mapped ID as the primary one for this input
+                primary_mapped_id = mapped_ids_list[0]
+                final_primary_ids_set.add(primary_mapped_id) # Add to set of all unique mapped IDs
+                final_input_to_primary[original_id] = primary_mapped_id # Map input to its primary
+            else:
+                final_errors.append({
+                    'input_id': original_id,
+                    'error_type': 'NO_MAPPING_FOUND',
+                    'message': f'No Arivale mapping found for {original_id}'
+                })
+
         logger.info(
-            f"Arivale Lookup: Mapped {found_count} (found) / {miss_count} (missed) out of {len(identifiers)} "
+            f"Arivale Lookup: Mapped {len(final_input_to_primary)} (found) / {len(final_errors)} (missed) out of {len(identifiers)} "
             f"input identifiers. Cache hits: {cache_hit_count}/{len(identifiers)}"
         )
-        return results
+        
+        return {
+            'primary_ids': list(final_primary_ids_set),
+            'input_to_primary': final_input_to_primary,
+            'secondary_ids': {}, # Arivale client doesn't produce secondary IDs in this context
+            'errors': final_errors
+        }
         
     async def reverse_map_identifiers(
         self, identifiers: List[str], config: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Tuple[Optional[List[str]], Optional[str]]]:
+    ) -> Dict[str, Any]:
         """Map identifiers in the reverse direction (from Arivale IDs to source IDs).
         
         Args:
@@ -356,8 +364,12 @@ class ArivaleMetadataLookupClient(
             config: Optional configuration overrides for this specific call.
             
         Returns:
-            Dictionary mapping original input identifiers to a tuple:
-            (list of mapped source IDs or None, the target ID that yielded the match or None).
+            A dictionary in the format expected by MappingExecutor:
+            {
+                'primary_ids': List of unique successfully mapped source (e.g., UniProtKB) IDs,
+                'input_to_primary': Dict mapping original Arivale ID to its FIRST mapped source ID,
+                'errors': List of dicts for Arivale IDs that could not be reverse mapped.
+            }
         """
         if not self._initialized:
             raise ClientExecutionError(
@@ -365,34 +377,57 @@ class ArivaleMetadataLookupClient(
                 client_name=self.__class__.__name__
             )
             
-        # Preload cache if needed
         if hasattr(self, "_cache_preload_needed") and self._cache_preload_needed:
             await self._preload_cache()
             self._cache_preload_needed = False
             
-        results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
+        # Temporary dict to hold results in the client's original format
+        client_format_results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
         miss_count = 0
         found_count = 0
         
-        # Process each identifier
         for identifier in identifiers:
-            identifier_stripped = identifier.strip()
+            identifier_processed = identifier.strip().strip('"')  # Apply .strip('"') here
             
-            # Check if the identifier exists in the reverse lookup map
-            if identifier_stripped in self._reverse_lookup_map:
-                # Return all source IDs that map to this target ID
-                results[identifier] = self.format_result(
-                    self._reverse_lookup_map[identifier_stripped],
-                    identifier_stripped
+            if identifier_processed in self._reverse_lookup_map:
+                client_format_results[identifier] = self.format_result(
+                    self._reverse_lookup_map[identifier_processed], # Use identifier_processed
+                    identifier_processed  # Use identifier_processed as the 'successful_input_id'
                 )
                 found_count += 1
             else:
-                # No match found
-                results[identifier] = self.format_result(None, None)
+                client_format_results[identifier] = self.format_result(None, None)
                 miss_count += 1
                 
+        # Transform client_format_results into the executor's expected format
+        final_primary_ids_set = set()
+        final_input_to_primary = {}
+        final_errors = []
+
+        for original_arivale_id, result_tuple_val in client_format_results.items():
+            mapped_source_ids_list, _ = result_tuple_val # We don't need successful_component for reverse map
+            if mapped_source_ids_list and len(mapped_source_ids_list) > 0:
+                # Take the first mapped source ID as the primary one for this input
+                primary_mapped_source_id = mapped_source_ids_list[0]
+                final_primary_ids_set.add(primary_mapped_source_id)
+                final_input_to_primary[original_arivale_id] = primary_mapped_source_id
+            else:
+                final_errors.append({
+                    'input_id': original_arivale_id,
+                    'error_type': 'NO_REVERSE_MAPPING_FOUND',
+                    'message': f'No reverse Arivale mapping found for {original_arivale_id}'
+                })
+
         logger.info(
-            f"Arivale Reverse Lookup: Mapped {found_count} (found) / {miss_count} (missed) "
+            f"Arivale Reverse Lookup: Mapped {len(final_input_to_primary)} (found) / {len(final_errors)} (missed) "
             f"out of {len(identifiers)} input identifiers."
         )
-        return results
+        
+        return {
+            'primary_ids': list(final_primary_ids_set),
+            'input_to_primary': final_input_to_primary,
+            'secondary_ids': {}, # Not applicable for this reverse lookup client
+            'errors': final_errors
+        }
+
+# Ensure the client is registered if this file is imported directly for testing or other purposes

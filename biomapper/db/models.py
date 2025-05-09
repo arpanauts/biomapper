@@ -82,6 +82,7 @@ class Endpoint(Base):
     name = Column(String, unique=True, nullable=False)
     description = Column(Text)
     type = Column(String)  # e.g., 'database', 'api', 'file'
+    primary_property_name = Column(String, nullable=True)  # Name of the primary identifier property
     connection_details = Column(Text, nullable=True)  # Store as JSON string or similar
     # Relationships defined below if needed after other models
 
@@ -248,6 +249,10 @@ class EndpointPropertyConfig(Base):
     id = Column(Integer, primary_key=True)
     endpoint_id = Column(Integer, ForeignKey("endpoints.id"), nullable=False)
     property_name = Column(String(100), nullable=False)
+    ontology_type = Column(String, nullable=True)  # The ontology type for this property
+    is_primary_identifier = Column(Boolean, default=False, nullable=False)
+    description = Column(String, nullable=True)
+    data_type = Column(String, nullable=True)      # E.g., 'string', 'integer', 'boolean'
     property_extraction_config_id = Column(
         Integer, ForeignKey("property_extraction_configs.id"), nullable=False
     )
@@ -376,3 +381,79 @@ class CompositeProcessingStep(Base):
     
     def __repr__(self) -> str:
         return f"<CompositeProcessingStep id={self.id} pattern_id={self.pattern_id} type={self.step_type}>"
+
+
+class Ontology(Base):
+    """Represents a standardized ontology for identifier types."""
+    
+    __tablename__ = "ontologies"
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)  # e.g., "UNIPROTKB_AC_ONTOLOGY"
+    description = Column(Text)
+    identifier_prefix = Column(String, nullable=True)  # e.g., "UniProtKB:"
+    namespace_uri = Column(String, nullable=True)  # URL/URI defining the ontology namespace
+    version = Column(String, nullable=True)  # Version of the ontology
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationship to properties
+    properties = relationship("Property", back_populates="ontology")
+    
+    def __repr__(self) -> str:
+        return f"<Ontology id={self.id} name={self.name}>"
+
+
+class Property(Base):
+    """Defines a standardized property name linked to an ontology."""
+    
+    __tablename__ = "properties"
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)  # e.g., "UNIPROTKB_AC", "GENE_NAME", "ARIVALE_PROTEIN_ID"
+    description = Column(Text)
+    ontology_id = Column(Integer, ForeignKey("ontologies.id"), nullable=False)
+    is_primary = Column(Boolean, default=False)  # Whether this is the primary identifier in the ontology
+    data_type = Column(String, nullable=True)  # e.g., "string", "integer"
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    ontology = relationship("Ontology", back_populates="properties")
+    
+    __table_args__ = (
+        UniqueConstraint("name", "ontology_id", name="uix_property_name_ontology"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<Property id={self.id} name={self.name} ontology_id={self.ontology_id}>"
+
+
+class MappingSessionLog(Base):
+    """Logs information about mapping sessions for tracking and debugging."""
+    
+    __tablename__ = "mapping_session_logs"
+    
+    id = Column(Integer, primary_key=True)
+    source_endpoint = Column(String, nullable=False)
+    target_endpoint = Column(String, nullable=False)
+    source_property = Column(String, nullable=False)
+    target_property = Column(String, nullable=False)
+    identifier_count = Column(Integer, nullable=False)
+    successful_count = Column(Integer, default=0)
+    failed_count = Column(Integer, default=0)
+    validation_count = Column(Integer, default=0)  # Count of bidirectionally validated mappings
+    start_time = Column(DateTime, default=func.now())
+    end_time = Column(DateTime, nullable=True)
+    runtime_seconds = Column(Float, nullable=True)
+    cache_hit_count = Column(Integer, default=0)
+    cache_miss_count = Column(Integer, default=0)
+    use_cache = Column(Boolean, default=True)
+    try_reverse_mapping = Column(Boolean, default=False)
+    validation_enabled = Column(Boolean, default=False)
+    error_message = Column(Text, nullable=True)
+    status = Column(String, default="in_progress")  # in_progress, completed, failed
+    additional_info = Column(JSON, nullable=True)  # Any additional session details
+    
+    def __repr__(self) -> str:
+        return f"<MappingSessionLog id={self.id} {self.source_endpoint}->{self.target_endpoint} status={self.status}>"

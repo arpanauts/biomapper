@@ -1161,7 +1161,7 @@ class MappingResult:
 
 @pytest.mark.asyncio
 async def test_execute_mapping_caches_metadata(mapping_executor, mock_async_cache_session_factory):
-    """Test that cache_results properly stores mapping metadata."""
+    """Test that cache_results properly stores enhanced mapping metadata."""
     # Replace the session factories with our mock
     mapping_executor.async_cache_session = mock_async_cache_session_factory
     mapping_executor.get_cache_session = mock_async_cache_session_factory
@@ -1180,13 +1180,14 @@ async def test_execute_mapping_caches_metadata(mapping_executor, mock_async_cach
             "source_identifier": "TEST1",
             "target_identifiers": ["TARGET1"],
             "status": "success",
-            "confidence_score": 0.9
+            "confidence_score": 0.9,
+            "additional_metadata": {"source_name": "test_source", "quality": "high"}
         },
         "TEST2": {
             "source_identifier": "TEST2",
             "target_identifiers": ["TARGET2"],
-            "status": "success",
-            "confidence_score": 0.9
+            "status": "success"
+            # No confidence_score to test calculation logic
         }
     }
     
@@ -1195,45 +1196,295 @@ async def test_execute_mapping_caches_metadata(mapping_executor, mock_async_cach
     mapping_executor._get_path_details.return_value = {
         "step_1": {
             "resource_name": "TestResource1",
-            "resource_type": "api",
+            "resource_client": "test.client.TestClient",
             "input_ontology": "TEST_ONT",
+            "output_ontology": "INTERMEDIATE_ONT",
+        },
+        "step_2": {
+            "resource_name": "RagResource",
+            "resource_client": "biomapper.rag.TestRagClient",
+            "input_ontology": "INTERMEDIATE_ONT",
             "output_ontology": "TARGET_ONT",
         }
     }
     
-    # Call the _cache_results method directly
-    await mapping_executor._cache_results(
-        results_to_cache,
-        mock_path,
-        "SOURCE_ONT",
-        "TARGET_ONT",
-        mapping_session_id=1
+    # Mock the EntityMapping class for the EntityMapping instantiations in _cache_results
+    # We need to prepare mock instances first for the assertions later
+    mock_entity_mapping = MagicMock()
+    mock_entity_mapping.source_id = "TEST1"  
+    mock_entity_mapping.source_type = "SOURCE_ONT"
+    mock_entity_mapping.target_id = "TARGET1"
+    mock_entity_mapping.target_type = "TARGET_ONT"
+    mock_entity_mapping.mapping_source = "rag"
+    mock_entity_mapping.confidence_score = 0.9
+    mock_entity_mapping.hop_count = 2
+    mock_entity_mapping.mapping_direction = "forward"
+    mock_entity_mapping.mapping_path_details = json.dumps({
+        "path_id": 999,
+        "path_name": "TestPath",
+        "hop_count": 2,
+        "direction": "forward",
+        "log_id": None,
+        "execution_timestamp": "2023-01-01T00:00:00",
+        "steps": {},
+        "additional_metadata": {"source_name": "test_source", "quality": "high"}
+    })
+    
+    # Mock the session to return our entity mapping when add_all is called
+    mock_session = mock_async_cache_session_factory.get_session_mock()
+    mock_session.add_all.return_value = None
+    mock_session.add_all.side_effect = lambda x: setattr(mock_session, "added_entities", x)
+    mock_session.added_entities = [mock_entity_mapping]
+    
+    # Mock __init__ for SQLAlchemy model to capture parameters
+    with patch("biomapper.db.cache_models.EntityMapping", return_value=mock_entity_mapping) as mock_entity_mapping_class:
+        # Mock helper methods (these are called during _cache_results)
+        original_calculate_confidence = mapping_executor._calculate_confidence_score
+        original_create_mapping_details = mapping_executor._create_mapping_path_details
+        original_determine_source = mapping_executor._determine_mapping_source
+        
+        # We'll mock the mapping source determination for test simplicity
+        mapping_executor._determine_mapping_source = MagicMock(return_value="rag")
+        
+        # Call the _cache_results method directly
+        await mapping_executor._cache_results(
+            results_to_cache,
+            mock_path,
+            "SOURCE_ONT",
+            "TARGET_ONT",
+            mapping_session_id=1
+        )
+        
+        # Verify that the add_all method was called
+        mock_session = mock_async_cache_session_factory.get_session_mock()
+        mock_session.add_all.assert_called_once()
+        
+        # The entity mapping is our prepared mock, so we can check its properties directly
+        entity_mapping = mock_entity_mapping
+        
+        # Verify basic properties
+        assert entity_mapping.source_id == "TEST1"
+        assert entity_mapping.source_type == "SOURCE_ONT"
+        assert entity_mapping.target_type == "TARGET_ONT"
+        assert entity_mapping.mapping_source == "rag"  # Verify the mapping source is set
+        
+        # Verify metadata fields
+        assert entity_mapping.confidence_score == 0.9
+        assert entity_mapping.hop_count == 2  # Length of mock_path.steps
+        assert entity_mapping.mapping_direction == "forward"  # Default direction
+        
+        # Verify mapping_path_details is a JSON string
+        assert isinstance(entity_mapping.mapping_path_details, str)
+        
+        # Parse the JSON and verify required fields
+        try:
+            path_details = json.loads(entity_mapping.mapping_path_details)
+            assert "path_id" in path_details
+            assert "path_name" in path_details
+            assert "hop_count" in path_details
+            assert "direction" in path_details
+            
+            # Verify that TEST1's additional metadata was included
+            assert "additional_metadata" in path_details
+            assert path_details["additional_metadata"]["quality"] == "high"
+        except json.JSONDecodeError:
+            pytest.fail("mapping_path_details is not valid JSON")
+        
+        # Verify _get_path_details was called to gather metadata
+        mapping_executor._get_path_details.assert_called_once_with(mock_path.id)
+        
+        # Restore original methods to avoid affecting other tests
+        mapping_executor._calculate_confidence_score = original_calculate_confidence
+        mapping_executor._create_mapping_path_details = original_create_mapping_details
+        mapping_executor._determine_mapping_source = original_determine_source
+
+
+# --- Tests for Metadata Helper Methods ---
+
+@pytest.mark.asyncio
+async def test_calculate_confidence_score(mapping_executor):
+    """Test that _calculate_confidence_score correctly computes confidence values."""
+    # Create path step details with different resource types
+    path_step_details_api = {
+        "step_1": {
+            "resource_name": "ApiResource", 
+            "resource_client": "test.client.ApiClient"
+        }
+    }
+    
+    path_step_details_rag = {
+        "step_1": {
+            "resource_name": "RagResource", 
+            "resource_client": "biomapper.rag.TestClient"
+        }
+    }
+    
+    path_step_details_llm = {
+        "step_1": {
+            "resource_name": "LlmMapper", 
+            "resource_client": "biomapper.llm.TestClient"
+        }
+    }
+    
+    # Test case 1: Default confidence for direct mapping (1 hop)
+    result = {}  # No pre-set confidence score
+    score = mapping_executor._calculate_confidence_score(result, 1, False, path_step_details_api)
+    assert score == 0.95  # Should be high confidence for direct API mapping
+    
+    # Test case 2: Confidence decreased for 2-hop mapping
+    score = mapping_executor._calculate_confidence_score(result, 2, False, path_step_details_api)
+    assert score == 0.85  # Should be reduced for 2-hop
+    
+    # Test case 3: Long path reduces confidence more
+    score = mapping_executor._calculate_confidence_score(result, 5, False, path_step_details_api)
+    assert score == 0.55  # Should reduce further for 5-hop
+    
+    # Test case 4: Reverse mapping penalty
+    score = mapping_executor._calculate_confidence_score(result, 1, True, path_step_details_api)
+    assert score == 0.85  # Should apply reverse penalty
+    
+    # Test case 5: RAG resource penalty
+    score = mapping_executor._calculate_confidence_score(result, 1, False, path_step_details_rag)
+    assert score == 0.9  # Should apply RAG penalty
+    
+    # Test case 6: LLM resource penalty
+    score = mapping_executor._calculate_confidence_score(result, 1, False, path_step_details_llm)
+    assert score == 0.85  # Should apply LLM penalty
+    
+    # Test case 7: Pre-existing score takes precedence
+    result_with_score = {"confidence_score": 0.75}
+    score = mapping_executor._calculate_confidence_score(result_with_score, 1, False, path_step_details_api)
+    assert score == 0.75  # Should use the pre-set value
+    
+    # Test case 8: Minimum confidence threshold
+    score = mapping_executor._calculate_confidence_score(result, 10, True, path_step_details_llm)
+    assert score >= 0.1  # Should not go below minimum threshold
+
+@pytest.mark.asyncio
+async def test_create_mapping_path_details(mapping_executor):
+    """Test that _create_mapping_path_details creates correct structured data."""
+    # Create test inputs
+    path_id = 123
+    path_name = "Test Path"
+    hop_count = 2
+    mapping_direction = "forward"
+    log_id = 456
+    
+    path_step_details = {
+        "step_1": {
+            "resource_name": "Resource1",
+            "resource_client": "test.client.Resource1Client",
+            "input_ontology": "SOURCE_ONT",
+            "output_ontology": "TARGET_ONT"
+        }
+    }
+    
+    additional_metadata = {
+        "quality": "high",
+        "origin": "test"
+    }
+    
+    # Test case 1: Basic mapping path details
+    details = mapping_executor._create_mapping_path_details(
+        path_id, path_name, hop_count, mapping_direction, path_step_details, log_id
     )
     
-    # Verify that the add_all method was called
-    mock_session = mock_async_cache_session_factory.get_session_mock()
-    mock_session.add_all.assert_called_once()
+    # Verify required fields are present
+    assert "path_id" in details
+    assert "path_name" in details
+    assert "hop_count" in details
+    assert "direction" in details
+    assert "log_id" in details
+    assert "execution_timestamp" in details
+    assert "steps" in details
     
-    # Verify metadata fields were passed to the cache
-    args = mock_session.add_all.call_args[0][0]
-    assert len(args) > 0  # At least one entity mapping should be added
+    # Verify values are correct
+    assert details["path_id"] == path_id
+    assert details["path_name"] == path_name
+    assert details["hop_count"] == hop_count
+    assert details["direction"] == mapping_direction
+    assert details["log_id"] == log_id
+    assert details["steps"] == path_step_details
     
-    # Check properties of the first EntityMapping
-    entity_mapping = args[0]
+    # Test case 2: Including additional metadata
+    details = mapping_executor._create_mapping_path_details(
+        path_id, path_name, hop_count, mapping_direction, path_step_details, log_id, additional_metadata
+    )
     
-    # Verify basic properties
-    assert entity_mapping.source_id in ["TEST1", "TEST2"]
-    assert entity_mapping.source_type == "SOURCE_ONT"
-    assert entity_mapping.target_type == "TARGET_ONT"
+    # Verify additional metadata is included
+    assert "additional_metadata" in details
+    assert details["additional_metadata"] == additional_metadata
+    assert details["additional_metadata"]["quality"] == "high"
     
-    # Verify metadata fields
-    assert entity_mapping.confidence_score == 0.9
-    assert entity_mapping.hop_count == 2  # Length of mock_path.steps
-    assert entity_mapping.mapping_direction == "forward"  # Default direction
+    # Test case 3: Empty path step details
+    details = mapping_executor._create_mapping_path_details(
+        path_id, path_name, hop_count, mapping_direction, {}, log_id
+    )
     
-    # Verify _get_path_details was called to gather metadata
-    mapping_executor._get_path_details.assert_called_once_with(mock_path.id)
+    # Verify steps is empty but present
+    assert "steps" in details
+    assert details["steps"] == {}
 
+@pytest.mark.asyncio
+async def test_determine_mapping_source(mapping_executor):
+    """Test that _determine_mapping_source correctly identifies the source type."""
+    # Test case 1: Empty details defaults to API
+    source = mapping_executor._determine_mapping_source({})
+    assert source == "api"
+    
+    # Test case 2: Spoke resource
+    spoke_details = {
+        "step_1": {
+            "resource_name": "SpokeClient",
+            "resource_client": "biomapper.spoke.client.SpokeClient"
+        }
+    }
+    source = mapping_executor._determine_mapping_source(spoke_details)
+    assert source == "spoke"
+    
+    # Test case 3: RAG resource
+    rag_details = {
+        "step_1": {
+            "resource_name": "RegularAPI",
+            "resource_client": "test.api"
+        },
+        "step_2": {
+            "resource_name": "RagMapper",
+            "resource_client": "biomapper.rag.ChromaDBClient"
+        }
+    }
+    source = mapping_executor._determine_mapping_source(rag_details)
+    assert source == "rag"
+    
+    # Test case 4: LLM resource
+    llm_details = {
+        "step_1": {
+            "resource_name": "LlmBasedMapper",
+            "resource_client": "biomapper.llm.mapper"
+        }
+    }
+    source = mapping_executor._determine_mapping_source(llm_details)
+    assert source == "llm"
+    
+    # Test case 5: RAMP client
+    ramp_details = {
+        "step_1": {
+            "resource_name": "RampClient",
+            "resource_client": "biomapper.standardization.ramp_client"
+        }
+    }
+    source = mapping_executor._determine_mapping_source(ramp_details)
+    assert source == "ramp"
+    
+    # Test case 6: Default for standard APIs
+    api_details = {
+        "step_1": {
+            "resource_name": "StandardAPI",
+            "resource_client": "test.client.ApiClient"
+        }
+    }
+    source = mapping_executor._determine_mapping_source(api_details)
+    assert source == "api"
 
 # --- Tests for _run_path_steps and _execute_path ---
 

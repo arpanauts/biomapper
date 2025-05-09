@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 
 import aiohttp
 
@@ -153,48 +153,72 @@ class UniProtNameClient:
 
     async def map_identifiers(
         self, identifiers: List[str], config: Optional[Dict] = None
-    ) -> Dict[str, Optional[List[str]]]:
+    ) -> Dict[str, Any]:
         """Map a list of gene symbols/names to UniProtKB ACs using the search API.
 
         Args:
-            identifiers: A list of gene symbols or names (previously 'ids').
-            config: Optional configuration dictionary (currently unused by this client).
+            identifiers: A list of gene symbols or names.
+            config: Optional configuration dictionary.
 
         Returns:
-            A dictionary mapping original IDs to UniProtKB ACs (or None if not found).
+            A dictionary in the format expected by MappingExecutor:
+            {
+                'primary_ids': List of unique successfully mapped UniProtKB ACs,
+                'input_to_primary': Dict mapping input gene symbol to its FIRST mapped UniProtKB AC,
+                'errors': List of dicts for identifiers that could not be mapped.
+            }
         """
         logger.debug(
             f"UniProtNameClient received {len(identifiers)} IDs to map: {identifiers[:10]}..."
         )
-        all_results: Dict[str, Optional[List[str]]] = {}
+        raw_results: Dict[str, Optional[List[str]]] = {}
         if not identifiers:
-            return {}
+            return {'primary_ids': [], 'input_to_primary': {}, 'errors': []}
 
         async with aiohttp.ClientSession() as session:
-            # Process all gene symbols with the composite handler
             tasks = [
                 self._process_composite_gene(session, gene_id)
                 for gene_id in identifiers
             ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            results_from_gather = await asyncio.gather(*tasks, return_exceptions=True)
 
-            for original_id, result in zip(identifiers, results):
-                if isinstance(result, Exception):
-                    logger.error(f"Task for ID {original_id} failed: {result}")
-                    all_results[original_id] = None
-                elif result is None:
-                    # Explicitly store None if search returned no result
-                    all_results[original_id] = None
+            for original_id, result_item in zip(identifiers, results_from_gather):
+                if isinstance(result_item, Exception):
+                    logger.error(f"Task for ID {original_id} failed: {result_item}")
+                    raw_results[original_id] = None
+                elif result_item is None:
+                    raw_results[original_id] = None
                 else:
-                    all_results[original_id] = result
+                    raw_results[original_id] = result_item
 
-        logger.debug(
-            f"UniProtNameClient finished mapping. Result dict keys: {list(all_results.keys())[:10]}..."
-        )
+        # Transform raw_results into the expected format
+        primary_ids_set = set()
+        input_to_primary_map = {}
+        errors = []
+
+        for original_id, mapped_list in raw_results.items():
+            if mapped_list and len(mapped_list) > 0:
+                # Take the first accession as the primary one for this input
+                primary_accession = mapped_list[0]
+                primary_ids_set.add(primary_accession)
+                input_to_primary_map[original_id] = primary_accession
+            else:
+                errors.append({
+                    'input_id': original_id,
+                    'error_type': 'NO_MAPPING_FOUND',
+                    'message': f'No UniProtKB accession found for {original_id}'
+                })
+
         logger.info(
-            f"Finished UniProt search. Found mappings for {sum(1 for v in all_results.values() if v is not None)}/{len(identifiers)} identifiers."
+            f"Finished UniProt search. Found mappings for {len(input_to_primary_map)}/{len(identifiers)} identifiers."
         )
-        return all_results
+        
+        return {
+            'primary_ids': list(primary_ids_set),
+            'input_to_primary': input_to_primary_map,
+            'secondary_ids': {}, # UniProtNameClient doesn't produce secondary IDs in this context
+            'errors': errors
+        }
 
 
 # Example Usage (Optional - for testing)
@@ -205,7 +229,7 @@ async def run_example():
     test_ids = ["TP53", "EGFR", "BRCA1", "NONEXISTENTGENE", "AARSD1", "ABHD14B"]
     results = await client.map_identifiers(test_ids)
     print("Mapping Results:")
-    for gene, accession in results.items():
+    for gene, accession in results['input_to_primary'].items():
         print(f"  {gene}: {accession}")
 
 

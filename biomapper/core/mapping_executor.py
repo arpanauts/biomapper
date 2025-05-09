@@ -2,6 +2,7 @@ import asyncio
 import enum
 import importlib
 import json
+import time # Add import time
 from typing import List, Dict, Any, Optional, Tuple, Set, Union, Type
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -18,7 +19,7 @@ from biomapper.core.exceptions import (
     BiomapperError,
     NoPathFoundError,
     ClientError,
-    ConfigurationError,
+    ConfigurationError, # Import ConfigurationError
     CacheError,
     MappingExecutionError,
     ClientExecutionError,
@@ -26,7 +27,7 @@ from biomapper.core.exceptions import (
     CacheTransactionError,
     CacheRetrievalError,
     CacheStorageError,
-    ErrorCode,
+    ErrorCode, # Import ErrorCode
     DatabaseQueryError, # Import DatabaseQueryError
 )
 
@@ -50,6 +51,7 @@ from ..db.cache_models import (
     PathExecutionStatus,
     PathLogMappingAssociation,
     MappingSession,  # Add this for session logging
+    ExecutionMetric # Added ExecutionMetric
 )
 
 # Import our centralized configuration settings
@@ -58,6 +60,7 @@ from biomapper.config import settings
 from pathlib import Path # Added import
 
 import logging # Re-added import
+import os # Add import os
 
 # Added get_current_utc_time definition
 def get_current_utc_time() -> datetime:
@@ -110,6 +113,10 @@ class MappingExecutor(CompositeIdentifierMixin):
         metamapper_db_url: Optional[str] = None,
         mapping_cache_db_url: Optional[str] = None,
         echo_sql: bool = False, # Added parameter to control SQL echoing
+        path_cache_size: int = 100, # Maximum number of paths to cache
+        path_cache_expiry_seconds: int = 300, # Cache expiry time in seconds (5 minutes)
+        max_concurrent_batches: int = 5, # Maximum number of batches to process concurrently
+        enable_metrics: bool = True, # Whether to enable metrics tracking
     ):
         """
         Initializes the MappingExecutor.
@@ -118,9 +125,19 @@ class MappingExecutor(CompositeIdentifierMixin):
             metamapper_db_url: URL for the metamapper database. If None, uses settings.metamapper_db_url.
             mapping_cache_db_url: URL for the mapping cache database. If None, uses settings.cache_db_url.
             echo_sql: Boolean flag to enable SQL echoing for debugging purposes.
+            path_cache_size: Maximum number of paths to cache in memory
+            path_cache_expiry_seconds: Cache expiry time in seconds
+            max_concurrent_batches: Maximum number of batches to process concurrently
+            enable_metrics: Whether to enable metrics tracking
+            
+        Returns:
+            An initialized MappingExecutor instance with database tables created
         """
         # Initialize the CompositeIdentifierMixin
         super().__init__()
+
+        self.logger = logging.getLogger(__name__) # Moved logger initialization before Langfuse setup
+
         self.metamapper_db_url = (
             metamapper_db_url
             if metamapper_db_url is not None
@@ -132,11 +149,37 @@ class MappingExecutor(CompositeIdentifierMixin):
             else settings.cache_db_url
         )
         self.echo_sql = echo_sql
+        
+        # Path caching and concurrency settings
+        self._path_cache = {}
+        self._path_cache_timestamps = {}
+        self._path_cache_lock = asyncio.Lock()  # Thread safety for cache access
+        self._path_cache_max_size = path_cache_size
+        self._path_cache_expiry_seconds = path_cache_expiry_seconds
+        self.max_concurrent_batches = max_concurrent_batches
+        
+        # Performance monitoring
+        self.enable_metrics = enable_metrics
+        self._metrics_tracker = None
+        self._langfuse_tracker = None
+        
+        # Initialize metrics tracking if enabled and langfuse is available
+        if self.enable_metrics:
+            try:
+                import langfuse
+                self._langfuse_tracker = langfuse.Langfuse(
+                    host=os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com"),
+                    public_key=os.environ.get("LANGFUSE_PUBLIC_KEY"),
+                    secret_key=os.environ.get("LANGFUSE_SECRET_KEY"),
+                )
+                self.logger.info("Langfuse metrics tracking initialized")
+            except (ImportError, Exception) as e:
+                self.logger.warning(f"Langfuse metrics tracking not available: {e}")
 
-        self.logger = logging.getLogger(__name__) # Added logger initialization
-
+        # Log database URLs being used
         self.logger.info(f"Using Metamapper DB URL: {self.metamapper_db_url}")
         self.logger.info(f"Using Mapping Cache DB URL: {self.mapping_cache_db_url}")
+        self.logger.info(f"Initialized with path_cache_size={path_cache_size}, concurrent_batches={max_concurrent_batches}")
 
         # Ensure directories for file-based DBs exist
         for db_url in [self.metamapper_db_url, self.mapping_cache_db_url]:
@@ -174,6 +217,90 @@ class MappingExecutor(CompositeIdentifierMixin):
         # Define an async session property for easier access
         self.async_cache_session = self.CacheSessionFactory
 
+    async def _init_db_tables(self, engine, base_metadata):
+        """Initialize database tables if they don't exist.
+        
+        Args:
+            engine: SQLAlchemy async engine to use
+            base_metadata: The metadata object containing table definitions
+        """
+        try:
+            # Check if the tables already exist
+            async with engine.connect() as conn:
+                # Check if mapping_sessions table exists
+                has_tables = await conn.run_sync(
+                    lambda sync_conn: sync_conn.dialect.has_table(
+                        sync_conn, "mapping_sessions"
+                    )
+                )
+                
+                if has_tables:
+                    self.logger.info(f"Tables already exist in database {engine.url}, skipping initialization.")
+                    return
+                
+                # Tables don't exist, create them
+                self.logger.info(f"Tables don't exist in database {engine.url}, creating them...")
+            
+            # Create tables
+            async with engine.begin() as conn:
+                await conn.run_sync(base_metadata.create_all)
+            self.logger.info(f"Database tables for {engine.url} initialized successfully.")
+        except Exception as e:
+            self.logger.error(f"Error initializing database tables for {engine.url}: {str(e)}", exc_info=True)
+            raise BiomapperError(
+                f"Failed to initialize database tables: {str(e)}",
+                error_code=ErrorCode.DATABASE_INITIALIZATION_ERROR,
+                details={"engine_url": str(engine.url)}
+            ) from e
+    
+    @classmethod
+    async def create(
+        cls,
+        metamapper_db_url: Optional[str] = None,
+        mapping_cache_db_url: Optional[str] = None,
+        echo_sql: bool = False,
+        path_cache_size: int = 100,
+        path_cache_expiry_seconds: int = 300,
+        max_concurrent_batches: int = 5,
+        enable_metrics: bool = True,
+    ):
+        """Asynchronously create and initialize a MappingExecutor instance.
+        
+        This factory method creates a MappingExecutor instance and initializes
+        the database tables for both metamapper and cache databases.
+        
+        Args:
+            metamapper_db_url: URL for the metamapper database. If None, uses settings.metamapper_db_url.
+            mapping_cache_db_url: URL for the mapping cache database. If None, uses settings.cache_db_url.
+            echo_sql: Boolean flag to enable SQL echoing for debugging purposes.
+            path_cache_size: Maximum number of paths to cache in memory
+            path_cache_expiry_seconds: Cache expiry time in seconds
+            max_concurrent_batches: Maximum number of batches to process concurrently
+            enable_metrics: Whether to enable metrics tracking
+            
+        Returns:
+            An initialized MappingExecutor instance with database tables created
+        """
+        # Create instance with standard constructor
+        executor = cls(
+            metamapper_db_url=metamapper_db_url,
+            mapping_cache_db_url=mapping_cache_db_url,
+            echo_sql=echo_sql,
+            path_cache_size=path_cache_size,
+            path_cache_expiry_seconds=path_cache_expiry_seconds,
+            max_concurrent_batches=max_concurrent_batches,
+            enable_metrics=enable_metrics,
+        )
+        
+        # Initialize cache database tables
+        await executor._init_db_tables(executor.async_cache_engine, CacheBase.metadata)
+        
+        # Note: We don't initialize metamapper tables here because they're assumed to be
+        # already set up and populated. The issue is specifically with cache tables.
+        
+        executor.logger.info("MappingExecutor instance created and database tables initialized.")
+        return executor
+    
     def get_cache_session(self):
         """Get a cache database session."""
         return self.async_cache_session()
@@ -402,43 +529,47 @@ class MappingExecutor(CompositeIdentifierMixin):
                 self.logger.debug(f"No valid target identifiers found for source {source_id}")
                 continue
 
-            # Calculate confidence score using Claude's logic
-            confidence_score = result.get("confidence_score") # Allow override from result
-            if confidence_score is None:
-                if hop_count is not None:
-                    if hop_count <= 1:
-                        confidence_score = 0.9  # Direct mapping
-                    elif hop_count == 2:
-                        confidence_score = 0.8  # 2-hop mapping
-                    else:
-                        # Decrease confidence for longer paths
-                        confidence_score = max(0.1, 0.9 - ((hop_count - 1) * 0.1))
-                    
-                    # Apply penalty for reverse paths
-                    if is_reversed:
-                        confidence_score = max(0.1, confidence_score - 0.05)
-                else:
-                    confidence_score = 0.7 # Default if hop_count is somehow None
+            # Calculate confidence score based on mapping path characteristics
+            confidence_score = self._calculate_confidence_score(result, hop_count, is_reversed, path_step_details)
             
             self.logger.debug(f"Source: {source_id}, Hops: {hop_count}, Reversed: {is_reversed}, Confidence: {confidence_score}")
 
+            # Create mapping_path_details JSON with complete path information
+            mapping_path_details_dict = self._create_mapping_path_details(
+                path_id, 
+                path_name, 
+                hop_count, 
+                mapping_direction, 
+                path_step_details,
+                log_entry.id,  # Will be None initially, set later
+                result.get("additional_metadata", {})
+            )
+            
+            # Convert to JSON string for storage
+            try:
+                mapping_path_details = json.dumps(mapping_path_details_dict)
+            except Exception as e:
+                self.logger.error(f"Failed to serialize mapping path details to JSON: {e}", exc_info=True)
+                mapping_path_details = json.dumps({"error": "Failed to serialize details"})
+
             # Create entity mapping for each valid target identifier
             for target_id in valid_target_ids:
+                # Determine mapping source based on path details
+                source_type = self._determine_mapping_source(path_step_details)
+                
                 entity_mapping = EntityMapping(
-                    source_identifier=str(source_id), # Ensure string type
-                    target_identifier=str(target_id), # Ensure string type
-                    source_ontology_type=source_ontology,
-                    target_ontology_type=target_ontology,
-                    path_id=path_id,
-                    path_name=path_name,
-                    creation_time=current_time,
-                    # path_execution_log_id will be set after log entry is flushed
+                    source_id=str(source_id),  # Updated to match field names in cache_models.py
+                    source_type=source_ontology,
+                    target_id=str(target_id),
+                    target_type=target_ontology,
+                    mapping_source=source_type,  # Set mapping_source from our helper function
+                    last_updated=current_time,
                     
-                    # Populated Metadata fields:
+                    # Enhanced metadata fields:
                     confidence_score=confidence_score,
                     hop_count=hop_count,
                     mapping_direction=mapping_direction,
-                    mapping_path_details=path_details_json, # Use the pre-computed JSON
+                    mapping_path_details=mapping_path_details
                 )
                 entity_mappings.append(entity_mapping)
 
@@ -616,7 +747,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                     confidence_score = 0.7  # Default if hop_count is somehow None
             
             self.logger.debug(f"Source: {source_id}, Hops: {hop_count}, Reversed: {is_reversed}, Confidence: {confidence_score}")
-            
+
             # Create entity mapping for each valid target identifier
             for target_id in valid_target_ids:
                 entity_mapping = EntityMapping(
@@ -777,41 +908,86 @@ class MappingExecutor(CompositeIdentifierMixin):
         source_ontology: str,
         target_ontology: str,
         bidirectional: bool = False,
+        preferred_direction: str = "forward",
     ) -> List[Union[MappingPath, "ReversiblePath"]]:
         """
-        Find mapping paths between ontologies, optionally searching in both directions.
+        Find mapping paths between ontologies, optionally searching in both directions concurrently.
 
         Args:
             session: The database session
             source_ontology: Source ontology term
             target_ontology: Target ontology term
-            bidirectional: If True, also search for reverse paths (target→source) when no forward paths exist
+            bidirectional: If True, search for both forward and reverse paths in parallel
+            preferred_direction: Preferred direction for path ordering ("forward" or "reverse")
 
         Returns:
             List of paths (may be wrapped in ReversiblePath if reverse paths were found)
+            Paths are sorted by direction preference and then by priority
         """
+        # Use caching to avoid redundant database calls
+        cache_key = f"{source_ontology}_{target_ontology}_{bidirectional}_{preferred_direction}"
+        
+        # Initialize path cache if needed with time-based expiration
+        if not hasattr(self, "_path_cache"):
+            self._path_cache = {}
+            self._path_cache_timestamps = {}
+            self._path_cache_lock = asyncio.Lock()  # Thread safety for cache access
+            self._path_cache_max_size = 100  # Maximum number of paths to cache
+            self._path_cache_expiry_seconds = 300  # Cache expiry time in seconds (5 minutes)
+            
+        # Check if cache entry exists and is not expired
+        current_time = time.time()
+        cache_hit = False
+        
+        async with self._path_cache_lock:
+            if cache_key in self._path_cache:
+                # Check if cache entry is expired
+                timestamp = self._path_cache_timestamps.get(cache_key, 0)
+                if current_time - timestamp < self._path_cache_expiry_seconds:
+                    cache_hit = True
+                    self.logger.debug(f"Using cached paths for {cache_key}")
+                    return self._path_cache[cache_key]
+                else:
+                    # Remove expired cache entry
+                    self.logger.debug(f"Cache entry for {cache_key} expired, removing")
+                    del self._path_cache[cache_key]
+                    if cache_key in self._path_cache_timestamps:
+                        del self._path_cache_timestamps[cache_key]
+            
         self.logger.debug(
-            f"Searching for mapping paths from '{source_ontology}' to '{target_ontology}' (bidirectional={bidirectional})"
+            f"Searching for mapping paths from '{source_ontology}' to '{target_ontology}' (bidirectional={bidirectional}, preferred={preferred_direction})"
         )
 
-        # First try to find forward paths
-        forward_paths = await self._find_direct_paths(
-            session, source_ontology, target_ontology
-        )
-        paths = [ReversiblePath(path, is_reverse=False) for path in forward_paths]
+        # Create tasks for both forward and reverse path finding
+        forward_task = self._find_direct_paths(session, source_ontology, target_ontology)
+        
+        if bidirectional:
+            # Only create the reverse task if bidirectional=True
+            reverse_task = self._find_direct_paths(session, target_ontology, source_ontology)
+            # Run both tasks concurrently
+            forward_paths, reverse_paths = await asyncio.gather(forward_task, reverse_task)
+            
+            # Process forward paths
+            paths = [ReversiblePath(path, is_reverse=False) for path in forward_paths]
+            # Process reverse paths
+            reverse_path_objects = [ReversiblePath(path, is_reverse=True) for path in reverse_paths]
+            
+            # Combine paths based on preferred direction
+            if preferred_direction == "reverse":
+                # If reverse is preferred, put reverse paths first
+                paths = reverse_path_objects + paths
+            else:
+                # Otherwise, forward paths first (default)
+                paths = paths + reverse_path_objects
+        else:
+            # If not bidirectional, just get the forward paths
+            forward_paths = await forward_task
+            paths = [ReversiblePath(path, is_reverse=False) for path in forward_paths]
 
-        # If bidirectional flag is set and no forward paths were found, try reverse
-        if bidirectional and not paths:
-            self.logger.info(
-                f"No forward paths found, searching for reverse paths from '{target_ontology}' to '{source_ontology}'"
-            )
-            reverse_paths = await self._find_direct_paths(
-                session, target_ontology, source_ontology
-            )
-            paths.extend(
-                [ReversiblePath(path, is_reverse=True) for path in reverse_paths]
-            )
+        # Sort paths by priority after respecting direction preference
+        paths = sorted(paths, key=lambda p: (-1 if p.is_reverse != (preferred_direction == "reverse") else 1, p.priority))
 
+        # Log found paths
         if paths:
             direction = "bidirectional" if bidirectional else "forward"
             self.logger.info(
@@ -822,11 +998,39 @@ class MappingExecutor(CompositeIdentifierMixin):
                 self.logger.info(
                     f" - Path ID: {path.id}, Name: '{path.name}' {reverse_text}, Priority: {path.priority}"
                 )
-        else:
+        
+        # Cache the results to avoid redundant database calls with thread safety and size limits
+        async with self._path_cache_lock:
+            # Implement LRU-like behavior by removing oldest entries if cache is too large
+            if len(self._path_cache) >= self._path_cache_max_size:
+                # Find oldest entry
+                oldest_key = None
+                oldest_time = float('inf')
+                for key, timestamp in self._path_cache_timestamps.items():
+                    if timestamp < oldest_time:
+                        oldest_time = timestamp
+                        oldest_key = key
+                        
+                if oldest_key:
+                    self.logger.debug(f"Cache full, removing oldest entry: {oldest_key}")
+                    del self._path_cache[oldest_key]
+                    del self._path_cache_timestamps[oldest_key]
+            
+            # Store new cache entry with timestamp
+            self._path_cache[cache_key] = paths
+            self._path_cache_timestamps[cache_key] = time.time()
+            
+            # Add telemetry
+            cache_size = len(self._path_cache)
+            if cache_size % 10 == 0:  # Log every 10 entries
+                self.logger.info(f"Path cache contains {cache_size} entries")
+        
+        # Log warning if no paths were found
+        if not paths:
             self.logger.warning(
                 f"No mapping paths found from '{source_ontology}' to '{target_ontology}' (bidirectional={bidirectional})"
             )
-
+            
         return paths
 
     async def _find_best_path(
@@ -835,22 +1039,36 @@ class MappingExecutor(CompositeIdentifierMixin):
         source_type: str,
         target_type: str,
         bidirectional: bool = False,
+        preferred_direction: str = "forward",
+        allow_reverse: bool = False,
     ) -> Optional[Union[MappingPath, ReversiblePath]]:
         """
-        Find the highest priority mapping path, optionally considering reverse paths.
+        Find the highest priority mapping path, optionally considering reverse paths concurrently.
 
         Args:
             session: Database session
             source_type: Source ontology type
             target_type: Target ontology type
-            bidirectional: If True, also search for reverse paths if no forward paths found
+            bidirectional: If True, also search for reverse paths concurrently with forward paths
+            preferred_direction: Preferred direction ("forward" or "reverse") for path selection
+            allow_reverse: Legacy parameter to maintain compatibility, same as bidirectional=True
 
         Returns:
-            The highest priority path, which might be a reverse path if bidirectional=True
+            The highest priority path, sorted by direction preference and then by priority
         """
+        # For compatibility: if allow_reverse is True, make sure bidirectional is too
+        if allow_reverse and not bidirectional:
+            bidirectional = True
+            
+        # Find all paths with the given parameters
         paths = await self._find_mapping_paths(
-            session, source_type, target_type, bidirectional=bidirectional
+            session, 
+            source_type, 
+            target_type, 
+            bidirectional=bidirectional,
+            preferred_direction=preferred_direction
         )
+        
         return paths[0] if paths else None
 
     async def _get_endpoint_properties(self, session: AsyncSession, endpoint_name: str) -> List[EndpointPropertyConfig]:
@@ -870,16 +1088,42 @@ class MappingExecutor(CompositeIdentifierMixin):
         result = await session.execute(stmt)
         return result.scalars().all()
 
+    async def _get_endpoint(self, session: AsyncSession, endpoint_name: str) -> Optional[Endpoint]:
+        """Retrieves an endpoint by name.
+        
+        Args:
+            session: SQLAlchemy session
+            endpoint_name: Name of the endpoint to retrieve
+            
+        Returns:
+            The Endpoint if found, None otherwise
+        """
+        try:
+            stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
+            result = await session.execute(stmt)
+            endpoint = result.scalar_one_or_none()
+            
+            if endpoint:
+                self.logger.debug(f"Found endpoint: {endpoint.name} (ID: {endpoint.id})")
+            else:
+                self.logger.warning(f"Endpoint not found: {endpoint_name}")
+                
+            return endpoint
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error retrieving endpoint {endpoint_name}: {e}", exc_info=True)
+            raise DatabaseQueryError(
+                f"Database error fetching endpoint",
+                details={"endpoint": endpoint_name, "error": str(e)}
+            ) from e
+    
     async def _get_ontology_type(self, session: AsyncSession, endpoint_name: str, property_name: str) -> Optional[str]:
         """Retrieves the primary ontology type for a given endpoint and property name."""
         self.logger.debug(f"Getting ontology type for {endpoint_name}.{property_name}")
         try:
-            # Join EndpointPropertyConfig with PropertyExtractionConfig to get the ontology type
+            # Join EndpointPropertyConfig with Endpoint
             stmt = (
-                select(PropertyExtractionConfig.ontology_type)
-                .join(EndpointPropertyConfig, 
-                      EndpointPropertyConfig.property_extraction_config_id == PropertyExtractionConfig.id)
-                .join(Endpoint)
+                select(EndpointPropertyConfig.ontology_type)
+                .join(Endpoint, Endpoint.id == EndpointPropertyConfig.endpoint_id)
                 .where(Endpoint.name == endpoint_name)
                 .where(EndpointPropertyConfig.property_name == property_name)
                 .limit(1)
@@ -1011,54 +1255,94 @@ class MappingExecutor(CompositeIdentifierMixin):
                     self.logger.debug(f"  Input sample: {input_values}")
                 else:
                     self.logger.debug(f"  Input sample: {input_values[:10]}...")
-                return await client_instance.map_identifiers(input_values)
+                # map_identifiers is expected to return the rich dictionary:
+                # {'primary_ids': [...], 'input_to_primary': {in:out}, 'errors': [...]}
+                # This needs to be converted to Dict[str, Tuple[Optional[List[str]], Optional[str]]]
+                client_results_dict = await client_instance.map_identifiers(input_values)
+                
+                processed_step_results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
+                successful_mappings = client_results_dict.get('input_to_primary', {})
+                for input_id, mapped_primary_id in successful_mappings.items():
+                    processed_step_results[input_id] = ([mapped_primary_id], None) 
+                
+                errors_list = client_results_dict.get('errors', [])
+                for error_detail in errors_list:
+                    error_input_id = error_detail.get('input_id')
+                    if error_input_id:
+                        processed_step_results[error_input_id] = (None, None)
+                        
+                for val in input_values: # Ensure all original inputs are covered
+                    if val not in processed_step_results:
+                        processed_step_results[val] = (None, None)
+                return processed_step_results
             else:
                 # Reverse execution - try specialized reverse method first
                 if hasattr(client_instance, "reverse_map_identifiers"):
                     self.logger.debug(
                         f"Using specialized reverse_map_identifiers method for {step.mapping_resource.name}"
                     )
-                    # TODO: Update clients' reverse_map_identifiers if they exist to return the tuple.
-                    old_format_results = await client_instance.reverse_map_identifiers(
+                    client_results_dict = await client_instance.reverse_map_identifiers(
                         input_values
                     )
-                    # Wrap result in the new tuple format, assuming None for component ID in reverse
-                    return {k: (v, None) for k, v in old_format_results.items()}
+                    # client_results_dict is in the rich format:
+                    # {'primary_ids': [...], 'input_to_primary': {in_id: out_id}, 'errors': [{'input_id': ...}]}
+                    
+                    # Expected output format for _execute_mapping_step is:
+                    # Dict[str, Tuple[Optional[List[str]], Optional[str]]]
+                    # i.e., Dict[original_input_id, ([mapped_ids_for_this_input], successful_component_if_any)]
+                    
+                    processed_step_results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
+                    
+                    successful_mappings = client_results_dict.get('input_to_primary', {})
+                    for input_id, mapped_primary_id in successful_mappings.items():
+                        # The format is ([mapped_id], None) where None is for component_id (not applicable here)
+                        processed_step_results[input_id] = ([mapped_primary_id], None) 
+                    
+                    errors_list = client_results_dict.get('errors', [])
+                    for error_detail in errors_list:
+                        error_input_id = error_detail.get('input_id')
+                        if error_input_id:
+                            processed_step_results[error_input_id] = (None, None)
+                            
+                    # Ensure all original input_values passed to the step have an entry in the output
+                    for val in input_values:
+                        if val not in processed_step_results:
+                            # Default to no mapping if not covered by success or error from client
+                            processed_step_results[val] = (None, None) 
+                    return processed_step_results
 
                 # Fall back to inverting the results of forward mapping
+                # NOTE: Conceptual issue here if map_identifiers expects source-type IDs
+                # and input_values are target-type IDs.
                 self.logger.info(
                     f"Executing reverse mapping for {step.mapping_resource.name} by inverting forward results"
                 )
-                # Call forward mapping, which now returns the tuple format
-                all_forward_results: Dict[
-                    str, Tuple[Optional[List[str]], Optional[str]]
-                ] = await client_instance.map_identifiers(input_values)
+                # client_instance.map_identifiers is expected to return the rich structure.
+                forward_results_dict = await client_instance.map_identifiers(input_values)
 
                 # Now invert the mapping (target_id → [source_id])
-                inverted_results: Dict[str, Tuple[List[str], None]] = {}
-                for source_id, result_tuple in all_forward_results.items():
-                    (
-                        target_ids_list,
-                        _,
-                    ) = result_tuple  # Extract target IDs, ignore component ID for inversion
-                    if not target_ids_list:
-                        continue
-
-                    for target_id in target_ids_list:
-                        if (
-                            target_id in input_values
-                        ):  # Only include targets that were part of our original reverse input
-                            if target_id not in inverted_results:
-                                # Initialize with the tuple format (list, None)
-                                inverted_results[target_id] = ([], None)
-                            # Append source_id to the list within the tuple
-                            inverted_results[target_id][0].append(source_id)
-
-                # Add empty results (None, None) for inputs with no matches
-                for input_id in input_values:
-                    if input_id not in inverted_results:
-                        inverted_results[input_id] = (None, None)
-
+                # The output of _execute_mapping_step should be Dict[str, Tuple[Optional[List[str]], Optional[str]]]
+                # where the key is the *original input_id to this step* (which are target_ids in this context)
+                inverted_results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
+                
+                # Iterate through successful forward mappings from the client's perspective:
+                # {source_id_of_client_map: target_id_of_client_map}
+                for client_source_id, client_target_id in forward_results_dict.get('input_to_primary', {}).items():
+                    # We are interested if this client_target_id is one of the IDs we are trying to map from (i.e., in input_values)
+                    if client_target_id in input_values:
+                        if client_target_id not in inverted_results:
+                            inverted_results[client_target_id] = ([], None)
+                        # Ensure the list is not None before appending
+                        if inverted_results[client_target_id][0] is not None:
+                             inverted_results[client_target_id][0].append(client_source_id)
+                        else: # Should not happen if initialized with ([], None)
+                             inverted_results[client_target_id] = ([client_source_id], None)
+            
+                # Add empty results (None, None) for step's input_values that didn't appear as a target in the forward map
+                for original_step_input_id in input_values:
+                    if original_step_input_id not in inverted_results:
+                        inverted_results[original_step_input_id] = (None, None)
+                
                 return inverted_results
 
         except ClientError as ce:  # Catch specific client errors if raised by client
@@ -1167,6 +1451,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             )
             cache_session.add(log_entry)
             await cache_session.flush()  # Ensure ID is generated
+            await cache_session.commit() # Commit to make it visible to other sessions
             return log_entry
         except SQLAlchemyError as e:
             self.logger.error(f"Cache storage error creating path log: {e}", exc_info=True)
@@ -1229,7 +1514,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                     self.logger.error(f"Cache query execution failed: {e}", exc_info=True)
                     raise CacheRetrievalError(
                         f"Error during cache lookup query",
-                        details={"error": str(e)}
+                        details={"source_type": source_ontology, "target_type": target_ontology, "count": len(input_identifiers), "error": str(e)}
                     ) from e
                 except Exception as e:
                     self.logger.error(f"Unexpected error during cache retrieval: {e}", exc_info=True)
@@ -1328,10 +1613,19 @@ class MappingExecutor(CompositeIdentifierMixin):
         input_data: List[str] = None, # Preferred input parameter
         source_property_name: str = "PrimaryIdentifier",
         target_property_name: str = "PrimaryIdentifier",
+        source_ontology_type: str = None,  # Optional: provide source ontology directly
+        target_ontology_type: str = None,  # Optional: provide target ontology directly
         use_cache: bool = True,
         max_cache_age_days: Optional[int] = None,
         mapping_direction: str = "forward", # Primarily for initial path finding bias
         try_reverse_mapping: bool = False, # Allows using reversed path if no forward found
+        validate_bidirectional: bool = False, # Validates forward mappings by testing reverse mapping
+        progress_callback: Optional[callable] = None, # Callback function for reporting progress
+        batch_size: int = 250,  # Number of identifiers to process in each batch
+        max_concurrent_batches: Optional[int] = None,  # Maximum number of batches to process concurrently
+        max_hop_count: Optional[int] = None,  # Maximum number of hops to allow in paths
+        min_confidence: float = 0.0,  # Minimum confidence score to accept
+        enable_metrics: Optional[bool] = None,  # Whether to enable metrics tracking
     ) -> Dict[str, Any]:
         """
         Execute a mapping process based on endpoint configurations, using an iterative strategy.
@@ -1353,7 +1647,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         :param max_cache_age_days: Maximum age of cached results to use (None = no limit)
         :param mapping_direction: The preferred direction ('forward' or 'reverse') - influences path selection but strategy remains the same.
         :param try_reverse_mapping: Allows using a reversed path if no forward path found in direct/indirect steps.
-        :return: Dictionary with mapping results, including provenance.
+        :param validate_bidirectional: If True, validates forward mappings by running a reverse mapping and checking if target IDs map back to their source.
+        :param progress_callback: Optional callback function for reporting progress (signature: callback(current: int, total: int, status: str))
+        :return: Dictionary with mapping results, including provenance and validation status when bidirectional validation is enabled.
         """
         # --- Input Handling ---
         if input_data is not None and input_identifiers is None:
@@ -1369,7 +1665,25 @@ class MappingExecutor(CompositeIdentifierMixin):
         successful_mappings = {}  # Store successfully mapped {input_id: result_details}
         processed_ids = set() # Track IDs processed in any successful step (cache hit or execution)
         final_results = {} # Initialize final results
+        
+        # Initialize progress tracking variables
+        total_ids = len(original_input_ids_set)
+        current_progress = 0
+        
+        # Report initial progress if callback provided
+        if progress_callback:
+            progress_callback(current_progress, total_ids, "Starting mapping process")
 
+        # Set default parameter values from class attributes if not provided
+        if max_concurrent_batches is None:
+            max_concurrent_batches = getattr(self, "max_concurrent_batches", 5)
+        
+        if enable_metrics is None:
+            enable_metrics = getattr(self, "enable_metrics", True)
+            
+        # Start overall execution performance tracking
+        overall_start_time = time.time()
+        
         # --- 0. Initial Setup --- Create a mapping session for logging ---
         mapping_session_id = await self._create_mapping_session_log(
             source_endpoint_name, target_endpoint_name, source_property_name,
@@ -1385,8 +1699,10 @@ class MappingExecutor(CompositeIdentifierMixin):
                 )
                 
                 # --- Check for composite identifiers and handle if needed ---
-                if not self._composite_initialized:
-                    await self._initialize_composite_handler(meta_session)
+                # Skip composite handling for this optimization test
+                self._composite_initialized = True
+                # if not self._composite_initialized:
+                #     await self._initialize_composite_handler(meta_session)
                 
                 # Get the primary source ontology type (needed to check for composite patterns)
                 primary_source_ontology = await self._get_ontology_type(
@@ -1434,12 +1750,19 @@ class MappingExecutor(CompositeIdentifierMixin):
                     meta_session, target_endpoint_name, target_property_name
                 )
 
+                # --- Debug Logging ---
+                src_prop_name = getattr(source_endpoint, 'primary_property_name', 'NOT_FOUND') if source_endpoint else 'ENDPOINT_NONE'
+                tgt_prop_name = getattr(target_endpoint, 'primary_property_name', 'NOT_FOUND') if target_endpoint else 'ENDPOINT_NONE'
+                self.logger.info(f"DEBUG: SrcEP PrimaryProp: {src_prop_name}")
+                self.logger.info(f"DEBUG: TgtEP PrimaryProp: {tgt_prop_name}")
+                # --- End Debug Logging ---
+
                 # Validate configuration
                 if not all([source_endpoint, target_endpoint, primary_source_ontology, primary_target_ontology]):
                     error_message = "Configuration Error: Could not determine endpoints or primary ontologies."
                     # Log specific missing items if needed
                     self.logger.error(f"{error_message} SourceEndpoint: {source_endpoint}, TargetEndpoint: {target_endpoint}, SourceOntology: {primary_source_ontology}, TargetOntology: {primary_target_ontology}")
-                    raise ConfigurationError(error_message, ErrorCode.CONFIG_ERROR)
+                    raise ConfigurationError(error_message) # Use ConfigurationError directly
 
                 self.logger.info(f"Primary mapping ontologies: {primary_source_ontology} -> {primary_target_ontology}")
 
@@ -1471,7 +1794,11 @@ class MappingExecutor(CompositeIdentifierMixin):
                             ids_to_process_step2, # Process only those not found in cache yet
                             primary_source_ontology,
                             primary_target_ontology,
-                            mapping_session_id=mapping_session_id
+                            mapping_session_id=mapping_session_id,
+                            batch_size=batch_size,
+                            max_hop_count=max_hop_count,
+                            filter_confidence=min_confidence,
+                            max_concurrent_batches=max_concurrent_batches
                         )
 
                         # Process results from direct path
@@ -1494,6 +1821,9 @@ class MappingExecutor(CompositeIdentifierMixin):
                 # --- 3 & 4. Identify Unmapped Entities & Attempt Secondary -> Primary Conversion ---
                 self.logger.info("--- Steps 3 & 4: Identifying Unmapped Entities & Attempting Secondary -> Primary Conversion ---")
                 unmapped_ids_step3 = list(original_input_ids_set - processed_ids) # IDs not mapped by cache or Step 2
+                
+                # Initialize tracking for derived primary IDs - needed regardless of whether step 3 & 4 are executed
+                derived_primary_ids = {}  # Will store {source_id: {'primary_id': derived_id, 'provenance': details}}
 
                 if not unmapped_ids_step3:
                     self.logger.info("All input identifiers successfully mapped or handled in previous steps. Skipping Steps 3 & 4.")
@@ -1519,7 +1849,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                         # Sort secondary properties by preference priority (or use order by ID if no preference found)
                         if preferences:
                             # Create a mapping of ontology_type to priority from preferences
-                            priority_map = {pref.ontology_type: pref.priority for pref in preferences}
+                            priority_map = {pref.ontology_name: pref.priority for pref in preferences}
                             # Sort secondary properties by priority (lower number = higher priority)
                             secondary_properties.sort(key=lambda prop: priority_map.get(prop.ontology_type, 999))
                             self.logger.info(f"Sorted {len(secondary_properties)} secondary properties by endpoint preference priority.")
@@ -1567,7 +1897,11 @@ class MappingExecutor(CompositeIdentifierMixin):
                                 unmapped_ids_without_derived,
                                 secondary_source_ontology,  # Start with secondary
                                 primary_source_ontology,    # Convert to primary source
-                                mapping_session_id=mapping_session_id
+                                mapping_session_id=mapping_session_id,
+                                batch_size=batch_size,
+                                max_hop_count=max_hop_count,
+                                filter_confidence=min_confidence,
+                                max_concurrent_batches=max_concurrent_batches
                             )
                             
                             # Process results - for each successfully converted ID, store the derived primary
@@ -1593,7 +1927,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                                 
                         self.logger.info(f"Secondary-to-primary conversion complete. Derived primary IDs for {len(derived_primary_ids)}/{len(unmapped_ids_step3)} unmapped entities.")
 
-                # --- 5. Re-attempt Direct Primary Mapping (using derived IDs) ---
+                # --- 5. Re-attempt Direct Primary Mapping using derived primary IDs ---
                 self.logger.info("--- Step 5: Re-attempting Direct Primary Mapping using derived primary IDs ---")
                 
                 # Check if we have any derived primary IDs to process
@@ -1619,6 +1953,23 @@ class MappingExecutor(CompositeIdentifierMixin):
                             for derived_primary_id in derived_primary_id_list:
                                 self.logger.debug(f"Attempting mapping for {source_id} using derived primary ID {derived_primary_id}")
                                 
+                                # Check cache for any existing valid mappings first
+                                if use_cache:
+                                    self.logger.info("Checking cache for existing mappings...")
+                                    pending_ids = list(original_input_ids_set - processed_ids)
+                                    
+                                    # Update progress
+                                    if progress_callback:
+                                        progress_callback(current_progress, total_ids, "Checking cache for existing mappings")
+                                    
+                                    # Try to get as many mappings from cache as possible
+                                    cache_results = await self._get_cached_mappings(
+                                        primary_source_ontology,
+                                        primary_target_ontology,
+                                        pending_ids,
+                                        max_age_days=max_cache_age_days
+                                    )
+                                    
                                 # Execute the primary path for this specific derived ID
                                 derived_mapping_results = await self._execute_path(
                                     meta_session,
@@ -1626,7 +1977,11 @@ class MappingExecutor(CompositeIdentifierMixin):
                                     [derived_primary_id],  # Just the single derived ID
                                     primary_source_ontology,
                                     primary_target_ontology,
-                                    mapping_session_id=mapping_session_id
+                                    mapping_session_id=mapping_session_id,
+                                    batch_size=batch_size,
+                                    max_hop_count=max_hop_count,
+                                    filter_confidence=min_confidence,
+                                    max_concurrent_batches=max_concurrent_batches
                                 )
                                 
                                 # Process results - connect back to original source ID
@@ -1671,8 +2026,67 @@ class MappingExecutor(CompositeIdentifierMixin):
                         newly_mapped = len([sid for sid in derived_primary_ids.keys() if sid in processed_ids])
                         self.logger.info(f"Indirect mapping using derived primary IDs successfully mapped {newly_mapped}/{len(derived_primary_ids)} additional entities.")
 
-                # --- 6. Aggregate Results & Finalize ---
-                self.logger.info("--- Step 6: Aggregating final results ---")
+                # --- 6. Bidirectional Validation (if requested) ---
+                if validate_bidirectional:
+                    self.logger.info("--- Step 6: Performing Bidirectional Validation ---")
+                    
+                    # Skip if no successful mappings to validate
+                    if not successful_mappings:
+                        self.logger.info("No successful mappings to validate. Skipping bidirectional validation.")
+                    else:
+                        # Extract all target IDs that need validation
+                        target_ids_to_validate = set()
+                        for result in successful_mappings.values():
+                            if result and result.get("target_identifiers"):
+                                target_ids_to_validate.update(result["target_identifiers"])
+                        
+                        self.logger.info(f"Found {len(target_ids_to_validate)} unique target IDs to validate")
+                        
+                        # Find a reverse mapping path from target back to source
+                        primary_source_ontology = await self._get_ontology_type(
+                            meta_session, source_endpoint_name, source_property_name
+                        )
+                        primary_target_ontology = await self._get_ontology_type(
+                            meta_session, target_endpoint_name, target_property_name
+                        )
+                        
+                        self.logger.info(f"Step 1: Finding reverse mapping path from {primary_target_ontology} back to {primary_source_ontology}...")
+                        reverse_path = await self._find_best_path(
+                            meta_session,
+                            primary_target_ontology,  # Using target as source
+                            primary_source_ontology,  # Using source as target
+                            preferred_direction="forward",  # We want a direct T->S path
+                            allow_reverse=True  # Allow using S->T paths in reverse if needed
+                        )
+                        
+                        if not reverse_path:
+                            self.logger.warning(f"No reverse mapping path found from {primary_target_ontology} to {primary_source_ontology}. Validation incomplete.")
+                        else:
+                            self.logger.info(f"Step 2: Found reverse path: {reverse_path.name} (id={reverse_path.id})")
+                            
+                            # Execute reverse mapping
+                            self.logger.info(f"Step 3: Reverse mapping from target to source...")
+                            reverse_results = await self._execute_path(
+                                meta_session,
+                                reverse_path,
+                                list(target_ids_to_validate),
+                                primary_target_ontology,
+                                primary_source_ontology,
+                                mapping_session_id=mapping_session_id,
+                                batch_size=batch_size,
+                                max_concurrent_batches=max_concurrent_batches,
+                                filter_confidence=min_confidence
+                            )
+                            
+                            # Now enrich successful_mappings with validation status
+                            self.logger.info(f"Step 4: Reconciling bidirectional mappings...")
+                            successful_mappings = await self._reconcile_bidirectional_mappings(
+                                successful_mappings,
+                                reverse_results
+                            )
+
+                # --- 7. Aggregate Results & Finalize ---
+                self.logger.info("--- Step 7: Aggregating final results ---")
                 final_results = successful_mappings
                 
                 # Add nulls for any original inputs that were never successfully processed
@@ -1710,8 +2124,6 @@ class MappingExecutor(CompositeIdentifierMixin):
                         "message": f"Mapping failed due to error: {e}",
                         # Add error details if possible/safe
                         "confidence_score": 0.0,
-                        "mapping_path_details": None,
-                        "hop_count": None,
                         "mapping_direction": None,
                     }
                     error_count += 1
@@ -1732,8 +2144,6 @@ class MappingExecutor(CompositeIdentifierMixin):
                         "status": PathExecutionStatus.ERROR.value,
                         "message": f"Unexpected error during mapping: {e}",
                         "confidence_score": 0.0,
-                        "mapping_path_details": None,
-                        "hop_count": None,
                         "mapping_direction": None,
                     }
                     error_count += 1
@@ -1752,10 +2162,62 @@ class MappingExecutor(CompositeIdentifierMixin):
                 elif 'e' in locals():
                     status = PathExecutionStatus.FAILURE
                     
+                # Calculate overall execution metrics
+                overall_end_time = time.time()
+                total_execution_time = overall_end_time - overall_start_time
+                
+                # Count results
+                results_count = len([r for r in final_results.values() if r.get("target_identifiers")])
+                
+                # Calculate unmapped count here to ensure it's always defined
+                unmapped_count = 0
+                if 'original_input_ids_set' in locals() and 'processed_ids' in locals():
+                    # If both variables are defined, calculate unmapped count properly
+                    unmapped_count = len(original_input_ids_set) - len(processed_ids)
+                elif 'original_input_ids_set' in locals() and 'final_results' in locals():
+                    # Alternative calculation if processed_ids is not available but final_results is
+                    unmapped_count = len(original_input_ids_set) - results_count
+                
+                execution_metrics = {
+                    "source_endpoint": source_endpoint_name,
+                    "target_endpoint": target_endpoint_name,
+                    "input_count": len(original_input_ids_set) if 'original_input_ids_set' in locals() else 0,
+                    "result_count": results_count,
+                    "unmapped_count": unmapped_count,
+                    "success_rate": (results_count / len(original_input_ids_set) * 100) if 'original_input_ids_set' in locals() and original_input_ids_set else 0,
+                    "total_execution_time": total_execution_time,
+                    "batch_size": batch_size,
+                    "max_concurrent_batches": max_concurrent_batches,
+                    "try_reverse_mapping": try_reverse_mapping,
+                    "mapping_direction": mapping_direction,
+                    "start_time": overall_start_time,
+                    "end_time": overall_end_time
+                }
+                
+                # Log overall execution metrics
+                self.logger.info(
+                    f"Mapping execution completed in {total_execution_time:.3f}s: "
+                    f"{results_count}/{execution_metrics['input_count']} successful "
+                    f"({execution_metrics['success_rate']:.1f}%), "
+                    f"{execution_metrics['unmapped_count']} unmapped"
+                )
+                
+                # Track performance metrics if enabled
+                if enable_metrics:
+                    try:
+                        await self.track_mapping_metrics("mapping_execution", execution_metrics)
+                        
+                        # Also save performance metrics to database
+                        if mapping_session_id:
+                            await self._save_metrics_to_database(mapping_session_id, "mapping_execution", execution_metrics)
+                    except Exception as e:
+                        self.logger.warning(f"Error tracking metrics: {str(e)}")
+                
                 await self._update_mapping_session_log(
                     mapping_session_id, 
                     status=status,
                     end_time=get_current_utc_time(),
+                    results_count=results_count,
                     error_message=str(e) if 'e' in locals() else None
                 )
             else:
@@ -1768,84 +2230,393 @@ class MappingExecutor(CompositeIdentifierMixin):
         input_identifiers: List[str],
         source_ontology: str,
         target_ontology: str,
-        mapping_session_id: Optional[int] = None
+        mapping_session_id: Optional[int] = None,
+        batch_size: int = 250,
+        max_hop_count: Optional[int] = None,
+        filter_confidence: float = 0.0,
+        max_concurrent_batches: int = 5
     ) -> Dict[str, Optional[Dict[str, Any]]]:
-        """Execute a mapping path or its reverse."""
-        self.logger.debug(f"Executing path {path.id} for {len(input_identifiers)} IDs")
+        """
+        Execute a mapping path or its reverse, with optimized batched processing.
         
-        # Convert list to set for _run_path_steps
-        input_ids_set = set(input_identifiers)
-        
-        try:
-            # Call _run_path_steps to execute the path
-            raw_results = await self._run_path_steps(
-                path=path,
-                initial_input_ids=input_ids_set,
-                meta_session=session,
-                mapping_session_id=mapping_session_id
-            )
+        Args:
+            session: Database session
+            path: The path to execute
+            input_identifiers: List of identifiers to map
+            source_ontology: Source ontology type
+            target_ontology: Target ontology type
+            mapping_session_id: Optional ID for the mapping session
+            batch_size: Size of batches for processing large input sets
+            max_hop_count: Maximum number of hops to allow (skip longer paths)
+            filter_confidence: Minimum confidence threshold for results
+            max_concurrent_batches: Maximum number of batches to process concurrently
             
-            # Transform the results into the format expected by execute_mapping
-            path_results = {}
-            for original_id, result_data in raw_results.items():
-                if not result_data or not result_data.get('final_ids'):
-                    # No mapping found for this ID
-                    continue
+        Returns:
+            Dictionary mapping input identifiers to their results
+        """
+        # Skip execution if max_hop_count is specified and this path exceeds it
+        path_hop_count = len(path.steps) if hasattr(path, "steps") and path.steps else 1
+        if max_hop_count is not None and path_hop_count > max_hop_count:
+            self.logger.info(f"Skipping path {path.id} with {path_hop_count} hops (exceeds max_hop_count of {max_hop_count})")
+            return {input_id: {
+                "source_identifier": input_id,
+                "target_identifiers": None,
+                "status": PathExecutionStatus.SKIPPED.value,
+                "message": f"Path skipped (hop count {path_hop_count} exceeds max_hop_count {max_hop_count})",
+                "path_id": path.id,
+                "path_name": path.name,
+                "is_reverse": getattr(path, "is_reverse", False),
+                "hop_count": path_hop_count,
+                "mapping_direction": "reverse" if getattr(path, "is_reverse", False) else "forward",
+                "confidence_score": 0.0
+            } for input_id in input_identifiers}
+            
+        # Add performance tracking
+        execution_start_time = time.time()
+        metrics = {
+            "path_id": path.id,
+            "input_count": len(input_identifiers),
+            "batch_size": batch_size,
+            "max_concurrent_batches": max_concurrent_batches,
+            "is_reverse": getattr(path, "is_reverse", False),
+            "start_time": execution_start_time,
+            "processing_times": {},
+            "success_count": 0,
+            "error_count": 0,
+            "filtered_count": 0
+        }
+        
+        self.logger.debug(f"Executing path {path.id} for {len(input_identifiers)} IDs with batch_size={batch_size}")
+        
+        # Convert input to a list (needed for batching)
+        input_ids_list = list(set(input_identifiers))  # Deduplicate while preserving order
+        
+        # Create batches for processing
+        batches = [input_ids_list[i:i+batch_size] for i in range(0, len(input_ids_list), batch_size)]
+        self.logger.debug(f"Split {len(input_ids_list)} identifiers into {len(batches)} batches")
+        
+        # Initialize results dictionary to store combined results
+        combined_results = {}
+        
+        # Create a semaphore to limit concurrent batch processing
+        semaphore = asyncio.Semaphore(max_concurrent_batches)
+        
+        # Define batch processing function with performance tracking
+        async def process_batch(batch_index: int, batch_ids: List[str]):
+            async with semaphore:
+                batch_start_time = time.time()
+                batch_metrics = {
+                    "start_time": batch_start_time,
+                    "batch_size": len(batch_ids),
+                    "success_count": 0,
+                    "error_count": 0,
+                    "filtered_count": 0
+                }
                 
-                # Extract the final mapped IDs
-                final_ids = result_data.get('final_ids', [])
+                self.logger.debug(f"Processing batch {batch_index+1}/{len(batches)} with {len(batch_ids)} identifiers")
+                batch_set = set(batch_ids)
                 
-                # Get provenance data (first entry if multiple exist)
-                provenance = result_data.get('provenance', [{}])[0]
-                
-                # Extract path details from provenance
-                path_id = provenance.get('path_id')
-                path_name = provenance.get('path_name')
-                steps_details = provenance.get('steps_details', [])
-                
-                # Check if any step involved historical ID resolution
-                resolved_historical = any(
-                    step.get('resolved_historical', False) 
-                    for step in steps_details
-                )
-                
-                # Calculate hop count (number of steps)
-                hop_count = len(steps_details)
-                
-                # Determine mapping direction
-                mapping_direction = "reverse" if getattr(path, 'is_reverse', False) else "forward"
-                
-                # Build the result structure
-                path_results[original_id] = {
-                    "source_identifier": original_id,
-                    "target_identifiers": final_ids,
-                    "status": PathExecutionStatus.SUCCESS.value,
-                    "message": f"Successfully mapped via path: {path_name}",
-                    "confidence_score": 0.9 if hop_count <= 1 else (0.8 if hop_count == 2 else 0.7),  # Simple confidence score
-                    "mapping_path_details": {
-                        "path_id": path_id,
-                        "path_name": path_name,
-                        "direction": mapping_direction,
-                        "resolved_historical": resolved_historical,
-                        "steps": [
-                            {
-                                "order": i + 1,
+                try:
+                    # Start timing the path execution
+                    path_execution_start = get_current_utc_time()
+                    
+                    # Execute path steps directly for this batch
+                    is_reverse_execution = getattr(path, 'is_reverse', False)
+                    self.logger.debug(f"Executing {'reverse' if is_reverse_execution else 'forward'} path {path.id}")
+                    
+                    # Start with the initial input identifiers
+                    current_input_ids = batch_set
+                    # Dict to track execution progress: input_id -> {final_ids: List[str], provenance: List[Dict]}
+                    execution_progress = {input_id: {
+                        'final_ids': [],
+                        'provenance': [{
+                            'path_id': path.id,
+                            'path_name': getattr(path, 'name', f"Path-{path.id}"),
+                            'steps_details': []
+                        }]
+                    } for input_id in batch_ids}
+                    
+                    # Get the steps to execute (in correct order based on direction)
+                    steps_to_execute = path.steps
+                    if is_reverse_execution and hasattr(path, 'steps') and path.steps:
+                        # For reverse paths, execute steps in reverse order
+                        steps_to_execute = list(reversed(path.steps))
+                    
+                    # Track unique identifiers at each step to avoid duplicates
+                    step_input_ids = set(current_input_ids)
+                    
+                    # Execute each step in the path
+                    for step_index, step in enumerate(steps_to_execute):
+                        step_start_time = time.time()
+                        step_id = step.id if hasattr(step, 'id') else f"step_{step_index}"
+                        step_name = step.name if hasattr(step, 'name') else f"Step {step_index}"
+                        self.logger.debug(f"Executing step {step_id} ({step_name}) with {len(step_input_ids)} input IDs")
+                        
+                        if not step_input_ids:
+                            self.logger.debug(f"No input IDs for step {step_id} - skipping")
+                            break
+                        
+                        try:
+                            # Execute the mapping step with the current set of input IDs
+                            step_results = await self._execute_mapping_step(
+                                step=step,
+                                input_values=list(step_input_ids),
+                                is_reverse=is_reverse_execution
+                            )
+                            
+                            # Track which original inputs connect to which outputs through this step
+                            # and update provenance information
+                            next_step_input_ids = set()
+                            
+                            # Go through all original input IDs still in the execution path
+                            for original_input_id, progress_data in execution_progress.items():
+                                current_progress = progress_data.copy()
+                                
+                                # For the first step, the input ID will be one of our original batch IDs
+                                # For subsequent steps, we need to trace through previous mappings
+                                if step_index == 0:
+                                    if original_input_id in step_results:
+                                        # Direct result for this original input ID
+                                        mapped_ids, source_component = step_results[original_input_id]
+                                        
+                                        if mapped_ids:  # If mapping was successful
+                                            # Add the mapped IDs to the next step's inputs
+                                            next_step_input_ids.update(mapped_ids)
+                                            
+                                            # If this is the last step, these are our final results for this input
+                                            if len(steps_to_execute) == 1:
+                                                current_progress['final_ids'] = mapped_ids
+                                            
+                                            # Add step details to provenance
+                                            step_detail = {
+                                                'step_id': step_id,
+                                                'step_name': step_name,
+                                                'resource_id': step.mapping_resource.id, # Changed to .id
+                                                'client_name': getattr(step, 'client_name', 'Unknown'),
+                                                'input_ids': [original_input_id],
+                                                'output_ids': mapped_ids,
+                                                'resolved_historical': False,  # This would need to be set based on actual resolution
+                                                'execution_time': time.time() - step_start_time
+                                            }
+                                            current_progress['provenance'][0]['steps_details'].append(step_detail)
+                                            execution_progress[original_input_id] = current_progress
+                                else:
+                                    # For subsequent steps, we need to check if any of our previous output IDs
+                                    # are inputs to the current step
+                                    if 'provenance' in current_progress and current_progress['provenance']:
+                                        previous_step_detail = current_progress['provenance'][0]['steps_details'][-1] if current_progress['provenance'][0]['steps_details'] else None
+                                        
+                                        if previous_step_detail and 'output_ids' in previous_step_detail:
+                                            previous_output_ids = previous_step_detail['output_ids']
+                                            
+                                            # Check if any of our previous outputs were mapped in this step
+                                            all_mapped_ids = []
+                                            input_ids_for_step = []
+                                            
+                                            for prev_output_id in previous_output_ids:
+                                                if prev_output_id in step_results:
+                                                    # This previous output was mapped in this step
+                                                    mapped_ids, source_component = step_results[prev_output_id]
+                                                    
+                                                    if mapped_ids:  # If mapping was successful
+                                                        # Add to our running list for this original input
+                                                        all_mapped_ids.extend(mapped_ids)
+                                                        next_step_input_ids.update(mapped_ids)
+                                                        input_ids_for_step.append(prev_output_id)
+                                            
+                                            # If we got any mappings for this original input in this step
+                                            if all_mapped_ids:
+                                                # If this is the last step, these are our final results
+                                                if step_index == len(steps_to_execute) - 1:
+                                                    current_progress['final_ids'] = all_mapped_ids
+                                                
+                                                # Add step details to provenance
+                                                step_detail = {
+                                                    'step_id': step_id,
+                                                    'step_name': step_name,
+                                                    'resource_id': step.mapping_resource.id, # Changed to .id
+                                                    'client_name': getattr(step, 'client_name', 'Unknown'),
+                                                    'input_ids': input_ids_for_step,
+                                                    'output_ids': all_mapped_ids, 
+                                                    'resolved_historical': False,  # Would need to be set based on actual resolution
+                                                    'execution_time': time.time() - step_start_time
+                                                }
+                                                current_progress['provenance'][0]['steps_details'].append(step_detail)
+                                                execution_progress[original_input_id] = current_progress
+                            
+                            # Update the input IDs for the next step
+                            step_input_ids = next_step_input_ids
+                            
+                            self.logger.debug(f"Step {step_id} completed with {len(next_step_input_ids)} output IDs")
+                            
+                        except Exception as e:
+                            self.logger.error(f"Error executing step {step_id}: {str(e)}", exc_info=True)
+                            # We continue with the next step to see if partial results can be obtained
+                    
+                    # Now execution_progress contains our raw results
+                    raw_results = execution_progress
+                    
+                    # Transform the results
+                    batch_results = {}
+                    for original_id, result_data in raw_results.items():
+                        if not result_data or not result_data.get('final_ids'):
+                            # No mapping found for this ID
+                            continue
+                        
+                        # Extract the final mapped IDs
+                        final_ids = result_data.get('final_ids', [])
+                        
+                        # Get provenance data (first entry if multiple exist)
+                        provenance = result_data.get('provenance', [{}])[0]
+                        
+                        # Extract path details from provenance
+                        path_id = provenance.get('path_id')
+                        path_name = provenance.get('path_name')
+                        steps_details = provenance.get('steps_details', [])
+                        
+                        # Check if any step involved historical ID resolution
+                        resolved_historical = any(
+                            step.get('resolved_historical', False) 
+                            for step in steps_details
+                        )
+                        
+                        # Calculate hop count (number of steps)
+                        hop_count = len(steps_details)
+                        
+                        # Determine mapping direction
+                        mapping_direction = "reverse" if getattr(path, 'is_reverse', False) else "forward"
+                        
+                        # Get detailed path step information for confidence calculation
+                        path_step_details = {}
+                        for i, step in enumerate(steps_details):
+                            path_step_details[str(i)] = {
                                 "resource_id": step.get("resource_id"),
-                                "client_name": step.get("client_name"),
+                                "resource_name": step.get("client_name", ""),
                                 "resolved_historical": step.get("resolved_historical", False)
                             }
-                            for i, step in enumerate(steps_details)
-                        ]
-                    },
-                    "hop_count": hop_count,
-                    "mapping_direction": mapping_direction,
-                }
-            
-            return path_results
+                        
+                        # Calculate confidence score
+                        confidence_score = self._calculate_confidence_score(
+                            {}, 
+                            hop_count, 
+                            getattr(path, 'is_reverse', False),
+                            path_step_details
+                        )
+                        
+                        self.logger.debug(f"Source: {original_id}, Hops: {hop_count}, Reversed: {getattr(path, 'is_reverse', False)}, Confidence: {confidence_score}")
+                        
+                        # Create mapping path details
+                        mapping_path_details = self._create_mapping_path_details(
+                            path_id=path_id,
+                            path_name=path_name,
+                            hop_count=hop_count,
+                            mapping_direction=mapping_direction,
+                            path_step_details=path_step_details,
+                            additional_metadata={
+                                "resolved_historical": resolved_historical,
+                                "confidence_score": confidence_score,
+                                "source_ontology": source_ontology,
+                                "target_ontology": target_ontology
+                            }
+                        )
+                        
+                        # Build the result structure
+                        batch_results[original_id] = {
+                            "source_identifier": original_id,
+                            "target_identifiers": final_ids,
+                            "status": PathExecutionStatus.SUCCESS.value,
+                            "message": f"Successfully mapped via path: {path_name}",
+                            "confidence_score": confidence_score,
+                            "mapping_path_details": mapping_path_details,
+                            "hop_count": hop_count,
+                            "mapping_direction": mapping_direction,
+                            "mapping_source": self._determine_mapping_source(path_step_details)
+                        }
+                    
+                    return batch_results
+                    
+                except Exception as e:
+                    # Record batch error in metrics
+                    batch_metrics["error_count"] = len(batch_ids)
+                    metrics["error_count"] += len(batch_ids)
+                    batch_metrics["error"] = str(e)
+                    batch_metrics["error_type"] = type(e).__name__
+                    
+                    error_time = time.time()
+                    batch_metrics["total_time"] = error_time - batch_start_time
+                    metrics["processing_times"][f"batch_{batch_index}"] = batch_metrics
+                    
+                    self.logger.error(f"Error executing batch {batch_index+1} of path {path.id}: {str(e)}", exc_info=True)
+                    # Return failed results for each ID in this batch
+                    return {input_id: {
+                        "source_identifier": input_id,
+                        "target_identifiers": None,
+                        "status": PathExecutionStatus.EXECUTION_ERROR.value,
+                        "message": f"Error during path execution: {str(e)}",
+                        "confidence_score": 0.0,
+                        "mapping_direction": "reverse" if getattr(path, "is_reverse", False) else "forward",
+                        "error_details": {
+                            "error_type": type(e).__name__,
+                            "error_message": str(e)
+                        }
+                    } for input_id in batch_ids}
+                
+                finally:
+                    # Record batch completion metrics regardless of success/failure
+                    batch_end_time = time.time()
+                    batch_metrics["total_time"] = batch_end_time - batch_start_time
+                    metrics["processing_times"][f"batch_{batch_index}"] = batch_metrics
         
-        except Exception as e:
-            self.logger.error(f"Error executing path {path.id}: {str(e)}", exc_info=True)
-            return {}  # Return empty dict on error
+        # Process batches concurrently
+        batch_tasks = [process_batch(i, batch) for i, batch in enumerate(batches)]
+        batch_results_list = await asyncio.gather(*batch_tasks)
+        
+        # Combine all batch results
+        for batch_result in batch_results_list:
+            if batch_result:
+                combined_results.update(batch_result)
+        
+        # Add error entries for any IDs not found in results
+        missing_ids = 0
+        for input_id in input_identifiers:
+            if input_id not in combined_results:
+                missing_ids += 1
+                combined_results[input_id] = {
+                    "source_identifier": input_id,
+                    "target_identifiers": None,
+                    "status": PathExecutionStatus.NO_MAPPING_FOUND.value,
+                    "message": f"No mapping found via path: {path.name}",
+                    "confidence_score": 0.0,
+                    "mapping_direction": "reverse" if getattr(path, 'is_reverse', False) else "forward",
+                    "path_id": path.id,
+                    "path_name": path.name
+                }
+        
+        # Record final execution metrics
+        execution_end_time = time.time()
+        total_execution_time = execution_end_time - execution_start_time
+        
+        metrics["end_time"] = execution_end_time
+        metrics["total_execution_time"] = total_execution_time
+        metrics["missing_ids"] = missing_ids
+        metrics["result_count"] = len(combined_results)
+        
+        # Log performance metrics
+        success_rate = (metrics["success_count"] / len(input_identifiers) * 100) if input_identifiers else 0
+        self.logger.info(
+            f"Path {path.id} execution completed in {total_execution_time:.3f}s: "
+            f"{metrics['success_count']}/{len(input_identifiers)} successful ({success_rate:.1f}%), "
+            f"{metrics['error_count']} errors, {metrics['filtered_count']} filtered"
+        )
+        
+        # If configured, send metrics to monitoring system
+        if hasattr(self, "metrics_tracker") and callable(getattr(self, "track_mapping_metrics", None)):
+            try:
+                await self.track_mapping_metrics("path_execution", metrics)
+            except Exception as e:
+                self.logger.warning(f"Failed to track metrics: {str(e)}")
+        
+        return combined_results
 
     def _flatten_results(self, step_results: Dict[str, Dict[str, Any]]) -> Set[str]:
         """Flatten the 'primary_ids' from client results into a unique set for the next step."""
@@ -1860,167 +2631,211 @@ class MappingExecutor(CompositeIdentifierMixin):
                 # For now, just log or pass; depends on desired handling
                 pass # Or log warning
         return all_next_inputs
-
-    async def _run_path_steps(
-        self,
-        path: Union[MappingPath, "ReversiblePath"],
-        initial_input_ids: Set[str],
-        meta_session: AsyncSession,
-        mapping_session_id: Optional[int] = None, # Added for logging
-    ) -> Dict[str, Dict[str, Any]]:
-        """Execute the sequence of steps defined in a mapping path."""
-        self.logger.info(f"Running path '{path.name}' (ID: {path.id}, Reverse: {getattr(path, 'is_reverse', False)}) for {len(initial_input_ids)} inputs.")
-
-        # Keep track of the original input ID -> final mapped IDs
-        final_results: Dict[str, Dict[str, Any]] = {input_id: {"final_ids": [], "provenance": []} for input_id in initial_input_ids}
-        # Track which original IDs map to which intermediate IDs at each step
-        # Format: {step_index: {intermediate_id: {original_id1, original_id2}}} 
-        traceback_mapping: Dict[int, Dict[str, Set[str]]] = { 
-            0: {input_id: {input_id} for input_id in initial_input_ids}
-        }
-
-        current_input_ids = initial_input_ids
-        step_execution_details = [] # For logging/provenance
-
-        steps_to_run = path.steps # steps property handles reversal if needed
-        step_order_key = lambda s: s.step_order if not getattr(path, 'is_reverse', False) else -(s.step_order or 0)
-        sorted_steps = sorted(steps_to_run, key=step_order_key)
-
-        for i, step in enumerate(sorted_steps):
-            step_start_time = get_current_utc_time()
-            self.logger.debug(f"  Step {i+1}/{len(sorted_steps)}: Resource '{step.mapping_resource.name}' (ID: {step.mapping_resource_id}), Order: {step.step_order}")
-
-            if not current_input_ids:
-                self.logger.warning(f"  Skipping step {i+1} as there are no input IDs from the previous step.")
-                break # No inputs, path cannot continue
-
-            try:
-                client_instance = await self._load_client(step.mapping_resource)
-            except (ClientInitializationError, ConfigurationError) as e:
-                self.logger.error(f"[{e.error_code}] Failed to initialize client for step {i+1} (Resource ID: {step.mapping_resource_id}). Path: {path.name}. Error: {e}", exc_info=True)
-                # Log path execution failure
-                # await self._log_path_execution(...) # TODO: Add path logging
-                raise MappingExecutionError(
-                    f"Client init failed for step {i+1}", 
-                    details={"path_name": path.name, "step_number": i+1}
-                ) from e
-
-            try:
-                # **** CORE CLIENT CALL ****
-                # Ensure client has map_identifiers method
-                if not hasattr(client_instance, 'map_identifiers'):
-                     raise ClientExecutionError(f"Client {client_instance.__class__.__name__} lacks map_identifiers method.", client_name=client_instance.__class__.__name__)
-                
-                step_results: Dict[str, Dict[str, Any]] = await client_instance.map_identifiers(
-                    list(current_input_ids)
-                )
-                # *************************
-
-                step_end_time = get_current_utc_time()
-                duration = (step_end_time - step_start_time).total_seconds()
-                self.logger.debug(f"  Step {i+1} executed in {duration:.4f}s. Got {len(step_results)} results.")
-
-                # --- Process results and prepare for next step --- 
-                next_step_inputs = set()
-                current_traceback = {} # {next_id: {original_id1, ...}}
-                resolved_flag_this_step = False # Track if any historical resolution occurred
-
-                for step_input_id, result_data in step_results.items():
-                    if step_input_id not in traceback_mapping[i]:
-                        self.logger.warning(f"Traceback error: ID '{step_input_id}' returned by client for step {i+1} was not in the inputs for this step. Skipping.")
-                        continue
-                    
-                    original_ids_for_this_input = traceback_mapping[i][step_input_id]
-
-                    # --- Extract mapped IDs and check for resolution ---
-                    # TODO: Make this robust based on actual client return structure
-                    # Assuming structure {'primary_ids': [...], 'was_resolved': bool}
-                    mapped_ids = result_data.get('primary_ids', [])
-                    was_resolved = result_data.get('was_resolved', False)
-                    if was_resolved:
-                        resolved_flag_this_step = True
-                    # -----------------------------------------------
-
-                    if mapped_ids:
-                        next_step_inputs.update(mapped_ids)
-                        for mapped_id in mapped_ids:
-                            if mapped_id not in current_traceback:
-                                current_traceback[mapped_id] = set()
-                            current_traceback[mapped_id].update(original_ids_for_this_input)
-                    else:
-                        # Handle failed mapping for step_input_id if needed
-                        pass
-                
-                # Store traceback for the next iteration
-                traceback_mapping[i+1] = current_traceback
-                current_input_ids = next_step_inputs
-
-                # --- Log step execution details --- 
-                step_execution_details.append({
-                    "step_order": step.step_order,
-                    "resource_id": step.mapping_resource_id,
-                    "client_name": client_instance.__class__.__name__,
-                    "input_count": len(step_results), # Or size of input list? Needs refinement
-                    "output_count": len(next_step_inputs),
-                    "duration_seconds": duration,
-                    "resolved_historical": resolved_flag_this_step # Store the flag
-                })
-                # ----------------------------------
-
-            except ClientExecutionError as e:
-                self.logger.error(f"[{e.error_code}] Client execution failed for step {i+1} (Resource ID: {step.mapping_resource_id}). Path: {path.name}. Error: {e}", exc_info=True)
-                 # Log path execution failure
-                # await self._log_path_execution(...) # TODO: Add path logging
-                raise MappingExecutionError(
-                    f"Client execution failed for step {i+1}", 
-                    details={"path_name": path.name, "step_number": i+1}
-                ) from e
-            except Exception as e:
-                self.logger.error(f"[{ErrorCode.UNEXPECTED_ERROR.name}] Unexpected error during step {i+1} execution (Resource ID: {step.mapping_resource_id}). Path: {path.name}. Error: {e}", exc_info=True)
-                # Log path execution failure
-                # await self._log_path_execution(...) # TODO: Add path logging
-                raise MappingExecutionError(
-                    f"Unexpected error in step {i+1}", 
-                    details={"path_name": path.name, "step_number": i+1}
-                ) from e
-            finally:
-                 # Clean up client resources if necessary (e.g., close sessions)
-                if hasattr(client_instance, 'close') and asyncio.iscoroutinefunction(client_instance.close):
-                    await client_instance.close()
-                elif hasattr(client_instance, 'close'):
-                    client_instance.close()
-
-        # --- Final Aggregation --- 
-        final_mapped_ids = current_input_ids # IDs remaining after the last step
-        final_traceback = traceback_mapping.get(len(sorted_steps), {}) 
-
-        for final_id in final_mapped_ids:
-            if final_id in final_traceback:
-                original_ids = final_traceback[final_id]
-                for original_id in original_ids:
-                    if original_id in final_results:
-                        # Ensure list uniqueness if needed
-                        if final_id not in final_results[original_id]['final_ids']:
-                             final_results[original_id]['final_ids'].append(final_id)
-                             # TODO: Enhance provenance details here 
-                             final_results[original_id]['provenance'].append({ # Basic provenance
-                                 "mapped_id": final_id,
-                                 "path_id": path.id,
-                                 "path_name": path.name,
-                                 "steps_details": step_execution_details
-                             })
-                    else:
-                         self.logger.warning(f"Original ID '{original_id}' from traceback not found in initial results dict.")
-            else:
-                self.logger.warning(f"Final mapped ID '{final_id}' has no traceback information.")
-
-        # Log path execution success
-        # await self._log_path_execution(...) # TODO: Add path logging
-        self.logger.info(f"Path '{path.name}' finished. Produced mappings for {sum(1 for r in final_results.values() if r['final_ids'])} original inputs.")
         
-        # Filter out inputs that didn't map to anything
-        successful_results = {k: v for k, v in final_results.items() if v['final_ids']}
-        return successful_results
+        async def _reconcile_bidirectional_mappings(
+        self,
+        forward_mappings: Dict[str, Dict[str, Any]],
+        reverse_results: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Enrich forward mappings with bidirectional validation status.
+        
+        Instead of filtering, this adds validation status information to each mapping
+        that succeeded in the primary S->T direction.
+        
+        Args:
+            forward_mappings: Dictionary of source_id -> mapping_result from forward mapping
+            reverse_results: Dictionary of target_id -> reverse_mapping_result from reverse mapping
+            
+        Returns:
+            Dictionary of enriched source_id -> mapping_result with validation status added
+        """
+        validated_count = 0
+        unidirectional_count = 0
+        
+        target_to_sources = {} # Stores target_id -> set of all source_ids it can reverse map to
+        for target_id, rev_res_item in reverse_results.items():
+            if rev_res_item and rev_res_item.get("target_identifiers"):
+                all_reverse_mapped_to_source_ids = set(rev_res_item["target_identifiers"])
+                
+                # Handle Arivale ID components in reverse mapped IDs
+                # If client returns "INF_P12345", ensure "P12345" is also considered.
+                current_set_copy = set(all_reverse_mapped_to_source_ids) # Iterate over a copy
+                for rs_id in current_set_copy:
+                    if any(rs_id.startswith(p) for p in ('INF_', 'CAM_', 'CVD_', 'CVD2_', 'DEV_')):
+                        parts = rs_id.split('_', 1)
+                        if len(parts) > 1:
+                            all_reverse_mapped_to_source_ids.add(parts[1]) # Add the UniProt part
+            
+                target_to_sources[target_id] = all_reverse_mapped_to_source_ids
+    
+        enriched_mappings = {}
+        for source_id, fwd_res_item in forward_mappings.items():
+            enriched_result = fwd_res_item.copy()
+            
+            if not fwd_res_item or not fwd_res_item.get("target_identifiers"):
+                enriched_result["validation_status"] = "UnidirectionalSuccess (NoFwdTarget)"
+                unidirectional_count += 1
+            else:
+                forward_mapped_target_ids = fwd_res_item["target_identifiers"]
+                current_status_for_source = None
+
+                for target_id_from_fwd_map in forward_mapped_target_ids:
+                    if target_id_from_fwd_map in target_to_sources: # This forward target has reverse mapping data
+                        all_possible_reverse_sources_for_target = target_to_sources[target_id_from_fwd_map]
+                        
+                        if source_id in all_possible_reverse_sources_for_target: # Original source_id is among them
+                            primary_reverse_mapped_id = reverse_results.get(target_id_from_fwd_map, {}).get("mapped_value")
+                            
+                            # Normalize primary_reverse_mapped_id if it's an Arivale ID
+                            normalized_primary_reverse_id = primary_reverse_mapped_id
+                            if primary_reverse_mapped_id and any(primary_reverse_mapped_id.startswith(p) for p in ('INF_', 'CAM_', 'CVD_', 'CVD2_', 'DEV_')):
+                                parts = primary_reverse_mapped_id.split('_', 1)
+                                if len(parts) > 1:
+                                    normalized_primary_reverse_id = parts[1]
+
+                            if normalized_primary_reverse_id == source_id:
+                                current_status_for_source = "Validated"
+                            else:
+                                current_status_for_source = "Validated (Ambiguous)"
+                            break # Found validation status for this source_id
+            
+                if current_status_for_source:
+                    enriched_result["validation_status"] = current_status_for_source
+                    validated_count += 1
+                else: # No validation path found to the original source_id
+                    any_fwd_target_had_reverse_data = any(tid in target_to_sources for tid in forward_mapped_target_ids)
+                    if any_fwd_target_had_reverse_data:
+                        enriched_result["validation_status"] = "UnidirectionalSuccess"
+                    else:
+                        enriched_result["validation_status"] = "UnidirectionalSuccess (NoReversePath)"
+                    unidirectional_count += 1
+            
+            # Add this entry to the enriched_mappings dictionary (fixed indentation)
+            enriched_mappings[source_id] = enriched_result
+    
+        self.logger.info(
+            f"Validation status: {validated_count} validated (bidirectional), "
+            f"{unidirectional_count} successful (unidirectional only)"
+        )
+        return enriched_mappings
+    async def track_mapping_metrics(self, event_type: str, metrics: Dict[str, Any]) -> None:
+        """
+        Track mapping metrics for performance monitoring.
+        
+        This method integrates with external monitoring systems like Langfuse, Prometheus, etc.
+        It can be overridden in subclasses to provide different implementations.
+        
+        Args:
+            event_type: The type of event being tracked (e.g., path_execution, batch_processing)
+            metrics: A dictionary containing metrics to track
+        """
+        # If Langfuse tracking is enabled, send metrics there
+        if hasattr(self, "_langfuse_tracker") and self._langfuse_tracker:
+            try:
+                # If this is a path execution event, create a trace
+                if event_type == "path_execution":
+                    trace_id = f"path_{metrics['path_id']}_{int(metrics['start_time'])}"
+                    
+                    # Create a trace for the entire path execution
+                    trace = self._langfuse_tracker.trace(
+                        name="path_execution",
+                        id=trace_id,
+                        metadata={
+                            "path_id": metrics.get("path_id"),
+                            "is_reverse": metrics.get("is_reverse", False),
+                            "input_count": metrics.get("input_count", 0),
+                            "batch_size": metrics.get("batch_size", 0),
+                            "max_concurrent_batches": metrics.get("max_concurrent_batches", 1)
+                        }
+                    )
+                    
+                    # Add spans for each batch
+                    for batch_key, batch_metrics in metrics.get("processing_times", {}).items():
+                        batch_span = trace.span(
+                            name=f"batch_{batch_key}",
+                            start_time=datetime.fromtimestamp(batch_metrics.get("start_time", 0)),
+                            end_time=datetime.fromtimestamp(batch_metrics.get("start_time", 0) + batch_metrics.get("total_time", 0)),
+                            metadata={
+                                "batch_size": batch_metrics.get("batch_size", 0),
+                                "success_count": batch_metrics.get("success_count", 0),
+                                "error_count": batch_metrics.get("error_count", 0),
+                                "filtered_count": batch_metrics.get("filtered_count", 0)
+                            }
+                        )
+                        
+                        if "error" in batch_metrics:
+                            batch_span.add_observation(
+                                name="error",
+                                value=batch_metrics["error"],
+                                metadata={"error_type": batch_metrics.get("error_type", "unknown")}
+                            )
+                            
+                    # Add summary metrics
+                    trace.update(
+                        metadata={
+                            "total_execution_time": metrics.get("total_execution_time", 0),
+                            "success_count": metrics.get("success_count", 0),
+                            "error_count": metrics.get("error_count", 0),
+                            "filtered_count": metrics.get("filtered_count", 0),
+                            "missing_ids": metrics.get("missing_ids", 0),
+                            "result_count": metrics.get("result_count", 0)
+                        }
+                    )
+                    
+                self.logger.debug(f"Sent '{event_type}' metrics to monitoring system")
+            except Exception as e:
+                self.logger.warning(f"Failed to send metrics to monitoring system: {str(e)}")
+                
+        # Additional monitoring systems could be integrated here
+        
+    async def _save_metrics_to_database(self, session_id: int, metric_type: str, metrics: Dict[str, Any]) -> None:
+        """
+        Save performance metrics to the database for analysis and reporting.
+        
+        Args:
+            session_id: ID of the MappingSession
+            metric_type: Type of metrics being saved
+            metrics: Dictionary of metrics to save
+        """
+        try:
+            async with self.async_cache_session() as session:
+                # Update session-level metrics if appropriate
+                if metric_type == "mapping_execution":
+                    mapping_session = await session.get(MappingSession, session_id)
+                    if mapping_session:
+                        mapping_session.batch_size = metrics.get("batch_size")
+                        mapping_session.max_concurrent_batches = metrics.get("max_concurrent_batches")
+                        mapping_session.total_execution_time = metrics.get("total_execution_time")
+                        mapping_session.success_rate = metrics.get("success_rate")
+                
+                # Save detailed metrics
+                for metric_name, metric_value in metrics.items():
+                    # Skip non-numeric metrics or complex objects
+                    if isinstance(metric_value, (dict, list)):
+                        continue
+                        
+                    metric_entry = ExecutionMetric(
+                        mapping_session_id=session_id,
+                        metric_type=metric_type,
+                        metric_name=metric_name,
+                        timestamp=datetime.utcnow()
+                    )
+                    
+                    # Set the appropriate value field based on type
+                    if isinstance(metric_value, (int, float)):
+                        metric_entry.metric_value = float(metric_value)
+                    elif metric_value is not None:
+                        metric_entry.string_value = str(metric_value)
+                        
+                    session.add(metric_entry)
+                    
+                await session.commit()
+                self.logger.debug(f"Saved {len(metrics)} metrics to database for session {session_id}")
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to save metrics to database: {str(e)}")
+            # Don't raise the exception - we don't want to fail the mapping process due to metrics errors
 
     async def _create_mapping_session_log(
         self,
@@ -2037,19 +2852,27 @@ class MappingExecutor(CompositeIdentifierMixin):
         try:
             async with self.async_cache_session() as cache_session:
                 now = get_current_utc_time()
+                
+                # Create parameters JSON
+                parameters = json.dumps({
+                    "source_property_name": source_property_name,
+                    "target_property_name": target_property_name,
+                    "use_cache": use_cache,
+                    "try_reverse_mapping": try_reverse_mapping,
+                    "input_count": input_count,
+                    "max_cache_age_days": max_cache_age_days,
+                })
+                
                 log_entry = MappingSession(
-                    source_endpoint_name=source_endpoint_name,
-                    target_endpoint_name=target_endpoint_name,
-                    source_property_name=source_property_name,
-                    target_property_name=target_property_name,
-                    use_cache=use_cache,
-                    try_reverse_mapping=try_reverse_mapping,
-                    input_count=input_count,
-                    max_cache_age_days=max_cache_age_days,
+                    source_endpoint=source_endpoint_name,
+                    target_endpoint=target_endpoint_name,
+                    parameters=parameters,
                     start_time=now,
+                    status="running"
                 )
                 cache_session.add(log_entry)
                 await cache_session.flush()  # Ensure ID is generated
+                await cache_session.commit() # Commit to make it visible to other sessions
                 return log_entry.id
         except SQLAlchemyError as e:
             self.logger.error(f"[{ErrorCode.CACHE_STORAGE_ERROR.name}] Cache storage error creating mapping session log. (original_exception={type(e).__name__}: {e})", exc_info=True)
@@ -2067,6 +2890,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         session_id: int,
         status: PathExecutionStatus,
         end_time: datetime,
+        results_count: int = 0,
         error_message: Optional[str] = None,
     ):
         """Update the status and end time of a mapping session log."""
@@ -2074,8 +2898,9 @@ class MappingExecutor(CompositeIdentifierMixin):
             async with self.async_cache_session() as cache_session:
                 log_entry = await cache_session.get(MappingSession, session_id)
                 if log_entry:
-                    log_entry.status = status
+                    log_entry.status = status.value if isinstance(status, PathExecutionStatus) else status
                     log_entry.end_time = end_time
+                    log_entry.results_count = results_count
                     if error_message:
                         log_entry.error_message = error_message
                     await cache_session.commit()
@@ -2088,3 +2913,250 @@ class MappingExecutor(CompositeIdentifierMixin):
                 f"[{ErrorCode.CACHE_STORAGE_ERROR.name}] Failed to update mapping session log entry. (original_exception={type(e).__name__}: {e})",
                 details={"session_id": session_id},
             ) from e
+            
+    def _calculate_confidence_score(
+        self, 
+        result: Dict[str, Any], 
+        hop_count: Optional[int], 
+        is_reversed: bool, 
+        path_step_details: Dict[str, Any]
+    ) -> float:
+        """
+        Calculate confidence score based on mapping characteristics.
+        
+        The confidence score is determined by:
+        1. Existing score in the result (if provided)
+        2. Number of hops in the mapping path
+        3. Whether the path was executed in reverse
+        4. Type of mapping resources used (e.g., direct API vs RAG)
+        
+        Args:
+            result: The mapping result dictionary
+            hop_count: Number of steps in the mapping path
+            is_reversed: Whether the path was executed in reverse
+            path_step_details: Detailed information about the path steps
+            
+        Returns:
+            A confidence score between 0.0 and 1.0
+        """
+        # Check if result already has a confidence score
+        if result.get("confidence_score") is not None:
+            return result["confidence_score"]
+        
+        # Base confidence calculation from hop count
+        if hop_count is not None:
+            if hop_count <= 1:
+                base_confidence = 0.95  # Direct mapping (highest confidence)
+            elif hop_count == 2:
+                base_confidence = 0.85  # 2-hop mapping (high confidence)
+            else:
+                # Decrease confidence for longer paths: 0.95 → 0.85 → 0.75 → 0.65 → ...
+                base_confidence = max(0.15, 0.95 - ((hop_count - 1) * 0.1))
+        else:
+            base_confidence = 0.7  # Default if hop_count is unknown
+        
+        # Apply penalty for reverse paths
+        if is_reversed:
+            base_confidence = max(0.1, base_confidence - 0.1)
+        
+        # Apply additional adjustments based on resource types
+        resource_types = []
+        for step_key, step_info in path_step_details.items():
+            if not isinstance(step_info, dict):
+                continue
+                
+            # Check resource name for clues
+            resource_name = step_info.get("resource_name", "").lower()
+            client_path = step_info.get("resource_client", "").lower()
+            
+            # Determine source based on resource name or client path
+            if "spoke" in resource_name or "spoke" in client_path:
+                resource_types.append("spoke")
+            elif "rag" in resource_name or "rag" in client_path:
+                resource_types.append("rag")
+            elif "llm" in resource_name or "llm" in client_path:
+                resource_types.append("llm")
+            elif "ramp" in resource_name or "ramp" in client_path:
+                resource_types.append("ramp")
+                
+        # Apply adjustments for specific resources
+        if "rag" in resource_types:
+            base_confidence = max(0.1, base_confidence - 0.05)  # Small penalty for RAG-based mappings
+        if "llm" in resource_types:
+            base_confidence = max(0.1, base_confidence - 0.1)   # Larger penalty for LLM-based mappings
+        
+        return round(base_confidence, 2)  # Round to 2 decimal places for consistency
+    
+    def _create_mapping_path_details(
+        self,
+        path_id: int,
+        path_name: str,
+        hop_count: Optional[int],
+        mapping_direction: str,
+        path_step_details: Dict[str, Any],
+        log_id: Optional[int] = None,
+        additional_metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a structured mapping_path_details JSON with complete path information.
+        
+        Args:
+            path_id: The ID of the mapping path
+            path_name: The name of the mapping path
+            hop_count: Number of steps in the path
+            mapping_direction: Direction of the mapping (forward, reverse, bidirectional)
+            path_step_details: Detailed information about the path steps
+            log_id: Optional ID of the execution log entry
+            additional_metadata: Optional additional metadata to include
+            
+        Returns:
+            A dictionary with structured path details ready to be serialized to JSON
+        """
+        # Initialize details with core information
+        details = {
+            "path_id": path_id,
+            "path_name": path_name,
+            "hop_count": hop_count,
+            "direction": mapping_direction,
+            "log_id": log_id,
+            "execution_timestamp": datetime.utcnow().isoformat(),
+            "steps": {}
+        }
+        
+        # Add step details if available
+        if path_step_details:
+            details["steps"] = path_step_details
+        
+        # Add any additional metadata
+        if additional_metadata:
+            details["additional_metadata"] = additional_metadata
+            
+        return details
+    
+    def _determine_mapping_source(self, path_step_details: Dict[str, Any]) -> str:
+        """
+        Determine the mapping source based on the path steps.
+        
+        Args:
+            path_step_details: Detailed information about the path steps
+            
+        Returns:
+            A string indicating the mapping source (api, spoke, rag, etc.)
+        """
+        # Default source if we can't determine
+        default_source = "api"
+        
+        # Check for empty details
+        if not path_step_details:
+            return default_source
+            
+        # Check each step for resource type clues
+        for step_key, step_info in path_step_details.items():
+            if not isinstance(step_info, dict):
+                continue
+                
+            # Check resource name for clues
+            resource_name = step_info.get("resource_name", "").lower()
+            client_path = step_info.get("resource_client", "").lower()
+            
+            # Determine source based on resource name or client path
+            if "spoke" in resource_name or "spoke" in client_path:
+                return "spoke"
+            elif "rag" in resource_name or "rag" in client_path:
+                return "rag"
+            elif "llm" in resource_name or "llm" in client_path:
+                return "llm"
+            elif "ramp" in resource_name or "ramp" in client_path:
+                return "ramp"
+                
+        return default_source
+
+    async def _reconcile_bidirectional_mappings(
+        self,
+        forward_mappings: Dict[str, Dict[str, Any]],
+        reverse_results: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Enrich forward mappings with bidirectional validation status.
+        
+        Instead of filtering, this adds validation status information to each mapping
+        that succeeded in the primary S->T direction.
+        
+        Args:
+            forward_mappings: Dictionary of source_id -> mapping_result from forward mapping
+            reverse_results: Dictionary of target_id -> reverse_mapping_result from reverse mapping
+            
+        Returns:
+            Dictionary of enriched source_id -> mapping_result with validation status added
+        """
+        validated_count = 0
+        unidirectional_count = 0
+        
+        target_to_sources = {} # Stores target_id -> set of all source_ids it can reverse map to
+        for target_id, rev_res_item in reverse_results.items():
+            if rev_res_item and rev_res_item.get("target_identifiers"):
+                all_reverse_mapped_to_source_ids = set(rev_res_item["target_identifiers"])
+                
+                # Handle Arivale ID components in reverse mapped IDs
+                # If client returns "INF_P12345", ensure "P12345" is also considered.
+                current_set_copy = set(all_reverse_mapped_to_source_ids) # Iterate over a copy
+                for rs_id in current_set_copy:
+                    if any(rs_id.startswith(p) for p in ('INF_', 'CAM_', 'CVD_', 'CVD2_', 'DEV_')):
+                        parts = rs_id.split('_', 1)
+                        if len(parts) > 1:
+                            all_reverse_mapped_to_source_ids.add(parts[1]) # Add the UniProt part
+            
+                target_to_sources[target_id] = all_reverse_mapped_to_source_ids
+    
+        enriched_mappings = {}
+        for source_id, fwd_res_item in forward_mappings.items():
+            enriched_result = fwd_res_item.copy()
+            
+            if not fwd_res_item or not fwd_res_item.get("target_identifiers"):
+                enriched_result["validation_status"] = "UnidirectionalSuccess (NoFwdTarget)"
+                unidirectional_count += 1
+            else:
+                forward_mapped_target_ids = fwd_res_item["target_identifiers"]
+                current_status_for_source = None
+
+                for target_id_from_fwd_map in forward_mapped_target_ids:
+                    if target_id_from_fwd_map in target_to_sources: # This forward target has reverse mapping data
+                        all_possible_reverse_sources_for_target = target_to_sources[target_id_from_fwd_map]
+                        
+                        if source_id in all_possible_reverse_sources_for_target: # Original source_id is among them
+                            primary_reverse_mapped_id = reverse_results.get(target_id_from_fwd_map, {}).get("mapped_value")
+                            
+                            # Normalize primary_reverse_mapped_id if it's an Arivale ID
+                            normalized_primary_reverse_id = primary_reverse_mapped_id
+                            if primary_reverse_mapped_id and any(primary_reverse_mapped_id.startswith(p) for p in ('INF_', 'CAM_', 'CVD_', 'CVD2_', 'DEV_')):
+                                parts = primary_reverse_mapped_id.split('_', 1)
+                                if len(parts) > 1:
+                                    normalized_primary_reverse_id = parts[1]
+
+                            if normalized_primary_reverse_id == source_id:
+                                current_status_for_source = "Validated"
+                            else:
+                                current_status_for_source = "Validated (Ambiguous)"
+                            break # Found validation status for this source_id
+            
+                if current_status_for_source:
+                    enriched_result["validation_status"] = current_status_for_source
+                    validated_count += 1
+                else: # No validation path found to the original source_id
+                    any_fwd_target_had_reverse_data = any(tid in target_to_sources for tid in forward_mapped_target_ids)
+                    if any_fwd_target_had_reverse_data:
+                        enriched_result["validation_status"] = "UnidirectionalSuccess"
+                    else:
+                        enriched_result["validation_status"] = "UnidirectionalSuccess (NoReversePath)"
+                    unidirectional_count += 1
+
+
+                        # Add this entry to the enriched_mappings dictionary
+
+                        enriched_mappings[source_id] = enriched_result
+    
+        self.logger.info(
+            f"Validation status: {validated_count} validated (bidirectional), "
+            f"{unidirectional_count} successful (unidirectional only)"
+        )
+        return enriched_mappings

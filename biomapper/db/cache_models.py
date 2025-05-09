@@ -183,6 +183,9 @@ class PathExecutionStatus(enum.Enum):
     NO_MAPPING_FOUND = "no_mapping_found"  # Added to match test references
     NO_PATH_FOUND = "no_path_found"  # Added to match implementation references
     TIMED_OUT = "timed_out"
+    ERROR = "error"  # General error status
+    SKIPPED = "skipped"  # Added for skipped paths
+    EXECUTION_ERROR = "execution_error"  # Error during path execution
 
 
 class PathExecutionLog(Base):
@@ -264,5 +267,34 @@ class MappingSession(Base):
     results_count = Column(Integer, default=0)
     error_message = Column(Text, nullable=True)
     
+    # Enhanced performance metrics
+    batch_size = Column(Integer, nullable=True)
+    max_concurrent_batches = Column(Integer, nullable=True)
+    total_execution_time = Column(Float, nullable=True)
+    success_rate = Column(Float, nullable=True)
+    
+    # Relationship to detailed metrics
+    metrics = relationship("ExecutionMetric", back_populates="session", cascade="all, delete-orphan")
+    
     def __repr__(self):
         return f"<MappingSession id={self.id} source={self.source_endpoint} target={self.target_endpoint} status={self.status}>"
+
+
+class ExecutionMetric(Base):
+    """Detailed execution metrics for analysis and monitoring."""
+    
+    __tablename__ = "execution_metrics"
+    
+    id = Column(Integer, primary_key=True)
+    mapping_session_id = Column(Integer, ForeignKey("mapping_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    metric_type = Column(String(50), nullable=False, index=True)  # e.g., 'path_execution', 'batch_processing'
+    metric_name = Column(String(100), nullable=False)  # e.g., 'execution_time', 'success_rate'
+    metric_value = Column(Float, nullable=True)  # Numeric value
+    string_value = Column(String(255), nullable=True)  # String value if needed
+    timestamp = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    
+    # Relationship back to session
+    session = relationship("MappingSession", back_populates="metrics")
+    
+    def __repr__(self):
+        return f"<ExecutionMetric id={self.id} session_id={self.mapping_session_id} type={self.metric_type} name={self.metric_name}>"
