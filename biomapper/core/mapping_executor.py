@@ -62,6 +62,8 @@ from pathlib import Path # Added import
 import logging # Re-added import
 import os # Add import os
 
+from biomapper.utils.formatters import PydanticEncoder
+
 # Added get_current_utc_time definition
 def get_current_utc_time() -> datetime:
     """Return the current time in UTC timezone."""
@@ -305,65 +307,6 @@ class MappingExecutor(CompositeIdentifierMixin):
         """Get a cache database session."""
         return self.async_cache_session()
 
-    async def _get_path_details(
-        self, meta_session: AsyncSession, path_id: int
-    ) -> Dict[str, Any]:
-        """
-        Retrieve details about a mapping path for use in confidence scoring and metadata.
-
-        Args:
-            meta_session: SQLAlchemy session for the metamapper database
-            path_id: ID of the MappingPath to analyze
-
-        Returns:
-            Dict containing path details including:
-                - hop_count: Number of steps in the path
-                - resource_types: List of resource types used
-                - client_identifiers: List of client identifiers used
-        """
-        # Query to get the path with its steps and resources
-        stmt = (
-            select(MappingPath)
-            .options(
-                selectinload(MappingPath.steps).joinedload(
-                    MappingPathStep.mapping_resource
-                )
-            )
-            .where(MappingPath.id == path_id)
-        )
-
-        result = await meta_session.execute(stmt)
-        path = result.scalar_one_or_none()
-
-        if not path:
-            self.logger.warning(f"Path ID {path_id} not found in database")
-            return {"hop_count": 1, "resource_types": [], "client_identifiers": []}
-
-        # Count the steps as hop count
-        steps = sorted(path.steps, key=lambda s: s.step_order)
-        hop_count = len(steps)
-
-        # Extract info about resources used
-        resource_types = []
-        client_identifiers = []
-
-        for step in steps:
-            if step.mapping_resource:
-                resource_type = getattr(step.mapping_resource, "resource_type", None)
-                if resource_type:
-                    resource_types.append(resource_type)
-
-                client_id = getattr(step.mapping_resource, "name", None)
-                if client_id:
-                    client_identifiers.append(client_id)
-
-        return {
-            "hop_count": hop_count,
-            "resource_types": resource_types,
-            "client_identifiers": client_identifiers,
-            "path_name": path.name if path else None,
-            "path_description": path.description if path else None,
-        }
 
     async def _get_path_details(self, path_id: int) -> Dict[str, Any]:
         """
@@ -487,10 +430,10 @@ class MappingExecutor(CompositeIdentifierMixin):
         }
         try:
             # Serialize to JSON
-            path_details_json = json.dumps(mapping_path_info)
+            path_details_json = json.dumps(mapping_path_info, cls=PydanticEncoder)
         except Exception as e:
             self.logger.error(f"Failed to serialize path details for {path_id} to JSON: {e}", exc_info=True)
-            path_details_json = json.dumps({"error": "Failed to serialize path details"}) # Fallback JSON
+            path_details_json = json.dumps({"error": "Failed to serialize path details"}, cls=PydanticEncoder) # Fallback JSON
 
         # Calculate match count accurately
         input_count = len(results_to_cache)
@@ -536,21 +479,19 @@ class MappingExecutor(CompositeIdentifierMixin):
 
             # Create mapping_path_details JSON with complete path information
             mapping_path_details_dict = self._create_mapping_path_details(
-                path_id, 
-                path_name, 
-                hop_count, 
-                mapping_direction, 
-                path_step_details,
-                log_entry.id,  # Will be None initially, set later
-                result.get("additional_metadata", {})
+                path_id=path_id,
+                path_name=path_name,
+                hop_count=hop_count,
+                mapping_direction=mapping_direction,
+                path_step_details=path_step_details,
+                log_id=log_entry.id if log_entry and log_entry.id else None,
+                additional_metadata=result.get("additional_metadata")
             )
-            
-            # Convert to JSON string for storage
             try:
-                mapping_path_details = json.dumps(mapping_path_details_dict)
+                mapping_path_details = json.dumps(mapping_path_details_dict, cls=PydanticEncoder)
             except Exception as e:
-                self.logger.error(f"Failed to serialize mapping path details to JSON: {e}", exc_info=True)
-                mapping_path_details = json.dumps({"error": "Failed to serialize details"})
+                self.logger.error(f"Failed to serialize mapping_path_details for {source_id} to JSON: {e}", exc_info=True)
+                mapping_path_details = json.dumps({"error": "Failed to serialize details"}, cls=PydanticEncoder)
 
             # Create entity mapping for each valid target identifier
             for target_id in valid_target_ids:
@@ -627,181 +568,6 @@ class MappingExecutor(CompositeIdentifierMixin):
             self.logger.error(f"Unexpected error during caching for path {path_id}: {str(e)}", exc_info=True)
             raise CacheError(f"Unexpected error during caching: {str(e)}", original_exception=e)
 
-    async def _cache_results(
-        self,
-        results_to_cache: Dict[str, Dict[str, Any]],
-        path: Union[MappingPath, "ReversiblePath"],
-        source_ontology: str,
-        target_ontology: str,
-        mapping_session_id: Optional[int] = None
-    ):
-        """
-        Store successful mapping results in the cache.
-        
-        Calculates and populates metadata fields:
-        - confidence_score: Based on path length, client type, or a default value
-        - hop_count: Number of steps in the executed path
-        - mapping_direction: Whether the path was executed in "forward" or "reverse" direction
-        - mapping_path_details: Structured JSON information about the path execution
-        
-        Args:
-            results_to_cache: Dictionary of source identifiers to mapping results.
-            path: MappingPath or ReversiblePath that was executed.
-            source_ontology: Source ontology type.
-            target_ontology: Target ontology type.
-            mapping_session_id: Optional ID of the mapping session.
-        
-        Returns:
-            The number of mappings added, or None if no results cached.
-        
-        Raises:
-            CacheStorageError: If there is an error storing the results in the cache.
-            CacheTransactionError: If there is an error during the database transaction.
-            CacheError: For other unexpected caching errors.
-        """
-        # Skip if no results to cache
-        if not results_to_cache:
-            self.logger.debug("No results to cache")
-            return None  # Return None explicitly
-        
-        # Get basic path information
-        path_id = path.id if hasattr(path, 'id') else None
-        path_name = path.name if hasattr(path, 'name') else "Unknown"
-        self.logger.debug(f"Caching results for path ID: {path_id}, Name: {path_name}")
-        
-        # Retrieve detailed path information using the helper method
-        try:
-            # Note: Assuming _get_path_details returns a dictionary of step details
-            # compatible with the structure needed below.
-            path_step_details = await self._get_path_details(path_id)
-            if path_step_details is None:
-                self.logger.warning(f"_get_path_details returned None for path {path_id}. Using empty details.")
-                path_step_details = {}
-        except Exception as e:
-            # Log error but proceed with caching if possible, using empty details
-            self.logger.error(f"Failed to retrieve path details for {path_id} during caching: {e}", exc_info=True)
-            path_step_details = {}
-
-        # Determine if this is a reverse path
-        # We need a reliable way to determine if 'path' represents a reversed execution.
-        # Checking for an attribute like 'is_reverse' added by the calling code is one way.
-        # Or, if ReversiblePath is a real class wrapping MappingPath, check isinstance.
-        is_reversed = getattr(path, "is_reverse", False) # Assuming an 'is_reverse' flag is set externally
-        mapping_direction = "reverse" if is_reversed else "forward"
-        
-        # Calculate hop count from path steps if available
-        # Accessing 'steps' might differ if path is a ReversiblePath wrapper
-        actual_path_obj = getattr(path, 'original_path', path) # Check for wrapper pattern
-        hop_count = len(actual_path_obj.steps) if hasattr(actual_path_obj, "steps") and actual_path_obj.steps else None
-        self.logger.debug(f"Path {path_id} - Reversed: {is_reversed}, Hop Count: {hop_count}")
-        
-        # Prepare the rich path details JSON structure
-        mapping_path_info = {
-            "path_id": path_id,
-            "path_name": path_name,
-            "mapping_direction": mapping_direction,
-            "hop_count": hop_count,
-            "steps": path_step_details  # Use the retrieved step details
-        }
-        
-        try:
-            # Serialize to JSON
-            path_details_json = json.dumps(mapping_path_info)
-        except Exception as e:
-            self.logger.error(f"Failed to serialize path details for path {path_id}: {e}", exc_info=True)
-            path_details_json = json.dumps({"error": "Failed to serialize path details", "path_id": path_id})
-        
-        # Create entity mappings
-        mappings_to_add = []
-        current_time = get_current_utc_time()  # Get time once for consistency
-        
-        for source_id, result in results_to_cache.items():
-            target_identifiers = result.get("target_identifiers", [])
-            # Ensure target_identifiers is always a list
-            if not isinstance(target_identifiers, list):
-                target_identifiers = [target_identifiers] if target_identifiers is not None else []
-            
-            # Filter out None values from target identifiers
-            valid_target_ids = [tid for tid in target_identifiers if tid is not None]
-            
-            if not valid_target_ids:
-                self.logger.debug(f"No valid target identifiers found for source {source_id}")
-                continue
-            
-            # Calculate confidence score
-            confidence_score = result.get("confidence_score")  # Allow override from result
-            if confidence_score is None:
-                if hop_count is not None:
-                    if hop_count <= 1:
-                        confidence_score = 0.9  # Direct mapping
-                    elif hop_count == 2:
-                        confidence_score = 0.8  # 2-hop mapping
-                    else:
-                        # Decrease confidence for longer paths
-                        confidence_score = max(0.1, 0.9 - ((hop_count - 1) * 0.1))
-                    
-                    # Apply penalty for reverse paths
-                    if is_reversed:
-                        confidence_score = max(0.1, confidence_score - 0.05)
-                else:
-                    confidence_score = 0.7  # Default if hop_count is somehow None
-            
-            self.logger.debug(f"Source: {source_id}, Hops: {hop_count}, Reversed: {is_reversed}, Confidence: {confidence_score}")
-
-            # Create entity mapping for each valid target identifier
-            for target_id in valid_target_ids:
-                entity_mapping = EntityMapping(
-                    source_id=str(source_id),  # Ensure string type
-                    source_type=source_ontology,
-                    target_id=str(target_id),  # Ensure string type
-                    target_type=target_ontology,
-                    
-                    # Populated metadata fields:
-                    confidence_score=confidence_score,
-                    hop_count=hop_count,
-                    mapping_direction=mapping_direction,
-                    mapping_path_details=path_details_json,  # Use the pre-computed JSON
-                    
-                    # Additional fields:
-                    last_updated=current_time,
-                    # mapping_session_log_id=mapping_session_id, # Consider if needed
-                    # path_execution_log_id=path_execution_log_id # Needs to be created/passed
-                )
-                mappings_to_add.append(entity_mapping)
-        
-        if not mappings_to_add:
-            self.logger.warning(f"No valid entity mappings generated for path {path_id}, despite having results to cache. Check input data.")
-            return None  # Indicate nothing was cached
-        
-        # Store the mappings in the cache database
-        try:
-            async with self.get_cache_session() as session:
-                # Add all entity mappings
-                session.add_all(mappings_to_add)
-                # TODO: Consider creating and linking PathExecutionLog here if needed
-                # path_execution_log = PathExecutionLog(...) 
-                # session.add(path_execution_log)
-                # await session.flush() # Get ID for path_execution_log
-                # for mapping in mappings_to_add: mapping.path_execution_log_id = path_execution_log.id
-                await session.commit()  # Commit the transaction
-                
-                self.logger.info(f"Successfully cached {len(mappings_to_add)} mappings for path {path_id}.")
-                return len(mappings_to_add)  # Return the number of mappings added
-                
-        except SQLAlchemyError as e:
-            # Rollback is handled by the async session context manager's __aexit__
-            self.logger.error(f"Database error during cache storage for path {path_id}: {e}", exc_info=True)
-            raise CacheTransactionError(
-                f"Error during cache transaction",
-                details={"path_id": path_id, "error": str(e)}
-            ) from e
-        except Exception as e:
-            self.logger.error(f"Unexpected error during caching for path {path_id}: {e}", exc_info=True)
-            raise CacheError(
-                f"Unexpected error during caching",
-                error_code=ErrorCode.UNKNOWN_ERROR,
-                details={"error": str(e)}
-            ) from e
 
     async def _find_direct_paths(
         self, session: AsyncSession, source_ontology: str, target_ontology: str
@@ -2618,21 +2384,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         return combined_results
 
-    def _flatten_results(self, step_results: Dict[str, Dict[str, Any]]) -> Set[str]:
-        """Flatten the 'primary_ids' from client results into a unique set for the next step."""
-        all_next_inputs = set()
-        for input_id, result_dict in step_results.items():
-            # Assuming result_dict has 'primary_ids': List[str]
-            # Need robust error handling/checking here in future
-            if 'primary_ids' in result_dict and isinstance(result_dict['primary_ids'], list):
-                all_next_inputs.update(result_dict['primary_ids'])
-            else:
-                # Handle cases where mapping failed or format is unexpected
-                # For now, just log or pass; depends on desired handling
-                pass # Or log warning
-        return all_next_inputs
-        
-        async def _reconcile_bidirectional_mappings(
+    async def _reconcile_bidirectional_mappings(
         self,
         forward_mappings: Dict[str, Dict[str, Any]],
         reverse_results: Dict[str, Dict[str, Any]]
@@ -2711,7 +2463,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                         enriched_result["validation_status"] = "UnidirectionalSuccess (NoReversePath)"
                     unidirectional_count += 1
             
-            # Add this entry to the enriched_mappings dictionary (fixed indentation)
+            # Add this entry to the enriched_mappings dictionary
             enriched_mappings[source_id] = enriched_result
     
         self.logger.info(
@@ -2719,6 +2471,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             f"{unidirectional_count} successful (unidirectional only)"
         )
         return enriched_mappings
+
     async def track_mapping_metrics(self, event_type: str, metrics: Dict[str, Any]) -> None:
         """
         Track mapping metrics for performance monitoring.
@@ -3149,11 +2902,9 @@ class MappingExecutor(CompositeIdentifierMixin):
                     else:
                         enriched_result["validation_status"] = "UnidirectionalSuccess (NoReversePath)"
                     unidirectional_count += 1
-
-
-                        # Add this entry to the enriched_mappings dictionary
-
-                        enriched_mappings[source_id] = enriched_result
+            
+            # Add this entry to the enriched_mappings dictionary
+            enriched_mappings[source_id] = enriched_result
     
         self.logger.info(
             f"Validation status: {validated_count} validated (bidirectional), "
