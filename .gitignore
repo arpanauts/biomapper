@@ -43,7 +43,7 @@ MANIFEST
 *.sqlite3
 *.xml
 *.bin
-#vector_store/
+vector_store/
 hmdb_metabolites.xml
 mapping_cache.db
 
@@ -232,3 +232,6 @@ docs/generated/
 # Development experiments and temporary sample data
 scripts/dev_experiments/
 temp_sample_data/
+
+**/.claude/settings.local.json
+CLAUDE.md
