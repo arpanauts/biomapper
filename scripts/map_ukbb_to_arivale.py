@@ -35,12 +35,6 @@ logging.basicConfig(
 )
 
 # --- Constants ---
-# Column names in the input UKBB TSV file
-# Assuming these based on EndpointPropertyConfig defined previously
-UKBB_ID_COLUMN = "Assay"  # The primary ID in the source file
-UNIPROT_COLUMN = "UniProt"  # The column containing UniProt ACs
-# Column name for the output mapped Arivale ID
-ARIVALE_ID_COLUMN = "ARIVALE_PROTEIN_ID"
 # New columns for detailed output
 CONFIDENCE_SCORE_COLUMN = "mapping_confidence_score"
 PATH_DETAILS_COLUMN = "mapping_path_details"
@@ -48,28 +42,30 @@ HOP_COUNT_COLUMN = "mapping_hop_count"
 MAPPING_DIRECTION_COLUMN = "mapping_direction"  # Added explicit constant
 VALIDATION_STATUS_COLUMN = "validation_status"  # Column for bidirectional validation status
 
-# Column names in Arivale metadata file (for proper mapping lookup)
-ARIVALE_UNIPROT_COLUMN = "uniprot"  # The column containing UniProt ACs in the Arivale metadata file
-ARIVALE_NAME_COLUMN = "name"  # The column containing Arivale IDs in the Arivale metadata file
-
-# Source and target ontology types for MappingExecutor (Used for logging/info)
-SOURCE_ONTOLOGY = "UNIPROTKB_AC"
-TARGET_ONTOLOGY = "ARIVALE_PROTEIN_ID"
-
-# Source and target endpoint names (Used for MappingExecutor call)
-SOURCE_ENDPOINT_NAME = "UKBB_Protein"
-TARGET_ENDPOINT_NAME = "Arivale_Protein"
-
 # Source and target property names - these are what the endpoints expose
+# These are assumed to be 'PrimaryIdentifier' for now, but could be made configurable if needed.
 SOURCE_PROPERTY_NAME = "PrimaryIdentifier"
 TARGET_PROPERTY_NAME = "PrimaryIdentifier"
 
 
 # --- Main Function ---
-async def main(input_file_path: str, output_file_path: str, try_reverse_mapping_param: bool):
+async def main(
+    input_file_path: str, 
+    output_file_path: str, 
+    try_reverse_mapping_param: bool,
+    source_endpoint_name: str,
+    target_endpoint_name: str,
+    input_id_column_name: str,        # e.g., "UniProt" or "uniprot"
+    input_primary_key_column_name: str, # e.g., "Assay" or "name"
+    output_mapped_id_column_name: str, # e.g., "ARIVALE_PROTEIN_ID" or "UKBB_ASSAY_ID"
+    source_ontology_name: str,        # e.g., "UNIPROTKB_AC"
+    target_ontology_name: str         # e.g., "ARIVALE_PROTEIN_ID"
+):
     """
-    Reads UKBB data, extracts UniProt IDs, maps them to Arivale IDs using
-    MappingExecutor, and writes the merged results.
+    Reads input data, extracts IDs from 'input_id_column_name', maps them using
+    MappingExecutor from 'source_endpoint_name' to 'target_endpoint_name',
+    and writes the merged results, storing mapped IDs in 'output_mapped_id_column_name'.
+    The 'input_primary_key_column_name' is used to ensure all original columns are kept.
     """
     # --- Logging Configuration Start ---
     log_level_str = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -104,11 +100,11 @@ async def main(input_file_path: str, output_file_path: str, try_reverse_mapping_
     logger.info(f"Using Config DB: {config_db_url}")
     logger.info(f"Using Cache DB: {cache_db_url}")
 
-    # 1. Read UKBB Data
+    # 1. Read input Data
     logger.info(f"Reading input file: {input_file_path}")
     try:
         # Read with pandas, ensure correct separator and engine
-        df = pd.read_csv(input_file_path, sep="\t", engine="python", dtype=str)
+        df = pd.read_csv(input_file_path, sep='\t', engine='python', dtype=str, comment='#') # Use python engine, explicit tab sep, dtype=str, and skip comments
         logger.info(f"Read {len(df)} rows from input file.")
 
     except FileNotFoundError:
@@ -119,20 +115,25 @@ async def main(input_file_path: str, output_file_path: str, try_reverse_mapping_
         return
 
     # Verify required columns exist
-    if UNIPROT_COLUMN not in df.columns:
+    if input_id_column_name not in df.columns:
         logger.error(
-            f"Error: Input file must contain column '{UNIPROT_COLUMN}'. Found: {df.columns.tolist()}"
+            f"Error: Input file must contain column '{input_id_column_name}'. Found: {df.columns.tolist()}"
+        )
+        return
+    if input_primary_key_column_name not in df.columns:
+        logger.error(
+            f"Error: Input file must contain column '{input_primary_key_column_name}'. Found: {df.columns.tolist()}"
         )
         return
 
-    # Extract unique UniProt IDs to map
-    identifiers_to_map = df[UNIPROT_COLUMN].dropna().unique().tolist()
-    logger.info(f"Found {len(identifiers_to_map)} unique UniProt IDs to map.")
+    # Extract unique IDs to map
+    identifiers_to_map = df[input_id_column_name].dropna().unique().tolist()
+    logger.info(f"Found {len(identifiers_to_map)} unique IDs from column '{input_id_column_name}' to map.")
 
     # --- MVP SUBSETTING: Process only the first N unique identifiers for initial testing ---
     SUBSET_SIZE = 1000  # Define the subset size
     if len(identifiers_to_map) > SUBSET_SIZE:
-        logger.warning(f"SUBSETTING ENABLED: Processing only the first {SUBSET_SIZE} of {len(identifiers_to_map)} unique UniProt IDs.")
+        logger.warning(f"SUBSETTING ENABLED: Processing only the first {SUBSET_SIZE} of {len(identifiers_to_map)} unique IDs.")
         identifiers_to_map = identifiers_to_map[:SUBSET_SIZE]
     # --- END MVP SUBSETTING ---
 
@@ -158,8 +159,8 @@ async def main(input_file_path: str, output_file_path: str, try_reverse_mapping_
     # This will:
     # 1. First try the direct path (UKBB_to_Arivale_Protein_via_UniProt)
     # 2. Then try the fallback path with historical resolution if direct path fails
-    logger.info(f"Executing mapping from {SOURCE_ENDPOINT_NAME}.{SOURCE_ONTOLOGY} to {TARGET_ENDPOINT_NAME}.{TARGET_ONTOLOGY}...")
-    logger.info(f"Mapping {len(identifiers_to_map)} unique UniProt IDs with try_reverse_mapping={try_reverse_mapping_param}")
+    logger.info(f"Executing mapping from {source_endpoint_name}.{source_ontology_name} to {target_endpoint_name}.{target_ontology_name}...")
+    logger.info(f"Mapping {len(identifiers_to_map)} unique IDs with try_reverse_mapping={try_reverse_mapping_param}")
     
     # Setup progress tracking
     start_time = time.time()
@@ -185,8 +186,8 @@ async def main(input_file_path: str, output_file_path: str, try_reverse_mapping_
     
     try:
         mapping_result = await executor.execute_mapping(
-            source_endpoint_name=SOURCE_ENDPOINT_NAME,
-            target_endpoint_name=TARGET_ENDPOINT_NAME,
+            source_endpoint_name=source_endpoint_name,
+            target_endpoint_name=target_endpoint_name,
             input_identifiers=identifiers_to_map,
             source_property_name=SOURCE_PROPERTY_NAME, # Property name (PrimaryIdentifier), not the ontology type
             target_property_name=TARGET_PROPERTY_NAME, # Property name (PrimaryIdentifier), not the ontology type
@@ -252,158 +253,187 @@ async def main(input_file_path: str, output_file_path: str, try_reverse_mapping_
     results_dict = mapping_result  # Now mapping_result is directly the results dict
     logger.info(f"Processing {len(results_dict)} mapping results.")
 
-    # Process the results to extract just the target IDs
-    processed_results = {}
-    
     # Log some sample data to debug
     sample_keys = list(results_dict.keys())[:5]
     logger.info(f"Sample results keys: {sample_keys}")
     for key in sample_keys:
         logger.info(f"Sample result for {key}: {results_dict[key]}")
-    
-    # Enhanced result processing with debugging
+
+    # CHANGE: Instead of creating a single mapping per source ID, we'll create a list of rows
+    # to properly represent one-to-many relationships
+    expanded_rows = []
     mapping_count = 0
-    for uniprot_id, result_data in results_dict.items():
+    source_id_with_multiple_targets = 0
+
+    # First, make a copy of the original dataframe for rows with no mappings
+    # This ensures we keep all original rows even if they don't map to anything
+    df_copy = df.copy()
+
+    # Track source IDs that have mappings to avoid duplicates in the final merged result
+    source_ids_with_mappings = set()
+
+    # Process each mapping result and create expanded rows for one-to-many mappings
+    for source_id, result_data in results_dict.items():
         if result_data and "target_identifiers" in result_data:
             target_ids = result_data["target_identifiers"]
             if target_ids and len(target_ids) > 0:
-                # Take the first target ID if there are multiple
-                processed_results[uniprot_id] = target_ids[0]
-                mapping_count += 1
+                # For each source ID, we may have multiple target IDs
+                if len(target_ids) > 1:
+                    source_id_with_multiple_targets += 1
+                    logger.info(f"Source ID {source_id} maps to {len(target_ids)} targets: {target_ids}")
+
+                # Store for tracking purposes
+                source_ids_with_mappings.add(source_id)
+
+                # Get all rows in the original dataframe that have this source ID
+                matching_rows = df[df[input_id_column_name] == source_id]
+                if len(matching_rows) == 0:
+                    logger.warning(f"Source ID {source_id} has mapping results but not found in input DataFrame")
+                    continue
+
+                # For each matching row in original dataframe and each target ID, create a new row
+                for _, orig_row in matching_rows.iterrows():
+                    # Convert the row to a dictionary for easier manipulation
+                    row_dict = orig_row.to_dict()
+
+                    # For each target ID, create a new row
+                    for target_id in target_ids:
+                        # Create a new row based on the original
+                        new_row = row_dict.copy()
+                        # Add the mapped target ID
+                        new_row[output_mapped_id_column_name] = target_id
+                        # Add to our list of expanded rows
+                        expanded_rows.append(new_row)
+                        mapping_count += 1
             else:
-                processed_results[uniprot_id] = None
-        else:
-            processed_results[uniprot_id] = None
-    
-    logger.info(f"Processed {mapping_count} successful mappings from results dictionary")
-    
-    # Create a pandas Series from the processed results for efficient mapping
-    map_series = pd.Series(processed_results)
-    
-    # Map the Arivale IDs back to the original dataframe based on the UniProt column
-    # This adds the ARIVALE_ID_COLUMN
-    df[ARIVALE_ID_COLUMN] = df[UNIPROT_COLUMN].map(map_series)
+                # No target IDs for this source ID
+                pass
 
-    # --- Generate metadata from our mapping results with enhanced processing --- #
-    
-    # Initialize metadata collection
-    metadata_entries = []
-    ids_for_metadata_generation = []
+    logger.info(f"Processed {mapping_count} total mappings from {len(source_ids_with_mappings)} unique source IDs")
+    logger.info(f"Found {source_id_with_multiple_targets} source IDs with multiple target mappings")
 
-    for uniprot_id, result_data in mapping_result.items():
-        if result_data: # Ensure there's result_data for this ID
-            # Consider an entry active if it has target_identifiers, or a meaningful validation_status, or path_details
-            has_targets = bool(result_data.get("target_identifiers"))
-            validation_status = result_data.get("validation_status", "Unknown")
-            has_path_details = bool(result_data.get("mapping_path_details"))
-            # Define what counts as a non-default or informative validation status
-            is_informative_status = validation_status not in ["Unknown", "NotApplicable", "NoMappingFound"]
+    # Create a new dataframe from the expanded rows (if any)
+    if expanded_rows:
+        # Create a dataframe from the expanded rows
+        expanded_df = pd.DataFrame(expanded_rows)
 
-            # Log the status for all entries being checked
-            logger.info(f"DEBUG_METADATA_CHECK: ID: {uniprot_id}, HasTargets: {has_targets}, ValidationStatus: '{validation_status}', HasPathDetails: {has_path_details}, IsInformativeStatus: {is_informative_status}")
+        # Remove rows from the original dataframe that have mappings (to avoid duplicates)
+        if source_ids_with_mappings:
+            df_copy = df_copy[~df_copy[input_id_column_name].isin(source_ids_with_mappings)]
 
-            if has_targets or is_informative_status or has_path_details:
-                ids_for_metadata_generation.append(uniprot_id)
+        # Concatenate the expanded rows with the original dataframe rows that don't have mappings
+        df = pd.concat([expanded_df, df_copy], ignore_index=True)
 
-    if ids_for_metadata_generation:
-        logger.info(f"Generating metadata for {len(ids_for_metadata_generation)} source UniProt IDs with mapping activity...")
-        metadata_start_time = time.time()
-        
-        for uniprot_id in ids_for_metadata_generation:
-            result_data = mapping_result[uniprot_id] # We know this exists
-            
-            # Extract metadata with appropriate defaults and validation
-            confidence_score = result_data.get("confidence_score")
-            
-            path_details_raw = result_data.get("mapping_path_details")
-            path_details_for_json = path_details_raw if isinstance(path_details_raw, dict) else {}
-
-            # Refined hop_count extraction
-            hop_count = result_data.get("hop_count")
-            if hop_count is None and path_details_for_json:
-                hop_count = path_details_for_json.get("hop_count")
-            if hop_count is None: # Default if still not found
-                hop_count = 1 if path_details_for_json else None
-            
-            mapping_direction = result_data.get("mapping_direction", "forward" if path_details_for_json else None)
-            validation_status = result_data.get("validation_status", "Unknown") # Already fetched, but good to re-get for clarity
-            
-            metadata_entries.append({
-                UNIPROT_COLUMN: uniprot_id,
-                CONFIDENCE_SCORE_COLUMN: confidence_score,
-                HOP_COUNT_COLUMN: hop_count,
-                PATH_DETAILS_COLUMN: json.dumps(path_details_for_json),
-                MAPPING_DIRECTION_COLUMN: mapping_direction,
-                VALIDATION_STATUS_COLUMN: validation_status
-            })
-    
-        # Create metadata DataFrame with all validated entries
-        metadata_df = pd.DataFrame(metadata_entries) if metadata_entries else None
-        
-        # Calculate and log metadata statistics if available
-        if metadata_df is not None and not metadata_df.empty:
-            # Log statistics about confidence scores
-            if CONFIDENCE_SCORE_COLUMN in metadata_df.columns and not metadata_df[CONFIDENCE_SCORE_COLUMN].isna().all():
-                avg_confidence = metadata_df[CONFIDENCE_SCORE_COLUMN].mean()
-                min_confidence = metadata_df[CONFIDENCE_SCORE_COLUMN].min()
-                max_confidence = metadata_df[CONFIDENCE_SCORE_COLUMN].max()
-                logger.info(f"Confidence Scores - Avg: {avg_confidence:.3f}, Min: {min_confidence:.3f}, Max: {max_confidence:.3f}")
-            
-            # Report metadata processing time
-            logger.info(f"Metadata generation completed in {time.time() - metadata_start_time:.2f} seconds")
-            
-            # Log distribution of mapping directions if available
-            if MAPPING_DIRECTION_COLUMN in metadata_df.columns and not metadata_df[MAPPING_DIRECTION_COLUMN].isna().all():
-                direction_counts = metadata_df[MAPPING_DIRECTION_COLUMN].value_counts()
-                logger.info(f"Mapping direction distribution: {dict(direction_counts)}")
-                
-            # Log distribution of validation statuses if available
-            if VALIDATION_STATUS_COLUMN in metadata_df.columns and not metadata_df[VALIDATION_STATUS_COLUMN].isna().all():
-                validation_counts = metadata_df[VALIDATION_STATUS_COLUMN].value_counts()
-                logger.info(f"Validation status distribution: {dict(validation_counts)}")
-            
-            # Log distribution of hop counts if available
-            if HOP_COUNT_COLUMN in metadata_df.columns and not metadata_df[HOP_COUNT_COLUMN].isna().all():
-                hop_counts = metadata_df[HOP_COUNT_COLUMN].value_counts().to_dict()
-                logger.info(f"Hop count distribution: {hop_counts}")
-            
-            # Log statistics about hop counts
-            if HOP_COUNT_COLUMN in metadata_df.columns and not metadata_df[HOP_COUNT_COLUMN].isna().all():
-                hop_counts = metadata_df[HOP_COUNT_COLUMN].value_counts().to_dict()
-                logger.info(f"Hop Count Distribution: {hop_counts}")
-            
-            # Merge metadata with detailed logging
-            logger.info(f"Merging metadata for {len(metadata_df)} mappings into output DataFrame")
-            df = pd.merge(df, metadata_df, on=UNIPROT_COLUMN, how="left", validate="many_to_one")
-            
-            # Check for potential join issues
-            null_metadata_count = df[CONFIDENCE_SCORE_COLUMN].isna().sum()
-            if null_metadata_count > 0:
-                logger.warning(f"Found {null_metadata_count} rows with missing metadata after merge")
-        else:
-            logger.warning("No valid metadata available for mapped identifiers. Adding empty columns.")
-            df[CONFIDENCE_SCORE_COLUMN] = None
-            df[PATH_DETAILS_COLUMN] = None
-            df[HOP_COUNT_COLUMN] = None
-            df[MAPPING_DIRECTION_COLUMN] = None
-            df[VALIDATION_STATUS_COLUMN] = None
+        logger.info(f"Created expanded DataFrame with {len(expanded_df)} rows from mappings")
+        logger.info(f"Final DataFrame has {len(df)} rows (expanded mappings + unmapped rows)")
     else:
-        logger.info("No successful mappings found, skipping metadata generation.")
+        # No successful mappings, keep original dataframe
+        logger.warning("No expanded rows created - no successful mappings found")
+        df[output_mapped_id_column_name] = None
+
+    # --- MODIFIED: Generate metadata directly in the expanded rows approach --- #
+
+    # If we have successful mappings
+    if expanded_rows:
+        logger.info(f"Generating metadata for expanded rows...")
+        metadata_start_time = time.time()
+
+        # Process expanded rows as a completed batch
+        # We've already created the expanded rows with source_id -> target_id pairs
+
+        # Create a dictionary to store metadata for each source_id
+        source_metadata = {}
+
+        # Collect metadata for each source ID
+        for source_id, result_data in mapping_result.items():
+            if result_data:
+                # Extract basic metadata
+                confidence_score = result_data.get("confidence_score")
+
+                path_details_raw = result_data.get("mapping_path_details")
+                path_details_for_json = path_details_raw if isinstance(path_details_raw, dict) else {}
+
+                # Refined hop_count extraction
+                hop_count = result_data.get("hop_count")
+                if hop_count is None and path_details_for_json:
+                    hop_count = path_details_for_json.get("hop_count")
+                if hop_count is None:  # Default if still not found
+                    hop_count = 1 if path_details_for_json else None
+
+                mapping_direction = result_data.get("mapping_direction", "forward" if path_details_for_json else None)
+                validation_status = result_data.get("validation_status", "Unknown")
+
+                # Store metadata for this source ID
+                source_metadata[source_id] = {
+                    CONFIDENCE_SCORE_COLUMN: confidence_score,
+                    HOP_COUNT_COLUMN: hop_count,
+                    PATH_DETAILS_COLUMN: json.dumps(path_details_for_json),
+                    MAPPING_DIRECTION_COLUMN: mapping_direction,
+                    VALIDATION_STATUS_COLUMN: validation_status
+                }
+
+                # Log the metadata for debugging
+                logger.info(f"Metadata for {source_id}: confidence={confidence_score}, hops={hop_count}, dir={mapping_direction}, status={validation_status}")
+
+        # Now add metadata to each row in our dataframe based on source ID
+        # Create new columns for metadata
+        for column in [CONFIDENCE_SCORE_COLUMN, HOP_COUNT_COLUMN, PATH_DETAILS_COLUMN, MAPPING_DIRECTION_COLUMN, VALIDATION_STATUS_COLUMN]:
+            df[column] = None
+
+        # Apply metadata to matching rows
+        for idx, row in df.iterrows():
+            source_id = row[input_id_column_name]
+            if pd.notna(source_id) and source_id in source_metadata:
+                metadata = source_metadata[source_id]
+                for column, value in metadata.items():
+                    df.at[idx, column] = value
+
+        # Log statistics about metadata
+        if not df[CONFIDENCE_SCORE_COLUMN].isna().all():
+            # Filter to only rows with metadata
+            df_with_metadata = df[df[CONFIDENCE_SCORE_COLUMN].notna()]
+            num_with_metadata = len(df_with_metadata)
+
+            # Calculate statistics
+            avg_confidence = df_with_metadata[CONFIDENCE_SCORE_COLUMN].mean()
+            min_confidence = df_with_metadata[CONFIDENCE_SCORE_COLUMN].min()
+            max_confidence = df_with_metadata[CONFIDENCE_SCORE_COLUMN].max()
+            logger.info(f"Confidence Scores - Avg: {avg_confidence:.3f}, Min: {min_confidence:.3f}, Max: {max_confidence:.3f}")
+
+            # Report metadata processing time
+            logger.info(f"Metadata generation completed in {time.time() - metadata_start_time:.2f} seconds for {num_with_metadata} rows")
+
+            # Log distribution of mapping directions
+            if MAPPING_DIRECTION_COLUMN in df.columns and not df[MAPPING_DIRECTION_COLUMN].isna().all():
+                direction_counts = df[MAPPING_DIRECTION_COLUMN].value_counts()
+                logger.info(f"Mapping direction distribution: {dict(direction_counts)}")
+
+            # Log distribution of validation statuses
+            if VALIDATION_STATUS_COLUMN in df.columns and not df[VALIDATION_STATUS_COLUMN].isna().all():
+                validation_counts = df[VALIDATION_STATUS_COLUMN].value_counts()
+                logger.info(f"Validation status distribution: {dict(validation_counts)}")
+
+            # Log distribution of hop counts
+            if HOP_COUNT_COLUMN in df.columns and not df[HOP_COUNT_COLUMN].isna().all():
+                hop_counts = df[HOP_COUNT_COLUMN].value_counts().to_dict()
+                logger.info(f"Hop count distribution: {hop_counts}")
+    else:
+        logger.info("No successful mappings found, adding empty metadata columns.")
         # Add empty columns if no successful mappings
         df[CONFIDENCE_SCORE_COLUMN] = None
         df[PATH_DETAILS_COLUMN] = None
         df[HOP_COUNT_COLUMN] = None
         df[MAPPING_DIRECTION_COLUMN] = None
         df[VALIDATION_STATUS_COLUMN] = None
-        # --- End Enhanced Metadata Generation --- #
+    # --- End Modified Metadata Generation --- #
 
-        # Log mapping statistics
-        # Count successful maps based on non-null values in the *target* ID column
-        successful_maps = df[ARIVALE_ID_COLUMN].notna().sum()
-        total_attempted = df[UNIPROT_COLUMN].notna().sum()
-        logger.info(
-            f"Successfully mapped {successful_maps} out of {total_attempted} input UniProt IDs."
-        )
+    # Log mapping statistics
+    # Count successful maps based on non-null values in the *target* ID column
+    successful_maps = df[output_mapped_id_column_name].notna().sum()
+    total_attempted = df[input_id_column_name].notna().sum()
+    logger.info(
+        f"Successfully mapped {successful_maps} out of {total_attempted} input IDs."
+    )
 
     # 4. Write Output (for success, partial success, or handled failures)
     logger.info(f"Writing results to {output_file_path}")
@@ -422,20 +452,55 @@ async def main(input_file_path: str, output_file_path: str, try_reverse_mapping_
 # --- Argument Parsing and Execution ---
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description=f"Map {UKBB_ID_COLUMN} to {ARIVALE_ID_COLUMN} via {UNIPROT_COLUMN}."
+        description="Map identifiers from a source endpoint to a target endpoint using Biomapper."
     )
     parser.add_argument(
         "input_file",
-        help=f"Path to the input TSV file containing {UKBB_ID_COLUMN} and {UNIPROT_COLUMN}.",
+        help="Path to the input TSV file.",
     )
     parser.add_argument(
         "output_file",
-        help=f"Path to write the output TSV file with mapped {ARIVALE_ID_COLUMN}.",
+        help="Path to write the output TSV file with mapped identifiers.",
+    )
+    parser.add_argument(
+        "--source_endpoint",
+        required=True,
+        help="Name of the source endpoint (e.g., UKBB_Protein)"
+    )
+    parser.add_argument(
+        "--target_endpoint",
+        required=True,
+        help="Name of the target endpoint (e.g., Arivale_Protein)"
+    )
+    parser.add_argument(
+        "--input_id_column_name",
+        required=True,
+        help="Name of the column in the input file containing IDs to map (e.g., UniProt or uniprot)"
+    )
+    parser.add_argument(
+        "--input_primary_key_column_name",
+        required=True,
+        help="Name of the primary key column in the input file (e.g., Assay or name)"
+    )
+    parser.add_argument(
+        "--output_mapped_id_column_name",
+        required=True,
+        help="Name for the new column that will store the mapped IDs (e.g., ARIVALE_PROTEIN_ID or UKBB_ASSAY_ID)"
+    )
+    parser.add_argument(
+        "--source_ontology_name",
+        required=True,
+        help="Ontology name for the source identifiers (e.g., UNIPROTKB_AC)"
+    )
+    parser.add_argument(
+        "--target_ontology_name",
+        required=True,
+        help="Ontology name for the target identifiers (e.g., ARIVALE_PROTEIN_ID)"
     )
     parser.add_argument(
         "--reverse",
         action="store_true",
-        help="Enable reverse mapping when forward mapping fails",
+        help="Enable reverse mapping as a fallback if forward mapping fails for an ID (within MappingExecutor)",
     )
     parser.add_argument(
         "--summary",
@@ -450,24 +515,38 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Run the async main function
-    asyncio.run(main(args.input_file, args.output_file, args.reverse))
+    asyncio.run(main(
+        args.input_file, 
+        args.output_file, 
+        args.reverse,
+        args.source_endpoint,
+        args.target_endpoint,
+        args.input_id_column_name,
+        args.input_primary_key_column_name,
+        args.output_mapped_id_column_name,
+        args.source_ontology_name,
+        args.target_ontology_name
+    ))
     
     # Generate summary report if requested
     if args.summary:
         output_dir = os.path.dirname(args.output_file)
-        summary_file = os.path.join(output_dir, "mapping_summary_report.txt")
+        summary_file = os.path.join(output_dir, f"{Path(args.output_file).stem}_summary_report.txt") # Make summary filename based on outputfile
         try:
             # Read the output file
-            df = pd.read_csv(args.output_file, sep="\t")
+            df_summary = pd.read_csv(args.output_file, sep="\t")
             
             # Generate and write summary
             with open(summary_file, "w") as f:
-                f.write("# UKBB to Arivale Mapping Summary Report\n\n")
+                f.write(f"# {args.source_endpoint} to {args.target_endpoint} Mapping Summary Report\n\n")
+                f.write(f"Input File: {args.input_file}\n")
+                f.write(f"Output File: {args.output_file}\n")
                 f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
                 
                 # Overall stats
-                total_records = len(df)
-                mapped_records = df[ARIVALE_ID_COLUMN].notna().sum()
+                total_records = len(df_summary)
+                # Use the dynamic output_mapped_id_column_name for checking mapped records
+                mapped_records = df_summary[args.output_mapped_id_column_name].notna().sum()
                 mapping_rate = mapped_records / total_records * 100 if total_records > 0 else 0
                 
                 f.write(f"## Overall Statistics\n")
@@ -475,30 +554,32 @@ if __name__ == "__main__":
                 f.write(f"Successfully mapped: {mapped_records} ({mapping_rate:.2f}%)\n\n")
                 
                 # Confidence score distribution
-                if CONFIDENCE_SCORE_COLUMN in df.columns and not df[CONFIDENCE_SCORE_COLUMN].isna().all():
+                if CONFIDENCE_SCORE_COLUMN in df_summary.columns and not df_summary[CONFIDENCE_SCORE_COLUMN].isna().all():
                     f.write(f"## Confidence Score Statistics\n")
-                    f.write(f"Average confidence: {df[CONFIDENCE_SCORE_COLUMN].mean():.3f}\n")
-                    f.write(f"Minimum confidence: {df[CONFIDENCE_SCORE_COLUMN].min():.3f}\n")
-                    f.write(f"Maximum confidence: {df[CONFIDENCE_SCORE_COLUMN].max():.3f}\n\n")
+                    f.write(f"Average confidence: {df_summary[CONFIDENCE_SCORE_COLUMN].mean():.3f}\n")
+                    f.write(f"Minimum confidence: {df_summary[CONFIDENCE_SCORE_COLUMN].min():.3f}\n")
+                    f.write(f"Maximum confidence: {df_summary[CONFIDENCE_SCORE_COLUMN].max():.3f}\n\n")
                 
                 # Hop count distribution
-                if HOP_COUNT_COLUMN in df.columns and not df[HOP_COUNT_COLUMN].isna().all():
-                    hop_counts = df[HOP_COUNT_COLUMN].value_counts().sort_index()
+                if HOP_COUNT_COLUMN in df_summary.columns and not df_summary[HOP_COUNT_COLUMN].isna().all():
+                    hop_counts = df_summary[HOP_COUNT_COLUMN].value_counts().sort_index()
                     f.write(f"## Hop Count Distribution\n")
                     for hop, count in hop_counts.items():
                         f.write(f"{int(hop)} hops: {count} ({count/mapped_records*100:.2f}%)\n")
                     f.write("\n")
                 
                 # Mapping direction distribution
-                if MAPPING_DIRECTION_COLUMN in df.columns and not df[MAPPING_DIRECTION_COLUMN].isna().all():
-                    direction_counts = df[MAPPING_DIRECTION_COLUMN].value_counts()
+                if MAPPING_DIRECTION_COLUMN in df_summary.columns and not df_summary[MAPPING_DIRECTION_COLUMN].isna().all():
+                    direction_counts = df_summary[MAPPING_DIRECTION_COLUMN].value_counts()
                     f.write(f"## Mapping Direction Distribution\n")
                     for direction, count in direction_counts.items():
-                        f.write(f"{direction}: {count} ({count/mapped_records*100:.2f}%)\n")
+                        # Check if mapped_records is zero to avoid division by zero
+                        direction_percentage = count / mapped_records * 100 if mapped_records > 0 else 0
+                        f.write(f"{direction}: {count} ({direction_percentage:.2f}%)\n")
                 
                 # Validation status distribution
-                if VALIDATION_STATUS_COLUMN in df.columns and not df[VALIDATION_STATUS_COLUMN].isna().all():
-                    validation_counts = df[VALIDATION_STATUS_COLUMN].value_counts()
+                if VALIDATION_STATUS_COLUMN in df_summary.columns and not df_summary[VALIDATION_STATUS_COLUMN].isna().all():
+                    validation_counts = df_summary[VALIDATION_STATUS_COLUMN].value_counts()
                     f.write(f"\n## Validation Status Distribution\n")
                     for status, count in validation_counts.items():
                         f.write(f"{status}: {count} ({count/mapped_records*100:.2f}%)\n")
