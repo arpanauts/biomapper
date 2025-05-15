@@ -234,4 +234,4 @@ scripts/dev_experiments/
 temp_sample_data/
 
 **/.claude/settings.local.json
-CLAUDE.md
+#CLAUDE.md
