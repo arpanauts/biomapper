@@ -207,7 +207,6 @@ vector_store/
 # SQLite database files
 #data/metamapper.db
 data/metamapper.db-*
-CLAUDE.md
 
 # Biomapper specific ignores added by Cascade
 # Backup files for mapping_executor
