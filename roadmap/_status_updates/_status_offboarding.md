@@ -33,7 +33,7 @@ Please organize your response into the following sections:
 - Note areas where we might need to revisit our approach
 - Identify topics requiring further research or exploration
 
-Please be specific and reference relevant files, components, or concepts by name where appropriate. This document serves as both a record of our progress and a guide for continuing development.
+Please be specific and reference relevant files, components, or concepts by name where appropriate. Always use full absolute file paths when referencing files (e.g., `/home/ubuntu/biomapper/scripts/phase3_bidirectional_reconciliation.py` instead of just `phase3_bidirectional_reconciliation.py`) for clarity and to enable quick location of the exact files. This document serves as both a record of our progress and a guide for continuing development.
 ```
 
 ## Storage Recommendations

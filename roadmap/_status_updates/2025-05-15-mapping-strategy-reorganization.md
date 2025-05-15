@@ -25,6 +25,7 @@ This document provides an update on the Biomapper project, incorporating our rec
     *   Fixed `IndentationError` in `biomapper/core/mapping_executor.py`, making the executor available for complex mapping tasks
     *   Resolved previous `KeyError` issues with dynamic column name handling
     *   Established comprehensive output generation with structured TSV files and JSON metadata
+    *   Completed initial fixes for one-to-many relationship handling in the Phase 1 mapping script (`map_ukbb_to_arivale.py`)
 
 ## 2. Current Project State
 
@@ -41,6 +42,9 @@ This document provides an update on the Biomapper project, incorporating our rec
 *   **Key Statistics & Metrics:**
     *   Initial pipeline runs showed very low mapping success rate (0.2% - 0.5%), which has been a focus area for improvement.
     *   Output files are now generated in a standardized format in timestamp-based directories (e.g., `/home/ubuntu/biomapper/output/full_run_20250512_170659/`).
+
+*   **Outstanding Critical Issues:**
+    *   **One-to-Many Flag Bug:** Discovered a significant issue where the `is_one_to_many_target` flag is incorrectly set to TRUE for all records in the Phase 3 reconciliation output. This compromises the reliability of important metadata used for canonical mapping selection and requires urgent investigation in the `perform_bidirectional_validation` function of `phase3_bidirectional_reconciliation.py`.
 
 ## 3. Technical Context
 
@@ -67,6 +71,8 @@ This document provides an update on the Biomapper project, incorporating our rec
     *   Ensure comprehensive documentation of the improved mapping approach in appropriate technical notes.
 
 *   **Priorities for Coming Week:**
+    *   **Fix One-to-Many Flag Bug in Phase 3 Reconciliation:** Investigate and resolve the issue where the `is_one_to_many_target` flag is incorrectly set to TRUE for all records in the Phase 3 output. This fix is critical for ensuring accurate identification of many-to-many relationships and proper canonical mapping selection.
+
     *   **Implement UKBB-Arivale Metabolite Mapping:** Develop and execute a more manual approach for mapping between:
         *   UKBB metabolites → Arivale metabolites
         *   UKBB metabolites → Arivale clinical lab results

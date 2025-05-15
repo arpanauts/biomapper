@@ -106,6 +106,7 @@ For features or ideas that become obsolete, are indefinitely deferred, or supers
 ## 5. Tips for Effective Use
 
 -   **Be Explicit with AI:** When instructing your AI assistant, provide clear, full paths to the relevant prompt files and feature files/folders.
+-   **Always Use Full Absolute File Paths:** When referencing files in documentation, always use complete absolute paths (e.g., `/home/ubuntu/biomapper/scripts/phase3_bidirectional_reconciliation.py` instead of just `phase3_bidirectional_reconciliation.py`). This ensures clarity and allows both humans and AI to quickly locate the exact files.
 -   **Iterate and Refine:** The AI-generated content is a starting point. Review, edit, and add your expertise to all documents.
 -   **Keep Status Updates Detailed:** The more detail in your `roadmap/_status_updates/` files, the easier it will be to identify and process items for the roadmap stages.
 -   **Adapt the Process:** This is a template. Feel free to adapt the stage gate prompts, templates, and workflow to best suit the Biomapper project's evolving needs.
