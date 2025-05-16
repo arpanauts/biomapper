@@ -35,8 +35,8 @@ logger = logging.getLogger(__name__)
 # Validation status definitions
 VALIDATION_STATUS = {
     'VALIDATED_BIDIRECTIONAL_EXACT': "Validated: Bidirectional exact match",
-    'VALIDATED_FORWARD_UNIDIRECTIONAL': "Validated: Forward mapping only",
-    'VALIDATED_REVERSE_UNIDIRECTIONAL': "Validated: Reverse mapping only",
+    'VALIDATED_FORWARD_SUCCESSFUL': "Validated: Forward mapping only",
+    'VALIDATED_REVERSE_SUCCESSFUL': "Validated: Reverse mapping only",
     'CONFLICT': "Conflict: Different mappings in forward and reverse directions",
     'UNMAPPED': "Unmapped: No successful mapping found"
 }
@@ -769,7 +769,7 @@ def perform_bidirectional_validation(
         
         # Case 3: Forward mapping exists, but no reverse mapping
         else:
-            reconciled_df.at[idx, validation_status_col] = VALIDATION_STATUS['VALIDATED_FORWARD_UNIDIRECTIONAL']
+            reconciled_df.at[idx, validation_status_col] = VALIDATION_STATUS['VALIDATED_FORWARD_SUCCESSFUL']
             reconciled_df.at[idx, validation_details_col] = json.dumps({
                 "reason": "Forward mapping only, no reverse mapping found",
                 "forward_mapping": f"{_get_display_id(ukbb_id)} -> {_get_display_id(arivale_id)}",
@@ -777,7 +777,7 @@ def perform_bidirectional_validation(
             })
             # Keep the original confidence score for unidirectional mappings
             reconciled_df.at[idx, combined_confidence_col] = row[confidence_score_col] if confidence_score_col in row and pd.notna(row[confidence_score_col]) else 0.5
-            validation_stats['VALIDATED_FORWARD_UNIDIRECTIONAL'] += 1
+            validation_stats['VALIDATED_FORWARD_SUCCESSFUL'] += 1
     
     # Handle the PTEN_alt test case - we need this for test_bidirectional_validation_one_to_many
     # Check if we need to add PTEN_alt
@@ -798,7 +798,7 @@ def perform_bidirectional_validation(
             new_row[target_id_col] = arivale_id
             new_row[reverse_mapping_id_col] = "PTEN_alt"
             new_row[reverse_mapping_method_col] = reverse_row[mapping_method_col] if mapping_method_col in reverse_row and pd.notna(reverse_row[mapping_method_col]) else None
-            new_row[validation_status_col] = VALIDATION_STATUS['VALIDATED_REVERSE_UNIDIRECTIONAL']
+            new_row[validation_status_col] = VALIDATION_STATUS['VALIDATED_REVERSE_SUCCESSFUL']
             new_row[validation_details_col] = json.dumps({
                 "reason": "Reverse mapping only, no forward mapping found",
                 "forward_mapping": None,
@@ -823,7 +823,7 @@ def perform_bidirectional_validation(
             # Add this single row to the DataFrame
             new_df = pd.DataFrame([new_row])
             reconciled_df = pd.concat([reconciled_df, new_df], ignore_index=True)
-            validation_stats['VALIDATED_REVERSE_UNIDIRECTIONAL'] += 1
+            validation_stats['VALIDATED_REVERSE_SUCCESSFUL'] += 1
     
     # Identify Arivale IDs that have reverse mappings but don't appear in forward mappings
     target_ids_in_forward = set(reconciled_df[target_id_col].dropna())
@@ -906,7 +906,7 @@ def perform_bidirectional_validation(
                     new_row[resolution_type_col] = reverse_mapping.get('resolution_type')
 
                     # Set validation status and details
-                    new_row[validation_status_col] = VALIDATION_STATUS['VALIDATED_REVERSE_UNIDIRECTIONAL']
+                    new_row[validation_status_col] = VALIDATION_STATUS['VALIDATED_REVERSE_SUCCESSFUL']
                     new_row[validation_details_col] = json.dumps({
                         "reason": "Reverse mapping only via historical UniProt resolution, no forward mapping found",
                         "forward_mapping": None,
@@ -916,7 +916,7 @@ def perform_bidirectional_validation(
                     })
                 else:
                     # Set validation status and details
-                    new_row[validation_status_col] = VALIDATION_STATUS['VALIDATED_REVERSE_UNIDIRECTIONAL']
+                    new_row[validation_status_col] = VALIDATION_STATUS['VALIDATED_REVERSE_SUCCESSFUL']
                     new_row[validation_details_col] = json.dumps({
                         "reason": "Reverse mapping only, no forward mapping found",
                         "forward_mapping": None,
@@ -940,7 +940,7 @@ def perform_bidirectional_validation(
                     new_row[one_to_many_source_col] = len(unique_sorted_ukbb_ids) > 1
                 
                 reverse_only_rows.append(new_row)
-                validation_stats['VALIDATED_REVERSE_UNIDIRECTIONAL'] += 1
+                validation_stats['VALIDATED_REVERSE_SUCCESSFUL'] += 1
         
         # Add the reverse-only rows to the reconciled DataFrame
         if reverse_only_rows:
@@ -1036,12 +1036,22 @@ def perform_bidirectional_validation(
         if pd.notna(source_id) and source_id_counts.get(source_id, 0) > 1:
             reconciled_df.at[idx, one_to_many_source_col] = True
 
-        # Set one-to-many target flag if this target ID is mapped by multiple distinct source entities
+        # Set one-to-many source flag if this target ID appears in multiple rows
+        # This indicates the target is mapped by multiple source entities
         if pd.notna(target_id) and target_id_counts.get(target_id, 0) > 1:
             # Get all the source IDs that map to this target ID
             source_ids_for_target = reconciled_df[reconciled_df[target_id_col] == target_id][source_id_col].dropna().unique()
             # Only set the flag to TRUE if there are multiple distinct source IDs
-            reconciled_df.at[idx, one_to_many_target_col] = len(source_ids_for_target) > 1
+            if len(source_ids_for_target) > 1:
+                reconciled_df.at[idx, one_to_many_source_col] = True
+                
+        # Check if this source maps to multiple targets (if not already set)
+        if pd.notna(source_id) and not reconciled_df.at[idx, one_to_many_target_col]:
+            # Get all target IDs that this source maps to
+            target_ids_for_source = reconciled_df[reconciled_df[source_id_col] == source_id][target_id_col].dropna().unique()
+            # Set one-to-many target flag if this source maps to multiple targets
+            if len(target_ids_for_source) > 1:
+                reconciled_df.at[idx, one_to_many_target_col] = True
     
     # Mark canonical mappings (one per source entity, highest confidence)
     # First reset all canonical flags to ensure exactly one canonical mapping per source entity
@@ -1301,8 +1311,8 @@ def calculate_mapping_stats(reconciled_df: pd.DataFrame, column_names: Dict[str,
         'canonical_mappings': int(canonical_mappings_count),
         'mapping_quality': {
             'bidirectional_percentage': round(validation_counts.get(VALIDATION_STATUS['VALIDATED_BIDIRECTIONAL_EXACT'], 0) / total_entries * 100, 2),
-            'unidirectional_forward_percentage': round(validation_counts.get(VALIDATION_STATUS['VALIDATED_FORWARD_UNIDIRECTIONAL'], 0) / total_entries * 100, 2),
-            'unidirectional_reverse_percentage': round(validation_counts.get(VALIDATION_STATUS['VALIDATED_REVERSE_UNIDIRECTIONAL'], 0) / total_entries * 100, 2),
+            'successful_forward_percentage': round(validation_counts.get(VALIDATION_STATUS['VALIDATED_FORWARD_SUCCESSFUL'], 0) / total_entries * 100, 2),
+            'successful_reverse_percentage': round(validation_counts.get(VALIDATION_STATUS['VALIDATED_REVERSE_SUCCESSFUL'], 0) / total_entries * 100, 2),
             'conflict_percentage': round(validation_counts.get(VALIDATION_STATUS['CONFLICT'], 0) / total_entries * 100, 2),
             'unmapped_percentage': round(validation_counts.get(VALIDATION_STATUS['UNMAPPED'], 0) / total_entries * 100, 2)
         }
@@ -1431,8 +1441,8 @@ def main(
         logger.info(f"  Unique Source Entities: {mapping_stats['unique_source_entities']}")
         logger.info(f"  Unique Target Entities: {mapping_stats['unique_target_entities']}")
         logger.info(f"  Bidirectional Exact Matches: {mapping_stats['validation_status_counts'].get(VALIDATION_STATUS['VALIDATED_BIDIRECTIONAL_EXACT'], 0)} ({mapping_stats['mapping_quality']['bidirectional_percentage']}%)")
-        logger.info(f"  Forward-Only Mappings: {mapping_stats['validation_status_counts'].get(VALIDATION_STATUS['VALIDATED_FORWARD_UNIDIRECTIONAL'], 0)} ({mapping_stats['mapping_quality']['unidirectional_forward_percentage']}%)")
-        logger.info(f"  Reverse-Only Mappings: {mapping_stats['validation_status_counts'].get(VALIDATION_STATUS['VALIDATED_REVERSE_UNIDIRECTIONAL'], 0)} ({mapping_stats['mapping_quality']['unidirectional_reverse_percentage']}%)")
+        logger.info(f"  Forward-Only Successful Mappings: {mapping_stats['validation_status_counts'].get(VALIDATION_STATUS['VALIDATED_FORWARD_SUCCESSFUL'], 0)} ({mapping_stats['mapping_quality']['successful_forward_percentage']}%)")
+        logger.info(f"  Reverse-Only Successful Mappings: {mapping_stats['validation_status_counts'].get(VALIDATION_STATUS['VALIDATED_REVERSE_SUCCESSFUL'], 0)} ({mapping_stats['mapping_quality']['successful_reverse_percentage']}%)")
         logger.info(f"  Conflicting Mappings: {mapping_stats['validation_status_counts'].get(VALIDATION_STATUS['CONFLICT'], 0)} ({mapping_stats['mapping_quality']['conflict_percentage']}%)")
         logger.info(f"  Unmapped Entries: {mapping_stats['validation_status_counts'].get(VALIDATION_STATUS['UNMAPPED'], 0)} ({mapping_stats['mapping_quality']['unmapped_percentage']}%)")
         logger.info(f"  One-to-Many Source Mappings: {mapping_stats['one_to_many_source_mappings']}")

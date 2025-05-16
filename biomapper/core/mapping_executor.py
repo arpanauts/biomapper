@@ -2426,7 +2426,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             enriched_result = fwd_res_item.copy()
             
             if not fwd_res_item or not fwd_res_item.get("target_identifiers"):
-                enriched_result["validation_status"] = "UnidirectionalSuccess (NoFwdTarget)"
+                enriched_result["validation_status"] = "Successful (NoFwdTarget)"
                 unidirectional_count += 1
             else:
                 forward_mapped_target_ids = fwd_res_item["target_identifiers"]
@@ -2458,9 +2458,9 @@ class MappingExecutor(CompositeIdentifierMixin):
                 else: # No validation path found to the original source_id
                     any_fwd_target_had_reverse_data = any(tid in target_to_sources for tid in forward_mapped_target_ids)
                     if any_fwd_target_had_reverse_data:
-                        enriched_result["validation_status"] = "UnidirectionalSuccess"
+                        enriched_result["validation_status"] = "Successful"
                     else:
-                        enriched_result["validation_status"] = "UnidirectionalSuccess (NoReversePath)"
+                        enriched_result["validation_status"] = "Successful (NoReversePath)"
                     unidirectional_count += 1
             
             # Add this entry to the enriched_mappings dictionary
@@ -2468,7 +2468,7 @@ class MappingExecutor(CompositeIdentifierMixin):
     
         self.logger.info(
             f"Validation status: {validated_count} validated (bidirectional), "
-            f"{unidirectional_count} successful (unidirectional only)"
+            f"{unidirectional_count} successful (one-directional only)"
         )
         return enriched_mappings
 
@@ -2866,7 +2866,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             enriched_result = fwd_res_item.copy()
             
             if not fwd_res_item or not fwd_res_item.get("target_identifiers"):
-                enriched_result["validation_status"] = "UnidirectionalSuccess (NoFwdTarget)"
+                enriched_result["validation_status"] = "Successful (NoFwdTarget)"
                 unidirectional_count += 1
             else:
                 forward_mapped_target_ids = fwd_res_item["target_identifiers"]
@@ -2898,9 +2898,9 @@ class MappingExecutor(CompositeIdentifierMixin):
                 else: # No validation path found to the original source_id
                     any_fwd_target_had_reverse_data = any(tid in target_to_sources for tid in forward_mapped_target_ids)
                     if any_fwd_target_had_reverse_data:
-                        enriched_result["validation_status"] = "UnidirectionalSuccess"
+                        enriched_result["validation_status"] = "Successful"
                     else:
-                        enriched_result["validation_status"] = "UnidirectionalSuccess (NoReversePath)"
+                        enriched_result["validation_status"] = "Successful (NoReversePath)"
                     unidirectional_count += 1
             
             # Add this entry to the enriched_mappings dictionary
@@ -2908,6 +2908,6 @@ class MappingExecutor(CompositeIdentifierMixin):
     
         self.logger.info(
             f"Validation status: {validated_count} validated (bidirectional), "
-            f"{unidirectional_count} successful (unidirectional only)"
+            f"{unidirectional_count} successful (one-directional only)"
         )
         return enriched_mappings
