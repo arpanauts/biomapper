@@ -16,9 +16,9 @@ This document details the architectural design and implementation approach for t
 
 ### 1. Core System Components
 
-#### 1.1 Script Adaptation
+#### 1.1 Script Architecture
 
-The existing three-phase approach will be preserved but adapted for metabolites:
+The existing three-phase approach will be preserved but implemented with dedicated entity-specific scripts:
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────────────┐
@@ -28,12 +28,19 @@ The existing three-phase approach will be preserved but adapted for metabolites:
 └─────────────────┘     └─────────────────┘     └─────────────────────────┘
 ```
 
-Key modifications to the existing scripts:
+New dedicated scripts for metabolite mapping:
 
-- `map_ukbb_to_arivale.py`: 
-  - Add support for metabolite column configurations
-  - Integrate fallback mechanism invocation for unmapped entities
-  - Enhance output to include fallback results and confidence scores
+- `map_ukbb_metabolites_to_arivale_metabolites.py`: 
+  - Specific script for UKBB metabolite to Arivale metabolite mapping
+  - Hard-coded metabolite column configurations
+  - Integrated fallback mechanism invocation for unmapped entities
+
+- `map_ukbb_metabolites_to_arivale_clinlabs.py`:
+  - Specific script for UKBB metabolite to Arivale clinical lab mapping
+  - Hard-coded column configurations 
+  - Entity-specific configuration for clinical lab data
+
+Rather than modifying the existing `map_ukbb_to_arivale.py` (which will be kept as-is for protein mapping), this approach maintains clear separation of concerns with dedicated scripts for each entity type.
 
 - `phase3_bidirectional_reconciliation.py`:
   - Extend reconciliation logic to handle metabolite-specific many-to-many relationships
@@ -310,16 +317,22 @@ Enhanced JSON metadata file to include:
 
 ### 6. Integration with Existing Pipeline
 
-#### 6.1 Script Modification Approach
+#### 6.1 Script Development Approach
 
-The `map_ukbb_to_arivale.py` script will be enhanced but maintain its current structure:
+New dedicated scripts will be created for metabolite mapping:
 
-1. Detect entity type based on input file or explicit parameter
-2. Load appropriate configuration based on entity type
-3. Execute the existing mapping logic with entity-specific clients
-4. For unmapped entities, invoke the `FallbackOrchestrator`
-5. Combine and format results with confidence scoring
-6. Generate appropriate output files
+1. `map_ukbb_metabolites_to_arivale_metabolites.py`:
+   - Focused specifically on metabolite mapping
+   - Contains hard-coded metabolite-specific configurations
+   - Implements the core mapping logic with appropriate clients
+   - Invokes the `FallbackOrchestrator` for unmapped entities
+   - Generates appropriately formatted output files
+
+2. `map_ukbb_metabolites_to_arivale_clinlabs.py`:
+   - Similar structure but focuses on clinical lab mapping
+   - Contains specific configuration for clinical lab identifiers
+
+This approach maintains clear separation of concerns between entity types, with the long-term goal of eventually moving these hard-coded configurations into `populate_metamapper.db.py`.
 
 #### 6.2 Phase 3 Reconciliation Integration
 
@@ -337,7 +350,19 @@ The `phase3_bidirectional_reconciliation.py` script will be enhanced to:
 1. Fix the `is_one_to_many_target` flag bug in `phase3_bidirectional_reconciliation.py`
 2. Implement the confidence scoring system
 3. Enhance output format to support tiered results
-4. Create unit tests for these components
+4. Update validation status terminology throughout the codebase:
+   - Change "UnidirectionalSuccess" to "Successful" in `biomapper/core/mapping_executor.py`
+   - Update `VALIDATION_STATUS` constants in `phase3_bidirectional_reconciliation.py`:
+     ```python
+     # From
+     'VALIDATED_FORWARD_UNIDIRECTIONAL': "Validated: Forward mapping only",
+     'VALIDATED_REVERSE_UNIDIRECTIONAL': "Validated: Reverse mapping only",
+     # To
+     'SUCCESSFUL_FORWARD_MAPPING': "Successful: Forward mapping only",
+     'SUCCESSFUL_REVERSE_MAPPING': "Successful: Reverse mapping only",
+     ```
+   - Update all references to these constants throughout the codebase
+5. Create unit tests for these components
 
 ### Phase 2: Client Development
 
@@ -353,9 +378,11 @@ The `phase3_bidirectional_reconciliation.py` script will be enhanced to:
 2. Create integration tests for fallback orchestration
 3. Integrate fallback results with the primary mapping pipeline
 
-### Phase 4: Script Adaptation
+### Phase 4: Script Development
 
-1. Enhance `map_ukbb_to_arivale.py` for metabolite mapping
+1. Create dedicated scripts:
+   - `map_ukbb_metabolites_to_arivale_metabolites.py`
+   - `map_ukbb_metabolites_to_arivale_clinlabs.py`
 2. Update `phase3_bidirectional_reconciliation.py` for enhanced metadata
 3. Create end-to-end tests for metabolite mapping
 
@@ -367,18 +394,24 @@ The `phase3_bidirectional_reconciliation.py` script will be enhanced to:
 
 ## Design Considerations and Tradeoffs
 
-### Consideration 1: Script Adaptation vs. Complete Rewrite
+### Consideration 1: Dedicated Scripts vs. Unified Approach
 
-**Decision**: Adapt existing scripts rather than creating entirely new ones for metabolites.
+**Decision**: Create dedicated entity-specific scripts rather than modifying existing ones to handle multiple entity types.
 
 **Rationale**:
-- Maintains consistency with the established workflow
-- Reduces duplication and maintenance burden
-- Enforces the entity-agnostic design principle
+- Provides clear separation of concerns
+- Avoids complex conditional logic in shared scripts
+- Simplifies maintenance and debugging
+- Allows entity-specific optimizations without impacting other entity types
 
 **Tradeoff**:
-- May require more complex conditional logic within shared scripts
-- Greater risk of regressions in existing functionality
+- Some code duplication across scripts
+- Need to maintain consistent patterns across multiple scripts
+- Future updates to shared logic may need to be propagated to multiple files
+
+**Mitigation**:
+- Focus on long-term plan to move configurations to `populate_metamapper.db.py`
+- Extract common functionality into shared utility modules where appropriate
 
 ### Consideration 2: Fallback Mechanism Integration
 

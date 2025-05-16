@@ -62,16 +62,16 @@ The following examples illustrate how this strategy applies to different entity 
     *   A reverse mapping (target → source) is executed for these IDs.
     *   Each original mapping is enriched with a `validation_status` field:
         *   **"Validated"**: When a target ID maps back to its original source ID (bidirectional success).
-        *   **"UnidirectionalSuccess"**: When forward mapping succeeded but the target doesn't map back to the source.
+        *   **"Successful"**: When forward mapping succeeded but the target doesn't map back to the source.
     *   All forward mappings are preserved in the result, just enriched with validation status.
-    *   This provides a three-tiered status system: "Validated" (bidirectional success), "UnidirectionalSuccess" (forward only), and "Failed" (not in successful mappings).
+    *   This provides a three-tiered status system: "Validated" (bidirectional success), "Successful" (one-directional mapping only), and "Failed" (not in successful mappings).
     *   When a single source entity maps to multiple target entities (as noted in Step 2), each of these individual forward links is independently validated. The final reconciled output (e.g., from Phase 3) will therefore present each such validated link as a distinct entry. This ensures comprehensive reporting of all identified one-to-many or many-to-many relationships, detailing the validation status for each specific source-target_instance pair.
 
 7.  **Phase 3: Bidirectional Reconciliation:** For comprehensive mapping analysis, a dedicated reconciliation script provides the following enhancements:
-    *   **Advanced Validation Status:** Expands the validation status system to five tiers:
+    *   **Advanced Validation Status:** Extends the validation status system to five tiers:
         *   **"Validated: Bidirectional exact match":** The source entity maps to the target entity, and the target maps back to exactly the same source entity.
-        *   **"Validated: Forward mapping only":** The source entity maps to the target entity, but the target entity does not map back to this source entity.
-        *   **"Validated: Reverse mapping only":** No direct mapping exists from source to target, but the target entity maps back to this source entity.
+        *   **"Successful: Forward mapping only":** The source entity maps to the target entity, but the target entity does not map back to this source entity.
+        *   **"Successful: Reverse mapping only":** No direct mapping exists from source to target, but the target entity maps back to this source entity.
         *   **"Conflict":** The source entity maps to the target entity, but the target entity maps back to a different source entity.
         *   **"Unmapped":** No mapping exists in either direction.
     *   **One-to-Many Relationship Support:** Explicitly handles and flags one-to-many relationships in both directions:
@@ -264,7 +264,7 @@ def reconcile_bidirectional_mappings(forward_mappings, reverse_results):
         enriched_result = result.copy()
         
         if not result or not result.get("target_identifiers"):
-            enriched_result["validation_status"] = "UnidirectionalSuccess"
+            enriched_result["validation_status"] = "Successful"  # One-directional mapping only
         else:
             target_ids = result["target_identifiers"]
             source_validated = False
@@ -277,9 +277,9 @@ def reconcile_bidirectional_mappings(forward_mappings, reverse_results):
                         break
             
             if source_validated:
-                enriched_result["validation_status"] = "Validated"
+                enriched_result["validation_status"] = "Validated"  # Bidirectional exact match
             else:
-                enriched_result["validation_status"] = "UnidirectionalSuccess"
+                enriched_result["validation_status"] = "Successful"  # One-directional mapping only
         
         enriched_mappings[source_id] = enriched_result
     
