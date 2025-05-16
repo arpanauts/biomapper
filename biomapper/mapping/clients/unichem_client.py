@@ -1,490 +1,425 @@
-"""
-UniChem API Client
+"""UniChem Mapping Client for Biomapper
 
-This module provides a Python interface to the UniChem REST API.
-It handles request formation and response parsing for retrieving
-metabolite information across various chemical databases.
+A client for mapping metabolite identifiers between different chemical databases
+using the UniChem REST API. This client implements the standard BaseMappingClient
+interface for use with MappingExecutor.
 """
 
 import logging
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple, Any, Union
-from pathlib import Path
+import aiohttp
+import asyncio
+from typing import Dict, List, Optional, Any, Tuple, Set, Union
+import json
 
-import pandas as pd
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-import csv
+from biomapper.mapping.clients.base_client import BaseMappingClient, CachedMappingClientMixin
+from biomapper.core.exceptions import ClientExecutionError, ClientInitializationError
 
 logger = logging.getLogger(__name__)
 
 
-class UniChemError(Exception):
-    """Custom exception for UniChem API errors"""
-
-    pass
-
-
-@dataclass
-class UniChemConfig:
-    """Configuration for the UniChem API Client."""
-
-    base_url: str = "https://www.ebi.ac.uk/unichem/rest"
-    timeout: int = 30
-    max_retries: int = 3
-    backoff_factor: float = 0.5
-
-
-@dataclass
-class MappingResult:
-    """Data structure for summarizing mapping results."""
-
-    mapped_ids: int
-    total_ids: int
-    mapping_sources: Set[str]
-
-    @property
-    def mapping_rate(self) -> float:
-        """Percentage of successfully mapped IDs."""
-        return (self.mapped_ids / self.total_ids * 100) if self.total_ids > 0 else 0.0
-
-
-class UniChemClient:
+class UniChemClient(CachedMappingClientMixin, BaseMappingClient):
     """
-    A client to interact with the UniChem REST API for compound ID mapping.
+    Client for mapping metabolite identifiers using the UniChem REST API.
+    
+    This client supports mapping between different chemical identifier systems including:
+    - PubChem
+    - ChEBI
+    - HMDB
+    - KEGG
+    - InChIKey
+    - LIPID MAPS
+    - ChemSpider
+    and many others.
+    
+    Configuration options:
+    - source_db: Source database name (e.g., "PUBCHEM", "CHEBI")
+    - target_db: Target database name (e.g., "PUBCHEM", "CHEBI")
+    - timeout: Request timeout in seconds (default 30)
+    - max_retries: Maximum number of retry attempts for failed requests (default 3)
+    - backoff_factor: Exponential backoff factor for retries (default 0.5)
     """
-
-    def __init__(self, config: Optional[UniChemConfig] = None) -> None:
-        """Initialize the UniChem client with retry logic on the session."""
-        self.config = config or UniChemConfig()
-        self.session = requests.Session()
-
-        # Configure retry strategy
-        retry_strategy = Retry(
-            total=self.config.max_retries,
-            backoff_factor=self.config.backoff_factor,
-            status_forcelist=[429, 500, 502, 503, 504],
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        self.session.mount("https://", adapter)
-        self.session.mount("http://", adapter)
-
-        # Updated source mapping
-        self.SOURCE_IDS = {
-            "chembl": 1,
-            "hmdb": 2,
-            "drugbank": 3,
-            "pdb": 4,
-            "pubchem": 22,
-            "chebi": 7,
-            "kegg": 6,
-            "inchikey": "inchikey",
-            "lipidmaps": 18,
-            "zinc": 19,
-            "chemspider": 10,
-            "atlas": 29,
-            "gtopdb": 21,
-            "emolecules": 38,
-            "cas": 9,
-            "bindingdb": 25,
-            "molport": 33,
-            "comptox": 46,
-            "brenda": 12,
-            "metabolights": 39,
-            "selleck": 37,
+    
+    # UniChem source mappings
+    # Source: https://www.ebi.ac.uk/unichem/sources
+    SOURCE_IDS = {
+        "CHEMBL": 1,
+        "HMDB": 2,
+        "DRUGBANK": 3,
+        "PDB": 4,
+        "KEGG": 6,
+        "CHEBI": 7,
+        "CAS": 9,
+        "CHEMSPIDER": 10,
+        "BRENDA": 12,
+        "LIPIDMAPS": 18,
+        "ZINC": 19,
+        "GTOPDB": 21,
+        "PUBCHEM": 22,
+        "BINDINGDB": 25,
+        "ATLAS": 29,
+        "MOLPORT": 33,
+        "SELLECK": 37,
+        "EMOLECULES": 38,
+        "METABOLIGHTS": 39,
+        "COMPTOX": 46,
+        # Special value for InChI Key searches
+        "INCHIKEY": "inchikey",
+    }
+    
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize the UniChem client.
+        
+        Args:
+            config: Optional configuration dictionary with client-specific settings.
+                   - source_db: Source database name (e.g., "PUBCHEM", "CHEBI")
+                   - target_db: Target database name (e.g., "PUBCHEM", "CHEBI")
+                   - timeout: Request timeout in seconds (default 30)
+                   - max_retries: Maximum number of retry attempts (default 3)
+                   - backoff_factor: Exponential backoff factor for retries (default 0.5)
+        """
+        # Default configuration
+        default_config = {
+            "base_url": "https://www.ebi.ac.uk/unichem/rest",
+            "timeout": 30,
+            "max_retries": 3,
+            "backoff_factor": 0.5,
         }
-
-    def _get_empty_result(self) -> Dict[str, List[Any]]:
-        """Return an empty result dictionary with all source types."""
-        return {
-            "chembl_ids": [],
-            "chebi_ids": [],
-            "pubchem_ids": [],
-            "kegg_ids": [],
-            "hmdb_ids": [],
-            "drugbank_ids": [],
-            "lipidmaps_ids": [],
-            "zinc_ids": [],
-            "chemspider_ids": [],
-            "atlas_ids": [],
-            "gtopdb_ids": [],
-            "emolecules_ids": [],
-            "cas_ids": [],
-            "bindingdb_ids": [],
-            "molport_ids": [],
-            "comptox_ids": [],
-            "brenda_ids": [],
-            "metabolights_ids": [],
-            "selleck_ids": [],
-        }
-
-    def _process_compound_result(
-        self, data: List[Dict[str, Any]]
-    ) -> Dict[str, List[Any]]:
-        """Process compound results into categorized lists of IDs."""
-        result = self._get_empty_result()
-
-        for item in data:
-            src_id = item.get("src_id")
-            compound_id = item.get("src_compound_id")
-
-            if not src_id or not compound_id:
-                continue
-
-            if src_id == 1:
-                result["chembl_ids"].append(compound_id)
-            elif src_id == 7:
-                result["chebi_ids"].append(compound_id)
-            elif src_id == 22:
-                result["pubchem_ids"].append(compound_id)
-            elif src_id == 6:
-                result["kegg_ids"].append(compound_id)
-            elif src_id == 2:
-                result["hmdb_ids"].append(compound_id)
-            elif src_id == 3:
-                result["drugbank_ids"].append(compound_id)
-
-            elif src_id == 18:
-                result["lipidmaps_ids"].append(compound_id)
-            elif src_id == 19:
-                result["zinc_ids"].append(compound_id)
-            elif src_id == 10:
-                result["chemspider_ids"].append(compound_id)
-            elif src_id == 29:
-                result["atlas_ids"].append(compound_id)
-            elif src_id == 21:
-                result["gtopdb_ids"].append(compound_id)
-            elif src_id == 38:
-                result["emolecules_ids"].append(compound_id)
-            elif src_id == 9:
-                result["cas_ids"].append(compound_id)
-            elif src_id == 25:
-                result["bindingdb_ids"].append(compound_id)
-            elif src_id == 33:
-                result["molport_ids"].append(compound_id)
-            elif src_id == 46:
-                result["comptox_ids"].append(compound_id)
-            elif src_id == 12:
-                result["brenda_ids"].append(compound_id)
-            elif src_id == 39:
-                result["metabolights_ids"].append(compound_id)
-            elif src_id == 37:
-                result["selleck_ids"].append(compound_id)
-        return result
-
-    def get_source_information(self) -> Dict[str, Any]:
-        """Retrieve information about available data sources."""
-        try:
-            response = self.session.get(
-                f"{self.config.base_url}/sources", timeout=self.config.timeout
+        
+        # Merge with provided config
+        if config:
+            default_config.update(config)
+        
+        # Initialize parent classes (order matters for multiple inheritance)
+        super().__init__(config=default_config, cache_size=2048)
+        
+        # Initialize internal state
+        self._session = None
+        self._initialized = False
+        
+        # Normalize source and target database names to uppercase
+        self.source_db = self._config.get("source_db", "").upper()
+        self.target_db = self._config.get("target_db", "").upper()
+        
+        logger.info(f"Initialized UniChemClient with source_db={self.source_db}, target_db={self.target_db}")
+    
+    def get_required_config_keys(self) -> List[str]:
+        """
+        Return a list of required configuration keys for this client.
+        
+        Returns:
+            List of required configuration key names.
+        """
+        # We require source_db and target_db
+        return ["source_db", "target_db"]
+    
+    async def _ensure_session(self):
+        """
+        Ensure that an HTTP session exists, creating it if necessary.
+        """
+        if self._session is None:
+            timeout = aiohttp.ClientTimeout(total=self._config.get("timeout", 30))
+            self._session = aiohttp.ClientSession(timeout=timeout)
+            self._initialized = True
+    
+    async def close(self):
+        """
+        Close the HTTP session when finished.
+        """
+        if self._session is not None:
+            await self._session.close()
+            self._session = None
+            self._initialized = False
+    
+    async def _get_unichem_source_id(self, db_name: str) -> Union[int, str]:
+        """
+        Get the UniChem source ID number for a database name.
+        
+        Args:
+            db_name: The database name to get the ID for.
+            
+        Returns:
+            The UniChem source ID (integer or string for special cases like "inchikey").
+            
+        Raises:
+            ClientExecutionError: If the database name is not supported.
+        """
+        db_name = db_name.upper()
+        if db_name not in self.SOURCE_IDS:
+            supported_sources = ", ".join(self.SOURCE_IDS.keys())
+            error_msg = f"Unsupported database: {db_name}. Supported sources: {supported_sources}"
+            logger.error(error_msg)
+            raise ClientExecutionError(
+                error_msg,
+                client_name=self.__class__.__name__,
+                details={"supported_sources": list(self.SOURCE_IDS.keys())}
             )
-            response.raise_for_status()
-            json_response: Dict[str, Any] = response.json()
-            return json_response
-        except requests.RequestException as e:
-            raise UniChemError(f"Failed to get source information: {e}") from e
-
-    def get_structure_search(self, structure: str, search_type: str) -> Dict[str, Any]:
+        
+        return self.SOURCE_IDS[db_name]
+    
+    async def _perform_request(self, url: str) -> Dict[str, Any]:
         """
-        Search for compounds by structure.
-
-        Parameters
-        ----------
-        structure : str
-            The structure to search for (SMILES, InChI, etc.)
-        search_type : str
-            Type of structure search ('smiles', 'inchi', 'inchikey')
-
-        Returns
-        -------
-        Dict[str, Any]
-            Search results
+        Perform an HTTP request to the UniChem API with retry logic.
+        
+        Args:
+            url: The complete URL to request.
+            
+        Returns:
+            The JSON response parsed as a dictionary.
+            
+        Raises:
+            ClientExecutionError: If the request fails after max_retries.
         """
-        valid_types = {"smiles", "inchi", "inchikey"}
-        if search_type not in valid_types:
-            raise ValueError(f"Invalid search type. Must be one of: {valid_types}")
-
-        try:
-            response = self.session.get(
-                f"{self.config.base_url}/structure/{search_type}/{structure}",
-                timeout=self.config.timeout,
-            )
-            response.raise_for_status()
-            json_response: Dict[str, Any] = response.json()
-            return json_response
-        except requests.RequestException as e:
-            raise UniChemError(f"Structure search failed: {e}") from e
-
-    def format_hmdb_id(self, compound_id: str) -> str:
-        """
-        Format HMDB ID to ensure it follows the HMDB0000000 format.
-        Handles multiple comma-separated IDs by taking the first one.
-
-        Parameters
-        ----------
-        compound_id : str
-            The HMDB identifier to format.
-
-        Returns
-        -------
-        str
-            Properly formatted HMDB ID.
-        """
-        # For test data, bypass validation
-        if compound_id.startswith("TEST"):
-            return compound_id
-
-        # Handle multiple IDs by taking the first one
-        if "," in compound_id:
-            compound_id = compound_id.split(",")[0].strip()
-
-        # Remove any HMDB prefix if present
-        if compound_id.upper().startswith("HMDB"):
-            compound_id = compound_id[4:]
-
-        # Remove any leading zeros
-        compound_id = compound_id.lstrip("0")
-
-        try:
-            # Pad with zeros to make it 7 digits and add HMDB prefix
-            return f"HMDB{int(compound_id):07d}"
-        except ValueError as e:
-            logger.warning(f"Invalid HMDB ID format: {compound_id}")
-            raise ValueError(f"Could not parse HMDB ID: {compound_id}") from e
-
-    def get_compound_info_by_src_id(
-        self, compound_id: str, src_db: str
-    ) -> Dict[str, Any]:
-        """
-        Retrieve compound cross-references from UniChem using the REST API.
-        """
-        if src_db not in self.SOURCE_IDS:
-            raise UniChemError(
-                f"Invalid source database '{src_db}'. Supported sources are: {', '.join(self.SOURCE_IDS.keys())}"
-            )
-
-        # Format HMDB IDs if necessary
-        if src_db == "hmdb":
+        await self._ensure_session()
+        
+        max_retries = self._config.get("max_retries", 3)
+        backoff_factor = self._config.get("backoff_factor", 0.5)
+        
+        for attempt in range(max_retries + 1):
             try:
-                compound_id = self.format_hmdb_id(compound_id)
-            except ValueError as e:
-                logger.warning(f"Failed to format HMDB ID {compound_id}: {e}")
-                return self._get_empty_result()
-
-        try:
-            # Use the REST API endpoint for source compound lookup
-            response = self.session.get(
-                f"{self.config.base_url}/src_compound_id/{self.SOURCE_IDS[src_db]}/{compound_id}",
-                timeout=self.config.timeout,
-            )
-
-            # Handle 404 as "not found" rather than error
-            if response.status_code == 404:
-                logger.debug(f"Compound {compound_id} not found in UniChem")
-                return self._get_empty_result()
-
-            response.raise_for_status()
-
-            try:
-                json_response = response.json()
-                logger.debug(f"Response JSON: {json_response}")
-
-                if json_response is None:
-                    return self._get_empty_result()
-
-                # Handle both list and dict responses
-                if isinstance(json_response, dict):
-                    json_response = [json_response]
-
-                return self._process_compound_result(json_response)
-
-            except requests.exceptions.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON response: {response.text}")
-                raise UniChemError(
-                    f"Invalid JSON response: {e}. Response text: {response.text}"
-                ) from e
-
-        except requests.RequestException as e:
-            logger.error(
-                f"UniChem API request failed for {src_db} ID {compound_id}: {e}"
-            )
-            if hasattr(e, "response") and e.response is not None:
-                logger.error(f"Response status: {e.response.status_code}")
-                logger.error(f"Response text: {e.response.text}")
-            return self._get_empty_result()
-
-    def map_dataframe(
-        self,
-        df: pd.DataFrame,
-        id_columns: Dict[str, str],
-        target_sources: Optional[List[str]] = None,
-        prefix_ids: bool = True,
-    ) -> Tuple[pd.DataFrame, MappingResult]:
-        """Map compound IDs in a DataFrame using UniChem.
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            Input DataFrame containing compound IDs
-        id_columns : Dict[str, str]
-            Mapping of source database names to column names
-            Example: {'hmdb': 'HMDB_ID', 'pubchem': 'PUBCHEM_ID'}
-        target_sources : Optional[List[str]], default=None
-            List of target databases to map to. If None, defaults to ['chembl', 'drugbank']
-        prefix_ids : bool, default=True
-            Whether to prefix mapped IDs with database name (e.g., CHEMBL_ID vs chembl)
-
-        Returns
-        -------
-        Tuple[pd.DataFrame, MappingResult]
-            Tuple of (mapped DataFrame, mapping statistics)
-        """
-        # Validate inputs
-        for source, col in id_columns.items():
-            if source not in self.SOURCE_IDS:
-                raise UniChemError(
-                    f"Invalid source '{source}'. Must be one of: {', '.join(self.SOURCE_IDS.keys())}"
-                )
-            if col not in df.columns:
-                raise ValueError(f"Column '{col}' not found in DataFrame")
-
-        if target_sources is None:
-            target_sources = ["chembl", "drugbank"]
-
-        logger.info(f"Starting ID mapping for {len(df)} rows")
-        logger.info(f"Source columns: {id_columns}")
-        logger.info(f"Target sources: {target_sources}")
-
-        mapped_count = 0
-        total_count = 0
-        mapping_sources: Set[str] = set()
-
-        # Add INCHI column if not present
-        inchi_col_name = "INCHI_ID" if prefix_ids else "inchi"
-        if inchi_col_name not in df.columns:
-            df[inchi_col_name] = None
-
-        # Process each ID column
-        for source, col in id_columns.items():
-            logger.info(f"Processing source {source} from column {col}")
-
-            # Add new columns for mapped IDs
-            for target in target_sources:
-                col_name = f"{target.upper()}_ID" if prefix_ids else target
-                if col_name not in df.columns:
-                    df[col_name] = None
-
-            # Process each row
-            for idx, row in df.iterrows():
-                if pd.isna(row[col]):
-                    logger.debug(f"Skipping row {idx}: empty value")
-                    continue
-
-                total_count += 1
-                compound_id = str(row[col])
-
-                try:
-                    logger.debug(f"Processing row {idx}, {source} ID: {compound_id}")
-                    mappings = self.get_compound_info_by_src_id(compound_id, source)
-
-                    if mappings:
-                        mapped_count += 1
-                        mapping_sources.update(mappings.keys())
-                        logger.debug(f"Found mappings for {compound_id}: {mappings}")
-
-                        # Update DataFrame with mapped IDs
-                        for target in target_sources:
-                            if target in mappings:
-                                col_name = (
-                                    f"{target.upper()}_ID" if prefix_ids else target
-                                )
-                                df.at[idx, col_name] = mappings[target]
-
-                        # Store InChI value if available
-                        if "inchi" in mappings:
-                            df.at[idx, inchi_col_name] = mappings["inchi"]
-
-                        if mapped_count % 100 == 0:
-                            logger.info(f"Processed {mapped_count} compounds...")
+                async with self._session.get(url) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    elif response.status == 404:
+                        # No mappings found
+                        return {}
                     else:
-                        logger.debug(f"No mappings found for {compound_id}")
-
-                except UniChemError as e:
-                    logger.error(
-                        f"Failed to get compound info for {compound_id} from {source}: {e}"
+                        error_text = await response.text()
+                        logger.warning(
+                            f"UniChem API request failed with status {response.status}: {error_text}"
+                        )
+                        
+                        if attempt < max_retries:
+                            # Exponential backoff
+                            delay = backoff_factor * (2 ** attempt)
+                            logger.info(f"Retrying after {delay}s (attempt {attempt + 1}/{max_retries})")
+                            await asyncio.sleep(delay)
+                        else:
+                            raise ClientExecutionError(
+                                f"UniChem API request failed after {max_retries} retries",
+                                client_name=self.__class__.__name__,
+                                details={
+                                    "url": url,
+                                    "status": response.status,
+                                    "response": error_text
+                                }
+                            )
+            except aiohttp.ClientError as e:
+                logger.warning(f"HTTP error during UniChem API request: {str(e)}")
+                if attempt < max_retries:
+                    delay = backoff_factor * (2 ** attempt)
+                    logger.info(f"Retrying after {delay}s (attempt {attempt + 1}/{max_retries})")
+                    await asyncio.sleep(delay)
+                else:
+                    raise ClientExecutionError(
+                        f"HTTP error during UniChem API request after {max_retries} retries: {str(e)}",
+                        client_name=self.__class__.__name__,
+                        details={"url": url, "exception": str(e)}
                     )
-                    continue
-
-        result = MappingResult(
-            mapped_ids=mapped_count,
-            total_ids=total_count,
-            mapping_sources=mapping_sources,
-        )
-
-        logger.info(
-            f"Mapping complete. {result.mapped_ids} out of {result.total_ids} compounds mapped ({result.mapping_rate:.1f}%)"
-        )
-        logger.info(f"Found mappings in: {', '.join(result.mapping_sources)}")
-
-        return df, result
-
-    def map_csv(
-        self,
-        input_path: Union[str, Path],
-        id_columns: Dict[str, str],
-        target_sources: Optional[List[str]] = None,
-        output_path: Optional[Union[str, Path]] = None,
-        prefix_ids: bool = True,
-    ) -> MappingResult:
-        """Map compound IDs in a CSV file using UniChem."""
-        logger.info(f"Reading input CSV from {input_path}")
-
-        # Read CSV with explicit escapechar to handle embedded delimiters
-        df = pd.read_csv(
-            input_path,
-            escapechar="\\",
-            quotechar='"',
-            doublequote=True,
-            keep_default_na=True,
-        )
-
-        # Perform mapping
-        mapped_df, result = self.map_dataframe(
-            df=df,
-            id_columns=id_columns,
-            target_sources=target_sources,
-            prefix_ids=prefix_ids,
-        )
-
-        # Save results with proper quoting
-        if output_path is not None:
-            logger.info(f"Saving mapped data to {output_path}")
-            mapped_df.to_csv(output_path, index=False, quoting=csv.QUOTE_NONNUMERIC)
+    
+    async def _get_compound_mappings(self, compound_id: str, src_db: str) -> Dict[str, List[str]]:
+        """
+        Get mappings for a compound ID from the UniChem API.
+        
+        Args:
+            compound_id: The compound ID to look up.
+            src_db: The source database name.
+            
+        Returns:
+            A dictionary mapping target database names to lists of compound IDs.
+        """
+        # Skip empty IDs
+        if not compound_id or compound_id.strip() == "":
+            return {}
+        
+        # Handle case where the source is specified as InChIKey
+        if src_db.upper() == "INCHIKEY":
+            url = f"{self._config['base_url']}/inchikey/{compound_id}"
         else:
-            logger.info(f"Overwriting input file {input_path}")
-            mapped_df.to_csv(input_path, index=False, quoting=csv.QUOTE_NONNUMERIC)
-
-        return result
-
-    # ... rest of the class implementation ...
-
-
-# Example usage:
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Map compound IDs using UniChem")
-    parser.add_argument("input_file", help="Input CSV file")
-    parser.add_argument("--output", "-o", help="Output CSV file (optional)")
-    parser.add_argument("--hmdb-col", default="HMDB", help="HMDB column name")
-    parser.add_argument("--pubchem-col", default="PUBCHEM", help="PubChem column name")
-
-    args = parser.parse_args()
-
-    client = UniChemClient()
-    client.map_csv(
-        args.input_file,
-        id_columns={"hmdb": args.hmdb_col, "pubchem": args.pubchem_col},
-        output_path=args.output,
-    )
+            # Get the numeric source ID
+            src_id = await self._get_unichem_source_id(src_db)
+            url = f"{self._config['base_url']}/src_compound_id/{compound_id}/src_id/{src_id}"
+        
+        try:
+            result = await self._perform_request(url)
+            
+            # Handle the response format, which can vary based on the endpoint
+            mappings = {}
+            
+            if not result or (isinstance(result, list) and len(result) == 0):
+                return {}
+            
+            # InChIKey response has a different format
+            if src_db.upper() == "INCHIKEY":
+                # Extract mappings from the response
+                for item in result:
+                    src_name = item.get("src_name", "").upper()
+                    compound_id = item.get("src_compound_id", "")
+                    if src_name and compound_id:
+                        if src_name not in mappings:
+                            mappings[src_name] = []
+                        
+                        if compound_id not in mappings[src_name]:
+                            mappings[src_name].append(compound_id)
+            else:
+                # Standard mappings response
+                for item in result:
+                    src_name = item.get("src_name", "").upper()
+                    compound_id = item.get("src_compound_id", "")
+                    if src_name and compound_id:
+                        if src_name not in mappings:
+                            mappings[src_name] = []
+                        
+                        if compound_id not in mappings[src_name]:
+                            mappings[src_name].append(compound_id)
+            
+            return mappings
+            
+        except ClientExecutionError:
+            # Just re-raise the original error
+            raise
+        except Exception as e:
+            # Wrap unexpected errors
+            logger.error(f"Unexpected error in _get_compound_mappings: {str(e)}")
+            raise ClientExecutionError(
+                f"Unexpected error in UniChem API request: {str(e)}",
+                client_name=self.__class__.__name__,
+                details={"compound_id": compound_id, "src_db": src_db, "exception": str(e)}
+            )
+    
+    async def map_identifiers(
+        self, identifiers: List[str], config: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Tuple[Optional[List[str]], Optional[str]]]:
+        """
+        Map metabolite identifiers from the source database to the target database.
+        
+        Args:
+            identifiers: List of source compound identifiers to map.
+            config: Optional per-call configuration that may override instance config.
+                   Supported keys:
+                   - source_db: Override the source database for this specific call
+                   - target_db: Override the target database for this specific call
+                   
+        Returns:
+            A dictionary mapping each input identifier to a tuple containing:
+            - The first element is a list of mapped target identifiers or None if mapping failed
+            - The second element is always None for this client (no component ID needed)
+        """
+        if not identifiers:
+            return {}
+        
+        # Apply any per-call config overrides
+        call_config = self._config.copy()
+        if config:
+            call_config.update(config)
+        
+        # Get source and target DB (use instance values if not overridden)
+        source_db = call_config.get("source_db", self.source_db)
+        target_db = call_config.get("target_db", self.target_db)
+        
+        if not source_db or not target_db:
+            raise ClientExecutionError(
+                "Source database or target database not specified",
+                client_name=self.__class__.__name__,
+                details={"source_db": source_db, "target_db": target_db}
+            )
+        
+        logger.info(f"Mapping {len(identifiers)} identifiers from {source_db} to {target_db}")
+        
+        # Create results dictionary
+        results = {}
+        
+        # Check cache first for all identifiers
+        cache_results = {}
+        for identifier in identifiers:
+            cached_result = await self._get_from_cache(identifier)
+            if cached_result is not None:
+                cache_results[identifier] = cached_result
+        
+        # Identify which identifiers need to be looked up
+        identifiers_to_lookup = [id for id in identifiers if id not in cache_results]
+        
+        if identifiers_to_lookup:
+            logger.info(f"Looking up {len(identifiers_to_lookup)} identifiers not found in cache")
+            
+            # Process in chunks to avoid overwhelming the API
+            chunk_size = 20
+            for i in range(0, len(identifiers_to_lookup), chunk_size):
+                chunk = identifiers_to_lookup[i:i+chunk_size]
+                chunk_results = {}
+                
+                # Process each identifier in the chunk concurrently
+                tasks = [self._get_compound_mappings(identifier, source_db) for identifier in chunk]
+                chunk_mappings = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                # Process the results
+                for j, identifier in enumerate(chunk):
+                    mapping_result = chunk_mappings[j]
+                    
+                    # Handle exceptions
+                    if isinstance(mapping_result, Exception):
+                        logger.error(f"Error mapping {identifier}: {str(mapping_result)}")
+                        chunk_results[identifier] = (None, None)
+                        continue
+                    
+                    # Extract target IDs if they exist
+                    target_ids = mapping_result.get(target_db, []) if mapping_result else []
+                    
+                    if target_ids:
+                        logger.debug(f"Mapped {identifier} to {len(target_ids)} {target_db} IDs: {target_ids}")
+                        chunk_results[identifier] = (target_ids, None)
+                    else:
+                        logger.debug(f"No {target_db} mapping found for {identifier}")
+                        chunk_results[identifier] = (None, None)
+                
+                # Update cache and results with this chunk
+                await self._add_many_to_cache(chunk_results)
+                results.update(chunk_results)
+                
+                # Small delay to avoid overwhelming the API
+                await asyncio.sleep(0.1)
+        
+        # Add cached results to final results
+        results.update(cache_results)
+        
+        return results
+    
+    async def reverse_map_identifiers(
+        self, identifiers: List[str], config: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Tuple[Optional[List[str]], Optional[str]]]:
+        """
+        Map metabolite identifiers in the reverse direction (target DB to source DB).
+        
+        This implementation simply swaps the source and target databases and calls
+        map_identifiers, which matches the behavior expected by MappingExecutor.
+        
+        Args:
+            identifiers: List of target identifiers to map back to source identifiers.
+            config: Optional per-call configuration that may override instance config.
+                   
+        Returns:
+            A dictionary mapping each input identifier to a tuple containing:
+            - The first element is a list of mapped source identifiers or None if mapping failed
+            - The second element is always None for this client (no component ID needed)
+        """
+        if not identifiers:
+            return {}
+        
+        # Apply any per-call config overrides
+        call_config = self._config.copy()
+        if config:
+            call_config.update(config)
+        
+        # Swap source and target for reverse mapping
+        source_db = call_config.get("target_db", self.target_db)
+        target_db = call_config.get("source_db", self.source_db)
+        
+        # Create a config for the forward mapping method with swapped DBs
+        reverse_config = call_config.copy()
+        reverse_config["source_db"] = source_db
+        reverse_config["target_db"] = target_db
+        
+        logger.info(f"Reverse mapping {len(identifiers)} identifiers from {source_db} to {target_db}")
+        
+        # Use the forward mapping implementation with swapped source/target
+        return await self.map_identifiers(identifiers, config=reverse_config)
