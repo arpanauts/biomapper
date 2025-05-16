@@ -1036,9 +1036,12 @@ def perform_bidirectional_validation(
         if pd.notna(source_id) and source_id_counts.get(source_id, 0) > 1:
             reconciled_df.at[idx, one_to_many_source_col] = True
 
-        # Set one-to-many target flag if this target ID appears multiple times
+        # Set one-to-many target flag if this target ID is mapped by multiple distinct source entities
         if pd.notna(target_id) and target_id_counts.get(target_id, 0) > 1:
-            reconciled_df.at[idx, one_to_many_target_col] = True
+            # Get all the source IDs that map to this target ID
+            source_ids_for_target = reconciled_df[reconciled_df[target_id_col] == target_id][source_id_col].dropna().unique()
+            # Only set the flag to TRUE if there are multiple distinct source IDs
+            reconciled_df.at[idx, one_to_many_target_col] = len(source_ids_for_target) > 1
     
     # Mark canonical mappings (one per source entity, highest confidence)
     # First reset all canonical flags to ensure exactly one canonical mapping per source entity

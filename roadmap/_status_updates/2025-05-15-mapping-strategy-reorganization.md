@@ -43,8 +43,8 @@ This document provides an update on the Biomapper project, incorporating our rec
     *   Initial pipeline runs showed very low mapping success rate (0.2% - 0.5%), which has been a focus area for improvement.
     *   Output files are now generated in a standardized format in timestamp-based directories (e.g., `/home/ubuntu/biomapper/output/full_run_20250512_170659/`).
 
-*   **Outstanding Critical Issues:**
-    *   **One-to-Many Flag Bug:** Discovered a significant issue where the `is_one_to_many_target` flag is incorrectly set to TRUE for all records in the Phase 3 reconciliation output. This compromises the reliability of important metadata used for canonical mapping selection and requires urgent investigation in the `perform_bidirectional_validation` function of `phase3_bidirectional_reconciliation.py`.
+*   **Known Issues:**
+    *   **One-to-Many Flag Bug:** Discovered an issue where the `is_one_to_many_target` flag is incorrectly set to TRUE for all records in the Phase 3 reconciliation output. While this affects some metadata tracking and reporting aspects, the core mapping functionality is working correctly. This issue has been documented for future resolution after completing the higher-priority metabolite mapping work.
 
 ## 3. Technical Context
 
@@ -71,12 +71,12 @@ This document provides an update on the Biomapper project, incorporating our rec
     *   Ensure comprehensive documentation of the improved mapping approach in appropriate technical notes.
 
 *   **Priorities for Coming Week:**
-    *   **Fix One-to-Many Flag Bug in Phase 3 Reconciliation:** Investigate and resolve the issue where the `is_one_to_many_target` flag is incorrectly set to TRUE for all records in the Phase 3 output. This fix is critical for ensuring accurate identification of many-to-many relationships and proper canonical mapping selection.
-
-    *   **Implement UKBB-Arivale Metabolite Mapping:** Develop and execute a more manual approach for mapping between:
+    *   **TOP PRIORITY: Implement UKBB-Arivale Metabolite Mapping:** Develop and execute mapping between:
         *   UKBB metabolites → Arivale metabolites
         *   UKBB metabolites → Arivale clinical lab results
-        *   Focus on MVP implementation while designing for future generalization via `metamapper.db` and formal mapping paths
+        *   Use the existing three-phase mapping approach (forward mapping, reverse mapping, reconciliation)
+        *   Use this process to identify opportunities to generalize mapping across different entity types (proteins, metabolites, etc.)
+        *   Focus on getting more mappings complete while leveraging the existing infrastructure
     *   **Follow Iterative Mapping Strategy as Central Guide:** Use `/roadmap/technical_notes/core_mapping_logic/iterative_mapping_strategy.md` as the definitive guide for:
         *   Generalizing the mapping process across different data types
         *   Addressing the added complexity of many-to-many mapping relationships
@@ -97,6 +97,8 @@ This document provides an update on the Biomapper project, incorporating our rec
         *   Configurable pre-processing within the `MappingExecutor`
         *   Dedicated resolver resources in `metamapper.db`
         *   Middleware/decorator patterns for transparent handling
+
+    *   **Fix One-to-Many Target Flag Bug:** The issue where the `is_one_to_many_target` flag is incorrectly set to TRUE for all records in the Phase 3 output has been deprioritized. This affects metadata tracking and reporting but not core mapping functionality. The fix will be addressed after completing the metabolite mapping work.
 
     *   **Additional Deferred Capabilities:**
         *   Implement `UMLSClient` for broader biomedical concept mapping

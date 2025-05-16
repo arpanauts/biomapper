@@ -4,27 +4,21 @@
 
 This document outlines a refined, iterative strategy for mapping entities between two endpoints within the Biomapper framework. The primary goal is to maximize the number of successful mappings by systematically leveraging both the primary shared ontology type and available secondary ontology types present in the source endpoint data.
 
-This strategy moves beyond simply finding the first available `MappingPath` and instead implements a more robust, multi-step process orchestrated by the `MappingExecutor`. The approach is designed to be entity-agnostic, supporting mappings for proteins, metabolites, genes, and other biological entities using the same underlying framework.
+This strategy moves beyond simply finding the first available `MappingPath` and instead implements a more robust, multi-step process orchestrated by the `MappingExecutor`.
 
 ## Core Concepts
 
-*   **Endpoints:** Data sources or targets (e.g., `ukbb_protein`, `arivale_protein`, `ukbb_metabolite`, `arivale_metabolite`).
-*   **EndpointRelationship:** Defines the connection between a source and target endpoint and specifies the **Primary Shared Ontology Type** preferred for mapping between them (via `OntologyPreference`). Examples:
-    * For `ukbb_protein` → `arivale_protein`, the preferred shared type might be `UNIPROTKB_AC`
-    * For `ukbb_metabolite` → `arivale_metabolite`, the preferred shared type might be `PUBCHEM_CID` or `CHEBI_ID`
+*   **Endpoints:** Data sources or targets (e.g., `ukbb_protein`, `arivale_protein`).
+*   **EndpointRelationship:** Defines the connection between a source and target endpoint and specifies the **Primary Shared Ontology Type** preferred for mapping between them (via `OntologyPreference`). Example: For `ukbb_protein` -> `arivale_protein`, the preferred shared type is `UNIPROTKB_AC`.
 *   **Primary Ontology Type:** The identifier type designated as the preferred one for an endpoint (via `OntologyPreference`, often related to the `EndpointRelationship` preference).
-*   **Secondary Ontology Types:** Other identifier types available for entities within an endpoint. Examples:
-    * For proteins: `GENE_NAME`, `ENSEMBL_PROTEIN`, `ENSEMBL_GENE`
-    * For metabolites: `METABOLITE_NAME`, `INCHI_KEY`, `SMILES`, `KEGG_ID`, `HMDB_ID`
+*   **Secondary Ontology Types:** Other identifier types available for entities within an endpoint (e.g., `GENE_NAME`, `ENSEMBL_PROTEIN`, `ENSEMBL_GENE`) as defined in `EndpointPropertyConfig`.
 *   **Atomic Mapping Paths:** Individual `MappingPath` definitions in `populate_metamapper_db.py` that represent a single conversion step (e.g., `UNIPROTKB_AC` -> `ARIVALE_PROTEIN_ID`, `GENE_NAME` -> `UNIPROTKB_AC`, `ENSEMBL_PROTEIN` -> `UNIPROTKB_AC`).
 
 ## The Iterative Mapping Strategy
 
 The strategy is executed by the `MappingExecutor` when tasked with mapping entities from a source endpoint to a target endpoint, based on their defined `EndpointRelationship`.
 
-The following examples illustrate how this strategy applies to different entity types:
-
-### Protein Mapping Example: `UKBB_Protein` to `Arivale_Protein`
+**Example:** Mapping Source `UKBB_Protein` to Target `Arivale_Protein`.
 
 1.  **Identify Primary Shared Ontology:** The `MappingExecutor` checks the `EndpointRelationship` and associated `OntologyPreference` to determine the preferred shared ontology type. (e.g., `UNIPROTKB_AC`).
 
@@ -116,17 +110,10 @@ The current implementation supports mapping between UKBB Protein and Arivale Pro
   - `ARIVALE_PROTEIN_ID` (extracted from "name" column, used primarily for reverse lookups)
 
 **Mapping Paths:**
-- Protein Direct Path: `UNIPROTKB_AC` → `ARIVALE_PROTEIN_ID` (via `arivale_lookup` resource)
-- Protein Secondary Conversion Paths:
-  - `GENE_NAME` → `UNIPROTKB_AC` (via `uniprot_name` resource using UniProt Name Search API)
-  - `ENSEMBL_PROTEIN` → `UNIPROTKB_AC` (via `uniprot_ensembl_protein_mapping` resource)
-
-- Metabolite Direct Path: `PUBCHEM_CID` → `ARIVALE_METABOLITE_ID` (via hypothetical `arivale_metabolite_lookup` resource)
-- Metabolite Secondary Conversion Paths:
-  - `METABOLITE_NAME` → `PUBCHEM_CID` (via hypothetical `pubchem_name` resource)
-  - `INCHI_KEY` → `PUBCHEM_CID` (via `unichem` resource)
-  - `CHEBI_ID` → `PUBCHEM_CID` (via `unichem` resource)
-  - `HMDB_ID` → `PUBCHEM_CID` (via `unichem` resource)
+- Direct Path: `UNIPROTKB_AC` -> `ARIVALE_PROTEIN_ID` (via `arivale_lookup` resource)
+- Secondary Conversion Paths:
+  - `GENE_NAME` -> `UNIPROTKB_AC` (via `uniprot_name` resource using UniProt Name Search API)
+  - `ENSEMBL_PROTEIN` -> `UNIPROTKB_AC` (via `uniprot_ensembl_protein_mapping` resource)
   - `ENSEMBL_GENE` -> `UNIPROTKB_AC` (via `uniprot_idmapping` resource)
 
 **Ontology Preferences:**
@@ -135,29 +122,11 @@ The current implementation supports mapping between UKBB Protein and Arivale Pro
 
 These configurations enable the `MappingExecutor` to attempt mappings using the preferred ontology first, followed by secondary ontologies in order of priority if the primary mapping fails.
 
-### Metabolite Mapping Example: `UKBB_Metabolite` to `Arivale_Metabolite`
-
-The same iterative strategy applies to metabolite mapping:
-
-1. **Identify Primary Shared Ontology:** Determine the preferred shared ontology for metabolites (e.g., `PUBCHEM_CID` or `CHEBI_ID`).
-
-2. **Attempt Primary Mapping:** Find UKBB metabolites with existing primary IDs and map directly to Arivale metabolites.
-
-3. **Identify Unmapped Entities & Secondary Types:** For unmapped metabolites, identify available secondary identifiers like `METABOLITE_NAME`, `INCHI_KEY`, `SMILES`, etc.
-
-4. **Attempt Secondary → Primary Conversion:** Use prioritized paths like `METABOLITE_NAME` → `PUBCHEM_CID`, `INCHI_KEY` → `PUBCHEM_CID`, etc., to derive primary identifiers.
-
-5. **Re-attempt Primary Mapping:** Use newly derived primary identifiers to map to Arivale metabolites.
-
-6. **Bidirectional Validation:** Verify mappings by checking if target metabolites map back to original sources.
-
-7. **Advanced Fallback Approaches:** For remaining unmapped metabolites, employ specialized fallback mechanisms like Translator Name Resolution, UMLS concept mapping, or RAG-based approaches.
-
 ## Pseudo-code Illustration (`MappingExecutor` Logic Snippet)
 
 ```python
 # Conceptual pseudo-code within MappingExecutor.map(source_endpoint, target_endpoint, relationship)
-{{ ... }}
+
 def execute_iterative_mapping(source_entities, source_endpoint, target_endpoint, relationship, validate_bidirectional=False):
     primary_shared_ontology = get_primary_shared_ontology(relationship)
     source_preferences = get_ontology_preferences(source_endpoint)
@@ -298,25 +267,9 @@ def reconcile_bidirectional_mappings(forward_mappings, reverse_results):
 ## Future Considerations
 
 *   **Endpoints without a Shared Primary Ontology:** Developing strategies for mapping between endpoints where the `EndpointRelationship` does not identify a single, direct primary ontology type shared between them. This might involve multi-hop paths or leveraging intermediate ontologies, likely still guided by `OntologyPreference`.
-
-*   **Advanced Fallback Strategies:** Implementing more sophisticated fallback mechanisms when both direct and secondary-conversion mapping attempts fail:
-    * **For Proteins:** Leveraging specialized protein databases or orthology resources.
-    * **For Metabolites:** Using RAG-based approaches with domain-specific vector databases, Translator Name Resolution service, or UMLS concept mapping.
-    * **Confidence-Based Integration:** Developing methods to integrate results from multiple fallback approaches with appropriate confidence scoring.
-
+*   **Advanced Fallback Strategies:** Implementing more sophisticated fallback mechanisms (e.g., RAG-based approaches for certain data types like metabolites or clinical labs) when both direct and secondary-conversion mapping attempts fail.
 *   **Performance Optimization:** Refining the execution logic for large datasets, potentially including batching API calls or optimizing database lookups for path execution.
-
 *   **Enhanced Metadata Tracking:** Further developing the metadata tracking capabilities implemented in `EntityMapping` (`confidence_score`, `hop_count`, `mapping_direction`, `mapping_path_details`) to provide more detailed provenance information for complex mappings.
-
 *   **Client-Specific Reverse Mappings:** Implementing specialized `reverse_map_identifiers` methods in mapping clients where the current generic approach of inverting forward mappings may not be optimal.
-    * **Metabolite Complexity:** Particularly important for metabolites where different conventions for primary/alternative names exist between resources.
-
-*   **Cross-Entity Mapping Framework:** Developing a unified approach that enables:
-    * **Consistent Interface:** Same core functions work across protein, metabolite, and gene mappings.
-    * **Entity-Specific Optimizations:** Custom logic where needed while maintaining the shared iterative strategy.
-    * **Specialized Fallback Integration:** Entity-appropriate fallback mechanisms that feed into the same reconciliation framework.
-
+*   **Compound/Metabolite Support:** Extending the current protein mapping framework to support compound and metabolite identifiers with additional resources like UMLS for text-based entity mapping.
 *   **Advanced Bidirectional Validation:** Building on the current bidirectional validation implementation to provide more sophisticated validation metrics and confidence adjustments based on validation status.
-    * **Entity-Specific Confidence Models:** Different weight factors for proteins vs. metabolites based on their mapping characteristics.
-
-*   **Tiered Output Approach:** Developing a standardized way to represent results from different mapping approaches (primary mapping vs. fallback mechanisms) with clear provenance and confidence indicators.
