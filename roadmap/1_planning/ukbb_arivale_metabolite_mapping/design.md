@@ -4,6 +4,20 @@
 
 This document details the architectural design and implementation approach for the UKBB-Arivale metabolite mapping feature. The design builds upon the existing protein mapping framework while introducing metabolite-specific enhancements and fallback mechanisms.
 
+### MVP Mapping Goals
+
+The specific Minimum Viable Product (MVP) goals for metabolite mapping involve the following bidirectional scenarios:
+
+1.  **UKBB NMR Metabolites to Arivale Metabolomics Data:**
+    *   Source: `/procedure/data/local_data/HPP_PHENOAI_METADATA/UKBB_NMR_Meta.tsv`
+    *   Target: `/procedure/data/local_data/ARIVALE_SNAPSHOTS/metabolomics_metadata.tsv`
+
+2.  **Arivale Chemistries (Clinical Labs) to UKBB NMR Metabolites:**
+    *   Source: `/procedure/data/local_data/ARIVALE_SNAPSHOTS/chemistries_metadata.tsv`
+    *   Target: `/procedure/data/local_data/HPP_PHENOAI_METADATA/UKBB_NMR_Meta.tsv`
+
+It's important to note that the UKBB NMR metadata is being mapped to two distinct Arivale datasets (metabolomics and chemistries/clinical labs). This reflects a key challenge in mapping UKBB data to other heterogeneous datasets and is an intentional aspect of the MVP.
+
 ## Architectural Principles
 
 1. **Entity-Agnostic Core**: Maintain a single iterative mapping strategy that works across entity types
@@ -66,7 +80,7 @@ SMILES_COLUMN = "smiles"
 
 # Fallback mechanism configuration
 ENABLE_NAME_RESOLVER = True
-ENABLE_UMLS_MAPPING = True
+ENABLE_UMLS_MAPPING = False  # Implementation deferred as of 2025-05-22
 ENABLE_RAG_MAPPING = True
 CONFIDENCE_THRESHOLD = 0.7  # Minimum confidence to include in primary output
 ```
@@ -124,7 +138,7 @@ Maps concepts through UMLS:
 
 ```python
 class UMLSClient(MappingClient):
-    """Client for concept mapping via UMLS."""
+    """Client for concept mapping via UMLS. (NOTE: Implementation deferred as of 2025-05-22)"""
     
     def __init__(self, api_key=None):
         self.api_key = api_key or os.environ.get("UMLS_API_KEY")
@@ -150,7 +164,7 @@ Implements vector similarity search for mapping entities:
 
 ```python
 class RAGMappingClient(MappingClient):
-    """Client for RAG-based mapping using vector similarity."""
+    """Client for RAG-based mapping using vector similarity. (NOTE: Development prioritized as of 2025-05-22)"""
     
     def __init__(self, vector_db_path=None, model_name="BAAI/bge-small-en-v1.5"):
         self.vector_db_path = vector_db_path

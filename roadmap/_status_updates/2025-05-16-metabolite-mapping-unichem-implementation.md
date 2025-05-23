@@ -78,13 +78,17 @@
 * **Priorities for Coming Week:**
   * **Complete Metabolite Client Development:**
     * Implement `TranslatorNameResolverClient` for name resolution
-    * Implement `UMLSClient` for concept mapping
+    * Implement `UMLSClient` for concept mapping (DEFERRED - see Longer-Term Tasks)
     * Create unit tests for each client
 
   * **Develop Metabolite Mapping Scripts:**
     * Create `/home/ubuntu/biomapper/scripts/map_ukbb_metabolites_to_arivale_metabolites.py`
     * Create `/home/ubuntu/biomapper/scripts/map_ukbb_metabolites_to_arivale_clinlabs.py`
     * Incorporate the newly developed clients into these scripts
+
+  * **Begin RAG Approach Development:**
+    * Start implementation of `RAGMappingClient`.
+    * Investigate and set up Qdrant/FastEmbed for vector database.
 
   * **Enhance Test Coverage:**
     * Develop integration tests for metabolite mapping end-to-end
@@ -95,10 +99,10 @@
     * Document the UniChem integration and usage patterns
 
 * **Longer-Term Tasks:**
-  * Implement RAG-based approach with Qdrant/FastEmbed
   * Design and implement the FallbackOrchestrator class
   * Implement enhanced confidence scoring for metabolites
   * Extend metadata population in `populate_metamapper.db.py` for metabolite support
+  * Implement `UMLSClient` for concept mapping (DEFERRED from earlier priorities)
 
 ## 5. Open Questions & Considerations
 
