@@ -2,6 +2,24 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
 
+class MappingResultItem(BaseModel):
+    """Schema for individual mapping result with confidence scores."""
+    
+    identifier: str
+    target_ids: Optional[List[str]] = None
+    component_id: Optional[str] = None
+    confidence: Optional[float] = None
+    qdrant_similarity_score: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class MappingOutput(BaseModel):
+    """Schema for complete mapping output."""
+    
+    results: List[MappingResultItem]
+    metadata: Optional[Dict[str, Any]] = None
+
+
 class CompoundDocument(BaseModel):
     """Schema for compound documents in vector store."""
 

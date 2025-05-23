@@ -9,6 +9,7 @@ from qdrant_client.models import Distance, VectorParams, PointStruct
 from sentence_transformers import SentenceTransformer
 
 from biomapper.mapping.clients.base_client import BaseMappingClient
+from biomapper.schemas.rag_schema import MappingResultItem, MappingOutput
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,10 @@ class PubChemRAGMappingClient(BaseMappingClient):
     This client uses semantic search over PubChem compound embeddings to resolve
     metabolite names to PubChem CIDs. It leverages the pre-filtered biologically
     relevant subset of PubChem compounds indexed in Qdrant.
+    
+    Attributes:
+        last_mapping_output: Stores the detailed MappingOutput from the most recent
+                           map_identifiers call, including Qdrant similarity scores.
     """
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -43,6 +48,9 @@ class PubChemRAGMappingClient(BaseMappingClient):
         self.qdrant_client = None
         self.embedding_model = None
         self._initialize_clients()
+        
+        # Store detailed mapping results
+        self.last_mapping_output: Optional[MappingOutput] = None
     
     def get_required_config_keys(self) -> List[str]:
         """Return required configuration keys."""
@@ -74,19 +82,35 @@ class PubChemRAGMappingClient(BaseMappingClient):
         """
         Map metabolite names to PubChem CIDs using semantic search.
         
+        This method performs vector search in Qdrant and captures similarity scores.
+        The detailed results including Qdrant similarity scores are stored in 
+        self.last_mapping_output.
+        
         Args:
             identifiers: List of metabolite names to map
             config: Optional per-call configuration
         
         Returns:
             Dictionary mapping input identifiers to (target_identifiers, component_id) tuples
+            Note: The component_id field contains the best similarity score as a string
+                  for backward compatibility.
         """
         results = {}
+        mapping_result_items = []
         
         for identifier in identifiers:
             try:
                 if not identifier or not identifier.strip():
                     results[identifier] = self.format_result(None, None)
+                    mapping_result_items.append(
+                        MappingResultItem(
+                            identifier=identifier,
+                            target_ids=None,
+                            component_id=None,
+                            confidence=None,
+                            qdrant_similarity_score=None
+                        )
+                    )
                     continue
                 
                 # Generate embedding for the query
@@ -101,25 +125,89 @@ class PubChemRAGMappingClient(BaseMappingClient):
                 )
                 
                 if search_results:
-                    # Extract CIDs from results
+                    # Extract CIDs and scores from results
                     target_cids = []
+                    best_score = 0.0
+                    scores = []
+                    
                     for result in search_results:
                         cid = result.payload.get("cid")
                         if cid:
                             target_cids.append(f"PUBCHEM:{cid}")
+                            scores.append(result.score)
+                            if result.score > best_score:
+                                best_score = result.score
                     
                     if target_cids:
-                        results[identifier] = self.format_result(target_cids, None)
-                        logger.info(f"Found {len(target_cids)} mappings for '{identifier}' (top score: {search_results[0].score:.3f})")
+                        # Store best score as string in component_id for backward compatibility
+                        results[identifier] = self.format_result(target_cids, str(best_score))
+                        
+                        # Create detailed result item
+                        mapping_result_items.append(
+                            MappingResultItem(
+                                identifier=identifier,
+                                target_ids=target_cids,
+                                component_id=str(best_score),
+                                confidence=best_score,  # Use best score as confidence
+                                qdrant_similarity_score=best_score,
+                                metadata={
+                                    "all_scores": scores,
+                                    "distance_metric": "Cosine",
+                                    "score_interpretation": "Higher scores indicate better similarity (cosine distance)"
+                                }
+                            )
+                        )
+                        
+                        logger.info(f"Found {len(target_cids)} mappings for '{identifier}' (top score: {best_score:.3f})")
                     else:
                         results[identifier] = self.format_result(None, None)
+                        mapping_result_items.append(
+                            MappingResultItem(
+                                identifier=identifier,
+                                target_ids=None,
+                                component_id=None,
+                                confidence=None,
+                                qdrant_similarity_score=None
+                            )
+                        )
                 else:
                     results[identifier] = self.format_result(None, None)
+                    mapping_result_items.append(
+                        MappingResultItem(
+                            identifier=identifier,
+                            target_ids=None,
+                            component_id=None,
+                            confidence=None,
+                            qdrant_similarity_score=None
+                        )
+                    )
                     logger.info(f"No mappings found for '{identifier}'")
                     
             except Exception as e:
                 logger.error(f"Error mapping '{identifier}': {e}")
                 results[identifier] = self.format_result(None, None)
+                mapping_result_items.append(
+                    MappingResultItem(
+                        identifier=identifier,
+                        target_ids=None,
+                        component_id=None,
+                        confidence=None,
+                        qdrant_similarity_score=None,
+                        metadata={"error": str(e)}
+                    )
+                )
+        
+        # Store detailed results
+        self.last_mapping_output = MappingOutput(
+            results=mapping_result_items,
+            metadata={
+                "collection": self.collection_name,
+                "embedding_model": self.embedding_model_name,
+                "distance_metric": "Cosine",
+                "top_k": self.top_k,
+                "score_threshold": self.score_threshold
+            }
+        )
         
         return results
     
@@ -132,6 +220,16 @@ class PubChemRAGMappingClient(BaseMappingClient):
         Reverse mapping is not supported for RAG-based semantic search.
         """
         raise NotImplementedError("PubChemRAGMappingClient does not support reverse mapping")
+    
+    def get_last_mapping_output(self) -> Optional[MappingOutput]:
+        """
+        Retrieve the detailed mapping output from the most recent map_identifiers call.
+        
+        Returns:
+            MappingOutput with detailed results including Qdrant similarity scores,
+            or None if no mapping has been performed yet.
+        """
+        return self.last_mapping_output
     
     def health_check(self) -> Dict[str, Any]:
         """
