@@ -220,6 +220,13 @@ data/output/
 data/test_data/
 data/direct_mapping_summary.txt
 data/verified_mapping_summary.txt
+*.pkl
+*.zip
+*.tar.gz
+*.tsv.gz
+*.csv.gz
+*.sdf.gz
+*.sdf
 
 # Log files
 debug_output.txt
@@ -234,3 +241,18 @@ temp_sample_data/
 
 **/.claude/settings.local.json
 #CLAUDE.md
+
+# Qdrant vector database storage (large binary data)
+docker/qdrant/qdrant_storage/
+data/qdrant_storage/
+
+# Qdrant backups and snapshots
+*.qdrant.tar.gz
+*_snapshot.tar
+qdrant_storage_backup.tar.gz
+
+# Large data files for PubChem embeddings
+data/filtered_embeddings/
+data/bio_relevant_cids*.txt
+data/filtering_log.txt
+data/qdrant_indexing_log.txt
