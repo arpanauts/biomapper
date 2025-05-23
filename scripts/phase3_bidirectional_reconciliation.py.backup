@@ -576,9 +576,8 @@ def perform_bidirectional_validation(
                 unique_sorted_arivale_ids = sorted(set(all_forward_arivale_ids))
                 reconciled_df.at[idx, ALL_FORWARD_MAPPED_TARGETS_COL] = ";".join(unique_sorted_arivale_ids)
 
-                # Set the one_to_many_source_col flag if there are multiple unique target IDs
-                # FIX: A source mapping to multiple targets indicates one_to_many_source
-                reconciled_df.at[idx, one_to_many_source_col] = len(unique_sorted_arivale_ids) > 1
+                # Set the one_to_many_target_col flag if there are multiple unique target IDs
+                reconciled_df.at[idx, one_to_many_target_col] = len(unique_sorted_arivale_ids) > 1
 
         # Case 1: No forward mapping found
         if pd.isna(arivale_id):
@@ -605,9 +604,8 @@ def perform_bidirectional_validation(
                 unique_sorted_ukbb_ids = sorted(set(all_reverse_ukbb_ids))
                 reconciled_df.at[idx, ALL_REVERSE_MAPPED_SOURCES_COL] = ";".join(unique_sorted_ukbb_ids)
 
-                # Set the one_to_many_target_col flag if there are multiple unique source IDs
-                # FIX: Multiple sources mapping to this target indicates one_to_many_target
-                reconciled_df.at[idx, one_to_many_target_col] = len(unique_sorted_ukbb_ids) > 1
+                # Set the one_to_many_source_col flag if there are multiple unique source IDs
+                reconciled_df.at[idx, one_to_many_source_col] = len(unique_sorted_ukbb_ids) > 1
 
             # Initialize to track if we found a matching reverse mapping
             is_bidirectional_match = False
@@ -938,9 +936,8 @@ def perform_bidirectional_validation(
                     unique_sorted_ukbb_ids = sorted(set(all_reverse_ukbb_ids))
                     new_row[ALL_REVERSE_MAPPED_SOURCES_COL] = ";".join(unique_sorted_ukbb_ids)
 
-                    # Set the one_to_many_target_col flag if there are multiple unique source IDs
-                    # FIX: Multiple sources mapping to this target indicates one_to_many_target
-                    new_row[one_to_many_target_col] = len(unique_sorted_ukbb_ids) > 1
+                    # Set the one_to_many_source_col flag if there are multiple unique source IDs
+                    new_row[one_to_many_source_col] = len(unique_sorted_ukbb_ids) > 1
                 
                 reverse_only_rows.append(new_row)
                 validation_stats['VALIDATED_REVERSE_SUCCESSFUL'] += 1
@@ -1009,23 +1006,21 @@ def perform_bidirectional_validation(
     # Update one-to-many flags based on the ALL_*_COL columns
     # For rows where one-to-many flags haven't been set yet
 
-    # For one_to_many_source_col (sources that map to multiple targets)
-    # FIX: This checks if a SOURCE has multiple TARGETS, so it should set one_to_many_source_col
-    for idx, row in reconciled_df.iterrows():
-        # Only update if not already set
-        if not row[one_to_many_source_col]:
-            # Check if ALL_FORWARD_MAPPED_TARGETS_COL has multiple values
-            if pd.notna(row[ALL_FORWARD_MAPPED_TARGETS_COL]) and ";" in row[ALL_FORWARD_MAPPED_TARGETS_COL]:
-                reconciled_df.at[idx, one_to_many_source_col] = True
-
-    # For one_to_many_target_col (targets that are mapped by multiple sources)
-    # FIX: This checks if a TARGET has multiple SOURCES, so it should set one_to_many_target_col
+    # For one_to_many_target_col (rows that have multiple target mappings)
     for idx, row in reconciled_df.iterrows():
         # Only update if not already set
         if not row[one_to_many_target_col]:
+            # Check if ALL_FORWARD_MAPPED_TARGETS_COL has multiple values
+            if pd.notna(row[ALL_FORWARD_MAPPED_TARGETS_COL]) and ";" in row[ALL_FORWARD_MAPPED_TARGETS_COL]:
+                reconciled_df.at[idx, one_to_many_target_col] = True
+
+    # For one_to_many_source_col (rows that have multiple source mappings)
+    for idx, row in reconciled_df.iterrows():
+        # Only update if not already set
+        if not row[one_to_many_source_col]:
             # Check if ALL_REVERSE_MAPPED_SOURCES_COL has multiple values
             if pd.notna(row[ALL_REVERSE_MAPPED_SOURCES_COL]) and ";" in row[ALL_REVERSE_MAPPED_SOURCES_COL]:
-                reconciled_df.at[idx, one_to_many_target_col] = True
+                reconciled_df.at[idx, one_to_many_source_col] = True
 
     # For backward compatibility, also do the traditional count-based flags
     source_id_counts = reconciled_df[source_id_col].value_counts().to_dict()
@@ -1041,24 +1036,22 @@ def perform_bidirectional_validation(
         if pd.notna(source_id) and source_id_counts.get(source_id, 0) > 1:
             reconciled_df.at[idx, one_to_many_source_col] = True
 
-        # Set one-to-many target flag if this target ID appears in multiple rows
+        # Set one-to-many source flag if this target ID appears in multiple rows
         # This indicates the target is mapped by multiple source entities
-        # FIX: A TARGET mapped by multiple SOURCES should set one_to_many_target_col
         if pd.notna(target_id) and target_id_counts.get(target_id, 0) > 1:
             # Get all the source IDs that map to this target ID
             source_ids_for_target = reconciled_df[reconciled_df[target_id_col] == target_id][source_id_col].dropna().unique()
             # Only set the flag to TRUE if there are multiple distinct source IDs
             if len(source_ids_for_target) > 1:
-                reconciled_df.at[idx, one_to_many_target_col] = True
+                reconciled_df.at[idx, one_to_many_source_col] = True
                 
         # Check if this source maps to multiple targets (if not already set)
-        # FIX: A SOURCE mapping to multiple TARGETS should set one_to_many_source_col
-        if pd.notna(source_id) and not reconciled_df.at[idx, one_to_many_source_col]:
+        if pd.notna(source_id) and not reconciled_df.at[idx, one_to_many_target_col]:
             # Get all target IDs that this source maps to
             target_ids_for_source = reconciled_df[reconciled_df[source_id_col] == source_id][target_id_col].dropna().unique()
-            # Set one-to-many source flag if this source maps to multiple targets
+            # Set one-to-many target flag if this source maps to multiple targets
             if len(target_ids_for_source) > 1:
-                reconciled_df.at[idx, one_to_many_source_col] = True
+                reconciled_df.at[idx, one_to_many_target_col] = True
     
     # Mark canonical mappings (one per source entity, highest confidence)
     # First reset all canonical flags to ensure exactly one canonical mapping per source entity
