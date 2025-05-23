@@ -240,6 +240,7 @@ scripts/dev_experiments/
 temp_sample_data/
 
 **/.claude/settings.local.json
+#_active_prompts/
 #CLAUDE.md
 
 # Qdrant vector database storage (large binary data)
