@@ -5,3 +5,6 @@ from .metaboanalyst_client import (
     MetaboAnalystConfig,
     MetaboAnalystResult,
 )
+
+from .translator_name_resolver_client import TranslatorNameResolverClient
+from .umls_client import UMLSClient

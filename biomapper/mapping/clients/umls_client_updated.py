@@ -33,7 +33,6 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
     - timeout: Request timeout in seconds (default 30)
     - max_retries: Maximum number of retry attempts for failed requests (default 3)
     - backoff_factor: Exponential backoff factor for retries (default 0.5)
-    - tgt_validity_hours: Validity period for TGT in hours (default 7)
     """
     
     # Mapping of target database names to UMLS source abbreviations
@@ -70,17 +69,14 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
                    - timeout: Request timeout in seconds (default 30)
                    - max_retries: Maximum number of retry attempts (default 3)
                    - backoff_factor: Exponential backoff factor for retries (default 0.5)
-                   - tgt_validity_hours: Validity period for TGT in hours (default 7)
         """
         # Default configuration
         default_config = {
             "base_url": "https://uts-ws.nlm.nih.gov/rest",
-            "auth_url": "https://utslogin.nlm.nih.gov/cas/v1/api-key",
             "api_version": "current",
             "timeout": 30,
             "max_retries": 3,
             "backoff_factor": 0.5,
-            "tgt_validity_hours": 7,
         }
         
         # Merge with provided config
@@ -100,8 +96,6 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
         # Initialize internal state
         self._session = None
         self._initialized = False
-        self._tgt = None  # Ticket Granting Ticket
-        self._tgt_timestamp = 0  # When the TGT was obtained
         
         # Normalize target database name to uppercase
         self.target_db = self._config.get("target_db", "").upper()
@@ -136,179 +130,7 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
             await self._session.close()
             self._session = None
             self._initialized = False
-            self._tgt = None
-            self._tgt_timestamp = 0
             logger.debug("Closed HTTP session")
-    
-    async def _get_tgt(self) -> str:
-        """
-        Get a Ticket Granting Ticket (TGT) from the UMLS authentication service.
-        
-        The TGT is used to obtain single-use Service Tickets for each API request.
-        TGTs are valid for multiple hours, so we cache them to avoid unnecessary auth requests.
-        
-        Returns:
-            The TGT string for obtaining service tickets.
-            
-        Raises:
-            ClientExecutionError: If authentication fails.
-        """
-        await self._ensure_session()
-        
-        # Check if we have a valid TGT already
-        current_time = time.time()
-        tgt_validity_hours = self._config.get("tgt_validity_hours", 7)
-        tgt_validity_seconds = tgt_validity_hours * 3600
-        
-        if self._tgt and (current_time - self._tgt_timestamp) < tgt_validity_seconds:
-            logger.debug("Using existing TGT")
-            return self._tgt
-        
-        # Get a new TGT
-        api_key = self._config.get("api_key")
-        if not api_key:
-            raise ClientExecutionError(
-                "UMLS API key not provided",
-                client_name=self.__class__.__name__,
-                details={"error": "Missing API key"}
-            )
-        
-        auth_url = self._config.get("auth_url")
-        data = {"apikey": api_key}
-        
-        logger.debug("Obtaining new TGT")
-        
-        max_retries = self._config.get("max_retries", 3)
-        backoff_factor = self._config.get("backoff_factor", 0.5)
-        
-        for attempt in range(max_retries + 1):
-            try:
-                async with self._session.post(auth_url, data=data) as response:
-                    if response.status == 201:
-                        # Parse the TGT from the response
-                        response_text = await response.text()
-                        
-                        # Extract TGT URL from response using regex
-                        # Example: <form action="https://utslogin.nlm.nih.gov/cas/v1/api-key/TGT-12345-67890-abcde">
-                        match = re.search(r'action="([^"]+)"', response_text)
-                        if match:
-                            tgt_url = match.group(1)
-                            self._tgt = tgt_url
-                            self._tgt_timestamp = current_time
-                            logger.debug(f"Obtained new TGT: {tgt_url}")
-                            return tgt_url
-                        else:
-                            raise ClientExecutionError(
-                                "Could not extract TGT from response",
-                                client_name=self.__class__.__name__,
-                                details={"response": response_text}
-                            )
-                    else:
-                        error_text = await response.text()
-                        logger.warning(
-                            f"UMLS authentication failed with status {response.status}: {error_text}"
-                        )
-                        
-                        if attempt < max_retries:
-                            # Exponential backoff
-                            delay = backoff_factor * (2 ** attempt)
-                            logger.info(f"Retrying after {delay}s (attempt {attempt + 1}/{max_retries})")
-                            await asyncio.sleep(delay)
-                        else:
-                            raise ClientExecutionError(
-                                f"UMLS authentication failed after {max_retries} retries",
-                                client_name=self.__class__.__name__,
-                                details={
-                                    "status": response.status,
-                                    "response": error_text
-                                }
-                            )
-            except aiohttp.ClientError as e:
-                logger.warning(f"HTTP error during UMLS authentication: {str(e)}")
-                if attempt < max_retries:
-                    delay = backoff_factor * (2 ** attempt)
-                    logger.info(f"Retrying after {delay}s (attempt {attempt + 1}/{max_retries})")
-                    await asyncio.sleep(delay)
-                else:
-                    raise ClientExecutionError(
-                        f"HTTP error during UMLS authentication after {max_retries} retries: {str(e)}",
-                        client_name=self.__class__.__name__,
-                        details={"exception": str(e)}
-                    )
-    
-    async def _get_service_ticket(self) -> str:
-        """
-        Get a single-use Service Ticket (ST) for making API requests.
-        
-        Uses the TGT to obtain a Service Ticket that can be used for a single API request.
-        
-        Returns:
-            The Service Ticket string.
-            
-        Raises:
-            ClientExecutionError: If obtaining the service ticket fails.
-        """
-        await self._ensure_session()
-        
-        # Make sure we have a valid TGT
-        tgt_url = await self._get_tgt()
-        
-        # Get a service ticket
-        service_url = f"{self._config.get('base_url')}/search/{self._config.get('api_version')}"
-        data = {"service": service_url}
-        
-        logger.debug("Obtaining service ticket")
-        
-        max_retries = self._config.get("max_retries", 3)
-        backoff_factor = self._config.get("backoff_factor", 0.5)
-        
-        for attempt in range(max_retries + 1):
-            try:
-                async with self._session.post(tgt_url, data=data) as response:
-                    if response.status == 200:
-                        service_ticket = await response.text()
-                        logger.debug(f"Obtained service ticket: {service_ticket}")
-                        return service_ticket
-                    else:
-                        error_text = await response.text()
-                        logger.warning(
-                            f"Failed to get service ticket with status {response.status}: {error_text}"
-                        )
-                        
-                        if attempt < max_retries:
-                            # Exponential backoff
-                            delay = backoff_factor * (2 ** attempt)
-                            logger.info(f"Retrying after {delay}s (attempt {attempt + 1}/{max_retries})")
-                            await asyncio.sleep(delay)
-                        else:
-                            # TGT might be invalid, clear it so we get a new one next time
-                            self._tgt = None
-                            self._tgt_timestamp = 0
-                            
-                            raise ClientExecutionError(
-                                f"Failed to get service ticket after {max_retries} retries",
-                                client_name=self.__class__.__name__,
-                                details={
-                                    "status": response.status,
-                                    "response": error_text
-                                }
-                            )
-            except aiohttp.ClientError as e:
-                logger.warning(f"HTTP error while getting service ticket: {str(e)}")
-                if attempt < max_retries:
-                    delay = backoff_factor * (2 ** attempt)
-                    logger.info(f"Retrying after {delay}s (attempt {attempt + 1}/{max_retries})")
-                    await asyncio.sleep(delay)
-                else:
-                    # TGT might be invalid, clear it so we get a new one next time
-                    self._tgt = None
-                    self._tgt_timestamp = 0
-                    
-                    raise ClientExecutionError(
-                        f"HTTP error while getting service ticket after {max_retries} retries: {str(e)}",
-                        client_name=self.__class__.__name__,
-                        details={"exception": str(e)}
-                    )
     
     async def _perform_search(
         self, 
@@ -317,7 +139,7 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
         semantic_types: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Perform a search in the UMLS Metathesaurus.
+        Perform a search in the UMLS Metathesaurus using direct API key authentication.
         
         Args:
             query: The term to search for.
@@ -332,19 +154,25 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
         """
         await self._ensure_session()
         
-        # Get a service ticket
-        service_ticket = await self._get_service_ticket()
+        # Get API key
+        api_key = self._config.get("api_key")
+        if not api_key:
+            raise ClientExecutionError(
+                "UMLS API key not provided",
+                client_name=self.__class__.__name__,
+                details={"error": "Missing API key"}
+            )
         
         # Build search URL and parameters
         search_url = f"{self._config.get('base_url')}/search/{self._config.get('api_version')}"
         
         params = {
             "string": query,
-            "ticket": service_ticket,
             "searchType": search_type,
             "pageSize": 100,
             "pageNumber": 1,
             "returnIdType": "concept",
+            "apiKey": api_key,  # Direct API key authentication
         }
         
         # Add semantic type filtering if provided
@@ -375,10 +203,6 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
                             delay = backoff_factor * (2 ** attempt)
                             logger.info(f"Retrying after {delay}s (attempt {attempt + 1}/{max_retries})")
                             await asyncio.sleep(delay)
-                            
-                            # Get a new service ticket for the retry
-                            service_ticket = await self._get_service_ticket()
-                            params["ticket"] = service_ticket
                         else:
                             raise ClientExecutionError(
                                 f"UMLS search failed after {max_retries} retries",
@@ -395,10 +219,6 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
                     delay = backoff_factor * (2 ** attempt)
                     logger.info(f"Retrying after {delay}s (attempt {attempt + 1}/{max_retries})")
                     await asyncio.sleep(delay)
-                    
-                    # Get a new service ticket for the retry
-                    service_ticket = await self._get_service_ticket()
-                    params["ticket"] = service_ticket
                 else:
                     raise ClientExecutionError(
                         f"HTTP error during UMLS search after {max_retries} retries: {str(e)}",
@@ -411,7 +231,7 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
     
     async def _get_concept_details(self, cui: str) -> Dict[str, Any]:
         """
-        Get detailed information about a UMLS concept.
+        Get detailed information about a UMLS concept using direct API key authentication.
         
         Args:
             cui: The Concept Unique Identifier (CUI) to get details for.
@@ -424,14 +244,20 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
         """
         await self._ensure_session()
         
-        # Get a service ticket
-        service_ticket = await self._get_service_ticket()
+        # Get API key
+        api_key = self._config.get("api_key")
+        if not api_key:
+            raise ClientExecutionError(
+                "UMLS API key not provided",
+                client_name=self.__class__.__name__,
+                details={"error": "Missing API key"}
+            )
         
         # Build concept URL
         concept_url = f"{self._config.get('base_url')}/content/{self._config.get('api_version')}/CUI/{cui}"
         
         params = {
-            "ticket": service_ticket,
+            "apiKey": api_key,  # Direct API key authentication
         }
         
         logger.debug(f"Getting details for concept: {cui}")
@@ -457,10 +283,6 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
                             delay = backoff_factor * (2 ** attempt)
                             logger.info(f"Retrying after {delay}s (attempt {attempt + 1}/{max_retries})")
                             await asyncio.sleep(delay)
-                            
-                            # Get a new service ticket for the retry
-                            service_ticket = await self._get_service_ticket()
-                            params["ticket"] = service_ticket
                         else:
                             raise ClientExecutionError(
                                 f"Failed to get concept details after {max_retries} retries",
@@ -477,10 +299,6 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
                     delay = backoff_factor * (2 ** attempt)
                     logger.info(f"Retrying after {delay}s (attempt {attempt + 1}/{max_retries})")
                     await asyncio.sleep(delay)
-                    
-                    # Get a new service ticket for the retry
-                    service_ticket = await self._get_service_ticket()
-                    params["ticket"] = service_ticket
                 else:
                     raise ClientExecutionError(
                         f"HTTP error while getting concept details after {max_retries} retries: {str(e)}",
@@ -493,7 +311,7 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
     
     async def _get_concept_atoms(self, cui: str) -> List[Dict[str, Any]]:
         """
-        Get the atoms (source-asserted identifiers) for a UMLS concept.
+        Get the atoms (source-asserted identifiers) for a UMLS concept using direct API key authentication.
         
         Args:
             cui: The Concept Unique Identifier (CUI) to get atoms for.
@@ -506,14 +324,20 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
         """
         await self._ensure_session()
         
-        # Get a service ticket
-        service_ticket = await self._get_service_ticket()
+        # Get API key
+        api_key = self._config.get("api_key")
+        if not api_key:
+            raise ClientExecutionError(
+                "UMLS API key not provided",
+                client_name=self.__class__.__name__,
+                details={"error": "Missing API key"}
+            )
         
         # Build atoms URL
         atoms_url = f"{self._config.get('base_url')}/content/{self._config.get('api_version')}/CUI/{cui}/atoms"
         
         params = {
-            "ticket": service_ticket,
+            "apiKey": api_key,  # Direct API key authentication
             "pageSize": 100,
         }
         
@@ -541,10 +365,6 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
                             delay = backoff_factor * (2 ** attempt)
                             logger.info(f"Retrying after {delay}s (attempt {attempt + 1}/{max_retries})")
                             await asyncio.sleep(delay)
-                            
-                            # Get a new service ticket for the retry
-                            service_ticket = await self._get_service_ticket()
-                            params["ticket"] = service_ticket
                         else:
                             raise ClientExecutionError(
                                 f"Failed to get concept atoms after {max_retries} retries",
@@ -561,10 +381,6 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
                     delay = backoff_factor * (2 ** attempt)
                     logger.info(f"Retrying after {delay}s (attempt {attempt + 1}/{max_retries})")
                     await asyncio.sleep(delay)
-                    
-                    # Get a new service ticket for the retry
-                    service_ticket = await self._get_service_ticket()
-                    params["ticket"] = service_ticket
                 else:
                     raise ClientExecutionError(
                         f"HTTP error while getting concept atoms after {max_retries} retries: {str(e)}",
