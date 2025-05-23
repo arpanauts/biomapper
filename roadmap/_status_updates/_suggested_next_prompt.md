@@ -1,52 +1,79 @@
-# Suggested Next Work Session: Implementing the RAG-Based Mapping Solution
+# Suggested Next Prompt for Biomapper Development
 
 ## Context Brief
-We've developed a comprehensive RAG strategy document and detailed design for filtering PubChem embeddings to create a biologically relevant subset. We've also completed the implementation of `TranslatorNameResolverClient`, `UMLSClient`, and metabolite mapping scripts. Now we need to implement the RAG-based mapping components and the PubChem filtering to improve the current low mapping success rates (0.2-0.5%).
+The PubChem embedding filtering is complete with 2.3M biologically relevant embeddings extracted from 89.4M total. Qdrant is deployed and indexing is in progress. The next critical step is implementing the PubChemRAGMappingClient to leverage these indexed embeddings for improved metabolite mapping.
 
 ## Initial Steps
-First, review `/home/ubuntu/biomapper/CLAUDE.md` to get up to speed on the overall project context, roadmap structure, and workflow procedures. Then review our recent progress in the latest status update to understand what has been accomplished and what remains to be done.
-
-## Key References
-- Latest status update: `/home/ubuntu/biomapper/roadmap/_status_updates/2025-05-23-rag-strategy-pubchem-filtering.md`
-- RAG strategy document: `/home/ubuntu/biomapper/roadmap/technical_notes/rag/rag_strategy.md`
-- RAG mapping feature design: `/home/ubuntu/biomapper/roadmap/1_planning/rag_mapping_feature/design.md`
-- PubChem indexing design: `/home/ubuntu/biomapper/roadmap/1_planning/qdrant_pubchem_indexing/design.md`
-- Existing RAG framework: `/home/ubuntu/biomapper/biomapper/mapping/rag/base_rag.py`
-- Base mapping client interface: `/home/ubuntu/biomapper/biomapper/mapping/base.py`
+1. First, review `/home/ubuntu/biomapper/CLAUDE.md` for overall project context and development approach
+2. Check the status of Qdrant indexing by running:
+   ```bash
+   docker ps | grep qdrant
+   curl -X GET "http://localhost:6333/collections/pubchem_bge_small_v1_5"
+   ```
+3. Review the recent status update at `/home/ubuntu/biomapper/roadmap/_status_updates/2025-05-23-pubchem-filtering-qdrant-indexing-complete.md`
 
 ## Work Priorities
-1. Implement the PubChem embedding filtering solution
-   - Create the `create_bio_relevant_cid_allowlist.py` script to extract relevant PubChem CIDs from HMDB, ChEBI, and DrugBank
-   - Review the decompression guide at `/procedure/data/local_data/PUBCHEM_FASTEMBED/DECOMPRESSION_GUIDE.md`
-   - Implement `filter_pubchem_embeddings.py` to extract only biologically relevant embeddings from the compressed chunks
-   - Test with a small subset before scaling to the full dataset
 
-2. Set up and configure the Qdrant vector database
-   - Create a Docker setup for Qdrant
-   - Implement the indexing script to populate Qdrant with the filtered embeddings
-   - Ensure proper configuration for vector dimensionality (384) and cosine similarity
+### Priority 1: Implement PubChemRAGMappingClient
+- Review the design document at `/home/ubuntu/biomapper/roadmap/2_inprogress/qdrant_pubchem_indexing/design.md`
+- Implement the core RAG components:
+  - FastEmbedEmbedder for generating query embeddings
+  - QdrantVectorStore for semantic search
+  - PubChemPromptManager for LLM prompting
+  - LLMService for Claude integration
+- Create the main PubChemRAGMappingClient class
 
-3. Implement the core RAG components
-   - Develop `FastEmbedEmbedder` to generate embeddings using the BAAI/bge-small-en-v1.5 model
-   - Create `QdrantVectorStore` with support for cosine similarity thresholds and statistical significance testing
-   - Implement `PubChemAPIClient` for fetching detailed compound information
-   - Develop `PubChemPromptManager` to format LLM prompts with relevant context
-   - Create `LLMService` for interactions with Claude or other LLMs
+### Priority 2: Integration and Testing
+- Integrate PubChemRAGMappingClient into the FallbackOrchestrator pipeline
+- Test with challenging metabolite names that fail with current methods
+- Measure and document improvement in mapping success rates
 
-4. Integrate components into the `PubChemRAGMappingClient`
-   - Implement the client following both `BaseRAGMapper` and `MappingClient` interfaces
-   - Develop the mapping logic and confidence scoring
-   - Create comprehensive unit tests
-   - Integrate with the `FallbackOrchestrator`
+## Key Files and References
 
-5. Validate and measure improvement
-   - Test with challenging metabolite mappings
-   - Compare success rates to the current baseline (0.2-0.5%)
-   - Analyze and document findings
+### Implementation Files
+- `/home/ubuntu/biomapper/scripts/rag/index_filtered_embeddings_to_qdrant.py` - Indexing script
+- `/home/ubuntu/biomapper/roadmap/technical_notes/rag/rag_strategy.md` - RAG strategy document
+- `/home/ubuntu/biomapper/roadmap/2_inprogress/qdrant_pubchem_indexing/` - Feature folder with all planning docs
+
+### Data Files
+- `/home/ubuntu/biomapper/data/bio_relevant_cids_expanded.txt` - 2.7M CID allowlist
+- `/home/ubuntu/biomapper/data/filtered_embeddings/` - Filtered embeddings directory
+- `/home/ubuntu/biomapper/data/pubchem_bio_embeddings_qdrant.pkl.gz` - Qdrant-ready embeddings
+
+### Docker/Infrastructure
+- `/home/ubuntu/biomapper/docker/qdrant/docker-compose.yml` - Qdrant configuration
+- Qdrant API: http://localhost:6333
+- Qdrant dashboard: http://localhost:6333/dashboard
 
 ## Workflow Integration
-After reviewing the RAG strategy and implementation plans, incorporate this approach into your workflow step-by-step. First, focus on creating the biological relevance allowlist and filtering the embeddings, as this is a prerequisite for the rest of the implementation. You can have Claude assist with developing the database parsing logic for extracting PubChem CIDs from HMDB, ChEBI, and DrugBank.
 
-Once the filtered embeddings are available, work on setting up Qdrant and implementing the core RAG components. Claude can help with implementing the individual components like `FastEmbedEmbedder` and `QdrantVectorStore` while you focus on integration and testing. This modular approach allows for parallel development and iterative testing.
+### Claude Integration Points
+1. **Testing RAG Performance**: Create a detailed prompt for Claude to evaluate mapping results:
+   ```
+   "Analyze these metabolite mapping results from our RAG system:
+   - Input metabolite names: [list]
+   - RAG candidates with scores: [results]
+   - Traditional method results: [baseline]
+   Please evaluate the quality of matches and suggest threshold adjustments."
+   ```
 
-For validating the improvement in mapping success rates, create a test set of challenging metabolite names that currently fail to map correctly. This will provide concrete evidence of the RAG approach's effectiveness in addressing the critical low mapping success rate issue.
+2. **Implementation Review**: Have Claude review the PubChemRAGMappingClient implementation for:
+   - Proper integration with existing interfaces
+   - Error handling completeness
+   - Performance optimization opportunities
+
+3. **Documentation Generation**: Use Claude to help create comprehensive documentation for the new RAG pipeline
+
+### Suggested Development Flow
+1. Start by checking Qdrant status and running test queries
+2. Implement core components incrementally, testing each
+3. Use Claude for code review and optimization suggestions
+4. Document progress in implementation notes
+5. Update task list as components are completed
+
+## Success Metrics
+- Qdrant contains all 2.3M filtered embeddings
+- Query latency < 100ms for vector search
+- Mapping success rate improvement from 0.2-0.5% to >10%
+- Integration with FallbackOrchestrator working smoothly
+- Comprehensive documentation and tests in place
