@@ -1,41 +1,45 @@
 # Suggested Next Prompt for Biomapper Development
 
 ## Context Brief
-The `PubChemRAGMappingClient` feature is now complete, providing semantic search capabilities for metabolite mapping. The project workflow, including prompt generation and file naming, has also been refined. The immediate next step is to decide on reviewing suggested architecture documents or selecting a new feature for development.
+The MVP0 Pipeline Orchestrator integration test using Arivale data has been completed. It revealed a very low mapping success rate (4%) primarily due to 90% of inputs not finding matches in the Qdrant `pubchem_bge_small_v1_5` collection. The immediate focus is on investigating and addressing this Qdrant hit rate issue.
 
 ## Initial Steps
 1.  Review `/home/ubuntu/biomapper/CLAUDE.md` for overall project context and development approach.
-2.  Review the latest status update which summarizes our recent session: `/home/ubuntu/biomapper/roadmap/_status_updates/2025-05-23-210820-session-summary.md`.
-3.  Review the completion feedback for `PubChemRAGMappingClient`, particularly the "Architecture Review Suggestions" and "Future Considerations" sections: `/home/ubuntu/biomapper/roadmap/_active_prompts/feedback/2025-05-23-feedback-complete-pubchem-rag-client.md`.
+2.  Review the latest status update which details the MVP0 test results and Qdrant analysis: `/home/ubuntu/biomapper/roadmap/_status_updates/2025-05-24-mvp0-orchestrator-test-analysis.md`.
+3.  Review the implementer's feedback on the MVP0 test: `/home/ubuntu/biomapper/roadmap/_active_prompts/feedback/2025-05-24-061057-feedback-mvp0-orchestrator-arivale-test.md`.
+4.  Review the details of how the `pubchem_bge_small_v1_5` Qdrant collection was constructed (Memory ID: `6d5ae2aa-d04f-4a4c-8732-b872af99aee6`, Content: "The pubchem_bge_small_v1_5 Qdrant collection generated embeddings from a concatenated text string for each compound: 'All names (including IUPAC variants) Formula: [Formula] InChIKey: [InChIKey]'. Compound descriptions (PC-Compound_comment) were NOT included...").
 
 ## Work Priorities
 
-1.  **Decision Point: Next Focus Area**
-    *   **Option A: Architecture Document Review:**
-        *   Decide whether to review and potentially update the architecture documents suggested after the `PubChemRAGMappingClient` completion:
-            *   `rag_performance_evaluation_plan.md` (Path likely under `/home/ubuntu/biomapper/docs/architecture/` - to be confirmed or created).
-            *   `resource_metadata_system.md` (Path likely under `/home/ubuntu/biomapper/docs/architecture/` - to be confirmed or created).
-        *   If proceeding, locate/create these documents, assess necessary updates based on the RAG client, and plan/execute changes.
-    *   **Option B: New Feature Development:**
-        *   Identify the next high-priority feature or task from the project backlog or roadmap.
-        *   Initiate the planning stage for this new feature (e.g., creating `README.md`, `spec.md`, `design.md` in a new folder under `/home/ubuntu/biomapper/roadmap/1_planning/`).
+1.  **Investigate Low Qdrant Hit Rate:**
+    *   **Task 1: Manual Verification & Query Structure Test:**
+        *   Manually check a small sample of "NO_QDRANT_HITS" biochemical names from `/home/ubuntu/biomapper/data/testing_results/arivale_mvp0_test_run_20250524_044335_results.jsonl` (e.g., "spermidine", "alpha-ketoglutarate") against the PubChem website to confirm their existence and common nomenclature.
+        *   For these same compounds, obtain their actual Formula and InChIKey.
+        *   Construct test queries that mimic the Qdrant database's embedded text structure: `"[Name] Formula: [Formula] InChIKey: [InChIKey]"`.
+        *   Use the existing `PubChemRAGMappingClient`'s search functionality (or a direct Qdrant client query if simpler for a quick test) to execute these structured queries against the `pubchem_bge_small_v1_5` collection.
+        *   Compare results with the original name-only queries to see if hit rate/scores improve. This will help validate/invalidate the embedding structure mismatch hypothesis.
+    *   **Task 2: Analyze Findings & Plan Qdrant Strategy:**
+        *   Based on the results of Task 1, discuss and decide on the best strategy for improving Qdrant performance. Options include:
+            *   Re-indexing with embeddings from "names only" or "names + descriptions".
+            *   Exploring alternative/fine-tuned embedding models.
+            *   Developing query augmentation techniques.
+        *   Outline the steps for the chosen strategy.
 
-2.  **Action Based on Decision:**
-    *   If Option A, begin the document review and update process.
-    *   If Option B, begin the planning process for the new feature.
+2.  **Implement PubChem API Robustness:**
+    *   **Task 3:** Add retry logic (e.g., using the `tenacity` library) to the PubChem API calling components within the pipeline.
+    *   **Task 4:** Implement basic request rate limiting for PubChem API calls.
+    *   (Optional, based on priority) Consider adding a caching layer for PubChem API responses.
 
 ## Key Files and References
 
-*   **Latest Status Update:** `/home/ubuntu/biomapper/roadmap/_status_updates/2025-05-23-210820-session-summary.md`
-*   **`PubChemRAGMappingClient` Completion Feedback:** `/home/ubuntu/biomapper/roadmap/_active_prompts/feedback/2025-05-23-feedback-complete-pubchem-rag-client.md`
-*   **`PubChemRAGMappingClient` Summary:** `/home/ubuntu/biomapper/roadmap/3_completed/pubchem_rag_mapping_client/summary.md`
-*   **Starter Prompt (Process Guide):** `/home/ubuntu/biomapper/roadmap/_active_prompts/_starter_prompt.md`
-*   **Completed Features Log:** `/home/ubuntu/biomapper/roadmap/_reference/completed_features_log.md`
+*   **Latest Status Update:** `/home/ubuntu/biomapper/roadmap/_status_updates/2025-05-24-mvp0-orchestrator-test-analysis.md`
+*   **MVP0 Test Results:** `/home/ubuntu/biomapper/data/testing_results/arivale_mvp0_test_run_20250524_044335_results.jsonl`
+*   **MVP0 Test Feedback:** `/home/ubuntu/biomapper/roadmap/_active_prompts/feedback/2025-05-24-061057-feedback-mvp0-orchestrator-arivale-test.md`
+*   **`PubChemRAGMappingClient`:** `/home/ubuntu/biomapper/biomapper/mapping/clients/pubchem_rag_client.py`
+*   **Qdrant Embedding Content Memory ID:** `6d5ae2aa-d04f-4a4c-8732-b872af99aee6`
 
 ## Workflow Integration (General for Next Task)
 
-*   Continue to leverage Cascade (as Project Manager) to define tasks and generate detailed prompts for Claude code instances, following the established stage-gate process (Planning -> In Progress -> Completed).
-*   Ensure any new prompts created adhere to the updated naming convention (`YYYY-MM-DD-HHMMSS-[description].md`) and include the source prompt reference as outlined in `_starter_prompt.md`.
-*   If a new feature is started, Cascade will create the initial planning documents and the first handoff prompt for the Claude instance.
-
-This prompt aims to guide the USER in deciding the next steps and initiating the relevant workflow.
+*   For tasks requiring code changes (e.g., PubChem API robustness, Qdrant client modifications for testing), Cascade will generate detailed prompts for a Claude code instance.
+*   For analytical tasks (e.g., analyzing Qdrant test results, strategizing), engage in a discussion with Cascade to refine plans.
+*   Ensure any new prompts created adhere to the updated naming convention and include the source prompt reference.
