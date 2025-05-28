@@ -28,7 +28,7 @@ MANIFEST
 .python-version
 
 # Raw data & outputs
-*.csv
+#*.csv
 *.tsv
 *.xlsx
 *.xls
@@ -68,6 +68,8 @@ docs/prompts/  # Development prompt templates
 !hmdb_metabolites_sample.txt
 !tests_protein_set.py.txt
 !docs/requirements.txt
+#!data/output/*.txt
+#!data/output/*.tsv
 
 # Ignore docs/build/ directory entirely
 docs/build/
