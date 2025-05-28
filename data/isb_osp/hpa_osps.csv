@@ -1,0 +1,3019 @@
+gene,uniprot,organ
+CFH,P08603,liver
+ALS2,Q96Q42,brain
+ABCB5,Q2M3G0,epididymis
+SLC25A13,Q9UJS0,liver
+SLC4A1,P02730,bone marrow
+REXO5,Q96IC2,testis
+MPO,P05164,bone marrow
+PON1,P27169,liver
+ABCB4,P21439,liver
+SOX8,P57073,brain
+YBX2,Q9Y2T7,testis
+KRT33A,O76009,skin 1
+TAC1,P20366,brain
+DBF4,Q9UBU7,testis
+LGALS14,Q8TCE9,placenta
+PRSS21,Q9Y6M0,testis
+PROM1,O43490,retina
+GAS7,O60861,brain
+CEACAM7,Q14002,intestine
+CD79B,P40259,lymphoid tissue
+ST7L,Q8TDW4,testis
+TKTL1,P51854,testis
+FMO3,P31513,liver
+NOX1,Q9Y5S8,intestine
+SYN1,P17600,brain
+ADAM22,Q9P0K1,brain
+PGLYRP1,O75594,bone marrow
+MAPK8IP2,Q13387,brain
+MASP2,O00187,liver
+IYD,Q6PHW0,thyroid gland
+TRAF3IP3,Q9Y228,lymphoid tissue
+MLXIPL,Q9NP71,liver
+PHF7,Q9BWX1,testis
+SLC6A13,Q9NSD5,kidney
+IDS,P22304,brain
+PRSS3,P35030,pancreas
+FMO1,Q01740,kidney
+SLC6A7,Q99884,brain
+DPF1,Q92782,brain
+PLAUR,Q03405,bone marrow
+ANLN,Q9NQW6,brain
+ZBTB32,Q9Y2Y4,testis
+ACP3,P15309,prostate
+XYLT2,Q9H1B5,stomach 1
+STMN4,Q9H169,brain
+CLCA1,A8K7I4,intestine
+SLC38A5,Q8WUX1,pancreas
+VSIG2,Q96IQ7,stomach 1
+HGF,P14210,placenta
+NCDN,Q9UBB6,brain
+CYP3A43,Q9HB55,liver
+CPS1,P31327,liver
+C8B,P07358,liver
+HSD17B6,O14756,liver
+KCNG1,Q9UIX4,endometrium 1
+AGPAT4,Q9NRZ5,brain
+APBA2,Q99767,brain
+STAP1,Q9ULZ2,lymphoid tissue
+CYP46A1,Q9Y6A2,brain
+SLC18A1,P54219,adrenal gland
+CASR,P41180,parathyroid gland
+MSR1,P21757,lung
+C6,P13671,liver
+SOX30,O94993,testis
+RTN4R,Q9BZR6,brain
+CDH10,Q9Y6N8,brain
+SPATA7,Q9P0W8,testis
+ZPBP,Q9BS86,testis
+TG,P01266,thyroid gland
+DCUN1D1,Q96GG9,testis
+ZIC2,O95409,brain
+GUCA2B,Q16661,intestine
+MAGEC2,Q9UBF1,testis
+CP,P00450,liver
+ANO2,Q9NQ90,retina
+GUCA1A,P43080,retina
+RCN1,Q15293,epididymis
+NRIP2,Q9BQI9,brain
+LY75,O60449,lymphoid tissue
+FOXC1,Q12948,salivary gland
+SPO11,Q9Y5K1,testis
+RELT,Q969Z4,bone marrow
+ITIH4,Q14624,liver
+ITIH1,P19827,liver
+GYG2,O15488,adipose tissue
+SOAT1,P35610,adrenal gland
+F7,P08709,liver
+RASGRF1,Q13972,brain
+DNAJC25,Q9H1X3,liver
+SEZ6,Q53EL9,brain
+SLC6A16,Q9GZN6,testis
+CA11,O75493,brain
+DLX3,O60479,skin 1
+SPA17,Q15506,testis
+HIPK2,Q9H2X6,brain
+DDX20,Q9UHI6,testis
+BCAS1,O75363,brain
+POU1F1,P28069,pituitary gland
+ROPN1,Q9HAT0,testis
+PACC1,Q9H813,brain
+COL17A1,Q9UMD9,skin 1
+FGFR2,P21802,brain
+STAG3,Q9UJ98,testis
+PDZD4,Q76G19,brain
+ATP2B3,Q16720,choroid plexus
+PPP2R5B,Q15173,brain
+PAGE1,O75459,testis
+ADAM7,Q9H2U9,epididymis
+GAL,P22466,pituitary gland
+GUCY2C,P25092,intestine
+SCT,P09683,intestine
+FRMPD1,Q5SYB0,retina
+CNGB1,Q14028,retina
+EPHA8,P29322,choroid plexus
+SLC12A3,P55017,kidney
+MS4A12,Q9NXJ0,intestine
+ING3,Q9NXR8,bone marrow
+SEL1L,Q9UBV2,pancreas
+SPP2,Q13103,liver
+FCGR2B,P31994,placenta
+SCARB1,Q8WTV0,adrenal gland
+MOV10L1,Q9BXT6,testis
+PANX2,Q96RD6,brain
+FNDC8,Q8TC99,testis
+ADAM11,O75078,brain
+ABCB11,O95342,liver
+CD5L,O43866,lymphoid tissue
+CDHR2,Q9BYE9,intestine
+SLC24A1,O60721,retina
+SLC12A1,Q13621,kidney
+WSCD2,Q2TBF2,brain
+KCNQ2,O43526,brain
+TACR2,P21452,intestine
+CACNG5,Q9UF02,retina
+CACNG4,Q9UBN1,brain
+TYR,P14679,skin 1
+FKBP6,O75344,testis
+SMC1B,Q8NDV3,testis
+CST7,O76096,bone marrow
+PIAS2,O75928,testis
+LAMP3,Q9UQV4,lung
+NEBL,O76041,heart muscle
+SYNJ2,O15056,brain
+GNB1,P62873,retina
+ZCWPW1,Q9H0M4,testis
+BRINP1,O60477,brain
+TP53INP2,Q8IXH6,brain
+BPIFB2,Q8N4F0,salivary gland
+CLUL1,Q15846,retina
+CDH17,Q12864,intestine
+AFM,P43652,liver
+RIMS1,Q86UR5,brain
+DCT,P40126,skin 1
+RDH8,Q9NYR8,retina
+CPB2,Q96IY4,liver
+CLDND1,Q9NY35,brain
+CFHR2,P36980,liver
+CXCL2,P19875,liver
+AFP,P02771,liver
+TCF7,P36402,lymphoid tissue
+IMPG2,Q9BZV3,retina
+SLC13A1,Q9BZW2,kidney
+MPP4,Q96JB8,retina
+KCNK2,O95069,adrenal gland
+TRPM3,Q9HCF6,choroid plexus
+EPYC,Q99645,placenta
+SLC27A5,Q9Y2P5,liver
+KIF3C,O14782,brain
+OVGP1,Q12889,fallopian tube
+AKR1B1,P15121,adrenal gland
+AQP6,Q13520,kidney
+FAT2,Q9NYQ8,brain
+ERO1B,Q86YB8,pancreas
+NOX4,Q9NPH5,kidney
+MT3,P25713,brain
+PHACTR3,Q96KR7,brain
+SLC15A1,P46059,intestine
+DEFB127,Q9H1M4,epididymis
+F11,P03951,liver
+SIRPG,Q9P1W8,lymphoid tissue
+RPH3A,Q9Y2J0,brain
+CMTM1,Q8IZ96,testis
+KCNH4,Q9UQ05,brain
+SI,P14410,intestine
+FETUB,Q9UGM5,liver
+THPO,P40225,liver
+DLL3,Q9NYJ7,brain
+PITPNM2,Q9BZ72,lymphoid tissue
+LAMB4,A4D0S4,skin 1
+SLC26A4,O43511,thyroid gland
+SLC26A3,P40879,intestine
+RAPGEF4,Q8WZA2,brain
+MYO15A,Q9UKN7,pituitary gland
+APOH,P02749,liver
+CPA1,P15085,pancreas
+CEBPE,Q15744,bone marrow
+TGM1,P22735,esophagus
+TINF2,Q9BSI4,parathyroid gland
+DAZL,Q92904,testis
+TRPM7,Q96QT4,parathyroid gland
+KRT31,Q15323,skin 1
+NXPE1,Q8N323,intestine
+PDE6C,P51160,retina
+CYP26A1,O43174,liver
+TDRD1,Q9BXT4,testis
+PGC,P20142,stomach 1
+MLN,P12872,intestine
+CATSPERG,Q6ZRH7,testis
+STX1B,P61266,brain
+HSD3B7,Q9H2F3,liver
+MAGEB2,O15479,testis
+IGFALS,P35858,liver
+MISP,Q8IVT2,intestine
+HCN2,Q9UL51,brain
+IZUMO4,Q1ZYL8,testis
+SERPIND1,P05546,liver
+OSM,P13725,bone marrow
+UPB1,Q9UBR1,liver
+SEZ6L,Q9BYH1,brain
+GGTLC2,Q14390,testis
+SEPTIN3,Q9UH03,brain
+SLC5A1,P13866,intestine
+SLC5A4,Q9NY91,intestine
+CYP2D6,P10635,liver
+MIOX,Q9UGB7,kidney
+RASL10A,Q92737,brain
+HMOX1,P09601,lymphoid tissue
+RASD2,Q96D21,brain
+ACR,P10323,testis
+CABP7,Q86V35,brain
+PNPLA3,Q9NST1,liver
+GRAP2,O75791,lymphoid tissue
+CHADL,Q6NUI6,brain
+MLC1,Q15049,brain
+CTSG,P08311,bone marrow
+COCH,O43405,pancreas
+TRIM9,Q9C026,brain
+CDKN3,Q16667,testis
+LRRC74A,Q0VAA2,testis
+GSTZ1,O43708,liver
+ISM2,Q6H9L7,placenta
+CHGA,P10645,parathyroid gland
+SLC10A1,Q14973,liver
+SERPINA4,P29622,liver
+MTHFD1,P11586,liver
+TCL1A,P56279,lymphoid tissue
+CPNE6,O95741,brain
+R3HDML,Q9H3Y0,intestine
+HRH3,Q9Y5N1,brain
+NTSR1,P30989,intestine
+AVP,P01185,brain
+EEF1A2,Q05639,skeletal muscle
+SEL1L2,Q5TEA6,testis
+SNPH,O15079,brain
+MYLK2,Q9H1R3,skeletal muscle
+HAO1,Q9UJM8,liver
+PDYN,P01213,brain
+CCM2L,Q9NUG4,lymphoid tissue
+OXT,P01178,brain
+BPI,P17213,bone marrow
+SLC32A1,Q9H598,brain
+CST4,P01036,salivary gland
+VSIG1,Q86XK7,stomach 1
+GUCY2F,P51841,retina
+F9,P00740,liver
+CACNA1F,O60840,retina
+BMX,P51813,epididymis
+LUZP4,Q9P127,testis
+PPP1R2C,O14990,testis
+OPN1LW,P04000,retina
+RS1,O15537,retina
+GATA1,P15976,bone marrow
+GPR50,Q13585,pituitary gland
+BRS3,P32247,epididymis
+VGLL1,Q99990,placenta
+TAF7L,Q5H9L4,testis
+HTR2A,P28223,brain
+FLT1,P17948,placenta
+MT4,P47944,skin 1
+CBLN1,P23435,brain
+DHODH,Q02127,liver
+CCL17,Q92583,lymphoid tissue
+CYB5B,O43169,adrenal gland
+PRSS54,Q6PEW0,testis
+NECAB2,Q7Z6G3,brain
+RHBDL1,O75783,brain
+ZP2,Q05996,brain
+PRSS33,Q8NF86,fallopian tube
+AQP9,O43315,liver
+ATP8B4,Q8TF62,bone marrow
+OCA2,Q04671,choroid plexus
+ENTREP2,O60320,brain
+SLC30A4,O14863,prostate
+RP1,P56715,retina
+STMN2,Q93045,brain
+TRPS1,Q9UHF7,breast
+GML,Q99445,adrenal gland
+ADAM2,Q99965,testis
+FGL1,Q08830,liver
+TULP2,O00295,testis
+LHB,P01229,pituitary gland
+CGB3,P0DN86,placenta
+TUBB4A,P04350,brain
+DKKL1,Q9UK85,testis
+RETN,Q9HD89,bone marrow
+FCER2,P06734,lymphoid tissue
+RSPH6A,Q9H0K4,testis
+LILRA1,O75019,lymphoid tissue
+CASP14,P31944,skin 1
+SLC1A6,P48664,brain
+AURKC,Q9UQB9,testis
+LGALS13,Q9UHV8,placenta
+CLC,Q05315,bone marrow
+EBI3,Q14213,placenta
+FSD1,Q9BTV5,brain
+OVOL3,O00110,testis
+APLP1,P51693,brain
+CEACAM4,O75871,lymphoid tissue
+ICAM5,Q9UMF0,brain
+CEACAM5,P06731,intestine
+CRX,O43186,retina
+SULT2A1,Q06520,liver
+ZNRF4,Q8WWF5,testis
+SYNGR4,O95473,testis
+SIGLEC6,O43699,placenta
+CABP5,Q9NP86,retina
+THEG,Q9P2T0,testis
+FGF21,Q9NSA1,liver
+CACNG7,P62955,brain
+KLF1,Q13351,bone marrow
+MAST1,Q9Y2H9,brain
+TFPT,P0C1Z6,brain
+KCNN1,Q92952,brain
+RAB3A,P20336,brain
+UPK1A,O00322,urinary bladder
+ETV2,O00321,testis
+ATP4A,P20648,stomach 1
+ARMC6,Q6NXE6,liver
+GAPDHS,O14556,testis
+MAG,P20916,brain
+TMEM59L,Q9UK28,brain
+HAMP,P81172,liver
+TFPI2,P48307,placenta
+PON3,Q15166,liver
+DNAH11,Q96DT5,parathyroid gland
+NPVF,Q9HCQ7,retina
+RNF32,Q9H0A6,testis
+WNT2,P09544,placenta
+ANKRD7,Q92527,testis
+CRHR2,Q13324,choroid plexus
+GHRHR,Q02643,pituitary gland
+NPTX2,P47972,pituitary gland
+PTPRZ1,P23471,brain
+SPAM1,P38567,testis
+TFR2,Q9UP52,liver
+FSCN3,Q9NQT6,testis
+FBXO24,O75426,testis
+AGFG2,O95081,salivary gland
+MEST,Q5EB52,placenta
+TMEM176B,Q3YBM2,liver
+MYL7,Q01449,heart muscle
+GALNTL5,Q7Z4T8,testis
+CLIP2,Q9UDT6,brain
+LIMK1,P53667,brain
+C5,P01031,liver
+AMBP,P02760,liver
+DNM1,Q05193,brain
+RLN1,P04808,prostate
+CA9,Q16790,stomach 1
+LHX3,Q9UBR4,pituitary gland
+ABCA2,Q9BZC7,brain
+DNTT,P04053,lymphoid tissue
+CUBN,O60494,kidney
+FGF8,P55075,skeletal muscle
+LHPP,Q9H008,brain
+MAP3K8,P41279,bone marrow
+RGS9,O75916,brain
+KRT37,O76014,skin 1
+CCL7,P80098,bone marrow
+HSD17B1,P14061,placenta
+PPY,P01298,pancreas
+RCVRN,P35243,retina
+MYH1,P12882,skeletal muscle
+VTN,P04004,liver
+UNC119,Q13432,retina
+GNRHR,P30968,pituitary gland
+UGT2B10,P36537,liver
+ODAM,A1E959,salivary gland
+SMR3A,Q99954,salivary gland
+ANXA10,Q9UJ72,stomach 1
+SOD3,P08294,choroid plexus
+NKX3-2,P78367,intestine
+HGFAC,Q04756,liver
+DDX25,Q9UHL0,testis
+CRTAM,O95727,brain
+B3GAT1,Q9P2W7,brain
+NRXN2,"P58401, Q9P2S2",brain
+CCDC86,Q9H6F5,parathyroid gland
+HPX,P02790,liver
+FOLR1,P15328,choroid plexus
+FOLR3,P41439,bone marrow
+APOA5,Q6Q788,liver
+APOA4,P06727,intestine
+APOC3,P02656,liver
+UPK2,O00526,urinary bladder
+SLC1A2,P43004,brain
+PTPN5,P54829,brain
+ASIC1,P78348,brain
+CAMKK2,Q96RR4,brain
+IL23A,Q9NPF7,urinary bladder
+PRR4,Q16378,salivary gland
+PRMT8,Q9NR22,brain
+AKAP3,O75969,testis
+KCNA1,Q09470,brain
+GPRC5D,Q9NZD1,skin 1
+GSG1,Q2KHT4,testis
+VDR,P11473,parathyroid gland
+ACRBP,Q8NEB7,testis
+GNB3,P16520,retina
+SLCO1B3,Q9NPD5,liver
+APOBEC1,P41238,intestine
+GYS2,P54840,liver
+AICDA,Q9GZX7,lymphoid tissue
+MAK,P20794,retina
+GABRR2,P28476,retina
+TULP1,O00294,retina
+SLC26A8,Q96RN1,testis
+RHAG,Q02094,bone marrow
+MDGA1,Q8NFP4,brain
+BMP5,P22003,placenta
+TSPO2,Q5TGU0,bone marrow
+HDGFL1,Q5TGJ6,testis
+GPLD1,P80108,liver
+SLC17A2,O00624,liver
+CCR6,P51684,lymphoid tissue
+SLC22A2,O15244,kidney
+PDE10A,Q9Y233,brain
+GUCA1B,Q9UMX6,retina
+PRPH2,P23942,retina
+IMPG1,Q17R60,retina
+ENPP5,Q9UJA9,epididymis
+PRSS16,Q9NQE7,lymphoid tissue
+MEP1A,Q16819,intestine
+SLC4A9,Q96Q91,kidney
+GZMK,P49863,lymphoid tissue
+PDE8B,O95263,thyroid gland
+GRM6,O15303,retina
+ITK,Q08881,lymphoid tissue
+BTNL8,Q6UX41,intestine
+IL5,P05113,testis
+NUP155,O75694,testis
+FGF1,P05230,brain
+C9,P02748,liver
+HMGXB3,Q12766,parathyroid gland
+CDX1,P47902,intestine
+STC2,O76061,breast
+UNC5A,Q6ZN44,brain
+KNG1,P01042,liver
+HRG,P04196,liver
+CLDN16,Q9Y5I7,kidney
+RBP2,P50120,intestine
+GRK7,Q8WTQ7,retina
+BCHE,P06276,liver
+SERPINI2,O75830,pancreas
+FGF12,P61328,heart muscle
+GNAT1,P11488,retina
+HHLA2,Q9UM44,intestine
+MORC1,Q86VD1,testis
+ROPN1B,Q9BZX4,testis
+CFAP92,Q9ULG3,testis
+POMC,P01189,pituitary gland
+PCSK4,Q6UW60,testis
+GCG,P01275,pancreas
+APC2,O95996,brain
+GCA,P28676,bone marrow
+EVA1A,Q9H8M9,liver
+REG1A,P05451,pancreas
+PECR,Q9BY49,liver
+GGCX,P38435,liver
+NEU2,Q9Y3R4,skin 1
+PRKAG3,Q9UGI9,skeletal muscle
+TPO,P07202,thyroid gland
+PROC,P04070,liver
+HPCAL1,P37235,brain
+LCT,P09848,intestine
+PLEK,P08567,bone marrow
+CD207,Q9UJ71,skin 1
+TPSG1,Q9NRR2,intestine
+PAPPA2,Q9BXP8,placenta
+NPHS2,Q9NP85,kidney
+DLGAP3,O95886,brain
+SWT1,Q5T5J6,testis
+LEPR,P48357,liver
+IVNS1ABP,Q9Y6Y0,bone marrow
+PDC,P20941,retina
+TNNI3K,Q59H18,heart muscle
+CFHR3,Q02985,liver
+TFAP2E,Q6VUC0,brain
+CD2,P06729,lymphoid tissue
+HPCAL4,Q9UM19,brain
+ZP4,Q12836,ovary
+RIMS3,Q9UJD0,brain
+SLAMF1,Q13291,lymphoid tissue
+ACTL8,Q9H568,testis
+RGS4,P49798,brain
+IGSF21,Q96ID5,brain
+PLA2G2D,Q9UNK4,lymphoid tissue
+KIF17,Q9P2E2,testis
+CR2,P20023,lymphoid tissue
+NSUN4,Q96CB9,testis
+HSD11B1,P28845,liver
+PLPPR4,Q7Z2D5,brain
+SERPINC1,P01008,liver
+PROX1,Q92786,liver
+SLC5A9,Q2M3M2,intestine
+MUC5B,Q9HC84,salivary gland
+A4GNT,Q9UNA3,stomach 1
+TREH,O43280,intestine
+MMP8,P22894,bone marrow
+APOA1,P02647,liver
+ZNF541,Q9H0D2,testis
+SLC8A2,Q9UPR5,brain
+TNNT2,P45379,heart muscle
+TNP1,P09430,testis
+TTR,P02766,choroid plexus
+SPACA1,Q9HBV2,testis
+SGIP1,Q9BQI5,retina
+ZC2HC1B,Q5TFG8,testis
+ARG1,P05089,liver
+GHRH,P01286,brain
+CASQ2,O14958,heart muscle
+TRPM6,Q9BX84,intestine
+BSPRY,Q5W0U4,parathyroid gland
+VSX2,P58304,retina
+NPC2,P61916,epididymis
+ESRRB,O95718,retina
+YPEL5,P62699,bone marrow
+SLC17A5,Q9NRA2,parathyroid gland
+ELOVL3,Q9HB03,skin 1
+CPN1,P15169,liver
+EQTN,Q9NQ60,testis
+INSL4,Q14641,placenta
+MLANA,Q16655,skin 1
+SLC25A2,Q9BXI2,testis
+ACAT2,Q9BWD1,liver
+TTLL2,Q9BWV7,testis
+TEX11,Q8IYF3,pancreas
+ARR3,P36575,retina
+LYZL1,Q6UWQ5,testis
+EPC1,Q9H2F5,bone marrow
+IQSEC3,Q9UPP2,brain
+SOHLH2,Q9NX45,testis
+PLS1,Q14651,intestine
+CHRNA2,Q15822,prostate
+NPPB,P16860,heart muscle
+EPX,P11678,bone marrow
+COIL,P38432,testis
+TEX14,Q8IWB6,testis
+ABCC11,Q96J66,breast
+PRB2,P02812,salivary gland
+IAPP,P10997,pancreas
+A1BG,P04217,liver
+RGSL1,A5PLK6,testis
+LHX4,Q969G2,retina
+POPDC2,Q9HBU9,heart muscle
+GJA8,P48165,testis
+ADGRB2,O60241,brain
+GHSR,Q92847,pituitary gland
+TMEM156,Q8N614,lymphoid tissue
+HPCA,P84074,brain
+TMIGD3,P0DMS9,testis
+OBP2A,Q9NY56,fallopian tube
+LAX1,Q8IWV1,lymphoid tissue
+PLG,P00747,liver
+PRM2,P04554,testis
+SPINK4,O60575,intestine
+AKR1D1,P51857,liver
+SFTPA1,Q8IWL2,lung
+SRGN,P10124,bone marrow
+HVCN1,Q96D96,choroid plexus
+PRDX4,Q13162,pancreas
+ACTRT1,Q8TDG2,testis
+CCDC70,Q6NSX1,testis
+PDE1B,Q01064,brain
+HOXC13,P31276,skin 1
+DBH,P09172,adrenal gland
+PLP1,P60201,brain
+SERPINA7,P05543,liver
+ESX1,Q8N693,testis
+MAGEA9,P43362,testis
+ATXN3L,Q9H3M9,testis
+TNFAIP6,P98066,urinary bladder
+ACVR1C,Q8NER5,adipose tissue
+C4BPA,P04003,liver
+C4BPB,P20851,liver
+GPR83,Q9NYM4,brain
+MOGAT1,Q96PD6,gallbladder
+MC3R,P41968,brain
+GCNT7,Q6ZNI0,bone marrow
+CTCFL,Q8NI51,testis
+FAM209A,Q5JX71,testis
+KCNS1,Q96KK3,brain
+SEMG2,Q02383,seminal vesicle
+MATN4,O95460,pancreas
+GTSF1L,Q9H1H1,testis
+ANKRD60,Q9BZ19,testis
+RBPJL,Q9UBG7,pancreas
+SEMG1,P04279,seminal vesicle
+C20orf85,Q9H1P6,fallopian tube
+TP53TG5,Q9Y2B4,testis
+IRGC,Q6NXR0,testis
+PSG8,Q9UQ74,placenta
+CEACAM8,P31997,bone marrow
+CRISP2,P16562,testis
+GRM4,Q14833,brain
+BTN1A1,Q13410,breast
+SLC17A3,O00476,kidney
+TCP11,Q8WWU5,testis
+CRISP1,P54107,epididymis
+OPN5,Q6U736,testis
+GCM2,O75603,parathyroid gland
+EREG,O14944,bone marrow
+SH3TC1,Q8TE82,lymphoid tissue
+PIWIL1,Q96J94,testis
+SLC10A2,Q12908,intestine
+TEKT3,Q9BXF9,testis
+BARHL1,Q9BZE3,brain
+FNDC11,Q9BVV2,testis
+PLGLB2,Q02325,liver
+IL37,Q9NZH6,skin 1
+SLC25A23,Q9BV35,brain
+C3,P01024,liver
+TGM3,Q08188,esophagus
+DEFB126,Q9BYW3,epididymis
+PAX1,P15863,parathyroid gland
+CST8,O60676,testis
+NKX2-2,O95096,brain
+CSTL1,Q9H114,testis
+CST11,Q9H112,epididymis
+STK35,Q8TDR2,retina
+LAMP5,Q9UJQ1,brain
+BANF2,Q9H503,testis
+SIRPD,Q9H106,testis
+DEFB129,Q9H1M3,epididymis
+CITED1,Q99966,epididymis
+GDF5,P43026,salivary gland
+MMP24,Q9Y5R2,brain
+C20orf173,Q96LM9,testis
+GRPR,P30550,pancreas
+PROZ,P22891,liver
+KIRREL2,Q6UWL6,pancreas
+THRA,P10827,brain
+TSKS,Q9UJT2,testis
+ASL,P04424,liver
+CSN1S1,P47710,breast
+STATH,P02808,salivary gland
+HTN1,P15515,salivary gland
+PRKCG,P05129,brain
+IFI6,P09912,choroid plexus
+SSX1,Q16384,testis
+PZP,P20742,liver
+PRDM7,Q9NQW5,testis
+OMG,P23515,brain
+RGS13,O14921,lymphoid tissue
+TAS2R4,Q9NYW5,brain
+CRYGN,Q8WXF5,thyroid gland
+SYNGR3,O43761,brain
+FBXL16,Q8N461,brain
+VIL1,P09327,intestine
+GNGT1,P63211,retina
+SPINK2,P20155,epididymis
+YWHAH,Q04917,brain
+RFPL1,O75677,brain
+RFPL3,O75679,testis
+RNF112,Q9ULX5,brain
+OPN1SW,P03999,retina
+HOXD3,P31249,epididymis
+CHN1,P15882,brain
+ARHGAP22,Q7Z5H3,brain
+TMOD2,Q9NZR1,brain
+MYOD1,P15172,skeletal muscle
+KCNC1,P48547,brain
+SHBG,P04278,liver
+AIPL1,Q9NZN9,retina
+NRL,P54845,retina
+RNASE1,P07998,pancreas
+CHRNA10,Q9GZZ6,skeletal muscle
+VCY1B,O14598,testis
+VCY,O14598,testis
+INS-IGF2,F8WCM5,pancreas
+LBP,P18428,liver
+TNNI3,P19429,heart muscle
+NALF2,O75949,heart muscle
+TSPAN16,Q9UKR8,testis
+ANGPTL8,Q6UXH0,liver
+APOC1,P02654,liver
+GDF1,P27539,brain
+NCAN,O14594,brain
+ACSBG2,Q5FVE4,testis
+EPO,P01588,liver
+IQCN,Q9H0B3,testis
+SULT4A1,Q9BR01,brain
+OLFM1,Q99784,brain
+SAG,P10523,retina
+CYP2E1,P05181,liver
+MAP3K10,Q02779,brain
+CCDC62,Q6P9F0,testis
+ANGPTL6,Q8NI99,liver
+PKDREJ,Q9NTG1,testis
+NUTM2F,A1L443,testis
+BPIFA2,Q96DR5,salivary gland
+BPIFA3,Q9BQP9,testis
+DEFB118,Q96PH6,epididymis
+GFAP,P14136,brain
+PYY,P10082,intestine
+TEX101,Q9BY14,testis
+SLC34A1,Q06495,kidney
+F12,P00748,liver
+CDX4,O14627,skin 1
+C3orf20,Q8ND61,testis
+NAPSA,O96009,lung
+BARX1,Q9HBU1,stomach 1
+CA6,P23280,salivary gland
+RHOXF2,Q9BQY4,testis
+KRT34,O76011,skin 1
+KRT33B,Q14525,skin 1
+FMO5,P49326,liver
+FSHB,P01225,pituitary gland
+ZSCAN5A,Q9BUG6,testis
+LLGL1,Q15334,brain
+LIN28A,Q9H9Z2,testis
+RTBDN,Q9BSG5,retina
+CCT6B,Q92526,testis
+SLC6A11,P48066,brain
+FCRLA,Q7L513,lymphoid tissue
+SERPINF1,P36955,choroid plexus
+FTHL17,Q9BXU8,testis
+GUCY2D,Q02846,retina
+RGS22,Q8NE09,testis
+SCP2D1,Q9UJQ7,testis
+SNAP25,P60880,brain
+BCAN,Q96GW7,brain
+CRP,P02741,liver
+HAPLN2,Q9GZV7,brain
+APCS,P02743,liver
+TESMIN,Q9Y4I5,testis
+ANGPTL3,Q9Y5C1,liver
+SYT4,Q9H2B2,brain
+PDE6A,P16499,retina
+MTUS2,Q5JR59,heart muscle
+TPTE2,Q6XPS3,testis
+RNF17,Q9BXT8,testis
+STOML3,Q8TAV4,fallopian tube
+PRAM1,Q96QH2,bone marrow
+PDE6B,P35913,retina
+PLAAT2,Q9NWW9,intestine
+NTS,P30990,intestine
+SFTPD,P35247,lung
+MICAL2,O94851,brain
+CATSPERB,Q9H7T0,pancreas
+ADAM20,O43506,testis
+ADAMDEC1,O15204,intestine
+GNAT2,P19087,retina
+REG4,Q9BYZ8,intestine
+TSHB,P01222,pituitary gland
+GSTM5,P46439,breast
+CHIA,Q9BZP6,stomach 1
+HMGCS2,P54868,liver
+ADAM30,Q9UKF2,testis
+SAA2,P0DJI9,liver
+CFHR4,Q92496,liver
+CRB1,P82279,retina
+CFHR5,Q9BXR6,liver
+SLCO1B1,Q9Y6L6,liver
+SPX,Q9BT56,adipose tissue
+PRH2,P02810,salivary gland
+MYBPC3,Q14896,heart muscle
+DSG1,Q02413,skin 1
+DSC1,Q08554,skin 1
+CBLIF,P27352,stomach 1
+GGACT,Q9BVM4,kidney
+ACRV1,P26436,testis
+SDS,P20132,liver
+MSI1,O43347,retina
+CSN2,P05814,breast
+UGT2B28,Q9BY64,breast
+GARIN1B,Q96KD3,testis
+KCP,Q6ZWJ8,kidney
+CGA,P01215,pituitary gland
+LACRT,Q9GZZ8,salivary gland
+GLS2,Q9UI32,liver
+FAM186B,Q8IYM0,testis
+AGAP2,Q99490,brain
+KRT85,P78386,skin 1
+B4GALNT1,Q00973,brain
+STX11,O75558,bone marrow
+EGR4,Q05215,brain
+CHST5,Q9GZS9,intestine
+AGT,P01019,liver
+CHRND,Q07001,skeletal muscle
+TSGA10,Q9BZW7,testis
+STAB2,Q8WWQ8,lymphoid tissue
+USP44,Q9H0E7,testis
+PCDH8,O95206,brain
+SPDYE1,Q8NFV5,testis
+DGKB,Q9Y6T7,brain
+MTHFS,P49914,liver
+ADAMTS7,Q9UKP4,heart muscle
+MYCBPAP,Q8TBZ2,testis
+CSH1,P0DML2,placenta
+SCN2A,Q99250,brain
+TBR1,Q16650,brain
+ERMN,Q8TAM6,brain
+IL1RN,P18510,esophagus
+IL1F10,Q8WWZ1,skin 1
+GAD2,Q05329,brain
+ODF2,Q5BJF6,testis
+BAAT,Q14032,liver
+GABBR2,O75899,brain
+HEMGN,Q9BXL5,bone marrow
+CTSV,O60911,lymphoid tissue
+LMX1B,O60663,salivary gland
+ENPP2,Q13822,choroid plexus
+CCN3,P48745,adrenal gland
+CCL21,O00585,lymphoid tissue
+SIT1,Q9Y3P8,lymphoid tissue
+DMRT1,Q9Y5R6,testis
+CD72,P21854,lymphoid tissue
+IGFBPL1,Q8WX77,thyroid gland
+SLC22A7,Q9Y694,liver
+CAPN11,Q9UMQ6,testis
+TINAG,Q9UJW2,kidney
+GCM1,Q9NP62,placenta
+TUBB2B,Q9BVA1,brain
+CLPS,P04118,pancreas
+TTPA,P49638,liver
+BTG4,Q9NY30,testis
+POU2F3,Q9UKI9,skin 1
+FDX1,P10109,adrenal gland
+FXYD2,P54710,kidney
+MMP13,P45452,urinary bladder
+SLC28A2,O43868,intestine
+CYP19A1,P11511,placenta
+GCHFR,P30047,liver
+BRDT,Q58F21,testis
+DNASE2B,Q8WZ79,salivary gland
+SULT6B1,Q6IMI4,testis
+CYP2C9,P11712,liver
+CYP2C8,P10632,liver
+LBX1,P52954,skeletal muscle
+CUZD1,Q86UP6,pancreas
+EXOC6,Q8TAG9,retina
+RBP4,P02753,liver
+OIT3,Q8WWZ8,liver
+CHRNA1,P02708,skeletal muscle
+GUCA1C,O95843,retina
+CCDC54,Q8NEL0,testis
+SHF,Q7M4L6,brain
+APH1B,Q8WW43,testis
+IL21,Q9HBE4,lymphoid tissue
+CXCL9,Q07325,lymphoid tissue
+LEF1,Q9UJU2,lymphoid tissue
+C4orf17,Q53FE4,testis
+FBN2,P35556,placenta
+PDE6H,Q13956,retina
+ERP27,Q96DN0,pancreas
+PLCZ1,Q86YW0,testis
+CD27,P26842,lymphoid tissue
+PIANP,Q8IYJ0,brain
+SLC38A4,Q969I6,liver
+INHBE,P58166,liver
+SYCP3,Q8IZU3,testis
+TMEM132B,Q14DG7,brain
+FOXN4,Q96NZ1,testis
+RDH16,O75452,liver
+DHH,O43323,testis
+NPFF,O15130,epididymis
+KRT71,Q3SY84,skin 1
+SMIM2,Q9BVW6,testis
+SLAIN1,Q8ND83,brain
+METTL21C,Q5VZV1,epididymis
+RNF113B,Q8IZP6,testis
+ZIC5,Q96T25,brain
+CBLN3,Q6UW01,brain
+TSSK4,Q6SA08,testis
+RTN1,Q16799,brain
+ADAM21,Q9UKJ8,testis
+SERPINA10,Q9UK55,liver
+SLC25A47,Q6Q0C1,liver
+DISP2,A7MBM2,brain
+BCL2A1,Q16548,bone marrow
+CYP11A1,P05108,adrenal gland
+GOLGA6D,P0CG33,testis
+CYP1A2,P05177,liver
+RLBP1,P12271,retina
+SEPTIN12,Q8IYM1,testis
+SLC5A2,P31639,kidney
+IGSF6,O95976,lymphoid tissue
+CHST4,Q8NCG5,gallbladder
+CLEC18B,Q6UXF7,kidney
+CMTM2,Q8TAZ6,testis
+ADAD2,Q8NCV1,testis
+OSGIN1,Q9UJX0,liver
+CTRL,P40313,pancreas
+DPEP3,Q9H4B8,testis
+KIF2B,Q8N4N8,testis
+SPATA22,Q8NHS9,testis
+SPACA3,Q8IXA5,testis
+CHCT1,Q86WR6,testis
+MEP1B,Q16820,intestine
+SLC25A52,Q3SY17,testis
+SLC13A5,Q86YT5,liver
+ZMYND15,Q9H091,testis
+ASGR1,P07306,liver
+PIK3R5,Q8WYR1,bone marrow
+TTYH2,Q9BSA4,brain
+CBX4,O00257,bone marrow
+CBLN2,Q8IUK8,brain
+ARL5C,A6NH57,lymphoid tissue
+CACNA1A,O00555,brain
+NFIC,P08651,skeletal muscle
+DMRTC2,Q8IXT2,testis
+PGGHG,Q32M88,pancreas
+SLC6A3,Q01959,brain
+CACNG8,Q8WXS5,brain
+GPR32,O75388,parathyroid gland
+KLK3,P07288,prostate
+ZNF473,Q8WTR7,testis
+GARIN5A,Q6IPT2,testis
+IGLON5,A6NGN9,brain
+CELA2A,P08217,pancreas
+PADI1,Q9ULC6,esophagus
+IL22RA1,Q8N6P7,pancreas
+C1orf94,Q6P1W5,testis
+CELA3A,P09093,pancreas
+DMRTB1,Q96MA1,testis
+BARHL2,Q9NY43,brain
+GPA33,Q99795,intestine
+TBX19,O60806,pituitary gland
+MAEL,Q96JY0,testis
+NR1I3,Q14994,liver
+F13B,P05160,liver
+FCRL5,Q96RD9,lymphoid tissue
+ISG20L2,Q9H9L3,testis
+LHX9,Q9NQ69,ovary
+C1orf56,Q9BUN1,testis
+OAZ3,Q9UMX2,testis
+HORMAD1,Q86X24,testis
+KCNH1,O95259,brain
+FLG2,Q5D862,skin 1
+NUP210L,Q5VU65,testis
+AQP10,Q96PS8,intestine
+FLG,P20930,skin 1
+ACTA1,P68133,skeletal muscle
+DEGS1,O15121,skin 1
+REN,P00797,kidney
+PPFIA4,O75335,brain
+SYT2,Q8N9I0,brain
+REG3G,Q6UW15,pancreas
+ABHD1,Q96SE0,testis
+NAT8,Q9UHE5,kidney
+DQX1,Q8TE96,intestine
+RALB,P11234,parathyroid gland
+C1QL2,Q7Z5L3,brain
+LYG1,Q8N1E2,kidney
+THSD7B,Q9C0I4,retina
+PKP4,Q99569,brain
+DLX1,P56177,brain
+CPO,Q8IVL8,intestine
+KANSL1L,A0AUZ9,parathyroid gland
+CPNE9,Q8IYJ1,brain
+SLC22A14,Q9Y267,testis
+NFKBIZ,Q9BYH8,bone marrow
+TAGLN3,Q9UI15,brain
+SPATA16,Q9BXB7,testis
+AHSG,P02765,liver
+LYAR,Q9NX58,testis
+EPHA5,P54756,brain
+CORIN,Q9Y5Q5,heart muscle
+CABS1,Q96KC9,testis
+GC,P02774,liver
+FABP2,P12104,intestine
+ROPN1L,Q96C74,testis
+HAPLN1,P10915,placenta
+ANKRD31,Q8N7Z5,testis
+SPATA9,Q9BWV2,testis
+LECT2,O14960,liver
+GABRA6,Q16445,brain
+GABRB2,P47870,brain
+GLRA1,P23415,retina
+TENM2,Q9NT68,heart muscle
+FAM217A,Q8IXS0,testis
+PSD2,Q9BQI7,brain
+LRRTM2,O43300,brain
+H2BC1,Q96A08,testis
+RASGEF1C,Q8N431,brain
+SCUBE3,Q8IX30,thyroid gland
+CYP39A1,Q9NYL5,liver
+GABRR1,P24046,retina
+GPR6,P46095,brain
+TAAR1,Q96RJ0,stomach 1
+SLC2A12,Q8TD20,choroid plexus
+IGFBP1,P08833,liver
+CNPY1,Q3B7I2,brain
+CLTRN,Q9HBJ8,kidney
+AKAP4,Q5JQC9,testis
+RAB41,Q5JT25,retina
+GPR174,Q9BXC1,lymphoid tissue
+AWAT2,Q6E213,skin 1
+CPXCR1,Q8N123,testis
+IGSF1,Q8N6C5,pituitary gland
+GPC3,P51654,placenta
+GPR119,Q8TDV5,pancreas
+FATE1,Q969F0,testis
+MAGEA4,P43358,testis
+STAR,P49675,adrenal gland
+PXDNL,A1KZ92,heart muscle
+ST18,O60284,brain
+RGS20,O76081,brain
+DNAJC5B,Q9UF47,testis
+CRH,P06850,brain
+PMP2,P02689,brain
+SLC26A7,Q8TE54,thyroid gland
+PSKH2,Q96QS6,retina
+ATP6V0D2,Q8N8Y2,kidney
+SLC39A4,Q6P5W5,intestine
+SHC3,Q92529,brain
+ACTL7B,Q9Y614,testis
+NR6A1,Q15406,testis
+IDI2,Q9BXS1,skeletal muscle
+CACNA1B,Q00975,brain
+SLC39A12,Q504Y0,choroid plexus
+TMEM236,Q5W0B7,intestine
+ANKRD30A,Q9BXX3,breast
+A1CF,Q9NQ94,liver
+LRIT1,Q9P2V4,retina
+RGR,P47804,retina
+ANKRD1,Q15327,heart muscle
+HABP2,Q14520,liver
+VAX1,Q5SQQ9,brain
+CYP17A1,P05093,adrenal gland
+FUOM,A2VDF0,liver
+LRRC27,Q9C0I9,testis
+NKX6-2,Q9C056,brain
+ADAM12,O43184,placenta
+SAA4,P35542,liver
+PGAP2,Q9UHJ9,epididymis
+SCGB1A1,P11684,lung
+ROM1,Q03395,retina
+OOSP2,Q86WS3,testis
+MS4A3,Q96HJ5,bone marrow
+FEZ1,Q99689,brain
+KIRREL3,Q8IZU9,brain
+DUSP15,Q9H1R2,testis
+C20orf144,Q9BQM9,testis
+SOGA1,O94964,brain
+SPINT4,Q6UDR6,epididymis
+CDH22,Q9UJ99,brain
+GPHA2,Q96T91,pancreas
+SLC22A9,Q8IVM8,liver
+FXYD4,P59646,kidney
+KLHL1,Q9NR64,brain
+GPM6A,P51674,brain
+SPATA4,Q8NEY3,testis
+CNDP1,Q96KN2,brain
+CCDC83,Q8IWF9,testis
+PPP1R1C,Q8WVI7,heart muscle
+PIH1D2,Q8WWB5,testis
+TKTL2,Q9H0I9,testis
+LYZL2,Q7Z4W2,testis
+CACNA2D4,Q7Z3S7,retina
+KCNA6,P17658,brain
+RAD9B,Q6WBX8,testis
+MAT1A,Q00266,liver
+ALLC,Q8N6M5,testis
+MSGN1,A6NI15,choroid plexus
+ATP6V1G3,Q96LB4,kidney
+SLC25A31,Q9H0C2,testis
+DRD3,P35462,brain
+ITIH2,P19823,liver
+ANKAR,Q7Z5J8,testis
+KCNJ1,P48048,kidney
+TDO2,P48775,liver
+GABRA2,P47869,brain
+PABPC3,Q9H361,testis
+CCL28,Q9NRJ3,salivary gland
+BEND6,Q5SZJ8,brain
+TMEM132D,Q14C87,brain
+RBM46,Q8TBY0,testis
+TLCD4,Q96MV1,liver
+TMEM178A,Q8NBL3,brain
+RIT2,Q99578,brain
+PTH,P01270,parathyroid gland
+BOLL,Q8N9W6,testis
+SUV39H2,Q9H5I1,testis
+MEPE,Q9NQ76,brain
+NADK2,Q4G0N4,liver
+DDX4,Q9NQI0,testis
+CATSPER3,Q86XQ3,testis
+CNTNAP4,Q9C0A0,brain
+JAKMIP1,Q96N16,brain
+ZIC1,Q15915,brain
+CPB1,P15086,pancreas
+LGI2,Q8N0V4,parathyroid gland
+TEKT5,Q96M29,testis
+SYCP2L,Q5T4T6,parathyroid gland
+FEZF2,Q8TBJ5,brain
+TEX29,Q8N6K0,testis
+SPACA7,Q96KW9,testis
+CD8A,P01732,lymphoid tissue
+GOLGA8F,Q08AF8,testis
+TGIF2LX,Q8IUE1,testis
+C7orf31,Q8N865,testis
+ASB17,Q8WXJ9,testis
+SLC5A10,A0PJK1,kidney
+AK5,Q9Y6K8,brain
+CABYR,O75952,testis
+JPH3,Q8WXH2,brain
+NRGN,Q92686,brain
+GPR15,P49685,intestine
+GAL3ST2,Q9H3Q3,intestine
+WNT3A,P56704,placenta
+OBSCN,Q5VST9,skeletal muscle
+ASZ1,Q8WWH4,testis
+GPR26,Q8NDV2,brain
+MMP21,Q8N119,epididymis
+C10orf90,Q96M02,brain
+PSMA8,Q8TAA3,testis
+TMPRSS15,P98073,intestine
+RAB6B,Q9NRW1,brain
+SEPTIN14,Q6ZU15,testis
+CYP2U1,Q7Z449,lymphoid tissue
+ODF1,Q14990,testis
+MAGEC1,O60732,testis
+XAGE2,Q96GT9,placenta
+KDM8,Q8N371,liver
+PDZD9,Q8IXQ8,testis
+C2CD6,Q53TS8,testis
+TMEM237,Q96Q45,retina
+CYLC2,Q14093,testis
+SLC26A2,P50443,intestine
+SAXO1,Q8IYX7,testis
+TRIM42,Q8IWZ5,testis
+KIF5A,Q12840,brain
+MAGEA8,P43361,placenta
+WIF1,Q9Y5W5,retina
+UGT2B4,P06133,liver
+PPEF2,O14830,retina
+CXCL13,O43927,lymphoid tissue
+TIAM1,Q13009,brain
+FBXO43,Q4G163,testis
+CD109,Q6YHK3,parathyroid gland
+PRG3,Q9Y2Y8,bone marrow
+MS4A1,P11836,lymphoid tissue
+FBXO32,Q969P5,skeletal muscle
+PHKG2,P15735,testis
+ITGAD,Q13349,lymphoid tissue
+ZIC3,O60481,brain
+GHRL,Q9UBU3,stomach 1
+SHCBP1L,Q9BZQ2,testis
+NMNAT2,Q9BZQ4,brain
+LYZL4,Q96KX0,testis
+C8A,P07357,liver
+SYN2,Q92777,brain
+STEAP2,Q8NFT2,prostate
+HTR5A,P47898,brain
+TMED6,Q8WW62,pancreas
+CLEC18C,Q8NCF0,kidney
+ARMC12,Q5T9G4,testis
+FAM81A,Q8TBF8,brain
+LCA5L,O95447,testis
+C9orf43,Q8TAL5,testis
+SLC34A2,O95436,lung
+CABP1,Q9NZU7,brain
+FMNL2,Q96PY5,brain
+DPYSL5,Q9BPU6,brain
+CIB4,A0PJX0,testis
+SLC30A2,Q9BRI3,pancreas
+BABAM2,Q9NXR7,adrenal gland
+TRIM63,Q969Q1,skeletal muscle
+HPD,P32754,liver
+FAIM,Q9NVQ4,retina
+SLC13A3,Q8WWT9,kidney
+KCNB1,Q14721,retina
+CD1A,P06126,lymphoid tissue
+CD1C,P29017,lymphoid tissue
+CD1B,P29016,lymphoid tissue
+CD1E,P15812,lymphoid tissue
+CPA2,P48052,pancreas
+CPA5,Q8WXQ8,testis
+POM121L2,Q96KW2,testis
+ALAS2,P22557,bone marrow
+PAGE5,Q96GU1,testis
+SLC45A3,Q96JT2,prostate
+HTR6,P50406,brain
+ITLN2,Q8WWU7,intestine
+FGF17,O60258,brain
+VWA5B1,Q5TIE3,choroid plexus
+SLC5A11,Q8WWX8,brain
+APOA2,P02652,liver
+WFDC8,Q8IUA0,epididymis
+KCNE2,Q9Y6J6,stomach 1
+GIP,P09681,intestine
+ACTC1,P68032,heart muscle
+GOLGA6A,Q9NYA3,testis
+CES5A,Q6NT32,epididymis
+TCHH,Q07283,skin 1
+LCE2B,O14633,skin 1
+RGL4,Q8IZJ4,bone marrow
+SPRR2G,Q9BYE4,skin 1
+CCDC17,Q96LX7,fallopian tube
+TEPP,Q6URK8,testis
+UROC1,Q96N76,liver
+LRRC36,Q1X8D7,testis
+ZFYVE28,Q9HCC9,brain
+PIP,P12273,salivary gland
+FAM131B,Q86XD5,brain
+LYPD5,Q6UWN5,skin 1
+ANKLE1,Q8NAG6,bone marrow
+TFF2,Q03403,stomach 1
+TFF1,P04155,stomach 1
+UBASH3A,P57075,lymphoid tissue
+HSF2BP,O75031,testis
+CSTB,P04080,esophagus
+FTCD,O95954,liver
+PCNT,O95613,skeletal muscle
+S100B,P04271,brain
+CLDND2,Q8NHS1,testis
+ZNF761,Q86XN6,prostate
+FCN2,Q15485,liver
+COX6B2,Q6YFQ2,testis
+CD3G,P09693,lymphoid tissue
+PAQR6,Q6TCH4,brain
+PTH1R,Q03431,kidney
+FCRL3,Q96P31,lymphoid tissue
+CYP3A4,P08684,liver
+CYP3A7,P24462,liver
+CYP11B1,P15538,adrenal gland
+ZNF394,Q53GI3,bone marrow
+PTGER1,P34995,kidney
+COL26A1,Q96A83,brain
+CCDC105,Q8IYK2,testis
+PGLYRP2,Q96PD5,liver
+LRWD1,Q9UFC0,testis
+CELF5,Q8N6W0,brain
+CCDC116,Q8IYX3,testis
+DMKN,Q6E0U4,skin 1
+BDH1,Q02338,liver
+GRIN2C,Q14957,brain
+FDXR,P22570,adrenal gland
+KLHL10,Q6JEL2,testis
+KASH5,Q8N6L0,testis
+HCRT,O43612,brain
+DCD,P81605,skin 1
+IZUMO2,Q6UXV1,testis
+ASB16,Q96NS5,skeletal muscle
+SHANK1,Q9Y566,brain
+KRT82,Q9NSB4,skin 1
+SYCE2,Q6PIF2,testis
+ASGR2,P07307,liver
+CCDC42,Q96M95,testis
+PRR35,P0CG20,brain
+MEIOB,Q8N635,testis
+HS3ST6,Q96QI5,skin 1
+ZG16B,Q96DA0,salivary gland
+CLPB,Q9H078,testis
+GNG3,P63215,brain
+LBHD1,Q9BQE6,retina
+ITIH3,Q06033,liver
+FGF19,O95750,gallbladder
+CYP4A22,Q5TCH4,liver
+PDZK1IP1,Q13113,kidney
+SLC1A7,O00341,retina
+BSND,Q8WZ55,kidney
+CTRC,Q99895,pancreas
+MATN1,P21941,retina
+CAMK2N1,Q7Z7J9,brain
+CCDC27,Q2M243,testis
+C1orf87,Q8N0U7,fallopian tube
+LRRIQ3,A6PVS8,testis
+AKNAD1,Q5T1N1,testis
+VCAM1,P19320,lymphoid tissue
+CADM3,Q8N126,brain
+KCNJ9,Q92806,brain
+PEA15,Q15121,brain
+SLAMF6,Q96DU3,lymphoid tissue
+SLC9C2,Q5TAH2,testis
+LMX1A,Q8TE12,choroid plexus
+LRRC52,Q8N7C0,testis
+GARIN4,Q8IYT1,testis
+AXDND1,Q5T1B0,testis
+WDR64,B1ANS9,testis
+KLHDC8A,Q8IYD2,ovary
+OXER1,Q8TDS5,liver
+HAAO,P46952,liver
+ZSWIM2,Q8NEG5,testis
+FBXO41,Q8TF61,brain
+VSNL1,P62760,brain
+ANKRD30BL,A7E2S9,testis
+TEKT4,Q8WW24,testis
+PDHA2,P29803,testis
+SMCP,P49901,testis
+SPRR2D,P22532,esophagus
+BMP10,O95393,heart muscle
+S100A12,P80511,bone marrow
+TDRD10,Q5VZ19,testis
+CRYGC,P07315,testis
+GABRG1,Q8N1C3,brain
+ALPI,P09923,intestine
+PBXIP1,Q96AQ6,choroid plexus
+IGFN1,Q86VF2,skeletal muscle
+TEX55,Q96M34,testis
+PDCL2,Q8N4E4,testis
+TRIM46,Q7Z4K8,brain
+TSACC,Q96A04,testis
+CCDC141,Q6ZP82,heart muscle
+RETNLB,Q9BQ08,intestine
+FCRL4,Q96PJ5,lymphoid tissue
+TRAT1,Q6PIZ9,lymphoid tissue
+DPPA2,Q7Z7J5,testis
+SPTA1,P02549,bone marrow
+PYHIN1,Q6K0P9,lymphoid tissue
+SLC2A2,P11168,liver
+CTLA4,P16410,lymphoid tissue
+SYNPR,Q8TBG9,brain
+ALB,P02768,liver
+C4orf36,Q96KX1,testis
+ERICH6,Q7L0X2,testis
+FANCD2OS,Q96PS1,testis
+PLSCR2,Q9NRY7,testis
+CCDC158,Q5M9N0,testis
+PLB1,Q6P1J6,intestine
+SPDYA,Q5MJ70,testis
+TGM4,P49221,prostate
+RTP3,Q9BQQ7,liver
+RHO,P08100,retina
+RPL39L,Q96EH5,testis
+TKT,P29401,bone marrow
+ZDHHC19,Q8WVZ1,testis
+SLC9B1,Q4ZJI4,testis
+CAMP,P49913,bone marrow
+FBXW12,Q6X9E4,pancreas
+CCDC51,Q96ER9,choroid plexus
+BSN,Q9UPA5,brain
+HSPA4L,O95757,testis
+CAMKV,Q8NCB2,brain
+GRM2,Q14416,brain
+SMIM43,Q4W5P6,brain
+ADAD1,Q96M93,testis
+C4orf45,Q96LM5,testis
+TMEM144,Q7Z5S9,brain
+TMEM184C,Q9NVA4,parathyroid gland
+EDIL3,O43854,brain
+ADGRV1,Q8WXG9,adrenal gland
+ANKRD33B,A6NCL7,retina
+SCGB3A2,Q96PL1,lung
+SPINK1,P00995,pancreas
+SPZ1,Q9BXG8,testis
+CAGE1,Q8TC20,testis
+TMEM174,Q8WUU8,kidney
+CARTPT,Q16568,brain
+FAM170A,A1A519,testis
+KLKB1,P03952,liver
+SLC6A18,Q96N87,kidney
+SEPTIN8,Q92599,brain
+LEAP2,Q969E1,liver
+GRIK2,Q13002,brain
+TLX3,O43711,brain
+CALHM4,Q5JW98,placenta
+SPATA48,A4D263,testis
+H2AC1,Q96QV6,testis
+TBX20,Q9UMR3,heart muscle
+HCN1,O60741,retina
+NEUROD6,Q96NK8,brain
+TEX47,Q8TBZ9,testis
+SP8,Q8IXZ3,prostate
+IQUB,Q8NA54,testis
+SLC13A4,Q9UKG4,choroid plexus
+SLC35G3,Q8N808,testis
+SUN3,Q8TAQ9,testis
+HNF4G,Q14541,intestine
+SLC30A8,Q8IWU4,pancreas
+EN2,P19622,brain
+KCNV1,Q6PIU1,brain
+DEFA5,Q01523,intestine
+DEFA4,P12838,bone marrow
+DEFA6,Q01524,intestine
+UNCX,A6NJT0,brain
+SPAG11B,Q08648,epididymis
+CA3,P07451,skeletal muscle
+SLC7A13,Q8TCU3,kidney
+BAALC,Q8WXS3,brain
+PRKACG,P22612,testis
+PRSS37,A4D1T9,testis
+GKAP1,Q5VSY0,testis
+SSMEM1,Q8WWF3,testis
+LLCFC1,Q96L11,testis
+SHOC1,Q5VXU9,testis
+CXorf58,Q96LI9,testis
+GPR101,Q96P66,brain
+TSHR,P16473,thyroid gland
+PHOX2A,O14813,adrenal gland
+MBL2,P11226,liver
+RPL10L,Q96L21,testis
+NGB,Q9NPG2,brain
+CDX2,Q99626,intestine
+AKR1E2,Q96JD6,testis
+SSX3,Q99909,testis
+CLEC1B,Q9P126,liver
+TMEM52B,Q4KMG9,kidney
+GFI1B,Q5VTD9,bone marrow
+ZMYND19,Q96E35,retina
+NSMF,Q6X4W1,brain
+C12orf50,Q8NA57,testis
+ERICH6B,Q5W0A0,testis
+CYP2C19,P33261,liver
+C10orf82,Q8WW14,testis
+SERPINA12,Q8IW75,skin 1
+CCDC38,Q502W7,testis
+KCNC2,Q96PR1,brain
+LIPC,P11150,liver
+PASD1,Q8IV76,testis
+TMCO5A,Q8N6Q1,testis
+CMTM5,Q96DZ9,brain
+SPATA19,Q7Z5L4,testis
+PPP1R14D,Q9NXH3,intestine
+C16orf78,Q8WTQ4,testis
+LRTM2,Q8N967,brain
+BAG5,Q9UL15,testis
+SPIC,Q8N5J4,lymphoid tissue
+TBATA,Q96M53,lymphoid tissue
+MYRFL,Q96LU7,intestine
+C2,P06681,liver
+C11orf65,Q8NCR3,testis
+CCDC182,A6NF36,testis
+MSS51,Q4VC12,skeletal muscle
+RAG1,P15918,lymphoid tissue
+POTED,Q86YR6,testis
+WDR88,Q6ZMY6,testis
+CLEC4D,Q8WXI8,bone marrow
+CPLX4,Q7Z7G2,retina
+CDH16,O75309,kidney
+MMP10,P09238,endometrium 1
+ACSM1,Q08AH1,breast
+YPEL4,Q96NS1,brain
+LDHC,P07864,testis
+LDHAL6A,Q6ZMR3,testis
+C18orf54,Q8IYD9,testis
+CACNG2,Q9Y698,brain
+TAC3,Q9UHF0,placenta
+MYO1A,Q9UBC5,intestine
+STX3,Q13277,retina
+C15orf48,Q9C002,intestine
+TSC22D4,Q9Y3Q8,brain
+MS4A6E,Q96DS6,testis
+MS4A14,Q96JA4,testis
+MS4A5,Q9H3V2,testis
+EPB42,P16452,bone marrow
+MS4A15,Q8N5U1,lung
+MAP1A,P78559,brain
+TERB2,Q8NHR7,testis
+NKX3-1,Q99801,prostate
+GNGT2,O14610,retina
+SUN5,Q8TC36,testis
+SAMD14,Q8IZD0,brain
+BPIFB6,Q8NFQ5,salivary gland
+ANKRD40CL,Q53H64,intestine
+TBC1D21,Q8IYX1,testis
+IGF2,P01344,placenta
+CD3D,P04234,lymphoid tissue
+MMP26,Q9NRE1,endometrium 1
+LPO,P22079,salivary gland
+JSRP1,Q96MG2,skeletal muscle
+CDT1,Q9H211,bone marrow
+SPATA33,Q96N06,testis
+PROCA1,Q8NCQ7,testis
+LALBA,P00709,breast
+ANKRD33,Q7Z3H0,retina
+TTYH1,Q9H313,brain
+TMEM145,Q8NBT3,brain
+NLRP7,Q8WX94,testis
+PSCA,O43653,stomach 1
+TMIGD2,Q96BF3,lymphoid tissue
+SERPINF2,P08697,liver
+HSD11B1L,Q7Z5J1,brain
+KLK4,Q9Y5K2,prostate
+KLK2,P20151,prostate
+KLK5,Q9Y337,skin 1
+KLK6,Q92876,brain
+KLK13,Q9UKR3,esophagus
+KRT80,Q6KB66,skin 1
+KRT1,P04264,skin 1
+ACER1,Q8TDN7,skin 1
+SOAT2,O75908,intestine
+CABP2,Q9NPB3,retina
+TBX10,O75333,intestine
+MGAT5B,Q3V5L5,brain
+CYP7A1,P22680,liver
+GSDMA,Q96QA5,skin 1
+SOST,Q9BQB4,kidney
+CASKIN1,Q8WXD9,brain
+TTC21A,Q8NDW8,testis
+NAALADL1,Q9UQQ1,intestine
+MAJIN,Q3KP22,testis
+OR1F1,O43749,brain
+H3-4,Q16695,testis
+GLYCTK,Q8IVS8,liver
+KCNV2,Q8TDN2,retina
+PTF1A,Q7RTS3,pancreas
+KIF5C,O60282,brain
+H1-4,P10412,bone marrow
+ACOX2,Q99424,liver
+MOBP,Q13875,brain
+PPDPFL,Q8WWR9,skeletal muscle
+KCNG4,Q8TDN1,retina
+KLHL30,Q0D2K2,skeletal muscle
+TXNDC2,Q86VQ3,testis
+LGI3,Q8N145,brain
+SFTPC,P11686,lung
+PHYHIP,Q92561,brain
+GBX2,P52951,brain
+ADAM29,Q9UKF5,testis
+ADAM18,Q9Y3Q7,testis
+MUCL3,Q3MIW9,stomach 1
+WFDC13,Q8IUB5,epididymis
+KCTD19,Q17RG1,testis
+SLC16A4,O15374,kidney
+WFDC12,Q8WWY7,skin 1
+CA7,P43166,intestine
+TSPY2,A6NKD2,testis
+SFTPB,P07988,lung
+BTNL3,Q6UXE8,intestine
+PLA2G4F,Q68DD2,skin 1
+ENHO,Q6UWT2,brain
+CTRB1,P17538,pancreas
+CTRB2,Q6GPI1,pancreas
+TM4SF20,Q53R12,intestine
+GRM5,P41594,brain
+CPLX1,O14810,brain
+NTSR2,O95665,brain
+VCX3A,Q9NNX9,testis
+VXN,Q8TAG6,brain
+ATF5,Q9Y2D1,liver
+GOT1L1,Q8NHS2,testis
+PCSK9,Q8NBP7,liver
+IL13,P35225,testis
+OR6F1,Q8NGZ6,testis
+RGS14,O43566,brain
+IL1RAPL1,Q9NZN1,brain
+P2RY12,Q9H244,brain
+C22orf15,Q8WYQ4,fallopian tube
+PDILT,Q8N807,stomach 1
+UMOD,P07911,kidney
+GP2,P55259,pancreas
+RNASE2,P10153,bone marrow
+ELSPBP1,Q96BH3,epididymis
+RNASE3,P12724,bone marrow
+KCNK9,Q9NPC2,brain
+CXCL8,P10145,bone marrow
+COL22A1,Q8NFW1,pituitary gland
+CD52,P31358,epididymis
+HTRA4,P83105,placenta
+ZNF280A,P59817,adrenal gland
+MUC15,Q8N387,epididymis
+CT55,Q8WUE5,testis
+VPREB1,P12018,bone marrow
+GKN1,Q9NS71,stomach 1
+MT1B,P07438,liver
+ACTRT2,Q8TDY3,testis
+DCXR,Q7Z4W1,liver
+NRG4,Q8WWG1,retina
+TAS2R1,Q9NYW7,testis
+LINGO1,Q96FE5,brain
+PRY,O14603,epididymis
+RBMY1F,Q15415,testis
+CSGALNACT2,Q8N6G5,bone marrow
+GSX1,Q9H4S2,brain
+CTNND2,Q9UQB3,brain
+MUC17,Q685J3,intestine
+AHSP,Q9NZD4,bone marrow
+WNT10B,O00744,brain
+ITGAM,P11215,bone marrow
+S100G,P29377,intestine
+HSFY2,Q96LI6,testis
+TIGD4,Q8IY51,retina
+MYO7B,Q6PIF6,intestine
+ALCAM,Q13740,parathyroid gland
+SERPINA9,Q86WD7,lymphoid tissue
+FAM153A,Q9UHL3,testis
+GPR37L1,O60883,brain
+NSG2,Q9Y328,brain
+SERPINA6,P08185,liver
+NIPA1,Q7RTP0,brain
+GPR25,O00155,stomach 1
+VGLL2,Q8N8G2,skeletal muscle
+GYPA,P02724,bone marrow
+FABP6,P51161,intestine
+FAM161A,Q3B820,retina
+C7orf33,Q8WU49,retina
+FRMPD2,Q68DX3,retina
+CST5,P28325,salivary gland
+CST2,P09228,salivary gland
+CST1,P01037,salivary gland
+KRT78,Q8N1N4,esophagus
+KRT86,O43790,skin 1
+KRT75,O95678,skin 1
+DNAJC18,Q9H819,testis
+SPATA24,Q86W54,testis
+KRT4,P19013,esophagus
+KISS1,Q15726,placenta
+HSD17B13,Q7Z5P4,liver
+COX7B2,Q8TF08,testis
+KRT83,P78385,skin 1
+DLGAP1,O14490,brain
+GARIN3,Q8TC56,testis
+GTSF1,Q8WW33,testis
+RASA4B,C9J798,skeletal muscle
+RBMXL2,O75526,testis
+TPD52L3,Q96J77,testis
+DYDC1,Q8WWB3,testis
+CEL,P19835,pancreas
+PSG6,Q00889,placenta
+PLA2G1B,P04054,pancreas
+MBD3L1,Q8WWY6,testis
+PGK2,P07205,testis
+CEACAM3,P40198,bone marrow
+PLAC1,Q9HBJ0,placenta
+DDI1,Q8WTU0,testis
+PATE1,Q8WXA2,epididymis
+C8orf74,Q6P047,testis
+MUC7,Q8TAX7,salivary gland
+OPRPN,Q99935,salivary gland
+SMR3B,P02814,salivary gland
+CSN3,P07498,breast
+LRG1,P02750,liver
+SOSTDC1,Q6X4U4,choroid plexus
+NPTX1,Q15818,brain
+KCNK3,O14649,adrenal gland
+KRT38,O76015,skin 1
+TPPP,O94811,brain
+KRTAP4-4,Q9BYR3,skin 1
+XAGE3,Q8WTP9,placenta
+KRT9,P35527,lymphoid tissue
+XAGE5,Q8WWM1,testis
+KRT20,P35900,intestine
+KRT27,Q7Z3Y8,skin 1
+SPACA5B,Q96QH8,testis
+SPACA5,Q96QH8,testis
+MROH2B,Q7Z745,testis
+NEUROD2,Q15784,brain
+OTP,Q5XKR4,brain
+FGG,P02679,liver
+FGA,P02671,liver
+FGB,P02675,liver
+PTCRA,Q6ISU1,lymphoid tissue
+ENC1,O14682,brain
+LKAAEAR1,Q8TD35,testis
+DEFB4A,O15263,esophagus
+SPATA46,Q5T0L3,testis
+LGALS4,P56470,intestine
+SLFNL1,Q499Z3,testis
+UTF1,Q5T230,testis
+WDR87,Q6ZQQ6,testis
+KLF17,Q5JT82,testis
+FBXW10,Q5XX13,testis
+FOXB1,Q99853,brain
+LDHAL6B,Q9BYZ2,testis
+GAP43,P17677,brain
+REG1B,P48304,pancreas
+TEX37,Q96LM6,testis
+CD8B,P10966,lymphoid tissue
+LCE1D,Q5T752,skin 1
+PRL,P01236,pituitary gland
+AZU1,P20160,bone marrow
+ATOH1,Q92858,intestine
+C1QTNF4,Q9BXJ3,brain
+CDY1,Q9Y6F8,testis
+CDY1B,Q9Y6F8,testis
+ARNT2,Q9HBZ2,brain
+DNAJB7,Q7Z6W7,testis
+INSL5,Q9Y5Q6,intestine
+EFCAB3,Q8N7B9,testis
+TTC36,A6NLP5,liver
+HSFY1,Q96LI6,testis
+AGXT,P21549,liver
+ACOT12,Q8WYK0,liver
+FAM170B,A6NMN3,testis
+MUCL1,Q96DR8,breast
+KLHL6,Q8WZ60,lymphoid tissue
+ZFAND4,Q86XD8,testis
+THEMIS,Q8N1K5,lymphoid tissue
+MS4A10,Q96PG2,intestine
+GARIN2,Q8N9W8,testis
+CCL19,Q99731,lymphoid tissue
+SNX32,Q86XE0,brain
+KRT2,P35908,skin 1
+SLC22A13,Q9Y226,kidney
+ADH6,P28332,liver
+XKR3,Q5GH77,testis
+ARPP21,Q9UBL0,brain
+CCDC96,Q2M329,testis
+CCDC63,Q8NA47,testis
+C11orf86,A6NJI1,intestine
+LIPM,Q5VYY2,skin 1
+PLAC8L1,A1L4L8,testis
+SLC2A14,Q8TDB8,testis
+CST9,Q5W186,breast
+KCNK7,Q9Y2U2,skin 1
+IQCF1,Q8N6M8,testis
+GLIPR1L1,Q6UWM5,testis
+IHO1,Q8IYA8,testis
+RNASE8,Q8TDE3,salivary gland
+SAA1,P0DJI8,liver
+RNASE11,Q8TAA1,epididymis
+CCR9,P51686,lymphoid tissue
+TAS1R1,Q7RTX1,testis
+ADGRG2,Q8IZP9,epididymis
+SPATA3,Q8NHX4,testis
+MUC13,Q9H3R2,intestine
+WFIKKN2,Q8TEU8,choroid plexus
+C1orf100,Q5SVJ3,testis
+TOPAZ1,Q8N9V7,testis
+CNP,P09543,brain
+TDRD12,Q587J7,testis
+MARCHF10,Q8NA82,testis
+PHOSPHO1,Q8TCT1,testis
+KRT28,Q7Z3Y7,skin 1
+SLCO4C1,Q6ZQN7,kidney
+RAX2,Q96IS3,retina
+CBY2,Q8NA61,testis
+TENT5D,Q8NEK8,testis
+C9orf131,Q5VYM1,testis
+TLR10,Q9BXR5,lymphoid tissue
+ARL13A,Q5H913,testis
+ZNF80,P51504,lymphoid tissue
+STARD6,P59095,testis
+GOLGA6L2,Q8N9W4,testis
+TTC9B,Q8N6N2,brain
+GOLT1A,Q6ZVE7,liver
+UGT8,Q16880,brain
+ODAPH,Q17RF5,placenta
+PDZK1,Q5T2W1,kidney
+CNIH2,Q6PI25,brain
+AMY1B,P0DTE7,salivary gland
+NLRP6,P59044,intestine
+CATSPERD,Q86XM0,testis
+ASPHD1,Q5U4P2,brain
+AMZ1,Q400G9,brain
+ZIC4,Q8N9L1,brain
+CA5A,P35218,liver
+ZG16,O60844,intestine
+SLC22A1,O15245,liver
+TEX36,Q5VZQ5,testis
+DSG4,Q86SJ6,skin 1
+RAG2,P55895,lymphoid tissue
+WFDC5,Q8TCV5,skin 1
+INHBC,P55103,liver
+HIGD2B,Q4VC39,testis
+NPPA,P01160,heart muscle
+CATSPER1,Q8NEC5,testis
+CST6,Q15828,skin 1
+PROP1,O75360,pituitary gland
+ISX,Q2M1V0,intestine
+APOF,Q13790,liver
+TSGA10IP,Q3SY00,testis
+UBQLNL,Q8IYU4,testis
+UBQLN3,Q9H347,testis
+PNLIP,P16233,pancreas
+CABP4,P57796,retina
+TMEM70,Q9BUB7,skeletal muscle
+PRM1,P04553,testis
+RBMXL3,Q8N7X1,testis
+CBLL2,Q8N7E2,testis
+CCDC168,Q8NDH2,testis
+CREG2,Q8IUH2,brain
+TMEM270,Q6UE05,testis
+ASCL3,Q9NQ33,salivary gland
+ZNF683,Q8IZ20,testis
+HSF5,Q4G112,testis
+FOXG1,P55316,brain
+ENTHD1,Q8IYW4,testis
+ACBD7,Q8N6N7,brain
+HMGB4,Q8WW32,testis
+SLC35G1,Q2M3R5,intestine
+OR4N2,Q8NGD1,testis
+FOXR1,Q6PIV2,testis
+PRR18,Q8N4B5,brain
+GNG7,O60262,brain
+CNTD1,Q8N815,testis
+DCAF4L2,Q8NA75,testis
+CNBD1,Q8NA66,testis
+HORMAD2,Q8N7B1,testis
+TGIF2LY,Q8IUE0,testis
+PFN4,Q8NHR9,testis
+MAGEB6,Q8N7X4,testis
+CDK5R1,Q15078,brain
+DEFB104A,Q8WTQ1,epididymis
+GRIN1,Q05586,brain
+C8G,P07360,liver
+EFCAB5,A4FU69,testis
+LY6H,O94772,brain
+FMR1NB,Q8N0W7,testis
+DEAF1,O75398,brain
+ZDHHC22,Q8N966,brain
+CETN1,Q12798,testis
+SPACA4,Q8TDM5,testis
+FBXO39,Q8N4B4,testis
+CLDN22,Q8N7P3,salivary gland
+BEND2,Q8NDZ0,testis
+UBE2U,Q5VVX9,testis
+RBM44,Q6ZP01,testis
+VCX2,Q9H322,testis
+FAM187B,Q17R55,testis
+C12orf54,Q6X4T0,testis
+TEX44,Q53QW1,testis
+DEFB114,Q30KQ6,epididymis
+MAGEB10,Q96LZ2,testis
+CAPZA3,Q96KX2,testis
+ODF3,Q96PU9,testis
+SPATA31E1,Q6ZUB1,testis
+C2orf73,Q8N5S3,testis
+TSPYL6,Q8N831,testis
+HTR3C,Q8WXA8,lung
+TSSK6,Q9BXA6,testis
+TMEM151B,Q8IW70,brain
+SLITRK1,Q96PX8,brain
+PRM3,Q9NNZ6,testis
+TNP2,Q05952,testis
+SPAG11A,Q6PDA7,epididymis
+CALML5,Q9NZT1,skin 1
+CCDC185,Q8N715,testis
+DNAJC22,Q8N4W6,liver
+CEP295NL,Q96MC4,testis
+GLDC,P23378,liver
+TUBAL3,A6NHL2,intestine
+CTXN1,P60606,brain
+OR6B3,Q8NGW1,retina
+C10orf53,Q8N6V4,testis
+DYNAP,Q8N1N2,esophagus
+CPN2,P22792,liver
+H1-8,Q8IZA3,testis
+RFLNA,Q6ZTI6,stomach 1
+FOXE1,O00358,thyroid gland
+LGALS7B,P47929,skin 1
+EXD1,Q8NHP7,testis
+EXOC3L1,Q86VI1,lymphoid tissue
+C9orf50,Q5SZB4,testis
+CCDC89,Q8N998,testis
+C12orf42,Q96LP6,testis
+CYP11B2,P19099,adrenal gland
+ALOXE3,Q9BYJ1,skin 1
+PXT1,Q8NFP0,testis
+GGN,Q86UU5,testis
+SIGLECL1,Q8N7X8,testis
+PCARE,A6NGG8,retina
+TMEM151A,Q8N4L1,brain
+TMEM31,Q5JXX7,testis
+CATSPERE,Q5SY80,testis
+DNAJB8,Q8NHS0,testis
+ALOX12B,O75342,skin 1
+RNF151,Q2KHN1,testis
+GRM8,O00222,choroid plexus
+TPPP2,P59282,testis
+RPRML,Q8N4K4,brain
+WDR97,A6NE52,testis
+SYCN,Q0VAF6,pancreas
+FAM216B,Q8N7L0,fallopian tube
+AKAP5,P24588,brain
+NKPD1,Q17RQ9,skin 1
+RNF227,A6NIN4,skin 1
+NRXN1,"P58400, Q9ULB1",brain
+CCR8,P51685,lymphoid tissue
+GOLGA8J,A6NMD2,testis
+GARIN5B,Q8N5Q1,testis
+TMEM150B,A6NC51,intestine
+WFDC11,Q8NEX6,epididymis
+C12orf40,Q86WS4,testis
+CSNK1A1L,Q8N752,testis
+WFDC9,Q8NEX5,epididymis
+F2,P00734,liver
+GARIN6,Q8NEG0,testis
+RRH,O14718,retina
+SLC9A4,Q6AI14,stomach 1
+WFDC10A,Q9H1F0,epididymis
+PNPLA1,Q8N8W4,skin 1
+KCTD4,Q8WVF5,brain
+MEIOC,A2RUB1,testis
+MTURN,Q8N3F0,brain
+KRTAP9-7,A8MTY7,skin 1
+C11orf71,Q6IPW1,testis
+CYP8B1,Q9UNU6,liver
+GLIPR1L2,Q4G1C9,testis
+DEFB119,Q8N690,epididymis
+TMEM64,Q6YI46,epididymis
+C3orf22,Q8N5N4,testis
+ANKRD30B,Q9BXX2,testis
+HOXC10,Q9NYD6,skeletal muscle
+BHLHE22,Q8NFJ8,brain
+MAP6D1,Q9H9H5,brain
+C11orf42,Q8N5U0,testis
+OXTR,P30559,breast
+GPR62,Q9BZJ7,brain
+LSMEM1,Q8N8F7,skeletal muscle
+OR5AK2,Q8NH90,lymphoid tissue
+TMEM132E,Q6IEE7,brain
+SPEM1,Q8N4L4,testis
+SAGE1,Q9NXZ1,testis
+TMEM45A,Q9NWC5,skin 1
+MAB21L2,Q9Y586,intestine
+EDDM3B,P56851,epididymis
+EDDM3A,Q14507,epididymis
+MEX3D,Q86XN8,testis
+OR52D1,Q9H346,testis
+GPR88,Q9GZN0,brain
+ACTL9,Q8TC94,testis
+ADGRB1,O14514,brain
+TIGIT,Q495A1,lymphoid tissue
+FTMT,Q8N4E7,testis
+RTKN2,Q8IZC4,lung
+ADIG,Q0VDE8,testis
+FAM181B,A6NEQ2,brain
+ENPP7,Q6UWV6,intestine
+ATP6AP2,O75787,parathyroid gland
+IZUMO1,Q8IYV9,testis
+TMIGD1,Q6UXZ0,intestine
+AP1S2,P56377,epididymis
+DCAF4L1,Q3SXM0,testis
+SPACA6,W5XKT8,testis
+KCNJ14,Q9UNX9,retina
+C1S,P09871,liver
+GLTPD2,A6NH11,liver
+LIPF,P07098,stomach 1
+ZNF804B,A4D1E1,thyroid gland
+KCNK4,Q9NYG8,brain
+TEX19,Q8NA77,testis
+SPNS3,Q6ZMD2,bone marrow
+VCX,Q9H320,testis
+EPGN,Q6UW88,esophagus
+KRTAP11-1,Q8IUC1,skin 1
+HS3ST4,Q9Y661,brain
+PPP1R27,Q86WC6,skeletal muscle
+BRICD5,Q6PL45,brain
+GALR2,O43603,intestine
+RESP18,Q5W5W9,brain
+SLC35D3,Q5M8T2,brain
+PAPPA,Q13219,placenta
+MAFA,Q8NHW3,skeletal muscle
+CCDC87,Q9NVE4,testis
+CRIP2,P52943,heart muscle
+KRTAP13-2,Q52LG2,skin 1
+LCK,P06239,lymphoid tissue
+GALNT9,Q9HCQ5,brain
+ADGRG3,Q86Y34,bone marrow
+TMEM95,Q3KNT9,testis
+RGS7,P49802,brain
+ODF3L1,Q8IXM7,testis
+SOX1,O00570,brain
+SLC8A1,P32418,heart muscle
+OTOP2,Q7RTS6,intestine
+CYLC1,P35663,testis
+WBP2NL,Q6ICG8,testis
+NKX2-5,P52952,heart muscle
+GABRR3,A8MPY1,retina
+C2CD4C,Q8TF44,brain
+POTEC,B2RU33,testis
+RIMBP3C,A6NJZ7,testis
+ABHD16B,Q9H3Z7,testis
+FAM9A,Q8IZU1,testis
+MAGEA2B,P43356,testis
+SPDYE4,A6NLX3,testis
+REC114,Q7Z4M0,testis
+GBP6,Q6ZN66,esophagus
+SYNDIG1L,A6NDD5,brain
+PMCH,P20382,brain
+TMEM89,A2RUT3,testis
+LRIT3,Q3SXY7,retina
+TFDP3,Q5H9I0,testis
+GRIN2A,Q12879,brain
+URAD,A6NGE7,intestine
+ACSM5,Q6NUN0,liver
+C10orf120,Q5SQS8,testis
+SERHL2,Q9H4I8,breast
+PGPEP1L,A6NFU8,skeletal muscle
+GKN2,Q86XP6,stomach 1
+PRR32,B1ATL7,tongue
+RP1L1,Q8IWN7,retina
+KRTAP8-1,Q8IUC2,skin 1
+MARCHF11,A6NNE9,testis
+PSG9,Q00887,placenta
+BMP8A,Q7Z5Y6,thyroid gland
+RFLNB,Q8N5W9,bone marrow
+OR4N4,Q8N0Y3,testis
+BPY2,O14599,testis
+B3GALT5,Q9Y2C3,intestine
+SLC35F3,Q8IY50,brain
+BPY2B,O14599,testis
+EMILIN3,Q9NT22,epididymis
+SCN5A,Q14524,heart muscle
+SH2D1A,O60880,lymphoid tissue
+NPB,Q8NG41,brain
+OR2T10,Q8NGZ9,kidney
+KRTAP20-2,Q3LI61,skin 1
+CTAG1B,P78358,testis
+TRIML1,Q8N9V2,testis
+CNTN2,Q02246,brain
+SPRR4,Q96PI1,skin 1
+KCNQ3,O43525,brain
+OLIG1,Q8TAK6,brain
+PCDH9,Q9HC56,brain
+OAF,Q86UD1,liver
+H2AC20,Q16777,bone marrow
+KCNK12,Q9HB15,brain
+H2AC21,Q8IUE6,bone marrow
+DEFB108B,Q8NET1,epididymis
+SIX6,O95475,pituitary gland
+MROH7,Q68CQ1,testis
+IQCF2,Q8IXL9,testis
+KRTAP19-1,Q8IUB9,skin 1
+SPATA32,Q96LK8,testis
+COLEC10,Q9Y6Z7,liver
+ACTRT3,Q9BYD9,testis
+PABPC1L2B,Q5JQF8,brain
+KCND2,Q9NZV8,brain
+BPIFC,Q8NFQ6,skin 1
+POU3F2,P20265,brain
+GAST,P01350,stomach 1
+NUTM1,Q86Y26,testis
+CEND1,Q8N111,brain
+SPEM2,Q0P670,testis
+KRBA2,Q6ZNG9,retina
+PRSS55,Q6UWB4,testis
+ODF4,Q2M2E3,testis
+LRRC26,Q2I0M4,salivary gland
+SERINC4,A6NH21,retina
+KRTAP6-1,Q3LI64,skin 1
+DDX53,Q86TM3,testis
+DYNLT2,Q8IZS6,testis
+PRR23B,Q6ZRT6,testis
+CLCNKB,P51801,kidney
+LCN12,Q6JVE5,epididymis
+AQP12A,Q8IXF9,pancreas
+CHRM5,P08912,brain
+SLC22A10,Q63ZE4,liver
+NT5C1B,Q96P26,testis
+ANKS1B,Q7Z6G8,brain
+C5orf47,Q569G3,testis
+MYADML2,A6NDP7,skeletal muscle
+H2BC13,Q99880,bone marrow
+AQP12B,A6NM10,pancreas
+ZNF479,Q96JC4,testis
+PRSS57,Q6UWY2,bone marrow
+MC2R,Q01718,adrenal gland
+MAGEA11,P43364,epididymis
+TEX33,O43247,testis
+NOTUM,Q6P988,placenta
+RBM11,P57052,epididymis
+NUPR2,A6NF83,testis
+SPPL2C,Q8IUH8,testis
+SFTPA2,Q8IWL1,lung
+HS6ST3,Q8IZP7,brain
+FAM47A,Q5JRC9,testis
+FAM131C,Q96AQ9,brain
+PDE6G,P18545,retina
+DBX2,Q6ZNG2,brain
+PDIA2,Q13087,pancreas
+KRT79,Q5XKE5,skin 1
+SMIM23,A6NLE4,testis
+POU3F1,Q03052,skin 1
+SNAI3,Q3KNW1,skeletal muscle
+PRAME,P78395,testis
+ADARB2,Q9NS39,brain
+C11orf87,Q6NUJ2,brain
+SPATA31A6,Q5VVP1,testis
+WDR53,Q7Z5U6,testis
+TMEM210,A6NLX4,testis
+ZNF829,Q3KNS6,testis
+TRIM69,Q86WT6,testis
+PRSS38,A1L453,testis
+BPY2C,O14599,testis
+KLHL34,Q8N239,skeletal muscle
+KRTAP5-5,Q701N2,skin 1
+SPACDR,Q8IZ16,testis
+FAM186A,A6NE01,testis
+LCE3A,Q5TA76,lymphoid tissue
+CCIN,Q13939,testis
+GRK1,Q15835,retina
+DEFB128,Q7Z7B8,epididymis
+ATP4B,P51164,stomach 1
+DLEU7,Q6UYE1,brain
+KRT73,Q86Y46,skin 1
+TAL2,Q16559,skeletal muscle
+ZPBP2,Q6X784,testis
+TEX38,Q6PEX7,testis
+PRR30,Q53SZ7,testis
+DEFB131A,P59861,epididymis
+UBL4B,Q8N7F7,testis
+BPIFB4,P59827,pituitary gland
+LCE5A,Q5TCM9,skin 1
+LCE1E,Q5T753,skin 1
+BTLA,Q7Z6A9,lymphoid tissue
+KDM4D,Q6B0I6,testis
+GABRA5,P31644,brain
+TMEM212,A6NML5,fallopian tube
+SLC36A3,Q495N2,testis
+MINAR2,P59773,skeletal muscle
+KRT26,Q7Z3Y9,skin 1
+KRT10,P13645,skin 1
+SPATA12,Q7Z6I5,testis
+TMPRSS12,Q86WS5,testis
+FAM228A,Q86W67,testis
+DEFB132,Q7Z7B7,epididymis
+NAP1L2,Q9ULW6,brain
+INSIG1,O15503,liver
+CLCNKA,P51800,kidney
+CYP4F8,P98187,seminal vesicle
+DEFB105A,Q8NG35,epididymis
+DEFB107A,Q8IZN7,epididymis
+DEFB106A,Q8N104,epididymis
+SPATC1,Q76KD6,testis
+DEFB105B,Q8NG35,epididymis
+PRG2,P13727,placenta
+BCDIN3D,Q7Z5W3,skeletal muscle
+CCDC73,Q6ZRK6,testis
+SPATA31D3,P0C874,testis
+SELENOV,P59797,testis
+LCE1A,Q5T7P2,skin 1
+KRT14,P02533,skin 1
+KRTAP17-1,Q9BYP8,skin 1
+FGF3,P11487,brain
+SERPINA11,Q86U17,liver
+KRTAP19-5,Q3LI72,skin 1
+ACTL7A,Q9Y615,testis
+RHD,Q02161,bone marrow
+PNLIPRP1,P54315,pancreas
+SAMD7,Q7Z3H4,retina
+GPR141,Q7Z602,bone marrow
+TMPRSS6,Q8IU80,liver
+TMEM262,E9PQX1,testis
+DEFB106B,Q8N104,epididymis
+VSTM2B,A6NLU5,brain
+SPATA21,Q7Z572,testis
+SHTN1,A0MZ66,brain
+H1-7,Q75WM6,testis
+LCE4A,Q5TA78,skin 1
+LCE2A,Q5TA79,skin 1
+KRTAP12-1,P59990,skin 1
+LCE2C,Q5TA81,skin 1
+LCE2D,Q5TA82,skin 1
+LCE3B,Q5TA77,lymphoid tissue
+FAM9C,Q8IZT9,lymphoid tissue
+KRTAP9-8,Q9BYQ0,skin 1
+H1-6,P22492,testis
+CDHR4,A6H8M9,fallopian tube
+H2AP,O75409,testis
+PRR27,Q6MZM9,salivary gland
+PRAMEF10,O60809,liver
+AGMO,Q6ZNB7,liver
+COX8C,Q7Z4L0,testis
+MAGEH1,Q9H213,epididymis
+C17orf97,Q6ZQX7,testis
+C5orf52,A6NGY3,testis
+ERC2,O15083,brain
+SLC18A3,Q16572,brain
+GABRD,O14764,brain
+AMY1C,P0DTE8,salivary gland
+C9orf153,Q5TBE3,testis
+ADH1A,P07327,liver
+KRTAP10-8,P60410,skin 1
+LIN28B,Q6ZN17,placenta
+FAM205C,A6NFA0,testis
+TMEM202,A6NGA9,testis
+C2orf78,A6NCI8,testis
+TTC24,A2A3L6,lymphoid tissue
+SHISA7,A6NL88,brain
+ZCCHC13,Q8WW36,testis
+C17orf99,Q6UX52,bone marrow
+RTP5,Q14D33,brain
+S100A3,P33764,skin 1
+C19orf67,A6NJJ6,testis
+CLCN1,P35523,skeletal muscle
+NWD1,Q149M9,choroid plexus
+RNF133,Q8WVZ7,testis
+RAB42,Q8N4Z0,lymphoid tissue
+PLA2G4E,Q3MJ16,skin 1
+EYS,Q5T1H1,retina
+DAZ1,Q9NQZ3,testis
+TMEM215,Q68D42,retina
+KRTAP10-6,P60371,skin 1
+FAM166A,Q6J272,testis
+HEPACAM2,A8MVW5,intestine
+PRKAR1B,P31321,brain
+POTEE,Q6S8J3,testis
+LRRIQ4,A6NIV6,testis
+BSPH1,Q075Z2,epididymis
+OR6N2,Q8NGY6,bone marrow
+PRR19,A6NJB7,testis
+H3-5,Q6NXT2,testis
+PPP3R2,Q96LZ3,testis
+CLEC2A,Q6UVW9,skin 1
+NANOS2,P60321,testis
+SLC24A5,Q71RS6,skin 1
+INSC,Q1MX18,parathyroid gland
+LCTL,Q6UWM7,brain
+HBA2,P69905,bone marrow
+NKAIN2,Q5VXU1,brain
+KRTAP1-1,Q07627,skin 1
+ASAH2,Q9NR71,intestine
+IGFL3,Q6UXB1,skin 1
+RNASE9,P60153,epididymis
+RHCE,P18577,bone marrow
+C2orf80,Q0P641,brain
+KRTAP24-1,Q3LI83,skin 1
+DUSP29,Q68J44,skeletal muscle
+SKOR1,P84550,brain
+CATSPER4,Q7RTX7,testis
+PLA2G2E,Q9NZK7,lymphoid tissue
+TMCO2,Q7Z6W1,testis
+SNTN,A6NMZ2,fallopian tube
+TMC3,Q7Z5M5,parathyroid gland
+LRRK2,Q5S007,lung
+LIPI,Q6XZB0,epididymis
+KIR2DL4,Q99706,lymphoid tissue
+MAGEB16,A2A368,testis
+DUSP21,Q9H596,testis
+RELN,P78509,brain
+GAGE2A,Q6NT46,testis
+VSTM1,Q6UX27,bone marrow
+ANKRD34B,A5PLL1,brain
+FAM47B,Q8NA70,testis
+FSCB,Q5H9T9,testis
+KRTAP10-12,P60413,skin 1
+OR14I1,A6ND48,brain
+KRT77,Q7Z794,skin 1
+DCAF8L2,P0C7V8,testis
+SPANXN3,Q5MJ09,testis
+TRIM64B,A6NI03,placenta
+FHIT,P49789,choroid plexus
+FOXR2,Q6PJQ5,testis
+BNIP5,P0C671,intestine
+SPANXN4,Q5MJ08,testis
+SPATA31D4,Q6ZUB0,testis
+TBC1D28,Q2M2D7,testis
+OTUD6A,Q7L8S5,testis
+NCR1,O76036,lymphoid tissue
+GJB4,Q9NTQ9,skin 1
+IL1RAP,Q9NPH3,liver
+PAX5,Q02548,lymphoid tissue
+MYT1,Q01538,brain
+KRTAP4-3,Q9BYR4,skin 1
+ACADSB,P45954,liver
+OR10J1,P30954,testis
+CTSE,P14091,stomach 1
+GREB1,Q4ZG55,ovary
+KRTAP5-3,Q6L8H2,skin 1
+SULT1C3,Q6IMI6,breast
+STK31,Q9BXU1,testis
+ADH7,P40394,esophagus
+ZNF729,A6NN14,testis
+ELAVL3,Q14576,brain
+FUT4,P22083,bone marrow
+INCA1,Q0VD86,testis
+SPANXD,Q9BXN6,testis
+THEM5,Q8N1Q8,skin 1
+PRTN3,P24158,bone marrow
+C20orf204,A0A1B0GTL2,brain
+ASMT,P46597,choroid plexus
+FGF16,O43320,choroid plexus
+GK2,Q14410,testis
+CCDC196,A0A1B0GTZ2,testis
+HBG2,P69892,placenta
+PFN3,P60673,testis
+SLC22A25,Q6T423,liver
+POTEF,A5A3E0,testis
+FAM180B,Q6P0A1,choroid plexus
+LCE1B,Q5T7P3,skin 1
+CLPSL2,Q6UWE3,epididymis
+CHRNG,P07510,skeletal muscle
+MVB12B,Q9H7P6,brain
+PATE2,Q6UY27,epididymis
+KRT39,Q6A163,skin 1
+TOMM20L,Q6UXN7,testis
+TEX43,Q6ZNM6,testis
+FAM163B,P0C2L3,brain
+KRT35,Q92764,skin 1
+LCE1C,Q5T751,skin 1
+ZGPAT,Q8N5A5,liver
+ZNF679,Q8IYX0,testis
+ADAM32,Q8TC27,testis
+MAGEA6,P43360,testis
+ADGRA1,Q86SQ6,brain
+PIWIL2,Q8TC59,testis
+CYSRT1,A8MQ03,esophagus
+ZSCAN5B,A6NJL1,testis
+SLC2A7,Q6PXP3,intestine
+SERPINA1,P01009,liver
+IL27,Q8NEV9,liver
+GUCA2A,Q02747,intestine
+FITM2,Q8N6M3,heart muscle
+PELI1,Q96FA3,bone marrow
+LYPD2,Q6UXB3,esophagus
+CYP2B6,P20813,liver
+H3C4,P68431,bone marrow
+FABP12,A6NFH5,retina
+OPALIN,Q96PE5,brain
+GYPE,P15421,bone marrow
+ELANE,P08246,bone marrow
+MYH6,P13533,heart muscle
+CCER1,Q8TC90,testis
+SLC22A24,Q8N4F4,kidney
+KRTAP26-1,Q6PEX3,skin 1
+CR1L,Q2VPA4,bone marrow
+STPG3,Q8N7X2,testis
+CYP2A13,Q16696,liver
+PRB3,Q04118,salivary gland
+SLC22A12,Q96S37,kidney
+KIF13B,Q9NQT8,parathyroid gland
+SLC22A6,Q4U2R8,kidney
+AADACL2,Q6P093,skin 1
+MBP,P02686,brain
+SPANXA1,Q9NS26,testis
+TUBA3C,P0DPH7,testis
+AVPR1B,P47901,pituitary gland
+CYP2A7,P20853,liver
+KRTAP9-9,Q9BYP9,skin 1
+KRTAP4-6,Q9BYQ5,skin 1
+ADH4,P08319,liver
+LPAR1,Q92633,brain
+DEFB107B,Q8IZN7,epididymis
+NPIPB6,E9PJ23,testis
+FAM47C,Q5HY64,testis
+CACNA1E,Q15878,brain
+KRTAP4-5,Q9BYR2,skin 1
+TMEM239,Q8WW34,testis
+MYL4,P12829,heart muscle
+KRTAP13-1,Q8IUC0,skin 1
+TMEM207,Q6UWW9,kidney
+CCT8L2,Q96SF2,testis
+CNGA1,P29973,retina
+KCNRG,Q8N5I3,fallopian tube
+RD3,Q7Z3Z2,retina
+SPANXC,Q9NY87,testis
+MMP17,Q9ULZ9,brain
+AKR1C4,P17516,liver
+RYR2,Q92736,heart muscle
+TAT,P17735,liver
+LPA,P08519,liver
+MAGEA1,P43355,testis
+GPX6,P59796,epididymis
+TEX45,Q8NA69,testis
+OXCT2,Q9BYC2,testis
+EGFL6,Q8IUX8,placenta
+SYCP1,Q15431,testis
+FAM169A,Q9Y6X4,retina
+GRIN3A,Q8TCU5,brain
+LRRC10,Q5BKY1,heart muscle
+GRM3,Q14832,brain
+SUCNR1,Q9BXA5,kidney
+GJC2,Q5T442,brain
+TOX,O94900,lymphoid tissue
+CES1,P23141,liver
+CD3E,P07766,lymphoid tissue
+C1orf68,Q5T750,skin 1
+CCDC152,Q4G0S7,liver
+STKLD1,Q8NE28,testis
+NOS1AP,O75052,brain
+MAGEE1,Q9HCI5,brain
+SOWAHA,Q2M3V2,brain
+RORB,Q92753,retina
+OR10Z1,Q8NGY1,bone marrow
+GP1BB,P13224,brain
+CAPN8,A6NHC0,stomach 1
+TEDDM1,Q5T9Z0,epididymis
+ECT2L,Q008S8,fallopian tube
+GPR52,Q9Y2T5,brain
+TMEM244,Q5VVB8,retina
+OR6K3,Q8NGY3,bone marrow
+FAM229B,Q4G0N7,testis
+LORICRIN,P23490,skin 1
+PRR9,Q5T870,skin 1
+LELP1,Q5T871,testis
+KPRP,Q5T749,skin 1
+FAM24A,A6NFZ4,testis
+PLPP4,Q5VZY2,brain
+HSD3B1,P14060,placenta
+HSD3B2,P26439,adrenal gland
+LIME1,Q9H400,liver
+OOEP,A6NGQ2,testis
+SPANXN1,Q5VSR9,testis
+SPANXA2,Q9NS26,testis
+CXorf66,Q5JRM2,testis
+C10orf62,Q5T681,testis
+DEFB110,Q30KQ9,epididymis
+LDLRAD1,Q5T700,fallopian tube
+RHOXF2B,P0C7M4,testis
+LCN8,Q6JVE9,epididymis
+C1orf185,Q5T7R7,testis
+GLT6D1,Q7Z4J2,testis
+IFIT1B,Q5T764,bone marrow
+CT83,Q5H943,testis
+LIPN,Q5VXI9,skin 1
+LIPK,Q5VXJ0,skin 1
+LIPJ,Q5W064,testis
+TRPC5OS,A6NMA1,testis
+LRIT2,A6NDA9,retina
+NEU4,Q8WWR8,liver
+CXorf65,A6NEN9,testis
+TXNDC8,Q6A555,testis
+PAGE3,Q5JUK9,testis
+TSBP1,Q5SRN2,testis
+TMEM225,Q6GV28,testis
+AGER,Q15109,lung
+PRRT1,Q99946,brain
+BTBD17,A6NE02,brain
+SPANXN5,Q5MJ07,testis
+XAGE1A,Q9HD64,testis
+XAGE1B,Q9HD64,testis
+HSPA1L,P34931,testis
+CSHL1,Q14406,placenta
+LY6G6C,O95867,skin 1
+APOM,O95445,liver
+TRIM64,A6NGJ6,placenta
+MCCD1,P59942,kidney
+CCHCR1,Q8TD31,testis
+PSORS1C2,Q9UIG4,skin 1
+PSORS1C1,Q9UIG5,testis
+DEFB121,Q5J5C9,epididymis
+KRTAP5-11,Q6L8G4,skin 1
+LRCOL1,A6NCL2,epididymis
+MOG,Q16653,brain
+CBY3,A6NI87,testis
+C9orf57,Q5W0N0,testis
+GABBR1,Q9UBS5,brain
+OR2H1,Q9GZK4,testis
+MALRD1,Q5VYJ5,intestine
+SPATA31A1,Q5TZJ5,testis
+IGFL2,Q6UWQ7,skin 1
+KRTAP9-3,Q9BYQ3,skin 1
+KRTAP4-8,Q9BYQ9,skin 1
+KRTAP1-4,P0C5Y4,skin 1
+KRT25,Q7Z3Z0,skin 1
+PSG5,Q15238,placenta
+FBXO47,Q5MNV8,testis
+PCDHA5,Q9Y5H7,brain
+MS4A13,Q5J8X5,testis
+PRSS1,P07477,pancreas
+GARIN1A,Q6NXP2,testis
+FAM205A,Q6ZU69,testis
+TMEM88B,A6NKF7,brain
+ARID3C,A6NKF2,liver
+FABP9,Q0Z7S8,skin 1
+MUC12,Q9UKN1,intestine
+MGAT4D,A6NG13,testis
+TECPR1,Q7Z6L1,pancreas
+SLCO6A1,Q86UG4,testis
+CFI,P05156,liver
+KRT81,Q14533,skin 1
+KRTAP12-3,P60328,skin 1
+IZUMO3,Q5VZ72,testis
+KRTAP10-2,P60368,skin 1
+C2CD4B,A6NLJ0,pancreas
+MFSD2B,A6NFX1,bone marrow
+VCX3B,Q9H321,testis
+HTN3,P15516,salivary gland
+TECRL,Q5HYJ1,heart muscle
+ARRDC5,A6NEK1,testis
+CYS1,Q717R9,kidney
+C16orf96,A6NNT2,testis
+TTC23L,Q6PF05,testis
+LRRC72,A6NJI9,testis
+DEFB134,Q4QY38,epididymis
+DEFB135,Q30KP9,epididymis
+DEFB136,Q30KP8,epididymis
+OLIG2,Q13516,brain
+IFITM5,A6NNB3,pancreas
+SMIM21,Q3B7S5,testis
+DEFB109B,Q30KR1,epididymis
+C18orf63,Q68DL7,testis
+DEFA1,P59665,bone marrow
+KRTAP20-4,Q3LI62,testis
+TMEM191C,A6NGB0,testis
+RNASE13,Q5GAN3,epididymis
+HBA1,P69905,bone marrow
+HBM,Q6B0K9,bone marrow
+ELOA2,Q8IYF1,testis
+TSSK2,Q96PF2,testis
+PRR23A,A6NEV1,testis
+COL6A6,A6NMZ7,parathyroid gland
+CD200R1L,Q6Q8B3,testis
+TRIM71,Q2Q1W2,testis
+IGLV3-27,P01718,lymphoid tissue
+TRBV6-1,A0A0K0K1D8,lymphoid tissue
+TRBV4-1,A0A577,lymphoid tissue
+TRBV7-3,A0A075B6L6,lymphoid tissue
+TRBV10-1,A0A0K0K1A3,lymphoid tissue
+TRBV11-1,A0A0K0K1C0,lymphoid tissue
+TRBV6-5,A0A0K0K1A5,lymphoid tissue
+TRBV6-6,A0A0A6YYG2,lymphoid tissue
+TRBV5-5,A0A597,lymphoid tissue
+TRBV7-6,A0A1B0GX31,lymphoid tissue
+TRBV5-6,A0A599,lymphoid tissue
+TRBV5-1,A0A578,lymphoid tissue
+TRBV4-2,A0A539,lymphoid tissue
+TRBV19,A0A075B6N1,lymphoid tissue
+TRBV20-1,A0A075B6N2,lymphoid tissue
+TRBV23-1,A0A0A0MS06,lymphoid tissue
+TRBV24-1,A0A075B6N3,lymphoid tissue
+TRBC1,P01850,lymphoid tissue
+TRBV27,A0A0K0K1C4,lymphoid tissue
+TRBV28,A0A5B6,lymphoid tissue
+TRBC2,A0A5B9,lymphoid tissue
+TRAV2,A0A0B4J234,lymphoid tissue
+TRAV3,A0A0B4J244,lymphoid tissue
+TRAV4,A0A0B4J268,lymphoid tissue
+TRAV5,A0A0B4J249,lymphoid tissue
+TRAV6,A0A075B6T7,lymphoid tissue
+TRAV8-1,A0A0A6YYK1,lymphoid tissue
+TRAV10,A0A0B4J240,lymphoid tissue
+TRAV12-1,A0A0B4J245,lymphoid tissue
+TRAV8-2,A0A0B4J237,lymphoid tissue
+TRAV8-3,A0A0A6YYJ7,lymphoid tissue
+TRAV13-1,A0A0B4J241,lymphoid tissue
+TRAV12-2,A0A075B6T6,lymphoid tissue
+TRAV8-4,P01737,lymphoid tissue
+TRAV13-2,A0A0B4J235,lymphoid tissue
+TRAV14DV4,A0A0A6YYC5,lymphoid tissue
+TRAV9-2,A0A087WT02,lymphoid tissue
+TRAV12-3,A0A0B4J271,lymphoid tissue
+TRAV8-6,A0A0B4J262,lymphoid tissue
+TRAV16,A0A0A6YYK6,lymphoid tissue
+TRAV17,A0A0B4J275,lymphoid tissue
+TRAV18,A0A075B6X5,lymphoid tissue
+TRAV19,A0A0A6YYK7,lymphoid tissue
+TRAV20,A0A0B4J274,lymphoid tissue
+TRAV21,A0A0B4J279,lymphoid tissue
+TRAV22,A0A0B4J277,lymphoid tissue
+TRAV23DV6,A0A075B6W5,lymphoid tissue
+TRDV1,A0A1B0GX56,lymphoid tissue
+TRAV24,A0A0B4J272,lymphoid tissue
+TRAV25,A0A0B4J276,lymphoid tissue
+TRAV26-1,A0A087WT03,lymphoid tissue
+TRAV27,A0A087WT01,lymphoid tissue
+TRAV29DV5,P04437,lymphoid tissue
+TRAV26-2,A0A0B4J265,lymphoid tissue
+TRAV34,A0A0B4J273,lymphoid tissue
+TRAV36DV7,A0A075B6V5,lymphoid tissue
+TRAV38-1,A0A0B4J264,lymphoid tissue
+TRAV38-2DV8,A0JD32,lymphoid tissue
+TRAV39,A0A0B4J263,lymphoid tissue
+TRAV40,A0A0B4J280,lymphoid tissue
+TRAV41,A0A0B4J266,lymphoid tissue
+TRDC,B7Z8K6,lymphoid tissue
+TRAJ3,A0A075B6Y3,retina
+IGHA2,P01877,intestine
+IGHG4,P01861,lymphoid tissue
+IGHV6-1,A0A0B4J1U7,intestine
+IGHV4-34,P06331,urinary bladder
+IGHV5-51,A0A0C4DH38,urinary bladder
+TSSK1B,Q9BXA7,testis
+PRR22,Q8IZ63,testis
+KRTAP16-1,A8MUX0,skin 1
+KRTAP29-1,A8MX34,skin 1
+KRTAP9-6,A8MVA2,skin 1
+CTAGE1,"Q96RT6, Q9HC47",testis
+KRTAP4-11,Q9BYQ6,skin 1
+KRTAP4-9,Q9BYQ8,skin 1
+KRTAP2-3,P0C7H8,skin 1
+KRTAP2-1,Q9BYU5,skin 1
+KRTAP3-3,Q9BYR6,skin 1
+KRTAP3-2,Q9BYR7,skin 1
+KRTAP3-1,Q9BYR8,skin 1
+KRTAP10-3,P60369,skin 1
+KLK9,Q9UKQ9,skin 1
+SYT3,Q9BQG1,brain
+CGB8,P0DN86,placenta
+CCDC183,Q5T5S1,testis
+CSH2,P0DML3,placenta
+TSGA13,Q96PP4,testis
+MAGEA12,P43365,testis
+PVRIG,Q6DKI7,lymphoid tissue
+KRTAP4-12,Q9BQ66,skin 1
+KRTAP2-4,Q9BYR9,skin 1
+TTLL13,A6NNM8,testis
+GBP7,Q8N8V2,liver
+FAM209B,Q5JX69,testis
+UGT2B11,O75310,breast
+ATP6V1G2,O95670,brain
+CEACAM18,A8MTB9,intestine
+UBD,O15205,lymphoid tissue
+PPM1N,Q8N819,skeletal muscle
+CCL27,Q9Y4X3,skin 1
+HBG1,P69891,placenta
+ZNF99,A8MXY4,testis
+MEF2B,Q02080,lymphoid tissue
+MAGEB1,P43366,testis
+PRCD,Q00LT1,retina
+C19orf38,A8MVS5,bone marrow
+ANG,P03950,liver
+SPDYE3,A6NKU9,testis
+EFCAB9,A8MZ26,testis
+GNAT3,A8MTJ3,intestine
+SPINK13,Q1W4C9,epididymis
+KRTAP2-2,Q9BYT5,skin 1
+DEFB113,Q30KQ7,epididymis
+IQCF5,A8MTL0,testis
+IQCF6,A8MYZ5,testis
+C10orf105,Q8TEF2,brain
+CAPN14,A8MX76,esophagus
+FER1L6,Q2WGJ9,stomach 1
+CDRT15L2,A8MXV6,testis
+RAD51AP2,Q09MP3,testis
+SPATA31D1,Q6ZQQ2,testis
+CXorf49B,A8MYA2,testis
+CXorf49,A8MYA2,testis
+C16orf90,A8MZG2,testis
+MUC5AC,P98088,stomach 1
+GRXCR1,A8MXD5,seminal vesicle
+KCNU1,A8MYU2,testis
+GAGE12G,"P0CL81, O76087, P0CL82",testis
+RNF212B,A8MTL3,kidney
+ZNF705D,P0CH99,epididymis
+KRTAP10-4,P60372,skin 1
+KRTAP10-1,P60331,skin 1
+EFCAB8,A8MWE9,testis
+DEFB115,Q30KQ5,epididymis
+GAB4,Q2WGN9,testis
+CELA2B,P08218,pancreas
+ZC3H11B,A0A1B0GTU1,testis
+C1orf167,Q5SNV9,testis
+GAGE12E,A1L429,testis
+FAM240C,A0A1B0GVR7,tongue
+CCDC7,Q96M83,testis
+SP9,P0CG40,brain
+SYCE3,A1L190,testis
+TDRD15,B5MCY1,testis
+PAPOLB,Q9NRJ5,testis
+CELA3B,P08861,pancreas
+CATSPERZ,Q9NTU4,testis
+TAFA5,Q7Z5A7,brain
+PSG3,Q16557,placenta
+KRTAP10-9,P60411,skin 1
+KRTAP1-5,Q9BYS1,skin 1
+KRTAP10-10,P60014,skin 1
+KRTAP12-2,P59991,skin 1
+MAGEA3,P43357,testis
+KRTAP1-3,Q8IUG1,skin 1
+HMSD,"A8MTL9, P0C7T4",brain
+OR1C1,Q15619,testis
+NPTXR,O95502,brain
+POM121L12,Q8N7R1,testis
+HEPN1,Q6WQI6,brain
+FXYD7,P58549,brain
+MYBPHL,A2RUH7,heart muscle
+PSMB11,A5LHX3,lymphoid tissue
+POTEM,A6NI47,prostate
+DCDC2B,A2VCK2,fallopian tube
+CDRT15,Q96T59,testis
+TINCR,A0A2R8Y7D0,skin 1
+EBLN1,P0CF75,testis
+HBD,P02042,bone marrow
+CERS1,P27544,brain
+C1QTNF5,Q9BXJ0,choroid plexus
+ETDB,P0DPP9,testis
+CXorf51A,A0A1B0GTR3,testis
+GPX5,O75715,epididymis
+GAGE12J,A6NER3,testis
+GAGE12H,A6NDE8,testis
+PPP4R3C,Q6ZMV5,testis
+PNMA6F,A0A0J9YX94,brain
+FAM236D,A0A1B0GTK5,testis
+DEFB131B,A0A096LNP1,epididymis
+FAM229A,H3BQW9,testis
+TEX22,C9J3V5,testis
+KIF4B,Q2VIQ3,testis
+TRBV2,A0A1B0GX68,lymphoid tissue
+CT47A12,Q5JQC4,testis
+SRRM5,B3KS81,testis
+RBMY1J,Q15415,testis
+ANHX,E9PGG2,testis
+SPANXB1,Q9NS25,testis
+AKR1B15,C9JRZ8,breast
+GAGE12D,A1L429,testis
+TEX46,H3BTG2,testis
+BOD1L2,Q8IYS8,testis
+ORM2,P19652,liver
+TSPY3,P0CV98,testis
+PGA4,P0DJD7,stomach 1
+ORM1,P02763,liver
+TSPY8,P0CW00,testis
+H2AL3,A0A3B3IU63,testis
+PGA3,P0DJD8,stomach 1
+GK3P,Q14409,testis
+PRPS1L1,P21108,testis
+IQCF3,P0C7M6,testis
+POTEB2,H3BUK9,testis
+TEX53,A0A1B0GU33,testis
+ANKRD66,B4E2M5,fallopian tube
+SPATA31C1,P0DKV0,testis
+CCDC192,P0DO97,testis
+TEX48,A0A1B0GUV7,testis
+ANKRD63,C9JTQ0,brain
+CFAP97D1,B2RV13,testis
+AKAIN1,P0CW23,brain
+CYP21A2,P08686,adrenal gland
+PSG1,P11464,placenta
+PPP1R2B,Q6NXS1,testis
+TMEM253,P0C7T8,intestine
+TEX50,A0A1B0GTY4,testis
+TMEM114,B3SHH9,seminal vesicle
+TRBV29-1,A0A5B7,lymphoid tissue
+DEFB130A,P0DP74,epididymis
+PHGR1,C9JFL3,intestine
+DEFB130B,P0DP73,epididymis
+ERVH48-1,M5A8F1,placenta
+TRGV2,A0A075B6R0,lymphoid tissue
+BTBD18,B2RXH4,testis
+TSPY4,P0CV99,testis
+POTEB,A0A0A6YYL3,testis
+PAGE2,Q7Z2X7,testis
+CCDC188,H7C350,testis
+RBMY1A1,P0DJD3,testis
+KBTBD13,C9JR72,skeletal muscle
+C5orf58,C9J3I9,testis
+C11orf94,C9JXX5,testis
+IQCM,A0A1B0GVH7,testis
+APOC2,P02655,liver
+SHISA8,B8ZZ34,brain
+C19orf81,C9J6K1,testis
+RNF148,Q8N7C7,testis
+CXorf51B,P0DPH9,testis
+MFRP,Q9BY79,choroid plexus
+LCE6A,A0A183,skin 1
+PATE3,B3GLJ2,epididymis
+SLFN14,P0C7P3,bone marrow
+GAGE12F,"P0CL80, O76087, P0CL82",testis
+CCDC200,A0A1B0GVQ3,testis
+TSPY10,P0CW01,testis
+UBE2L5,A0A1B0GUS4,testis
+CT47B1,P0C2W7,testis
+CTAGE9,A4FU28,testis
+ZNF593OS,A0A0U1RRA0,retina
+C3orf84,H3BNL1,testis
+C4orf51,C9J302,testis
+TRBV30,A0A0K0K1B3,lymphoid tissue
+PATE4,P0C8F1,seminal vesicle
+MEIOSIN,C9JSJ3,testis
+OR7E24,Q6IFN5,testis
+TEX51,A0A1B0GUA7,testis
+GAGE12C,A1L429,testis
+PRAMEF33,A0A0G2JMD5,liver
+TRBV3-1,A0A576,lymphoid tissue
+AMY1A,P0DUB6,salivary gland
+TSPY9,A0A494C1R9,testis
+LRRC37A2,A6NM11,testis
+MPC1L,P0DKB6,testis
+ETDA,Q3ZM63,testis
+PAGE2B,Q5JRK9,testis
+STPG4,Q8N801,testis
+PRR20G,P0DPQ3,testis
+MEIKIN,A0A087WXM9,testis
+IGKV1D-8,A0A087WSZ0,lymphoid tissue
+DEFA3,P59666,bone marrow
+KRTAP9-2,Q9BYQ4,skin 1
+TEX35,Q5T0J7,testis
+AMY2B,P19961,pancreas
+SMKR1,H3BMG3,testis
+LCE1F,Q5T754,skin 1
+PNMA2,Q9UL42,brain
+LRRD1,A4D1F6,testis
+KRBOX1,C9JBD0,testis
+PCDHGC5,Q9Y5F6,brain
+KRTAP4-7,Q9BYR0,skin 1
+KRTAP10-5,P60370,skin 1
+OR14A2,Q96R54,testis
+ZNF722,A0A1W2PQL4,testis
+SSX2,Q16385,testis
+CORT,O00230,brain
+KRTAP9-4,Q9BYQ2,skin 1
+SPRR2A,P35326,esophagus
+TCP10L,Q8TDR4,testis
+PSG2,P11465,placenta
+RBMY1E,A6NEQ0,testis
+GTF2A1L,Q9UNN4,testis
+SERPINB10,P48595,bone marrow
+DECR2,Q9NUI1,liver
+CCDC169,A6NNP5,testis
+ZNF709,Q8N972,testis
+STRC,Q7RTU9,brain
+ERVW-1,Q9UQF0,placenta
+PSG11,Q9UQ72,placenta
+PCDHAC2,Q9Y5I4,parathyroid gland
+AMY2A,P04746,pancreas
+KRTAP10-11,P60412,skin 1
+WFDC6,Q9BQY6,epididymis
+CFB,P00751,liver
+RTL9,Q8NET4,testis
+MT1HL1,P0DM35,heart muscle
+LCE3C,Q5T5A8,lymphoid tissue
+UGT1A7,Q9HAW7,esophagus
+TMEM225B,P0DP42,testis
+GMCL2,Q8NEA9,testis
+RBMY1D,P0C7P1,testis
+CFHR1,Q03591,liver
+UGT1A4,P22310,liver
+ERVFRD-1,P60508,placenta
+KRTAP4-2,Q9BYR5,skin 1
+RAD21L1,Q9H4I0,testis
+ASPRV1,Q53RT3,skin 1
+HBB,P68871,bone marrow
+UBAP1L,F5GYI3,retina
+SPTY2D1OS,A0A0U1RRN3,testis
+USP51,Q70EK9,epididymis
+PCDHAC1,Q9H158,parathyroid gland
+TARM1,B6A8C7,bone marrow
+C4orf54,D6RIA3,skeletal muscle
+ACTN3,Q08043,skeletal muscle
+FOXL3,A0A1W2PRP0,testis
+THEGL,P0DJG4,testis
+LGALS16,A8MUM7,placenta
+GOLGA8K,D6RF30,testis
+TERB1,Q8NA31,testis
+YJEFN3,A6XGL0,brain
+GIMD1,P0DJR0,intestine
+GYPB,P06028,bone marrow
+ATP6V1E2,Q96A05,testis
+P3R3URF,A0A087WWA1,testis
+IGKV2D-40,P01614,lymphoid tissue
+PTTG1IP2,P0DTF9,testis
+RFPL4B,Q6ZWI9,testis
+TRBV7-7,A0A0K0K1E9,lymphoid tissue
+NACA2,Q9H009,testis
+EIF5AL1,Q6IS14,testis
+PRSS51,A0A1B0GVH4,brain
+ETV3L,Q6ZN32,choroid plexus
+PCDHGA10,Q9Y5H3,brain
+PCDHGB1,Q9Y5G3,brain
+AP5B1,Q2VPB7,bone marrow
+INS,P01308,pancreas
+CHMP1B,Q7LBR1,skeletal muscle
+EID3,Q8N140,testis
+CCDC166,P0CW27,testis
+PRR23D1,E9PI22,epididymis
+NOX5,Q96PH1,lymphoid tissue
+CCDC179,H3BU77,testis
+PRR23D2,P0DMB1,testis
+EBLN2,Q6P2I7,bone marrow
+CARD18,P57730,skin 1
+NPIPB8,E9PQR5,testis
+TRAV1-1,A0A0B4J248,lymphoid tissue
+RAB44,Q7Z6P3,bone marrow
+TRIL,Q7L0X0,brain
+CYP2A6,P11509,liver
+SMLR1,H3BR10,liver
+HMBS,P08397,bone marrow
+ASIC5,Q9NY37,intestine
+TRAV1-2,A0A0B4J238,lymphoid tissue
+PGA5,P0DJD9,stomach 1
+KLRF2,D3W0D1,skin 1
+HP,P00738,liver
+FNTB,P49356,brain
+TEX49,A0A1B0GTD5,testis
+PRSS58,Q8IYP2,testis
+CLEC5A,Q9NY25,bone marrow
+RNASE12,Q5GAN4,epididymis
+SPESP1,Q6UW49,testis
+C20orf141,Q9NUB4,testis
+RNASE4,P34096,liver
+TUBB3,Q13509,brain
+TSPY1,Q01534,testis
+TRAV30,A0A087WSZ9,lymphoid tissue
+SLC35G6,P0C7Q6,testis
+GH1,P01241,pituitary gland
+LYPD8,Q6UX82,intestine
+TGFBR3L,H3BV60,pituitary gland
+HOXB7,P09629,epididymis
+ARMH2,H3BNL8,testis
+TBC1D3G,Q6DHY5,testis
+C16orf95,Q9H693,testis
+KCNJ18,B7U540,skin 1
+SULT1A3,P0DMM9,intestine
+EPPK1,P58107,skin 1
+GOLGA8T,H3BQL2,testis
+MUC22,E2RYF6,esophagus
+TP53TG3B,Q9ULZ0,epididymis
+TMEM249,Q2WGJ8,testis
+GAN,Q9H2C0,skin 1
+GOLGA6L7,A0A1B0GV03,testis
+SCRT1,Q9BWW7,brain
+HPR,P00739,liver
+GOLGA8S,H3BPF8,testis
+SMIM28,A0A1B0GU29,intestine
+C19orf84,I3L1E1,testis
+MYZAP,P0CAP1,heart muscle
+DPEP2NB,A0A0U1RQF7,testis
+MSMB,P08118,prostate
+GDF2,Q9UK05,liver
+MYH4,Q9Y623,skeletal muscle
+RBP3,P10745,retina
+FSBP,O95073,retina
+LCN6,P62502,epididymis
+APOC4,P55056,liver
+EDDM13,A0A1B0GTR0,epididymis
+MAGEA9B,P43362,testis
+SSX4,O60224,testis
+OPN1MW,P04001,retina
+SSX2B,Q16385,testis
+MAGEA2,P43356,testis
+TEX13A,Q9BXU3,testis
+CTAG1A,P78358,testis
+ZNF723,P0DPD5,testis
+HSFX2,Q9UBD0,testis
+CT45A1,Q5HYN5,testis
+ERVV-2,B6SEH9,placenta
+SPANXN2,Q5MJ10,testis
+FAM236B,A0A1B0GV22,testis
+CALR3,Q96L12,testis
+ZNF728,P0DKX0,testis
+OPN1MW3,P0DN78,retina
+ERVV-1,B6SEH8,placenta
+CT45A10,P0DMU9,testis
+SSX4B,O60224,testis
+HEATR9,A2RTY3,testis
+C17orf50,Q8WW18,testis
+CTAGE15,A4D2H0,testis
+CTAGE6,Q86UF2,testis
+PPIAL4E,A0A075B759,brain
+MUSTN1,Q8IVN3,skeletal muscle
+ZNF595,Q8IYB9,placenta
+KRTAP10-7,P60409,skin 1
+GRIN2B,Q13224,brain
+LYPD4,Q6UWN0,testis
+CEACAM20,Q6UY09,intestine
+IGKV2-40,A0A087WW87,intestine
+GOLGA6L1,Q8N7Z2,testis
+H2AB1,P0C5Y9,testis
+ANTXRL,A6NF34,testis
+GAGE13,Q4V321,testis
+TPTE,P56180,testis
+C8orf89,P0DMQ9,testis
+RIMBP3B,A6NNM3,testis
+KRTAP7-1,Q8IUC3,skin 1
+TRBV12-3,P01733,lymphoid tissue
+TBC1D3I,A0A087WXS9,testis
+H2AC12,Q96KK5,bone marrow
+ZNF280B,Q86YH2,testis
+CCL16,O15467,liver
+TRBV12-5,A0A1B0GX78,lymphoid tissue
+CCL18,P55774,lung
+C17orf98,A8MV24,testis
+FAM236A,A0A1B0GUQ0,testis
+LYZL6,O75951,testis
+TRBV14,A0A5B0,lymphoid tissue
+TRBV10-3,A0A0K0K1G6,lymphoid tissue
+RIMBP3,Q9UFD9,testis
+PRSS2,P07478,pancreas
+SPATA31A3,Q5VYP0,testis
+SPATA31A7,Q8IWB4,testis
+H2AC14,Q99878,bone marrow
+TRBV13,A0A0A6YYD4,lymphoid tissue
+PCDHGB5,Q9Y5G0,parathyroid gland
+TRBV18,A0A087X0M5,lymphoid tissue
+SPATA31A5,Q5VU36,testis
+TRBV11-3,A0A5A6,lymphoid tissue
+PADI6,Q6TGC4,ovary
+H2AC16,P0C0S8,bone marrow
+GSTT4,A0A1W2PR19,testis
+TRBV12-4,A0A0B4J2E0,lymphoid tissue
+GOLGA6L6,A8MZA4,testis
+SRCIN1,Q9C0H9,brain
+TRAC,P01848,lymphoid tissue
+H2AB3,P0C5Z0,testis
+H2AB2,P0C5Z0,testis
+GOLGA6L22,H0YM25,testis
+RDM1,Q8NG50,testis
+TRBV7-9,P04435,lymphoid tissue
+TEX28,O15482,testis
+CT45A8,P0DMV1,testis
+C17orf78,Q8N4C9,intestine
+POTEB3,A0JP26,testis
+DHRS11,Q6UWP2,intestine
+TMEM191B,P0C7N4,testis
+NR2E3,Q9Y5X4,retina
+IQCA1L,A6NCM1,testis
+OR4N4C,A0A096LPK9,testis
+TMEM272,A0A1B0GTI8,brain
+TRBJ1-4,A0A0J9YXG5,lymphoid tissue
+TRBJ1-3,A0A0J9YWP8,lymphoid tissue
+TRBJ1-5,A0A0J9YXM7,lymphoid tissue
+TRBJ1-1,A0A0J9YXA8,lymphoid tissue
+TEX13D,A0A0J9YY54,testis
+TRBJ1-2,A0A0J9YX06,lymphoid tissue
+TRBV25-1,A0A075B6N4,lymphoid tissue
+TRBJ1-6,A0A0J9YWX3,lymphoid tissue
+TEX13C,A0A0J9YWL9,testis
+TRBV6-2,"A0A0J9YXY3, P0DPF7",lymphoid tissue
+CENPVL2,P0DPI3,brain
+SPRR5,A0A1B0GTR4,skin 1
+TEX54,A0A1B0GVG6,testis
+CSNKA2IP,A0A1B0GTH6,testis
+SPEM3,A0A1B0GUW6,testis
+HSFX4,A0A1B0GTS1,testis
+LITAFD,A0A1B0GVX0,testis
+FAM236C,P0DP71,testis
+HSFX3,A0A1B0GWH4,testis
+VSIG10L2,P0DP72,skin 1
+THSD8,A0A1W2PP97,testis
+SCYGR4,A0A286YEV6,placenta
+OR8B2,Q96RD0,testis
+TMEM247,A6NEH6,testis
+SMIM38,A0A286YFK9,stomach 1
+ENSG00000285025,L0R8F8,skeletal muscle
+LCE7A,P0DV60,skin 1
+TMEM217B,A0A494BZU4,testis
+SMIM40,Q5STR5,retina
+GUCA1ANB,X6R8D5,testis
+SMIM42,A0A5F9ZH02,testis
+ACTL10,Q5JWF8,testis
+UGT1A3,P35503,liver
+ENSG00000290147,P43080,retina
