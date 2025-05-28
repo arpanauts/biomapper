@@ -161,6 +161,12 @@ class MappingPath(Base):
     last_used = Column(DateTime)
     last_discovered = Column(DateTime)
 
+    # Foreign key to EndpointRelationship
+    relationship_id = Column(Integer, ForeignKey("endpoint_relationships.id"), nullable=True) # Made nullable=True for now, can be False if always required
+
+    # Relationship to EndpointRelationship (optional, for easier access from MappingPath object)
+    # endpoint_relationship = relationship("EndpointRelationship", back_populates="mapping_paths") # Requires back_populates on EndpointRelationship
+
     # Add relationship to steps
     steps = relationship(
         "MappingPathStep",

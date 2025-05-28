@@ -1,6 +1,5 @@
 """Script to populate the metamapper.db configuration database with standard data."""
 
-import argparse
 import asyncio
 import logging
 import os
@@ -25,7 +24,6 @@ from biomapper.db.models import (
     Property,
     Ontology,
     MappingSessionLog,
-    RelationshipMappingPath,
 )
 
 # Configure logging
@@ -69,8 +67,8 @@ async def populate_data(session: AsyncSession):
             version="2025.01"
         ),
         "gene_name": Ontology(
-            name="GENE_NAME",
-            description="Official Gene Symbol or Common Gene Name",
+            name="GENE_NAME_ONTOLOGY", 
+            description="Gene Names/Symbols",
             version="2025.01"
         ),
         "ensembl_protein": Ontology(
@@ -201,14 +199,12 @@ async def populate_data(session: AsyncSession):
         # HPA Protein Endpoint
         "hpa_protein": Endpoint(
             name="HPA_Protein",
-            description="HPA Protein Resource (hpa_osps.csv)",
-            connection_details=json.dumps({"file_path": "/home/ubuntu/biomapper/data/isb_osp/hpa_osps.csv"})
+            description="HPA Protein Resource (hpa_osps.csv)"
         ),
         # Qin Protein Endpoint
         "qin_protein": Endpoint(
-            name="QIN_Protein",
-            description="QIN Proteomics Data from ISB-OSP study",
-            connection_details=json.dumps({"file_path": "/home/ubuntu/biomapper/data/isb_osp/qin_osps.csv"})
+            name="Qin_Protein",
+            description="Qin Protein Resource (qin_osps.csv)"
         ),
         "metabolites_csv": Endpoint(
             name="MetabolitesCSV",
@@ -360,43 +356,39 @@ async def populate_data(session: AsyncSession):
             name="UKBB_Protein_UniProt_Lookup",
             description="Lookup UniProtKB ACs within UKBB Protein Meta TSV",
             client_class_path="biomapper.mapping.clients.generic_file_client.GenericFileLookupClient",
-            config_template=json.dumps({
+            config_template={
                 "file_path": "/home/ubuntu/biomapper/data/UKBB_Protein_Meta_full.tsv",
                 "key_column": "UniProt",
                 "value_column": "UniProt", # For identity lookup
                 "delimiter": "\t"
-            }),
+            },
             resource_type="LOOKUP"
         ),
-        # HPA Protein Lookup (UniProt to Gene Name)
+        # Generic File Lookup client for HPA Protein data (UniProt identity lookup)
         "hpa_protein_lookup": MappingResource(
-            name="HPA_Protein_Lookup_UniProt_to_Gene",
-            description="Looks up HPA gene names by UniProt AC from hpa_osps.csv.",
-            resource_type="LOOKUP",
-            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
-            config_template=json.dumps({
+            name="HPA_Protein_UniProt_Lookup",
+            description="Lookup UniProtKB ACs within HPA Protein CSV",
+            client_class_path="biomapper.mapping.clients.generic_file_client.GenericFileLookupClient",
+            config_template={
                 "file_path": "/home/ubuntu/biomapper/data/isb_osp/hpa_osps.csv",
                 "key_column": "uniprot",
-                "value_column": "gene",
+                "value_column": "uniprot",
                 "delimiter": ","
-            }),
-            input_ontology_term="UNIPROTKB_AC",
-            output_ontology_term="GENE_NAME"
+            },
+            resource_type="LOOKUP"
         ),
-        # QIN Protein Lookup (UniProt to Gene Name)
+        # Generic File Lookup client for Qin Protein data (UniProt identity lookup)
         "qin_protein_lookup": MappingResource(
-            name="QIN_Protein_Lookup_UniProt_to_Gene",
-            description="Looks up QIN gene names by UniProt AC from qin_osps.csv.",
-            resource_type="LOOKUP",
-            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
-            config_template=json.dumps({
+            name="Qin_Protein_UniProt_Lookup",
+            description="Lookup UniProtKB ACs within Qin Protein CSV",
+            client_class_path="biomapper.mapping.clients.generic_file_client.GenericFileLookupClient",
+            config_template={
                 "file_path": "/home/ubuntu/biomapper/data/isb_osp/qin_osps.csv",
                 "key_column": "uniprot",
-                "value_column": "gene",
+                "value_column": "uniprot",
                 "delimiter": ","
-            }),
-            input_ontology_term="UNIPROTKB_AC",
-            output_ontology_term="GENE_NAME"
+            },
+            resource_type="LOOKUP"
         ),
     }
     session.add_all(resources.values())
@@ -674,35 +666,6 @@ async def populate_data(session: AsyncSession):
                 )
             ],
         ),
-        # New paths for UKBB UniProt to HPA/QIN Gene Names
-        "UKBB_UniProt_to_HPA_GeneName": MappingPath(
-            name="UKBB_UniProt_to_HPA_GeneName",
-            source_type="UNIPROTKB_AC",
-            target_type="GENE_NAME",
-            priority=1,
-            description="Maps UKBB UniProtKB AC to HPA Gene Name using hpa_osps.csv.",
-            steps=[
-                MappingPathStep(
-                    mapping_resource_id=resources["hpa_protein_lookup"].id,
-                    step_order=1,
-                    description="Lookup HPA Gene Name from UniProt AC."
-                )
-            ],
-        ),
-        "UKBB_UniProt_to_QIN_GeneName": MappingPath(
-            name="UKBB_UniProt_to_QIN_GeneName",
-            source_type="UNIPROTKB_AC",
-            target_type="GENE_NAME",
-            priority=1,
-            description="Maps UKBB UniProtKB AC to QIN Gene Name using qin_osps.csv.",
-            steps=[
-                MappingPathStep(
-                    mapping_resource_id=resources["qin_protein_lookup"].id,
-                    step_order=1,
-                    description="Lookup QIN Gene Name from UniProt AC."
-                )
-            ],
-        ),
     }
     session.add_all(paths.values())
     await session.flush()  # Flush to get IDs
@@ -713,25 +676,14 @@ async def populate_data(session: AsyncSession):
             source_endpoint_id=endpoints["metabolites_csv"].id,
             target_endpoint_id=endpoints["spoke"].id,
             description="Map Arivale Metabolites (by PUBCHEM) to SPOKE Compounds (prefer CHEBI)",
-        ),
-        "ukbb_protein_to_hpa_protein": EndpointRelationship(
-            source_endpoint_id=endpoints["ukbb_protein"].id,
-            target_endpoint_id=endpoints["hpa_protein"].id,
-            description="Maps UKBB Protein identifiers to HPA Protein identifiers.",
-        ),
-        "ukbb_protein_to_qin_protein": EndpointRelationship(
-            source_endpoint_id=endpoints["ukbb_protein"].id,
-            target_endpoint_id=endpoints["qin_protein"].id,
-            description="Maps UKBB Protein identifiers to QIN Protein identifiers.",
-        ),
+        )
     }
     ukbb_arivale_protein_rel = EndpointRelationship(
         source_endpoint_id=endpoints["ukbb_protein"].id,
         target_endpoint_id=endpoints["arivale_protein"].id,
         description="Maps UKBB Olink Protein identifiers to Arivale SomaScan Protein identifiers.",
     )
-    relationships["ukbb_arivale_protein"] = ukbb_arivale_protein_rel
-    session.add_all(relationships.values())
+    session.add_all([relationships["arivale_to_spoke"], ukbb_arivale_protein_rel])
     await session.flush()  # Flush to get IDs for preferences
 
     logging.info("Populating Ontology Preferences...")
@@ -870,15 +822,6 @@ async def populate_data(session: AsyncSession):
             extraction_pattern=json.dumps({"column_name": "UniProt"}),
             result_type="string",
         ),
-        # Config for extracting UKBB UniProt column by property name "UniProt" (index 3b)
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="UNIPROTKB_AC",
-            property_name="UniProt",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "UniProt"}),
-            result_type="string",
-        ),
         # Config for extracting UniProt AC from Arivale TSV (index 4)
         PropertyExtractionConfig(
             resource_id=None,
@@ -933,42 +876,6 @@ async def populate_data(session: AsyncSession):
             extraction_pattern=json.dumps({"column_name": "protein_id"}),
             result_type="string",
         ),
-        # Config for extracting UniProt AC from HPA CSV (index 10)
-        PropertyExtractionConfig(
-            resource_id=resources["hpa_protein_lookup"].id,
-            ontology_type="UNIPROTKB_AC",
-            property_name="UniProtAccession",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "uniprot"}),
-            result_type="string",
-        ),
-        # Config for extracting UniProt AC from Qin CSV (index 11)
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="UNIPROTKB_AC",
-            property_name="UniProtAccession",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "uniprot"}),
-            result_type="string",
-        ),
-        # Config for extracting Gene Name from HPA CSV (index 12)
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="GENE_NAME",
-            property_name="gene",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "gene"}),
-            result_type="string",
-        ),
-        # Config for extracting Gene Name from QIN CSV (index 13)
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="GENE_NAME",
-            property_name="gene",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "gene"}),
-            result_type="string",
-        ),
     ]
     session.add_all(prop_extract_configs)
     await session.flush()  # Flush to get extraction config IDs
@@ -995,7 +902,7 @@ async def populate_data(session: AsyncSession):
         # Arivale Protein - UniProt AC non-primary identifier
         EndpointPropertyConfig(
             endpoint_id=endpoints["arivale_protein"].id,
-            property_extraction_config_id=prop_extract_configs[5].id,
+            property_extraction_config_id=prop_extract_configs[4].id,
             property_name="UniProtKB_Accession",
             ontology_type="UNIPROTKB_AC",
         ),
@@ -1003,7 +910,7 @@ async def populate_data(session: AsyncSession):
         # Arivale Protein - Primary identifier
         EndpointPropertyConfig(
             endpoint_id=endpoints["arivale_protein"].id,
-            property_extraction_config_id=prop_extract_configs[6].id,
+            property_extraction_config_id=prop_extract_configs[5].id,
             property_name="PrimaryIdentifier",
             ontology_type="ARIVALE_PROTEIN_ID",
             is_primary_identifier=True,
@@ -1013,30 +920,22 @@ async def populate_data(session: AsyncSession):
         EndpointPropertyConfig(
             endpoint_id=endpoints["ukbb_protein"].id,
             property_name="EnsemblGeneID",
-            property_extraction_config_id=prop_extract_configs[7].id,
+            property_extraction_config_id=prop_extract_configs[6].id,
             ontology_type="ENSEMBL_GENE",
         ),
         
         # UKBB Protein - Gene Name
         EndpointPropertyConfig(
             endpoint_id=endpoints["ukbb_protein"].id,
-            property_extraction_config_id=prop_extract_configs[8].id,
+            property_extraction_config_id=prop_extract_configs[7].id,
             property_name="GeneName",
             ontology_type="GENE_NAME",
-        ),
-        
-        # UKBB Protein - UniProt property (for direct column access)
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["ukbb_protein"].id,
-            property_extraction_config_id=prop_extract_configs[4].id,  # Using the new UniProt config
-            property_name="UniProt",
-            ontology_type="UNIPROTKB_AC",
         ),
         
         # Arivale Protein - Gene Name
         EndpointPropertyConfig(
             endpoint_id=endpoints["arivale_protein"].id,
-            property_extraction_config_id=prop_extract_configs[9].id,
+            property_extraction_config_id=prop_extract_configs[8].id,
             property_name="GeneName",
             ontology_type="GENE_NAME",
         ),
@@ -1044,7 +943,7 @@ async def populate_data(session: AsyncSession):
         # Arivale Protein - Ensembl Protein ID
         EndpointPropertyConfig(
             endpoint_id=endpoints["arivale_protein"].id,
-            property_extraction_config_id=prop_extract_configs[10].id,
+            property_extraction_config_id=prop_extract_configs[9].id,
             property_name="EnsemblProteinID",
             ontology_type="ENSEMBL_PROTEIN_ID",
         ),
@@ -1052,41 +951,23 @@ async def populate_data(session: AsyncSession):
         # Arivale Protein - Ensembl Gene ID
         EndpointPropertyConfig(
             endpoint_id=endpoints["arivale_protein"].id,
-            property_extraction_config_id=prop_extract_configs[7].id,
+            property_extraction_config_id=prop_extract_configs[6].id,
             property_name="EnsemblGeneID",
             ontology_type="ENSEMBL_GENE",
         ),
         # HPA Protein UNIPROTKB_AC
         EndpointPropertyConfig(
             endpoint_id=endpoints["hpa_protein"].id,
-            property_extraction_config_id=prop_extract_configs[11].id,
-            property_name="UniProtAccession",
-            ontology_type="UNIPROTKB_AC",
-            is_primary_identifier=True
+            property_id=property_uniprotkb_ac.id,
+            is_primary_identifier=True,
+            available_for_mapping=True
         ),
         # Qin Protein UNIPROTKB_AC
         EndpointPropertyConfig(
             endpoint_id=endpoints["qin_protein"].id,
-            property_extraction_config_id=prop_extract_configs[12].id,
-            property_name="UniProtAccession",
-            ontology_type="UNIPROTKB_AC",
-            is_primary_identifier=True
-        ),
-        # HPA Protein Gene Name
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["hpa_protein"].id,
-            property_extraction_config_id=prop_extract_configs[13].id,
-            property_name="gene",
-            ontology_type="GENE_NAME",
-            is_primary_identifier=False
-        ),
-        # QIN Protein Gene Name
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["qin_protein"].id,
-            property_extraction_config_id=prop_extract_configs[14].id,
-            property_name="gene",
-            ontology_type="GENE_NAME",
-            is_primary_identifier=False
+            property_id=property_uniprotkb_ac.id,
+            is_primary_identifier=True,
+            available_for_mapping=True
         ),
     ]
     session.add_all(endpoint_prop_configs)
@@ -1163,51 +1044,13 @@ async def populate_data(session: AsyncSession):
             target_type="UNIPROTKB_AC",
             support_level="api_lookup",
         ),
-        # UKBB Protein Lookup covers UNIPROTKB_AC -> UNIPROTKB_AC (identity)
-        OntologyCoverage(
-            resource_id=resources["ukbb_protein_lookup"].id,
-            source_type="UNIPROTKB_AC",
-            target_type="UNIPROTKB_AC",
-            support_level="client_lookup",
-        ),
-        # HPA Protein Lookup covers UNIPROTKB_AC -> GENE_NAME
-        OntologyCoverage(
-            resource_id=resources["hpa_protein_lookup"].id,
-            source_type="UNIPROTKB_AC",
-            target_type="GENE_NAME",
-            support_level="client_lookup",
-        ),
-        # Qin Protein Lookup covers UNIPROTKB_AC -> GENE_NAME
-        OntologyCoverage(
-            resource_id=resources["qin_protein_lookup"].id,
-            source_type="UNIPROTKB_AC",
-            target_type="GENE_NAME",
-            support_level="client_lookup",
-        ),
         # ... add others as needed ...
     ]
     session.add_all(ontology_coverage_configs)
     await session.flush()
 
-    logging.info("Populating Relationship Mapping Paths...")
-    relationship_mapping_paths = [
-        # UKBB to HPA Gene Name mapping
-        RelationshipMappingPath(
-            relationship_id=relationships["ukbb_protein_to_hpa_protein"].id,
-            ontology_path_id=paths["UKBB_UniProt_to_HPA_GeneName"].id,
-            source_ontology="UNIPROTKB_AC",
-            target_ontology="GENE_NAME"
-        ),
-        # UKBB to QIN Gene Name mapping
-        RelationshipMappingPath(
-            relationship_id=relationships["ukbb_protein_to_qin_protein"].id,
-            ontology_path_id=paths["UKBB_UniProt_to_QIN_GeneName"].id,
-            source_ontology="UNIPROTKB_AC",
-            target_ontology="GENE_NAME"
-        ),
-    ]
-    session.add_all(relationship_mapping_paths)
-    await session.flush()
+    # Note: We are not populating RelationshipMappingPath yet as specific
+    # relationships using these paths haven't been defined.
 
     try:
         await session.commit()
@@ -1218,14 +1061,13 @@ async def populate_data(session: AsyncSession):
         raise
 
 
-async def main(drop_all=False):
+async def main():
     """Main function to set up DB and populate data."""
     # Ensure parent directory exists
     CONFIG_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    # Delete existing DB if requested
-    if drop_all:
-        await delete_existing_db()
+    # Delete existing DB if it exists
+    await delete_existing_db()
 
     # Create engine and session
     engine = create_async_engine(f"sqlite+aiosqlite:///{CONFIG_DB_PATH}")
@@ -1245,8 +1087,4 @@ async def main(drop_all=False):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Populate metamapper database with configuration data")
-    parser.add_argument("--drop-all", action="store_true", help="Drop existing database before creating new one")
-    args = parser.parse_args()
-    
-    asyncio.run(main(drop_all=args.drop_all))
+    asyncio.run(main())
