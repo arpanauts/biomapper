@@ -97,9 +97,12 @@ class ArivaleMetadataLookupClient(
                         header_line_num = i
                         break
 
+            # Get delimiter from config, default to tab
+            delimiter = self._config.get("delimiter", "\t") if hasattr(self, '_config') else "\t"
+            
             df = pd.read_csv(
                 file_path_obj,
-                sep="\t",
+                sep=delimiter,
                 skiprows=header_line_num,
                 quoting=csv.QUOTE_ALL,  # Match check script
                 on_bad_lines="warn",
