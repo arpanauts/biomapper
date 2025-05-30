@@ -1,38 +1,36 @@
-## Context Brief:
-We've updated `populate_metamapper_db.py` and mapping scripts to use Gene Names as targets for UKBB-to-HPA/QIN mappings. However, a critical issue in `MappingExecutor` prevents this workaround for HPA, as it incorrectly prioritizes a failing identity UniProt-to-UniProt path. QIN mapping to Gene Names works because no such conflicting identity path exists for it.
+## Context Brief
+The Biomapper project has recently resolved a major performance bottleneck in the `MappingExecutor` by implementing client caching, leading to significant speedups. Additionally, `populate_metamapper_db.py` was updated with new UKBB/Arivale resources, and a key bug in `phase3_bidirectional_reconciliation.py`'s one-to-many logic was fixed. The roadmap has been updated to reflect these completions.
 
-## Initial Steps:
-1.  Review project context, particularly regarding `MappingExecutor` and mapping strategies: `/home/ubuntu/biomapper/CLAUDE.md` and `/home/ubuntu/biomapper/docs/iterative_mapping_strategy.md`.
-2.  Review the latest status update: `/home/ubuntu/biomapper/roadmap/_status_updates/2025-05-28-gene-mapping-executor-issue.md`.
-3.  Familiarize yourself with the `MappingExecutor` code, especially path discovery: `/home/ubuntu/biomapper/src/biomapper/mapping_executor.py` (specifically `_get_mapping_paths`).
+## Initial Steps
+1.  Review the overall project context and goals in `/home/ubuntu/biomapper/CLAUDE.md`.
+2.  Familiarize yourself with the latest completed features and their documentation:
+    *   MappingExecutor Performance: `/home/ubuntu/biomapper/roadmap/3_completed/mapping_executor_performance_optimization/summary.md`
+    *   Populate DB Update: `/home/ubuntu/biomapper/roadmap/3_completed/update_populate_metamapper_db_ukbb_arivale/summary.md`
+    *   Phase 3 Bug Fix: `/home/ubuntu/biomapper/roadmap/3_completed/fix_phase3_one_to_many_bug/summary.md`
+3.  Review the latest full status update: `/home/ubuntu/biomapper/roadmap/_status_updates/2025-05-30-session-recap-and-roadmap-update.md`.
 
-## Work Priorities:
-1.  **Investigate and Fix `MappingExecutor` Path Selection (Highest Priority):**
-    *   **Goal:** Ensure `MappingExecutor` correctly selects the `UKBB_UniProt_to_HPA_GeneName` path (UNIPROTKB_AC -> GENE_NAME) for the UKBB to HPA mapping, instead of the problematic identity path (UNIPROTKB_AC -> UNIPROTKB_AC).
-    *   **Areas to Investigate:**
-        *   How does `MappingExecutor._get_mapping_paths` currently prioritize paths?
-        *   Why is the `priority` field (set to 1 for the gene name path) in the `MappingPath` table not influencing the selection as expected?
-        *   Is there logic that inherently prefers identity mappings (source_ontology_type == target_ontology_type) over conversion mappings, and if so, how can this be adjusted?
-    *   **Possible Solutions to Implement:**
-        *   Modify the query or logic in `_get_mapping_paths` to strictly adhere to the `priority` field.
-        *   Introduce a mechanism to deprioritize or disable specific paths (e.g., identity paths that are known to cause issues for certain endpoint relationships).
-        *   Consider allowing an optional `mapping_path_id` to be passed to `MappingExecutor.execute_mapping` to force the use of a specific path, bypassing automatic discovery for problematic cases.
-2.  **Test Mappings:**
-    *   After modifying `MappingExecutor`, run `/home/ubuntu/biomapper/scripts/populate_metamapper_db.py --drop-all`.
-    *   Execute `/home/ubuntu/biomapper/scripts/map_ukbb_to_hpa.py` and verify it now uses the gene name path and produces successful mappings.
-    *   Execute a QIN mapping script (e.g., `/home/ubuntu/biomapper/scripts/map_ukbb_to_qin_gene.py` or a user-created one) to confirm it still works.
-3.  **Documentation:** Update any relevant documentation regarding `MappingExecutor`'s path selection logic.
+## Work Priorities
+1.  **Monitor and Validate Performance:**
+    *   Design and execute tests for `MappingExecutor` using larger, production-representative datasets to confirm sustained performance and identify any new, more subtle bottlenecks.
+2.  **Architecture Refinements (Post-Fixes):**
+    *   Discuss and potentially implement cache management strategies (e.g., LRU, size limits) for `MappingExecutor._client_cache`.
+    *   Evaluate if `ArivaleMetadataLookupClient` requires refactoring given its role as a generic file loader.
+    *   Plan and add more comprehensive unit tests for `phase3_bidirectional_reconciliation.py`.
+3.  **Data Quality and Mapping Validation:**
+    *   Focus on validating the output of mapping runs, particularly for newly integrated UKBB data. Investigate any low mapping success rates, potentially linking back to data quality issues (e.g., malformed gene names).
+4.  **Backlog Prioritization:**
+    *   Review `/home/ubuntu/biomapper/roadmap/README.md` and items in `/home/ubuntu/biomapper/roadmap/1_backlog/` to select and plan the next development sprint.
 
-## References:
-- Status Update: `/home/ubuntu/biomapper/roadmap/_status_updates/2025-05-28-gene-mapping-executor-issue.md`
-- `MappingExecutor`: `/home/ubuntu/biomapper/src/biomapper/mapping_executor.py`
-- Database Population: `/home/ubuntu/biomapper/scripts/populate_metamapper_db.py`
-- HPA Mapping Script: `/home/ubuntu/biomapper/scripts/map_ukbb_to_hpa.py`
-- Claude Feedback on previous attempt (archived): `/home/ubuntu/biomapper/roadmap/_active_prompts/feedback/archive/2025-05-28-214000-feedback-ukbb-hpa-qin-gene-mapping-workaround.md`
+## References
+-   `MappingExecutor`: `/home/ubuntu/biomapper/biomapper/core/mapping_executor.py`
+-   `populate_metamapper_db.py`: `/home/ubuntu/biomapper/scripts/populate_metamapper_db.py`
+-   `phase3_bidirectional_reconciliation.py`: `/home/ubuntu/biomapper/scripts/phase3_bidirectional_reconciliation.py`
+-   Completed Features Log: `/home/ubuntu/biomapper/roadmap/_reference/completed_features_log.md`
+-   Memory - UniProt Gene Name Issues: MEMORY[37e78782-dd9b-4c37-b305-9c17a323373c]
+-   Memory - Dataset Mismatch (UniProt/Arivale): MEMORY[c82f0648-ebe4-487f-b43d-210bc06a0529]
 
-## Workflow Integration:
-This task involves deep debugging and modification of core logic. It's recommended to:
-1.  First, use Cascade (yourself) to perform detailed code analysis of `MappingExecutor._get_mapping_paths` and related functions. Use `view_code_item` and `grep_search` to understand the current logic.
-2.  Formulate a hypothesis for the cause of the incorrect path selection.
-3.  Propose specific code changes to `MappingExecutor`.
-4.  Once a clear plan for modification is ready, you can either implement it directly or generate a detailed prompt for a Claude Code instance to make the specific changes.
+## Workflow Integration
+Consider using Claude to:
+-   Analyze mapping output statistics and identify patterns of low success.
+-   Draft unit test cases for the architectural refinement tasks.
+-   Help research and compare different cache management strategies (e.g., LRU, LFU, TTL) in the context of Python and the `MappingExecutor`'s usage pattern.
