@@ -108,6 +108,11 @@ async def populate_data(session: AsyncSession):
             namespace_uri="https://www.genome.jp/dbget-bin/www_bget?cpd:",
             version="2025.01"
         ),
+        "ukbb_assay_id": Ontology(
+            name="UKBB_ASSAY_ID_ONTOLOGY",
+            description="UKBB Assay Identifiers",
+            version="2025.01"
+        ),
     }
     session.add_all(ontologies.values())
     await session.flush()  # Flush to get IDs
@@ -189,6 +194,15 @@ async def populate_data(session: AsyncSession):
             name="KEGG_ID",
             description="KEGG Compound Identifier",
             ontology_id=ontologies["kegg_id"].id,
+            is_primary=True,
+            data_type="string"
+        ),
+        
+        # UKBB Assay ID properties
+        Property(
+            name="UKBB_ASSAY_ID",
+            description="UKBB Assay Identifier",
+            ontology_id=ontologies["ukbb_assay_id"].id,
             is_primary=True,
             data_type="string"
         ),
@@ -309,7 +323,7 @@ async def populate_data(session: AsyncSession):
             client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
             input_ontology_term="UNIPROTKB_AC",
             output_ontology_term="ARIVALE_PROTEIN_ID",
-            config_template='{"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "uniprot", "value_column": "name"}',
+            config_template='{"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "uniprot", "value_column": "name", "delimiter": "\t"}',
         ),
         "arivale_reverse_lookup": MappingResource(
             name="Arivale_Reverse_Lookup",
@@ -317,17 +331,34 @@ async def populate_data(session: AsyncSession):
             client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
             input_ontology_term="ARIVALE_PROTEIN_ID",
             output_ontology_term="UNIPROTKB_AC",
-            config_template='{"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "name", "value_column": "uniprot"}',
+            config_template='{"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "name", "value_column": "uniprot", "delimiter": "\t"}',
         ),
         "arivale_genename_lookup": MappingResource(
             name="Arivale_GeneName_Lookup",
             description="Direct lookup from Gene Name to Arivale Protein ID using the Arivale metadata file",
-            resource_type="client_lookup",  # Inferred type
-            # Assuming similar client/config structure to other Arivale lookups
-            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",  # Placeholder - May need a specific client or config adjustment
+            resource_type="client_lookup",
+            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
             input_ontology_term="GENE_NAME",
             output_ontology_term="ARIVALE_PROTEIN_ID",
-            config_template='{"key_column": "Gene_Name", "value_column": "Arivale_Protein_ID"}',  # Placeholder - Needs correct column names from metadata
+            config_template='{"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "gene_name", "value_column": "name", "delimiter": "\t"}',
+        ),
+        # UKBB Assay to UniProt mapping
+        "ukbb_assay_to_uniprot": MappingResource(
+            name="UKBB Assay ID to UniProt (File)",
+            description="Direct lookup from UKBB Assay ID to UniProt AC using UKBB metadata file",
+            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
+            input_ontology_term="UKBB_ASSAY_ID",
+            output_ontology_term="UNIPROTKB_AC",
+            config_template='{"file_path": "/procedure/data/local_data/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv", "key_column": "Assay", "value_column": "UniProt", "delimiter": "\t"}',
+        ),
+        # UniProt to UKBB Assay mapping (reverse)
+        "uniprot_to_ukbb_assay": MappingResource(
+            name="UniProt to UKBB Assay ID (File)",
+            description="Direct lookup from UniProt AC to UKBB Assay ID using UKBB metadata file",
+            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
+            input_ontology_term="UNIPROTKB_AC",
+            output_ontology_term="UKBB_ASSAY_ID",
+            config_template='{"file_path": "/procedure/data/local_data/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv", "key_column": "UniProt", "value_column": "Assay", "delimiter": "\t"}',
         ),
         "uniprot_ensembl_protein_mapping": MappingResource(
             name="UniProtEnsemblProteinMapping",
@@ -1184,7 +1215,27 @@ async def populate_data(session: AsyncSession):
             target_type="GENE_NAME",
             support_level="client_lookup",
         ),
-        # ... add others as needed ...
+        # Arivale GeneName Lookup covers GENE_NAME -> ARIVALE_PROTEIN_ID
+        OntologyCoverage(
+            resource_id=resources["arivale_genename_lookup"].id,
+            source_type="GENE_NAME",
+            target_type="ARIVALE_PROTEIN_ID",
+            support_level="client_lookup",
+        ),
+        # UKBB Assay to UniProt mapping
+        OntologyCoverage(
+            resource_id=resources["ukbb_assay_to_uniprot"].id,
+            source_type="UKBB_ASSAY_ID",
+            target_type="UNIPROTKB_AC",
+            support_level="client_lookup",
+        ),
+        # UniProt to UKBB Assay mapping
+        OntologyCoverage(
+            resource_id=resources["uniprot_to_ukbb_assay"].id,
+            source_type="UNIPROTKB_AC",
+            target_type="UKBB_ASSAY_ID",
+            support_level="client_lookup",
+        ),
     ]
     session.add_all(ontology_coverage_configs)
     await session.flush()
