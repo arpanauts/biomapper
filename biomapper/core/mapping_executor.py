@@ -40,6 +40,8 @@ from ..db.models import (
     MappingPathStep,
     MappingResource,
     OntologyPreference,
+    EndpointRelationship,
+    RelationshipMappingPath,
 )
 
 # Import models for cache DB
@@ -178,6 +180,9 @@ class MappingExecutor(CompositeIdentifierMixin):
             except (ImportError, Exception) as e:
                 self.logger.warning(f"Langfuse metrics tracking not available: {e}")
 
+        # Client instance cache to avoid re-initializing expensive clients
+        self._client_cache: Dict[str, Any] = {}
+        
         # Log database URLs being used
         self.logger.info(f"Using Metamapper DB URL: {self.metamapper_db_url}")
         self.logger.info(f"Using Mapping Cache DB URL: {self.mapping_cache_db_url}")
@@ -568,6 +573,108 @@ class MappingExecutor(CompositeIdentifierMixin):
             self.logger.error(f"Unexpected error during caching for path {path_id}: {str(e)}", exc_info=True)
             raise CacheError(f"Unexpected error during caching: {str(e)}", original_exception=e)
 
+    async def _find_paths_for_relationship(
+        self, 
+        session: AsyncSession, 
+        source_endpoint_id: int,
+        target_endpoint_id: int,
+        source_ontology: str, 
+        target_ontology: str
+    ) -> List[MappingPath]:
+        """
+        Find mapping paths for a specific endpoint relationship based on RelationshipMappingPath.
+        
+        This method looks for paths that are explicitly associated with the relationship
+        between two endpoints through the RelationshipMappingPath table.
+        
+        Args:
+            session: Database session
+            source_endpoint_id: ID of the source endpoint
+            target_endpoint_id: ID of the target endpoint
+            source_ontology: Source ontology type
+            target_ontology: Target ontology type
+            
+        Returns:
+            List of MappingPath objects associated with the relationship, ordered by priority
+        """
+        self.logger.debug(
+            f"Searching for relationship-specific paths from endpoint {source_endpoint_id} to {target_endpoint_id} "
+            f"with ontologies '{source_ontology}' -> '{target_ontology}'"
+        )
+        
+        # First, find the EndpointRelationship between these endpoints
+        relationship_stmt = (
+            select(EndpointRelationship)
+            .where(EndpointRelationship.source_endpoint_id == source_endpoint_id)
+            .where(EndpointRelationship.target_endpoint_id == target_endpoint_id)
+        )
+        
+        relationship_result = await session.execute(relationship_stmt)
+        relationship = relationship_result.scalar_one_or_none()
+        
+        if not relationship:
+            self.logger.debug(
+                f"No EndpointRelationship found between endpoints {source_endpoint_id} and {target_endpoint_id}"
+            )
+            return []
+        
+        self.logger.debug(f"Found EndpointRelationship ID: {relationship.id}")
+        
+        # Now find RelationshipMappingPaths for this relationship with matching ontologies
+        mapping_paths_stmt = (
+            select(MappingPath)
+            .join(
+                RelationshipMappingPath,
+                RelationshipMappingPath.ontology_path_id == MappingPath.id
+            )
+            .where(RelationshipMappingPath.relationship_id == relationship.id)
+            .where(RelationshipMappingPath.source_ontology == source_ontology)
+            .where(RelationshipMappingPath.target_ontology == target_ontology)
+            .where(MappingPath.is_active == True)  # Only active paths
+            .options(
+                selectinload(MappingPath.steps).joinedload(
+                    MappingPathStep.mapping_resource
+                )
+            )
+            .order_by(MappingPath.priority.asc())  # Lower number = higher priority
+        )
+        
+        try:
+            result = await session.execute(mapping_paths_stmt)
+            paths = result.scalars().unique().all()
+            
+            if paths:
+                self.logger.info(
+                    f"Found {len(paths)} relationship-specific mapping path(s) for "
+                    f"relationship {relationship.id} ({source_ontology} -> {target_ontology})"
+                )
+                for path in paths:
+                    self.logger.debug(
+                        f" - Path ID: {path.id}, Name: '{path.name}', Priority: {path.priority}"
+                    )
+            else:
+                self.logger.debug(
+                    f"No relationship-specific mapping paths found for relationship {relationship.id} "
+                    f"with ontologies {source_ontology} -> {target_ontology}"
+                )
+                
+            return paths
+            
+        except SQLAlchemyError as e:
+            self.logger.error(
+                f"Database query error finding relationship paths: {e}", exc_info=True
+            )
+            raise BiomapperError(
+                f"Database error finding relationship paths between endpoints "
+                f"{source_endpoint_id} and {target_endpoint_id}",
+                error_code=ErrorCode.DATABASE_QUERY_ERROR,
+                details={
+                    "source_endpoint_id": source_endpoint_id,
+                    "target_endpoint_id": target_endpoint_id,
+                    "source_ontology": source_ontology,
+                    "target_ontology": target_ontology
+                },
+            ) from e
 
     async def _find_direct_paths(
         self, session: AsyncSession, source_ontology: str, target_ontology: str
@@ -675,6 +782,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         target_ontology: str,
         bidirectional: bool = False,
         preferred_direction: str = "forward",
+        source_endpoint: Optional[Endpoint] = None,
+        target_endpoint: Optional[Endpoint] = None,
     ) -> List[Union[MappingPath, "ReversiblePath"]]:
         """
         Find mapping paths between ontologies, optionally searching in both directions concurrently.
@@ -685,6 +794,8 @@ class MappingExecutor(CompositeIdentifierMixin):
             target_ontology: Target ontology term
             bidirectional: If True, search for both forward and reverse paths in parallel
             preferred_direction: Preferred direction for path ordering ("forward" or "reverse")
+            source_endpoint: Optional source endpoint for relationship-specific path selection
+            target_endpoint: Optional target endpoint for relationship-specific path selection
 
         Returns:
             List of paths (may be wrapped in ReversiblePath if reverse paths were found)
@@ -724,31 +835,68 @@ class MappingExecutor(CompositeIdentifierMixin):
             f"Searching for mapping paths from '{source_ontology}' to '{target_ontology}' (bidirectional={bidirectional}, preferred={preferred_direction})"
         )
 
-        # Create tasks for both forward and reverse path finding
-        forward_task = self._find_direct_paths(session, source_ontology, target_ontology)
-        
-        if bidirectional:
-            # Only create the reverse task if bidirectional=True
-            reverse_task = self._find_direct_paths(session, target_ontology, source_ontology)
-            # Run both tasks concurrently
-            forward_paths, reverse_paths = await asyncio.gather(forward_task, reverse_task)
+        # First, try to find relationship-specific paths if endpoints are provided
+        relationship_paths = []
+        if source_endpoint and target_endpoint:
+            self.logger.debug(f"Checking for relationship-specific paths between endpoints {source_endpoint.id} and {target_endpoint.id}")
+            relationship_paths = await self._find_paths_for_relationship(
+                session,
+                source_endpoint.id,
+                target_endpoint.id,
+                source_ontology,
+                target_ontology
+            )
             
-            # Process forward paths
-            paths = [ReversiblePath(path, is_reverse=False) for path in forward_paths]
-            # Process reverse paths
-            reverse_path_objects = [ReversiblePath(path, is_reverse=True) for path in reverse_paths]
-            
-            # Combine paths based on preferred direction
-            if preferred_direction == "reverse":
-                # If reverse is preferred, put reverse paths first
-                paths = reverse_path_objects + paths
+            if relationship_paths:
+                self.logger.info(f"Using {len(relationship_paths)} relationship-specific path(s)")
+                # If we found relationship-specific paths, use only those
+                paths = [ReversiblePath(path, is_reverse=False) for path in relationship_paths]
+                
+                # If bidirectional, also check for reverse relationship paths
+                if bidirectional:
+                    reverse_relationship_paths = await self._find_paths_for_relationship(
+                        session,
+                        target_endpoint.id,
+                        source_endpoint.id,
+                        target_ontology,
+                        source_ontology
+                    )
+                    if reverse_relationship_paths:
+                        reverse_path_objects = [ReversiblePath(path, is_reverse=True) for path in reverse_relationship_paths]
+                        if preferred_direction == "reverse":
+                            paths = reverse_path_objects + paths
+                        else:
+                            paths = paths + reverse_path_objects
             else:
-                # Otherwise, forward paths first (default)
-                paths = paths + reverse_path_objects
-        else:
-            # If not bidirectional, just get the forward paths
-            forward_paths = await forward_task
-            paths = [ReversiblePath(path, is_reverse=False) for path in forward_paths]
+                self.logger.debug("No relationship-specific paths found, falling back to general path search")
+
+        # If no relationship-specific paths found (or no endpoints provided), use general path finding
+        if not relationship_paths:
+            # Create tasks for both forward and reverse path finding
+            forward_task = self._find_direct_paths(session, source_ontology, target_ontology)
+            
+            if bidirectional:
+                # Only create the reverse task if bidirectional=True
+                reverse_task = self._find_direct_paths(session, target_ontology, source_ontology)
+                # Run both tasks concurrently
+                forward_paths, reverse_paths = await asyncio.gather(forward_task, reverse_task)
+                
+                # Process forward paths
+                paths = [ReversiblePath(path, is_reverse=False) for path in forward_paths]
+                # Process reverse paths
+                reverse_path_objects = [ReversiblePath(path, is_reverse=True) for path in reverse_paths]
+                
+                # Combine paths based on preferred direction
+                if preferred_direction == "reverse":
+                    # If reverse is preferred, put reverse paths first
+                    paths = reverse_path_objects + paths
+                else:
+                    # Otherwise, forward paths first (default)
+                    paths = paths + reverse_path_objects
+            else:
+                # If not bidirectional, just get the forward paths
+                forward_paths = await forward_task
+                paths = [ReversiblePath(path, is_reverse=False) for path in forward_paths]
 
         # Sort paths by priority after respecting direction preference
         paths = sorted(paths, key=lambda p: (-1 if p.is_reverse != (preferred_direction == "reverse") else 1, p.priority))
@@ -807,6 +955,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         bidirectional: bool = False,
         preferred_direction: str = "forward",
         allow_reverse: bool = False,
+        source_endpoint: Optional[Endpoint] = None,
+        target_endpoint: Optional[Endpoint] = None,
     ) -> Optional[Union[MappingPath, ReversiblePath]]:
         """
         Find the highest priority mapping path, optionally considering reverse paths concurrently.
@@ -818,6 +968,8 @@ class MappingExecutor(CompositeIdentifierMixin):
             bidirectional: If True, also search for reverse paths concurrently with forward paths
             preferred_direction: Preferred direction ("forward" or "reverse") for path selection
             allow_reverse: Legacy parameter to maintain compatibility, same as bidirectional=True
+            source_endpoint: Optional source endpoint for relationship-specific path selection
+            target_endpoint: Optional target endpoint for relationship-specific path selection
 
         Returns:
             The highest priority path, sorted by direction preference and then by priority
@@ -832,7 +984,9 @@ class MappingExecutor(CompositeIdentifierMixin):
             source_type, 
             target_type, 
             bidirectional=bidirectional,
-            preferred_direction=preferred_direction
+            preferred_direction=preferred_direction,
+            source_endpoint=source_endpoint,
+            target_endpoint=target_endpoint
         )
         
         return paths[0] if paths else None
@@ -941,7 +1095,18 @@ class MappingExecutor(CompositeIdentifierMixin):
             ) from e
 
     async def _load_client(self, resource: MappingResource) -> Any:
-        """Loads and initializes a client instance."""
+        """Loads and initializes a client instance, using cache for expensive clients."""
+        # Create a cache key based on resource name and config
+        cache_key = f"{resource.name}_{resource.client_class_path}"
+        if resource.config_template:
+            # Include config in cache key to handle different configurations
+            cache_key += f"_{hash(resource.config_template)}"
+        
+        # Check if client is already cached
+        if cache_key in self._client_cache:
+            self.logger.debug(f"OPTIMIZATION: Using cached client for {resource.name}")
+            return self._client_cache[cache_key]
+        
         try:
             client_class = await self._load_client_class(resource.client_class_path)
             # Parse the config template
@@ -957,7 +1122,13 @@ class MappingExecutor(CompositeIdentifierMixin):
                     )
 
             # Initialize the client with the config, passing it as 'config'
+            self.logger.debug(f"OPTIMIZATION: Creating new client instance for {resource.name}")
             client_instance = client_class(config=config_for_init)
+            
+            # Cache the client instance for future use
+            self._client_cache[cache_key] = client_instance
+            self.logger.debug(f"OPTIMIZATION: Cached client for {resource.name}")
+            
             return client_instance
         except ImportError as e:
             self.logger.error(
@@ -1005,8 +1176,13 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Dictionary mapping input IDs to tuples: (list of output IDs, successful source component ID or None)
         """
+        step_start = time.time()
+        self.logger.debug(f"TIMING: _execute_mapping_step started for {len(input_values)} identifiers")
+        
         try:
+            client_load_start = time.time()
             client_instance = await self._load_client(step.mapping_resource)
+            self.logger.debug(f"TIMING: _load_client took {time.time() - client_load_start:.3f}s")
         except ClientInitializationError:
             # Propagate initialization errors directly
             raise
@@ -1024,7 +1200,9 @@ class MappingExecutor(CompositeIdentifierMixin):
                 # map_identifiers is expected to return the rich dictionary:
                 # {'primary_ids': [...], 'input_to_primary': {in:out}, 'errors': [...]}
                 # This needs to be converted to Dict[str, Tuple[Optional[List[str]], Optional[str]]]
+                mapping_start = time.time()
                 client_results_dict = await client_instance.map_identifiers(input_values)
+                self.logger.debug(f"TIMING: client.map_identifiers took {time.time() - mapping_start:.3f}s")
                 
                 processed_step_results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
                 successful_mappings = client_results_dict.get('input_to_primary', {})
@@ -1040,6 +1218,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                 for val in input_values: # Ensure all original inputs are covered
                     if val not in processed_step_results:
                         processed_step_results[val] = (None, None)
+                self.logger.debug(f"TIMING: _execute_mapping_step completed in {time.time() - step_start:.3f}s")
                 return processed_step_results
             else:
                 # Reverse execution - try specialized reverse method first
@@ -1075,6 +1254,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                         if val not in processed_step_results:
                             # Default to no mapping if not covered by success or error from client
                             processed_step_results[val] = (None, None) 
+                    self.logger.debug(f"TIMING: _execute_mapping_step (reverse) completed in {time.time() - step_start:.3f}s")
                     return processed_step_results
 
                 # Fall back to inverting the results of forward mapping
@@ -1449,16 +1629,20 @@ class MappingExecutor(CompositeIdentifierMixin):
             
         # Start overall execution performance tracking
         overall_start_time = time.time()
+        self.logger.info(f"TIMING: execute_mapping started for {len(original_input_ids_set)} identifiers")
         
         # --- 0. Initial Setup --- Create a mapping session for logging ---
+        setup_start = time.time()
         mapping_session_id = await self._create_mapping_session_log(
             source_endpoint_name, target_endpoint_name, source_property_name,
             target_property_name, use_cache, try_reverse_mapping, len(original_input_ids_set),
             max_cache_age_days=max_cache_age_days
         )
+        self.logger.info(f"TIMING: mapping session setup took {time.time() - setup_start:.3f}s")
 
         try:
             # --- 1. Get Endpoint Config and Primary Ontologies ---
+            config_start = time.time()
             async with self.async_metamapper_session() as meta_session:
                 self.logger.info(
                     f"Executing mapping: {source_endpoint_name}.{source_property_name} -> {target_endpoint_name}.{target_property_name}"
@@ -1531,16 +1715,21 @@ class MappingExecutor(CompositeIdentifierMixin):
                     raise ConfigurationError(error_message) # Use ConfigurationError directly
 
                 self.logger.info(f"Primary mapping ontologies: {primary_source_ontology} -> {primary_target_ontology}")
+                self.logger.info(f"TIMING: endpoint configuration took {time.time() - config_start:.3f}s")
 
                 # --- 2. Attempt Direct Primary Mapping (Source Ontology -> Target Ontology) ---
                 self.logger.info("--- Step 2: Attempting Direct Primary Mapping ---")
+                path_find_start = time.time()
                 primary_path = await self._find_best_path(
                     meta_session,
                     primary_source_ontology,
                     primary_target_ontology,
                     preferred_direction=mapping_direction,
                     allow_reverse=try_reverse_mapping,
+                    source_endpoint=source_endpoint,
+                    target_endpoint=target_endpoint,
                 )
+                self.logger.info(f"TIMING: _find_best_path took {time.time() - path_find_start:.3f}s")
 
                 if not primary_path:
                     self.logger.warning(
@@ -1554,6 +1743,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                          self.logger.info("All relevant identifiers already processed via cache. Skipping Step 2 execution.")
                     else:
                         self.logger.info(f"Executing direct primary path for {len(ids_to_process_step2)} identifiers.")
+                        path_exec_start = time.time()
                         primary_results_details = await self._execute_path(
                             meta_session,
                             primary_path,
@@ -1566,6 +1756,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                             filter_confidence=min_confidence,
                             max_concurrent_batches=max_concurrent_batches
                         )
+                        self.logger.info(f"TIMING: _execute_path took {time.time() - path_exec_start:.3f}s")
 
                         # Process results from direct path
                         if primary_results_details:
@@ -1586,6 +1777,7 @@ class MappingExecutor(CompositeIdentifierMixin):
 
                 # --- 3 & 4. Identify Unmapped Entities & Attempt Secondary -> Primary Conversion ---
                 self.logger.info("--- Steps 3 & 4: Identifying Unmapped Entities & Attempting Secondary -> Primary Conversion ---")
+                secondary_start = time.time()
                 unmapped_ids_step3 = list(original_input_ids_set - processed_ids) # IDs not mapped by cache or Step 2
                 
                 # Initialize tracking for derived primary IDs - needed regardless of whether step 3 & 4 are executed
@@ -1719,74 +1911,83 @@ class MappingExecutor(CompositeIdentifierMixin):
                             for derived_primary_id in derived_primary_id_list:
                                 self.logger.debug(f"Attempting mapping for {source_id} using derived primary ID {derived_primary_id}")
                                 
-                                # Check cache for any existing valid mappings first
+                                # --- CORRECTED CACHE CHECK for the derived_primary_id ---
+                                cached_derived_mapping = None
                                 if use_cache:
-                                    self.logger.info("Checking cache for existing mappings...")
-                                    pending_ids = list(original_input_ids_set - processed_ids)
-                                    
-                                    # Update progress
-                                    if progress_callback:
-                                        progress_callback(current_progress, total_ids, "Checking cache for existing mappings")
-                                    
-                                    # Try to get as many mappings from cache as possible
-                                    cache_results = await self._get_cached_mappings(
-                                        primary_source_ontology,
-                                        primary_target_ontology,
-                                        pending_ids,
+                                    self.logger.debug(f"Checking cache for derived ID: {derived_primary_id} ({primary_source_ontology}) -> {primary_target_ontology}")
+                                    cache_results_for_derived = await self._get_cached_mappings(
+                                        primary_source_ontology,    # Ontology of derived_primary_id
+                                        primary_target_ontology,    # Target ontology
+                                        [derived_primary_id],       # The specific derived ID
                                         max_age_days=max_cache_age_days
                                     )
-                                    
-                                # Execute the primary path for this specific derived ID
-                                derived_mapping_results = await self._execute_path(
-                                    meta_session,
-                                    primary_path,
-                                    [derived_primary_id],  # Just the single derived ID
-                                    primary_source_ontology,
-                                    primary_target_ontology,
-                                    mapping_session_id=mapping_session_id,
-                                    batch_size=batch_size,
-                                    max_hop_count=max_hop_count,
-                                    filter_confidence=min_confidence,
-                                    max_concurrent_batches=max_concurrent_batches
-                                )
+                                    if cache_results_for_derived and derived_primary_id in cache_results_for_derived:
+                                        cached_derived_mapping = cache_results_for_derived[derived_primary_id]
+                                        self.logger.info(f"Cache hit for derived ID {derived_primary_id} -> {cached_derived_mapping.get('target_identifiers')}")
+
+                                # Initialize derived_mapping_results_for_current_id
+                                derived_mapping_results_for_current_id = None
+
+                                if cached_derived_mapping:
+                                    # Use the cached result directly
+                                    derived_mapping_results_for_current_id = {derived_primary_id: cached_derived_mapping}
+                                elif primary_path: # Only execute path if no cache hit and primary_path exists
+                                    self.logger.debug(f"Cache miss or not used for derived ID {derived_primary_id}. Executing primary_path.")
+                                    derived_mapping_results_for_current_id = await self._execute_path(
+                                        meta_session,
+                                        primary_path,
+                                        [derived_primary_id],  # Just the single derived ID
+                                        primary_source_ontology,
+                                        primary_target_ontology,
+                                        mapping_session_id=mapping_session_id,
+                                        batch_size=batch_size, 
+                                        max_hop_count=max_hop_count,
+                                        filter_confidence=min_confidence,
+                                        max_concurrent_batches=max_concurrent_batches
+                                    )
+                                else:
+                                    self.logger.debug(f"No primary_path available to execute for derived ID {derived_primary_id}. Skipping execution for this ID.")
                                 
                                 # Process results - connect back to original source ID
-                                if derived_mapping_results and derived_primary_id in derived_mapping_results:
-                                    result_data = derived_mapping_results[derived_primary_id]
+                                if derived_mapping_results_for_current_id and derived_primary_id in derived_mapping_results_for_current_id:
+                                    result_data = derived_mapping_results_for_current_id[derived_primary_id]
                                     if result_data and result_data.get("target_identifiers"):
-                                        # Create a merged result that maintains connection to original source ID
                                         source_result = {
                                             "source_identifier": source_id,
                                             "target_identifiers": result_data["target_identifiers"],
                                             "status": PathExecutionStatus.SUCCESS.value,
-                                            "message": f"Mapped via derived primary ID {derived_primary_id}",
+                                            "message": f"Mapped via derived primary ID {derived_primary_id}" + (" (from cache)" if cached_derived_mapping else ""),
                                             "confidence_score": result_data.get("confidence_score", 0.5) * 0.9,  # Slightly lower confidence for indirect mapping
-                                            "hop_count": (result_data.get("hop_count", 1) + 1),  # Add a hop for the derivation step
+                                            "hop_count": (result_data.get("hop_count", 0) + 1 if result_data.get("hop_count") is not None else 2), # Add a hop for derivation; ensure hop_count exists
                                             "mapping_direction": result_data.get("mapping_direction", "forward"),
-                                            "derived_path": True,  # Flag to indicate this was through a derived ID
-                                            "intermediate_id": derived_primary_id,  # Store the intermediate ID
+                                            "derived_path": True,
+                                            "intermediate_id": derived_primary_id,
+                                            "mapping_path_details": result_data.get("mapping_path_details")
                                         }
-                                        
-                                        # Merge path details
-                                        if result_data.get("mapping_path_details"):
-                                            # Get path details (might be string or dict)
-                                            path_details = result_data["mapping_path_details"]
-                                            if isinstance(path_details, str):
-                                                try:
-                                                    path_details = json.loads(path_details)
-                                                except json.JSONDecodeError:
-                                                    path_details = {}
+
+                                        current_path_details_str = source_result.get("mapping_path_details")
+                                        new_path_details = {}
+                                        if isinstance(current_path_details_str, str):
+                                            try:
+                                                new_path_details = json.loads(current_path_details_str)
+                                            except json.JSONDecodeError:
+                                                self.logger.warning(f"Could not parse path_details JSON from mapping result: {current_path_details_str}")
+                                                new_path_details = {"original_mapping_step_details": current_path_details_str}
+                                        elif isinstance(current_path_details_str, dict):
+                                            new_path_details = current_path_details_str
+                                        elif current_path_details_str is None:
+                                            new_path_details = {}
+                                        else:
+                                            self.logger.warning(f"Unexpected type for path_details: {type(current_path_details_str)}. Storing as string.")
+                                            new_path_details = {"original_mapping_step_details": str(current_path_details_str)}
                                             
-                                            # Add the derivation step info to path details
-                                            if isinstance(path_details, dict):
-                                                path_details["derived_step"] = provenance_info
-                                                source_result["mapping_path_details"] = json.dumps(path_details)
+                                        new_path_details["derived_step_provenance"] = provenance_info
+                                        source_result["mapping_path_details"] = json.dumps(new_path_details)
                                         
-                                        # Add to successful mappings
                                         successful_mappings[source_id] = source_result
                                         processed_ids.add(source_id)
                                         self.logger.debug(f"Successfully mapped {source_id} to {source_result['target_identifiers']} via derived ID {derived_primary_id}")
-                                        break  # Stop processing additional derived IDs for this source once we have a success
+                                        break  # Stop processing additional derived IDs for this source_id once we have a success
                             
                         # Log summary of indirect mapping results
                         newly_mapped = len([sid for sid in derived_primary_ids.keys() if sid in processed_ids])
@@ -1822,7 +2023,9 @@ class MappingExecutor(CompositeIdentifierMixin):
                             primary_target_ontology,  # Using target as source
                             primary_source_ontology,  # Using source as target
                             preferred_direction="forward",  # We want a direct T->S path
-                            allow_reverse=True  # Allow using S->T paths in reverse if needed
+                            allow_reverse=True,  # Allow using S->T paths in reverse if needed
+                            source_endpoint=target_endpoint,  # Note: swapped for reverse
+                            target_endpoint=source_endpoint,  # Note: swapped for reverse
                         )
                         
                         if not reverse_path:
