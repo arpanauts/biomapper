@@ -1028,8 +1028,10 @@ def perform_bidirectional_validation(
                 reconciled_df.at[idx, one_to_many_target_col] = True
 
     # For backward compatibility, also do the traditional count-based flags
-    source_id_counts = reconciled_df[source_id_col].value_counts().to_dict()
-    target_id_counts = reconciled_df[target_id_col].value_counts().to_dict()
+    # But ONLY consider rows with valid mappings (non-null source and target IDs)
+    valid_mapping_df = reconciled_df[reconciled_df[source_id_col].notna() & reconciled_df[target_id_col].notna()]
+    source_id_counts = valid_mapping_df[source_id_col].value_counts().to_dict()
+    target_id_counts = valid_mapping_df[target_id_col].value_counts().to_dict()
 
     # Add flags for one-to-many relationships based on counts
     # This will set flags for entities that appear multiple times in the output
@@ -1037,25 +1039,29 @@ def perform_bidirectional_validation(
         source_id = row[source_id_col]
         target_id = row[target_id_col]
 
+        # Skip rows with missing source or target IDs
+        if pd.isna(source_id) or pd.isna(target_id):
+            continue
+
         # Set one-to-many source flag if this source ID appears multiple times
-        if pd.notna(source_id) and source_id_counts.get(source_id, 0) > 1:
+        if source_id_counts.get(source_id, 0) > 1:
             reconciled_df.at[idx, one_to_many_source_col] = True
 
         # Set one-to-many target flag if this target ID appears in multiple rows
         # This indicates the target is mapped by multiple source entities
         # FIX: A TARGET mapped by multiple SOURCES should set one_to_many_target_col
-        if pd.notna(target_id) and target_id_counts.get(target_id, 0) > 1:
-            # Get all the source IDs that map to this target ID
-            source_ids_for_target = reconciled_df[reconciled_df[target_id_col] == target_id][source_id_col].dropna().unique()
+        if target_id_counts.get(target_id, 0) > 1:
+            # Get all the source IDs that map to this target ID (from valid mappings only)
+            source_ids_for_target = valid_mapping_df[valid_mapping_df[target_id_col] == target_id][source_id_col].dropna().unique()
             # Only set the flag to TRUE if there are multiple distinct source IDs
             if len(source_ids_for_target) > 1:
                 reconciled_df.at[idx, one_to_many_target_col] = True
                 
         # Check if this source maps to multiple targets (if not already set)
         # FIX: A SOURCE mapping to multiple TARGETS should set one_to_many_source_col
-        if pd.notna(source_id) and not reconciled_df.at[idx, one_to_many_source_col]:
-            # Get all target IDs that this source maps to
-            target_ids_for_source = reconciled_df[reconciled_df[source_id_col] == source_id][target_id_col].dropna().unique()
+        if not reconciled_df.at[idx, one_to_many_source_col]:
+            # Get all target IDs that this source maps to (from valid mappings only)
+            target_ids_for_source = valid_mapping_df[valid_mapping_df[source_id_col] == source_id][target_id_col].dropna().unique()
             # Set one-to-many source flag if this source maps to multiple targets
             if len(target_ids_for_source) > 1:
                 reconciled_df.at[idx, one_to_many_source_col] = True
