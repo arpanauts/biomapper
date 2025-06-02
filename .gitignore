@@ -259,4 +259,4 @@ qdrant_storage_backup.tar.gz
 data/filtered_embeddings/
 data/bio_relevant_cids*.txt
 data/filtering_log.txt
-data/qdrant_indexing_log.txt
+data/qdrant_indexing_log.txtmetamapper.db*
