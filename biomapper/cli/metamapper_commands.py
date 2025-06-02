@@ -17,6 +17,9 @@ from biomapper.db.session import get_session
 from biomapper.mapping.metadata.pathfinder import RelationshipPathFinder
 from biomapper.mapping.metadata.mapper import RelationshipMappingExecutor
 from biomapper.mapping.health import PropertyHealthTracker
+from sqlalchemy import text
+from biomapper.config import settings
+from biomapper.db.session import get_db_manager, DatabaseManager # Import session utilities
 
 # Configure logging
 logging.basicConfig(
@@ -87,56 +90,82 @@ def create_relationship(name, description, source, target):
         db_session.close()
 
 
+async def _list_relationships_async():
+    """Async logic for listing all endpoint relationships."""
+    # Ensure we are using the metamapper_db for relationship metadata
+    logger.info(f"_list_relationships_async: settings.metamapper_db_url is {settings.metamapper_db_url}")
+    manager = DatabaseManager(db_url=settings.metamapper_db_url, echo=(settings.log_level.upper() == "DEBUG"))
+    logger.info(f"_list_relationships_async: manager.db_url is {manager.db_url}")
+    logger.info(f"_list_relationships_async: manager.async_engine.url is {manager.async_engine.url}")
+    
+    try:
+        async with await manager.create_async_session() as db_session:
+            # Diagnostic: List all tables
+            try:
+                stmt_diag = text("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
+                all_tables_result = await db_session.execute(stmt_diag)
+                all_tables = all_tables_result.fetchall()
+                logger.info(f"_list_relationships_async: Tables in connected DB: {all_tables}")
+            except Exception as e_diag:
+                logger.error(f"_list_relationships_async: Error querying sqlite_master: {e_diag}")
+
+            # Get relationships
+            result = await db_session.execute(
+                text("""SELECT r.*, 
+                          COUNT(DISTINCT m.endpoint_id) as member_count
+                   FROM endpoint_relationships r
+                   LEFT JOIN endpoint_relationship_members m ON r.id = m.relationship_id
+                   GROUP BY r.id
+                   ORDER BY r.id"""          
+                )
+            )
+            relationships = result.fetchall()
+
+            if not relationships:
+                click.echo("No relationships found")
+                return
+
+            click.echo("\nEndpoint Relationships:\n")
+            click.echo(f"{'ID':<5} {'Description':<60} {'Members':<10}")
+            click.echo("-" * 80)
+
+            for rel in relationships:
+                # Access the actual available attributes from the query
+                description = rel.description if rel.description else ''
+                member_count = rel.member_count
+
+                click.echo(
+                    f"{str(rel.id):<5} {str(description):<60} {str(member_count):<10}"
+                )
+
+                # Get members using the same session
+                member_result = await db_session.execute(
+                    text("""SELECT m.*, e.name as endpoint_name
+                       FROM endpoint_relationship_members m
+                       JOIN endpoints e ON m.endpoint_id = e.id  
+                       WHERE m.relationship_id = :relationship_id
+                       ORDER BY m.role"""        
+                    ),
+                    {"relationship_id": rel.id},
+                )
+                members = member_result.fetchall()
+
+                for m in members:
+                    click.echo(
+                        f"    - {m.endpoint_name} (ID: {m.endpoint_id}, Role: {m.role}, Priority: {m.priority})"
+                    )
+                click.echo("")
+
+    except Exception as e:
+        # Log the full traceback for debugging
+        logger.error(f"Error listing relationships: {e}", exc_info=True)
+        click.echo(f"Error listing relationships: {e}")
+
+
 @metamapper_cli.command("list-relationships")
 def list_relationships():
     """List all endpoint relationships."""
-    db_session = get_session()
-
-    try:
-        # Get relationships
-        relationships = db_session.execute(
-            """SELECT r.*, 
-                      COUNT(DISTINCT m.endpoint_id) as member_count
-               FROM endpoint_relationships r
-               LEFT JOIN endpoint_relationship_members m ON r.relationship_id = m.relationship_id
-               GROUP BY r.relationship_id
-               ORDER BY r.relationship_id"""
-        ).fetchall()
-
-        if not relationships:
-            click.echo("No relationships found")
-            return
-
-        click.echo("\nEndpoint Relationships:\n")
-        click.echo(f"{'ID':<5} {'Name':<30} {'Members':<10} {'Created':<20}")
-        click.echo("-" * 70)
-
-        for r in relationships:
-            click.echo(
-                f"{r.relationship_id:<5} {r.name:<30} {r.member_count:<10} {r.created_at}"
-            )
-
-            # Get members
-            members = db_session.execute(
-                """SELECT m.*, e.name as endpoint_name
-                   FROM endpoint_relationship_members m
-                   JOIN endpoints e ON m.endpoint_id = e.endpoint_id
-                   WHERE m.relationship_id = :relationship_id
-                   ORDER BY m.role""",
-                {"relationship_id": r.relationship_id},
-            ).fetchall()
-
-            for m in members:
-                click.echo(
-                    f"    - {m.endpoint_name} (ID: {m.endpoint_id}, Role: {m.role})"
-                )
-
-            click.echo("")
-
-    except Exception as e:
-        click.echo(f"Error listing relationships: {e}")
-    finally:
-        db_session.close()
+    asyncio.run(_list_relationships_async())
 
 
 @metamapper_cli.command("discover-paths")
