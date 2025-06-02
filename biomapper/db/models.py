@@ -84,6 +84,7 @@ class Endpoint(Base):
     type = Column(String)  # e.g., 'database', 'api', 'file'
     primary_property_name = Column(String, nullable=True)  # Name of the primary identifier property
     connection_details = Column(Text, nullable=True)  # Store as JSON string or similar
+    relationship_memberships = relationship("EndpointRelationshipMember", back_populates="endpoint", cascade="all, delete-orphan")
     # Relationships defined below if needed after other models
 
 
@@ -121,6 +122,23 @@ class EndpointRelationship(Base):
     # Relationships
     source_endpoint = relationship("Endpoint", foreign_keys=[source_endpoint_id])
     target_endpoint = relationship("Endpoint", foreign_keys=[target_endpoint_id])
+    members = relationship("EndpointRelationshipMember", back_populates="parent_relationship", cascade="all, delete-orphan")
+
+
+
+class EndpointRelationshipMember(Base):
+    __tablename__ = "endpoint_relationship_members"
+
+    relationship_id = Column(Integer, ForeignKey("endpoint_relationships.id", ondelete="CASCADE"), primary_key=True)
+    endpoint_id = Column(Integer, ForeignKey("endpoints.id", ondelete="CASCADE"), primary_key=True)
+    role = Column(String, nullable=True)  # e.g., 'source_identifier', 'target_identifier'
+
+    # Relationships
+    parent_relationship = relationship("EndpointRelationship", back_populates="members")
+    endpoint = relationship("Endpoint", back_populates="relationship_memberships")
+
+    def __repr__(self) -> str:
+        return f"<EndpointRelationshipMember r_id={self.relationship_id} e_id={self.endpoint_id} role='{self.role}'>"
 
 
 class OntologyPreference(Base):

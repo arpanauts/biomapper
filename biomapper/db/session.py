@@ -112,6 +112,21 @@ class DatabaseManager:
         logger.info("Creating database tables")
         Base.metadata.create_all(self.engine)
 
+    async def init_db_async(self, drop_all: bool = False) -> None:
+        """Initialize the database schema asynchronously.
+
+        Args:
+            drop_all: Whether to drop all tables before creation
+        """
+        logger.info(f"Initializing database schema asynchronously (drop_all={drop_all}) using async_engine.")
+        async with self.async_engine.begin() as conn:
+            if drop_all:
+                logger.warning("Dropping all tables from the database via async_engine.")
+                await conn.run_sync(Base.metadata.drop_all)
+            logger.info("Creating database tables via async_engine.")
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Asynchronous database schema initialization completed.")
+
     def close(self) -> None:
         """Close database connections."""
         self.engine.dispose()
