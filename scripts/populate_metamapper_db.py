@@ -6,109 +6,120 @@ import logging
 import os
 import json
 from pathlib import Path
-
+import sys
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import event, text, inspect
+import biomapper.db.models
+from biomapper.config import settings # Import settings
 
-# Assuming db.session provides get_session and Base, and models are in db.models
+# Import specific classes for type hinting or direct use if needed, but Base will be used via the module
 from biomapper.db.models import (
-    Base,
-    Endpoint,
-    MappingResource,
-    MappingPath,
-    MappingPathStep,
+    Ontology, MappingResource, MappingPath, MappingPathStep,
     OntologyPreference,
     EndpointRelationship,
     PropertyExtractionConfig,
     EndpointPropertyConfig,
     OntologyCoverage,
     Property,
-    Ontology,
+    Endpoint,
     MappingSessionLog,
     RelationshipMappingPath,
 )
+
+from biomapper.db.session import get_async_session, get_db_manager
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# Define the path to the configuration database
-CONFIG_DB_PATH = Path(__file__).parent.parent / "data" / "metamapper.db"
-
-
 async def delete_existing_db():
-    """Deletes the existing database file if it exists."""
-    if CONFIG_DB_PATH.exists():
-        logging.warning(f"Existing database found at {CONFIG_DB_PATH}. Deleting...")
+    """Deletes the existing database file if it exists, based on settings."""
+    db_url = settings.metamapper_db_url
+    if not db_url.startswith("sqlite"):
+        logging.warning(f"Database URL {db_url} is not SQLite. Skipping deletion.")
+        return
+
+    # Extract file path from URL like sqlite+aiosqlite:///path/to/file.db
+    # or sqlite:///path/to/file.db
+    path_part = db_url.split("///", 1)[-1]
+    if not path_part or path_part == db_url: # Ensure splitting occurred and path is not empty
+        logging.error(f"Could not extract file path from SQLite URL: {db_url}")
+        return
+
+    db_file_path = Path(path_part)
+
+    if db_file_path.exists():
+        logging.warning(f"Existing database found at {db_file_path}. Deleting...")
         try:
-            CONFIG_DB_PATH.unlink()
+            db_file_path.unlink()
             logging.info("Existing database deleted successfully.")
         except OSError as e:
-            logging.error(f"Error deleting database file {CONFIG_DB_PATH}: {e}")
+            logging.error(f"Error deleting database file {db_file_path}: {e}")
             raise
     else:
-        logging.info(f"No existing database found at {CONFIG_DB_PATH}. Proceeding.")
+        logging.info(f"No existing database found at {db_file_path}. Proceeding.")
 
 
 async def populate_data(session: AsyncSession):
     """Adds standard configuration data to the database."""
 
     logging.info("Populating Ontologies...")
-    ontologies = {
-        "uniprotkb_ac": Ontology(
-            name="UNIPROTKB_AC_ONTOLOGY",
+    ontologies = { 
+        # Example: "UNIPROTKB_AC_ONTOLOGY": biomapper.db.models.Ontology(...)
+        "uniprotkb_ac": biomapper.db.models.Ontology(
+            name="UNIPROTKB_AC_ONTOLOGY", 
             description="UniProtKB Accession Numbers",
             identifier_prefix="UniProtKB:",
             namespace_uri="https://www.uniprot.org/uniprot/",
             version="2025.01"
         ),
-        "arivale_protein_id": Ontology(
+        "arivale_protein_id": biomapper.db.models.Ontology(
             name="ARIVALE_PROTEIN_ID_ONTOLOGY",
             description="Arivale Protein Identifiers",
             version="2025.01"
         ),
-        "gene_name": Ontology(
+        "gene_name": biomapper.db.models.Ontology(
             name="GENE_NAME",
             description="Official Gene Symbol or Common Gene Name",
             version="2025.01"
         ),
-        "ensembl_protein": Ontology(
+        "ensembl_protein": biomapper.db.models.Ontology(
             name="ENSEMBL_PROTEIN_ONTOLOGY",
             description="Ensembl Protein Identifiers",
             identifier_prefix="ENSP:",
             namespace_uri="https://www.ensembl.org/id/",
             version="2025.01"
         ),
-        "ensembl_gene": Ontology(
+        "ensembl_gene": biomapper.db.models.Ontology(
             name="ENSEMBL_GENE_ONTOLOGY",
             description="Ensembl Gene Identifiers",
             identifier_prefix="ENSG:",
             namespace_uri="https://www.ensembl.org/id/",
             version="2025.01"
         ),
-        "pubchem_id": Ontology(
+        "pubchem_id": biomapper.db.models.Ontology(
             name="PUBCHEM_ID_ONTOLOGY",
             description="PubChem Compound Identifiers",
             identifier_prefix="CID:",
             namespace_uri="https://pubchem.ncbi.nlm.nih.gov/compound/",
             version="2025.01"
         ),
-        "chebi_id": Ontology(
+        "chebi_id": biomapper.db.models.Ontology(
             name="CHEBI_ID_ONTOLOGY",
             description="Chemical Entities of Biological Interest Identifiers",
             identifier_prefix="CHEBI:",
             namespace_uri="https://www.ebi.ac.uk/chebi/searchId.do?chebiId=",
             version="2025.01"
         ),
-        "kegg_id": Ontology(
+        "kegg_id": biomapper.db.models.Ontology(
             name="KEGG_ID_ONTOLOGY",
             description="KEGG Compound Identifiers",
             identifier_prefix="KEGG:",
             namespace_uri="https://www.genome.jp/dbget-bin/www_bget?cpd:",
             version="2025.01"
         ),
-        "ukbb_assay_id": Ontology(
+        "ukbb_assay_id": biomapper.db.models.Ontology(
             name="UKBB_ASSAY_ID_ONTOLOGY",
             description="UKBB Assay Identifiers",
             version="2025.01"
@@ -120,7 +131,7 @@ async def populate_data(session: AsyncSession):
     logging.info("Populating Properties...")
     properties = [
         # UniProtKB AC properties
-        Property(
+        biomapper.db.models.Property(
             name="UNIPROTKB_AC",
             description="UniProtKB Accession Number",
             ontology_id=ontologies["uniprotkb_ac"].id,
@@ -129,7 +140,7 @@ async def populate_data(session: AsyncSession):
         ),
         
         # Arivale Protein ID properties
-        Property(
+        biomapper.db.models.Property(
             name="ARIVALE_PROTEIN_ID",
             description="Arivale Protein Identifier",
             ontology_id=ontologies["arivale_protein_id"].id,
@@ -138,7 +149,7 @@ async def populate_data(session: AsyncSession):
         ),
         
         # Gene Name properties
-        Property(
+        biomapper.db.models.Property(
             name="GENE_NAME",
             description="Gene Name/Symbol",
             ontology_id=ontologies["gene_name"].id,
@@ -147,14 +158,14 @@ async def populate_data(session: AsyncSession):
         ),
         
         # Ensembl Protein properties
-        Property(
+        biomapper.db.models.Property(
             name="ENSEMBL_PROTEIN",
             description="Ensembl Protein Identifier",
             ontology_id=ontologies["ensembl_protein"].id,
             is_primary=True,
             data_type="string"
         ),
-        Property(
+        biomapper.db.models.Property(
             name="ENSEMBL_PROTEIN_ID",
             description="Ensembl Protein Identifier (Alternative naming)",
             ontology_id=ontologies["ensembl_protein"].id,
@@ -163,7 +174,7 @@ async def populate_data(session: AsyncSession):
         ),
         
         # Ensembl Gene properties
-        Property(
+        biomapper.db.models.Property(
             name="ENSEMBL_GENE",
             description="Ensembl Gene Identifier",
             ontology_id=ontologies["ensembl_gene"].id,
@@ -172,7 +183,7 @@ async def populate_data(session: AsyncSession):
         ),
         
         # PubChem properties
-        Property(
+        biomapper.db.models.Property(
             name="PUBCHEM_ID",
             description="PubChem Compound Identifier",
             ontology_id=ontologies["pubchem_id"].id,
@@ -181,7 +192,7 @@ async def populate_data(session: AsyncSession):
         ),
         
         # ChEBI properties
-        Property(
+        biomapper.db.models.Property(
             name="CHEBI_ID",
             description="ChEBI Identifier",
             ontology_id=ontologies["chebi_id"].id,
@@ -190,7 +201,7 @@ async def populate_data(session: AsyncSession):
         ),
         
         # KEGG properties
-        Property(
+        biomapper.db.models.Property(
             name="KEGG_ID",
             description="KEGG Compound Identifier",
             ontology_id=ontologies["kegg_id"].id,
@@ -199,7 +210,7 @@ async def populate_data(session: AsyncSession):
         ),
         
         # UKBB Assay ID properties
-        Property(
+        biomapper.db.models.Property(
             name="UKBB_ASSAY_ID",
             description="UKBB Assay Identifier",
             ontology_id=ontologies["ukbb_assay_id"].id,
@@ -213,41 +224,41 @@ async def populate_data(session: AsyncSession):
     logging.info("Populating Endpoints...")
     endpoints = {
         # HPA Protein Endpoint
-        "hpa_protein": Endpoint(
+        "hpa_protein": biomapper.db.models.Endpoint(
             name="HPA_Protein",
             description="HPA Protein Resource (hpa_osps.csv)",
             connection_details=json.dumps({"file_path": "/home/ubuntu/biomapper/data/isb_osp/hpa_osps.csv"})
         ),
         # Qin Protein Endpoint
-        "qin_protein": Endpoint(
+        "qin_protein": biomapper.db.models.Endpoint(
             name="QIN_Protein",
             description="QIN Proteomics Data from ISB-OSP study",
             connection_details=json.dumps({"file_path": "/home/ubuntu/biomapper/data/isb_osp/qin_osps.csv"})
         ),
-        "metabolites_csv": Endpoint(
+        "metabolites_csv": biomapper.db.models.Endpoint(
             name="MetabolitesCSV",
             description="Example Metabolites CSV File",
             connection_details='{"file_path": "data/metabolites_sample.csv", "identifier_column": "MetaboliteName"}',
         ),
-        "spoke": Endpoint(
+        "spoke": biomapper.db.models.Endpoint(
             name="SPOKE",
             description="SPOKE Neo4j Graph Database",
             connection_details='{"uri": "bolt://localhost:7687", "user": "neo4j", "password": "password"}',
         ),  # Example
-        "ukbb_protein": Endpoint(
+        "ukbb_protein": biomapper.db.models.Endpoint(
             name="UKBB_Protein",
             description="UK Biobank Protein Biomarkers",
             connection_details='{"path": "/procedure/data/local_data/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv"}',
             primary_property_name="UNIPROTKB_AC"
         ),  # Updated path
-        "arivale_protein": Endpoint(
+        "arivale_protein": biomapper.db.models.Endpoint(
             name="Arivale_Protein",
             description="Arivale SomaScan Protein Metadata",
             type="protein_tsv",
             connection_details='{"path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv"}',
             primary_property_name="ARIVALE_PROTEIN_ID"
         ),
-        "arivale_chem": Endpoint(
+        "arivale_chem": biomapper.db.models.Endpoint(
             name="Arivale_Chemistry",
             description="Arivale Clinical Lab Chemistries Metadata",
             type="clinical_tsv",
@@ -259,38 +270,38 @@ async def populate_data(session: AsyncSession):
 
     logging.info("Populating Mapping Resources...")
     resources = {
-        "chebi": MappingResource(
+        "chebi": biomapper.db.models.MappingResource(
             name="ChEBI",
             description="Chemical Entities of Biological Interest",
             resource_type="ontology",
         ),
-        "pubchem": MappingResource(
+        "pubchem": biomapper.db.models.MappingResource(
             name="PubChem",
             description="NCBI chemical compound database",
             resource_type="ontology",
         ),
-        "kegg": MappingResource(
+        "kegg": biomapper.db.models.MappingResource(
             name="KEGG",
             description="Metabolic pathway and compound information",
             resource_type="ontology",
         ),
-        "unichem": MappingResource(
+        "unichem": biomapper.db.models.MappingResource(
             name="UniChem",
             description="EBI compound identifier mapping service",
             resource_type="api",
         ),
-        "refmet": MappingResource(
+        "refmet": biomapper.db.models.MappingResource(
             name="RefMet",
             description="Reference metabolite nomenclature",
             resource_type="ontology",
         ),
-        "ramp_db": MappingResource(
+        "ramp_db": biomapper.db.models.MappingResource(
             name="RaMP DB",
             description="Rapid Mapping Database for metabolites and pathways",
             resource_type="database",
         ),
         # New resources:
-        "uniprot_name": MappingResource(
+        "uniprot_name": biomapper.db.models.MappingResource(
             name="UniProt_NameSearch",
             description="Maps Gene Names/Symbols to UniProtKB Accession IDs using the UniProt ID Mapping API.",
             client_class_path="biomapper.mapping.clients.uniprot_name_client.UniProtNameClient",
@@ -302,12 +313,12 @@ async def populate_data(session: AsyncSession):
                 }
             ),
         ),
-        "umls_search": MappingResource(
+        "umls_search": biomapper.db.models.MappingResource(
             name="UMLS_Metathesaurus",
             description="Maps UMLS CUIs to other ontology terms using the UMLS Terminology Services (UTS) API.",
             resource_type="api",
         ),
-        "uniprot_idmapping": MappingResource(
+        "uniprot_idmapping": biomapper.db.models.MappingResource(
             name="UniProt_IDMapping",
             description="UniProt ID Mapping: UniProtKB AC -> Ensembl Gene ID",
             client_class_path="biomapper.mapping.clients.uniprot_ensembl_protein_mapping_client.UniProtEnsemblProteinMappingClient",
@@ -317,50 +328,50 @@ async def populate_data(session: AsyncSession):
                 {"from_db": "UniProtKB_AC-ID", "to_db": "Ensembl"}
             ),
         ),
-        "arivale_lookup": MappingResource(
+        "arivale_lookup": biomapper.db.models.MappingResource(
             name="Arivale_UniProt_Lookup",
             description="Direct lookup from UniProt AC to Arivale protein identifiers using the Arivale metadata file",
             client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
             input_ontology_term="UNIPROTKB_AC",
             output_ontology_term="ARIVALE_PROTEIN_ID",
-            config_template='{"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "uniprot", "value_column": "name", "delimiter": "\t"}',
+            config_template=json.dumps({"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "uniprot", "value_column": "name", "delimiter": "\t"}),
         ),
-        "arivale_reverse_lookup": MappingResource(
+        "arivale_reverse_lookup": biomapper.db.models.MappingResource(
             name="Arivale_Reverse_Lookup",
             description="Direct lookup from Arivale Protein ID to UniProt AC using metadata file (reverse)",
             client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
             input_ontology_term="ARIVALE_PROTEIN_ID",
             output_ontology_term="UNIPROTKB_AC",
-            config_template='{"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "name", "value_column": "uniprot", "delimiter": "\t"}',
+            config_template=json.dumps({"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "name", "value_column": "uniprot", "delimiter": "\t"}),
         ),
-        "arivale_genename_lookup": MappingResource(
+        "arivale_genename_lookup": biomapper.db.models.MappingResource(
             name="Arivale_GeneName_Lookup",
             description="Direct lookup from Gene Name to Arivale Protein ID using the Arivale metadata file",
             resource_type="client_lookup",
             client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
             input_ontology_term="GENE_NAME",
             output_ontology_term="ARIVALE_PROTEIN_ID",
-            config_template='{"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "gene_name", "value_column": "name", "delimiter": "\t"}',
+            config_template=json.dumps({"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "gene_name", "value_column": "name", "delimiter": "\t"}),
         ),
         # UKBB Assay to UniProt mapping
-        "ukbb_assay_to_uniprot": MappingResource(
+        "ukbb_assay_to_uniprot": biomapper.db.models.MappingResource(
             name="UKBB Assay ID to UniProt (File)",
             description="Direct lookup from UKBB Assay ID to UniProt AC using UKBB metadata file",
             client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
             input_ontology_term="UKBB_ASSAY_ID",
             output_ontology_term="UNIPROTKB_AC",
-            config_template='{"file_path": "/procedure/data/local_data/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv", "key_column": "Assay", "value_column": "UniProt", "delimiter": "\t"}',
+            config_template=json.dumps({"file_path": "data/local_data/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv", "key_column": "Assay", "value_column": "UniProt", "delimiter": "\t"}),
         ),
         # UniProt to UKBB Assay mapping (reverse)
-        "uniprot_to_ukbb_assay": MappingResource(
+        "uniprot_to_ukbb_assay": biomapper.db.models.MappingResource(
             name="UniProt to UKBB Assay ID (File)",
             description="Direct lookup from UniProt AC to UKBB Assay ID using UKBB metadata file",
             client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
             input_ontology_term="UNIPROTKB_AC",
             output_ontology_term="UKBB_ASSAY_ID",
-            config_template='{"file_path": "/procedure/data/local_data/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv", "key_column": "UniProt", "value_column": "Assay", "delimiter": "\t"}',
+            config_template=json.dumps({"file_path": "data/local_data/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv", "key_column": "UniProt", "value_column": "Assay", "delimiter": "\t"}),
         ),
-        "uniprot_ensembl_protein_mapping": MappingResource(
+        "uniprot_ensembl_protein_mapping": biomapper.db.models.MappingResource(
             name="UniProtEnsemblProteinMapping",
             description="Map Ensembl Protein IDs to UniProtKB ACs via UniProt API",
             client_class_path="biomapper.mapping.clients.uniprot_ensembl_protein_mapping_client.UniProtEnsemblProteinMappingClient",
@@ -373,7 +384,7 @@ async def populate_data(session: AsyncSession):
                 }
             ),
         ),
-        "uniprot_historical_resolver": MappingResource(
+        "uniprot_historical_resolver": biomapper.db.models.MappingResource(
             name="UniProtHistoricalResolver",
             description="Resolves historical/secondary UniProt accessions to current primary accessions",
             client_class_path="biomapper.mapping.clients.uniprot_historical_resolver_client.UniProtHistoricalResolverClient",
@@ -387,7 +398,7 @@ async def populate_data(session: AsyncSession):
             ),
         ),
         # Generic File Lookup client for UKBB Protein data (UniProt identity lookup)
-        "ukbb_protein_lookup": MappingResource(
+        "ukbb_protein_lookup": biomapper.db.models.MappingResource(
             name="UKBB_Protein_UniProt_Lookup",
             description="Lookup UniProtKB ACs within UKBB Protein Meta TSV",
             client_class_path="biomapper.mapping.clients.generic_file_client.GenericFileLookupClient",
@@ -400,7 +411,7 @@ async def populate_data(session: AsyncSession):
             resource_type="LOOKUP"
         ),
         # HPA Protein Lookup (UniProt to Gene Name)
-        "hpa_protein_lookup": MappingResource(
+        "hpa_protein_lookup": biomapper.db.models.MappingResource(
             name="HPA_Protein_Lookup_UniProt_to_Gene",
             description="Looks up HPA gene names by UniProt AC from hpa_osps.csv.",
             resource_type="LOOKUP",
@@ -415,7 +426,7 @@ async def populate_data(session: AsyncSession):
             output_ontology_term="GENE_NAME"
         ),
         # QIN Protein Lookup (UniProt to Gene Name)
-        "qin_protein_lookup": MappingResource(
+        "qin_protein_lookup": biomapper.db.models.MappingResource(
             name="QIN_Protein_Lookup_UniProt_to_Gene",
             description="Looks up QIN gene names by UniProt AC from qin_osps.csv.",
             resource_type="LOOKUP",
@@ -435,14 +446,14 @@ async def populate_data(session: AsyncSession):
 
     logging.info("Populating Mapping Paths...")
     paths = {
-        "PUBCHEM_to_CHEBI_via_UniChem": MappingPath(
+        "PUBCHEM_to_CHEBI_via_UniChem": biomapper.db.models.MappingPath(
             name="PUBCHEM_to_CHEBI_via_UniChem",
             source_type="PUBCHEM_ID",
             target_type="CHEBI_ID",
             priority=10,
             description="Map PubChem ID to ChEBI ID using UniChem.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["unichem"].id,
                     step_order=1,
                     description="UniChem: PubChem ID -> ChEBI ID",
@@ -456,7 +467,7 @@ async def populate_data(session: AsyncSession):
             priority=10,
             description="Map KEGG ID to ChEBI ID using UniChem.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["unichem"].id,
                     step_order=1,
                     description="UniChem: KEGG_ID -> ChEBI ID",
@@ -470,7 +481,7 @@ async def populate_data(session: AsyncSession):
             priority=10,
             description="Map KEGG ID to PubChem ID using UniChem.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["unichem"].id,
                     step_order=1,
                     description="UniChem: KEGG_ID -> PUBCHEM_ID",
@@ -484,7 +495,7 @@ async def populate_data(session: AsyncSession):
             priority=20,
             description="Get common name from PubChem ID using PubChem PUG API.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["pubchem"].id,
                     step_order=1,
                     description="PubChem: PUBCHEM_ID -> NAME",
@@ -498,7 +509,7 @@ async def populate_data(session: AsyncSession):
             priority=20,
             description="Get common name from ChEBI ID using ChEBI API.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["chebi"].id,
                     step_order=1,
                     description="ChEBI: CHEBI_ID -> NAME",
@@ -513,7 +524,7 @@ async def populate_data(session: AsyncSession):
             priority=1,  # Highest priority (try this path first)
             description="Maps UKBB UniProt AC directly to Arivale protein identifiers using the Arivale metadata file",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["arivale_lookup"].id,
                     step_order=1,
                     description="Direct lookup from UniProt AC to Arivale ID",
@@ -528,12 +539,12 @@ async def populate_data(session: AsyncSession):
             priority=2,  # Lower priority (try after direct path)
             description="Maps UKBB UniProt AC to Arivale protein identifiers with historical/secondary accession resolution",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["uniprot_historical_resolver"].id,
                     step_order=1,
                     description="Resolve historical/secondary UniProt accessions to current primary accessions",
                 ),
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["arivale_lookup"].id,
                     step_order=2,
                     description="Direct lookup from resolved UniProt AC to Arivale ID",
@@ -548,7 +559,7 @@ async def populate_data(session: AsyncSession):
             priority=1,
             description="Maps Arivale protein identifiers directly to UniProt AC using the Arivale metadata file",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["arivale_reverse_lookup"].id,
                     step_order=1,
                     description="Direct lookup from Arivale ID to UniProt AC",
@@ -563,7 +574,7 @@ async def populate_data(session: AsyncSession):
             priority=10,
             description="Maps Gene Name/Symbol to UniProtKB AC using UniProt Name Search API.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["uniprot_name"].id,
                     step_order=1,
                     description="UniProt Name Search: Gene Name -> UniProtKB AC",
@@ -578,7 +589,7 @@ async def populate_data(session: AsyncSession):
             priority=5,
             description="Maps Ensembl Protein ID to UniProtKB AC using UniProt ID Mapping service.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["uniprot_ensembl_protein_mapping"].id,
                     step_order=1,
                     description="UniProt ID Mapping: Ensembl Protein -> UniProtKB AC",
@@ -593,7 +604,7 @@ async def populate_data(session: AsyncSession):
             priority=5,
             description="Map Ensembl Gene ID to UniProtKB AC using UniProt ID Mapping service.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["uniprot_idmapping"].id,
                     step_order=1,
                     description="UniProt ID Mapping: ENSEMBL_GENE -> UNIPROTKB_AC",
@@ -608,11 +619,11 @@ async def populate_data(session: AsyncSession):
             target_type="ARIVALE_PROTEIN_ID",
             priority=1,
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     step_order=1,
                     mapping_resource_id=resources["uniprot_ensembl_protein_mapping"].id,
                 ),
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     step_order=2,
                     mapping_resource_id=resources["arivale_lookup"].id,
                 ),
@@ -626,7 +637,7 @@ async def populate_data(session: AsyncSession):
             priority=1,
             description="Maps HPA UniProtKB AC to Qin UniProtKB AC if present in Qin data.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["qin_protein_lookup"].id,
                     step_order=1,
                     description="Qin Protein Lookup: HPA UniProtKB AC -> Qin UniProtKB AC",
@@ -640,7 +651,7 @@ async def populate_data(session: AsyncSession):
             priority=1,
             description="Maps Qin UniProtKB AC to HPA UniProtKB AC if present in HPA data.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["hpa_protein_lookup"].id,
                     step_order=1,
                     description="HPA Protein Lookup: Qin UniProtKB AC -> HPA UniProtKB AC",
@@ -655,7 +666,7 @@ async def populate_data(session: AsyncSession):
             priority=1,
             description="Maps HPA UniProtKB AC to UKBB UniProtKB AC if present in UKBB data.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["ukbb_protein_lookup"].id,
                     step_order=1,
                     description="UKBB Protein Lookup: HPA UniProtKB AC -> UKBB UniProtKB AC",
@@ -669,7 +680,7 @@ async def populate_data(session: AsyncSession):
             priority=1,
             description="Maps UKBB UniProtKB AC to HPA UniProtKB AC if present in HPA data.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["hpa_protein_lookup"].id,
                     step_order=1,
                     description="HPA Protein Lookup: UKBB UniProtKB AC -> HPA UniProtKB AC",
@@ -684,7 +695,7 @@ async def populate_data(session: AsyncSession):
             priority=1,
             description="Maps Qin UniProtKB AC to UKBB UniProtKB AC if present in UKBB data.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["ukbb_protein_lookup"].id,
                     step_order=1,
                     description="UKBB Protein Lookup: Qin UniProtKB AC -> UKBB UniProtKB AC",
@@ -698,7 +709,7 @@ async def populate_data(session: AsyncSession):
             priority=1,
             description="Maps UKBB UniProtKB AC to Qin UniProtKB AC if present in Qin data.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["qin_protein_lookup"].id,
                     step_order=1,
                     description="Qin Protein Lookup: UKBB UniProtKB AC -> Qin UniProtKB AC",
@@ -713,7 +724,7 @@ async def populate_data(session: AsyncSession):
             priority=1,
             description="Maps UKBB UniProtKB AC to HPA Gene Name using hpa_osps.csv.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["hpa_protein_lookup"].id,
                     step_order=1,
                     description="Lookup HPA Gene Name from UniProt AC."
@@ -727,7 +738,7 @@ async def populate_data(session: AsyncSession):
             priority=1,
             description="Maps UKBB UniProtKB AC to QIN Gene Name using qin_osps.csv.",
             steps=[
-                MappingPathStep(
+                biomapper.db.models.MappingPathStep(
                     mapping_resource_id=resources["qin_protein_lookup"].id,
                     step_order=1,
                     description="Lookup QIN Gene Name from UniProt AC."
@@ -1258,7 +1269,7 @@ async def populate_data(session: AsyncSession):
         ),
     ]
     session.add_all(relationship_mapping_paths)
-    await session.flush()
+    await session.flush() # Flush to get IDs if any are auto-generated and needed before commit
 
     try:
         await session.commit()
@@ -1269,30 +1280,40 @@ async def populate_data(session: AsyncSession):
         raise
 
 
+
 async def main(drop_all=False):
     """Main function to set up DB and populate data."""
-    # Ensure parent directory exists
-    CONFIG_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    db_url = settings.metamapper_db_url # Use settings for the database URL
+    logging.info(f"Target database URL: {db_url}")
 
     # Delete existing DB if requested
     if drop_all:
-        await delete_existing_db()
+        # delete_existing_db is async, ensure it's awaited if kept
+        # For now, DatabaseManager's init_db(drop_all=True) handles deletion if file exists before sync Base.metadata.drop_all
+        # However, explicit deletion of the file first might be cleaner for SQLite to avoid issues with existing connections.
+        await delete_existing_db() 
 
-    # Create engine and session
-    engine = create_async_engine(f"sqlite+aiosqlite:///{CONFIG_DB_PATH}")
-    async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    # Force re-instantiation of the default DatabaseManager to ensure fresh engines
+    logging.info("Forcing re-instantiation of DatabaseManager...")
+    # Call with a dummy URL to trigger closure of any existing manager for the old DB file
+    get_db_manager(db_url="sqlite+aiosqlite:///./dummy_temp_biomapper.db", echo=False) 
+    # Now get the manager for the actual target DB URL; this will be a new instance
+    manager = get_db_manager(db_url=db_url, echo=True)
+    logging.info(f"Using new DatabaseManager instance: {id(manager)} with URL: {manager.db_url}")
 
-    # Create tables
-    async with engine.begin() as conn:
-        logging.info("Creating database tables...")
-        await conn.run_sync(Base.metadata.create_all)
-        logging.info("Database tables created.")
+    # Initialize DB schema using the manager's asynchronous init_db_async method
+    # drop_all is set to False because we've already deleted the DB file.
+    logging.info(f"Initializing database schema via manager.init_db_async(drop_all=False)...")
+    await manager.init_db_async(drop_all=True)
+    logging.info("Database schema initialization via manager.init_db_async completed.")
+    logging.info(f"Tables known to Base.metadata: {biomapper.db.models.Base.metadata.tables.keys()}")
 
-    # Populate data
-    async with async_session() as session:
+    # Get async session DIRECTLY from the manager instance used for init_db_async
+    logging.info("Attempting to get async session directly from the local manager instance...")
+    async with await manager.create_async_session() as session:
+        logging.info(f"Successfully obtained async session directly from manager: {id(session)}")
         await populate_data(session)
 
-    await engine.dispose()
 
 
 if __name__ == "__main__":

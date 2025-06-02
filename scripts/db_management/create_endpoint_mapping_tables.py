@@ -376,13 +376,21 @@ def main():
 
     try:
         # Create all tables in the correct order for foreign key constraints
+        print("Calling create_endpoint_tables...")
         create_endpoint_tables(conn)
+        print("Calling create_mapping_resources_table...")
         create_mapping_resources_table(conn)
+        print("Calling create_relationships_tables...")
         create_relationships_tables(conn)
+        print("Calling create_ontology_tables...")
         create_ontology_tables(conn)
+        print("Calling create_performance_table...")
         create_performance_table(conn)
+        print("Calling create_property_configs_table...")
         create_property_configs_table(conn)
+        print("Calling create_mapping_cache_tables...")
         create_mapping_cache_tables(conn)
+        print("Calling create_mapping_paths_table...")
         create_mapping_paths_table(conn)
 
         # Commit all changes
