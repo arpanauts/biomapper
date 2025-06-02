@@ -8,18 +8,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Define the root directory of the project
 # Assuming this file is at /home/ubuntu/biomapper/biomapper/config.py
 # PROJECT_ROOT will be /home/ubuntu/biomapper
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+PROJECT_ROOT = Path(__file__).parent.parent
 
 
 class Settings(BaseSettings):
     # --- Database Settings ---
     # Metamapper DB URL (config/metadata)
     # Default location: data/metamapper.db relative to project root
-    metamapper_db_url: str = f"sqlite+aiosqlite:///{PROJECT_ROOT / 'data' / 'metamapper.db'}"
+    metamapper_db_url: str = f"sqlite+aiosqlite:///{PROJECT_ROOT / 'metamapper.db'}"
 
     # Cache DB URL (runtime results)
     # Default location: data/mapping_cache.db relative to project root
-    cache_db_url: str = f"sqlite+aiosqlite:///{PROJECT_ROOT / 'data' / 'mapping_cache.db'}"
+    cache_db_url: str = f"sqlite+aiosqlite:///{PROJECT_ROOT / 'mapping_cache.db'}"
 
     # --- Logging Settings ---
     log_level: str = "INFO"
