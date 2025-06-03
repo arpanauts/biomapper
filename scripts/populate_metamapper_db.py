@@ -1,1324 +1,786 @@
-"""Script to populate the metamapper.db configuration database with standard data."""
+"""Script to populate the metamapper.db configuration database from YAML configuration files."""
 
 import argparse
 import asyncio
+import json
 import logging
 import os
-import json
 from pathlib import Path
-import sys
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy import event, text, inspect
-import biomapper.db.models
-from biomapper.config import settings # Import settings
+from typing import Dict, List, Any, Optional
+import yaml
 
-# Import specific classes for type hinting or direct use if needed, but Base will be used via the module
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import inspect
+
+import biomapper.db.models
+from biomapper.config import settings
 from biomapper.db.models import (
     Ontology, MappingResource, MappingPath, MappingPathStep,
-    OntologyPreference,
-    EndpointRelationship,
-    PropertyExtractionConfig,
-    EndpointPropertyConfig,
-    OntologyCoverage,
-    Property,
-    Endpoint,
-    MappingSessionLog,
-    RelationshipMappingPath,
+    OntologyPreference, EndpointRelationship, PropertyExtractionConfig,
+    EndpointPropertyConfig, OntologyCoverage, Property, Endpoint,
+    MappingSessionLog, RelationshipMappingPath, Base
 )
-
-from biomapper.db.session import get_async_session, get_db_manager
+from biomapper.db.session import get_db_manager
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+logger = logging.getLogger(__name__)
+
+
+class ConfigurationValidator:
+    """Validates YAML configuration files before database population."""
+    
+    def __init__(self):
+        self.errors: List[str] = []
+        self.warnings: List[str] = []
+    
+    def validate(self, config_data: Dict[str, Any], config_filename: str) -> bool:
+        """Validate the entire configuration data."""
+        self.errors = []
+        self.warnings = []
+        self.config_filename = config_filename
+
+        # Basic structure validation
+        required_top_level_keys = ['entity_type', 'version', 'ontologies', 'databases'] # 'mapping_paths' is optional
+        for key in required_top_level_keys:
+            if key not in config_data:
+                self.errors.append(f"Missing required top-level key: '{key}'")
+        
+        if self.errors: # Stop if basic structure is wrong
+            return False
+
+        ontologies_data = config_data.get('ontologies', {})
+        databases_data = config_data.get('databases', {})
+        mapping_paths_data = config_data.get('mapping_paths', [])
+        additional_resources_data = config_data.get('additional_resources', []) # Get additional_resources
+
+        self._validate_ontologies(ontologies_data)
+        self._validate_databases(databases_data, ontologies_data)
+        # Pass additional_resources_data to _validate_mapping_paths
+        self._validate_mapping_paths(mapping_paths_data, ontologies_data, databases_data, additional_resources_data)
+        self._validate_additional_resources(additional_resources_data, ontologies_data)
+
+        return len(self.errors) == 0
+    
+    def _validate_ontologies(self, ontologies: Dict[str, Any]):
+        """Validate ontologies section."""
+        # ontologies is guaranteed to be a dict by the caller config_data.get('ontologies', {})
+        if not ontologies: # Handles case where 'ontologies' key is missing or its value is not a dict (caller passes {})
+            self.errors.append("Ontologies section is empty or not a valid dictionary structure.")
+            return
+            
+        primary_count = 0
+        found_valid_ontology_entry = False
+        for ont_name, ont_data in ontologies.items():
+            if not isinstance(ont_data, dict):
+                self.errors.append(
+                    f"Ontology entry '{ont_name}' is not a dictionary (type: {type(ont_data).__name__}). Value: {str(ont_data)[:100]}"
+                )
+                continue # Skip this malformed entry for further checks
+            
+            found_valid_ontology_entry = True # At least one entry was a dict
+            if ont_data.get('is_primary', False):
+                primary_count += 1
+        
+        if not found_valid_ontology_entry and ontologies: 
+             # Errors for malformed entries already logged.
+             pass
+
+        if found_valid_ontology_entry: # Only check primary count if there were valid entries to assess
+            if primary_count == 0:
+                self.errors.append("No primary identifier defined among valid ontologies.")
+            elif primary_count > 1:
+                self.errors.append("Multiple primary identifiers defined among valid ontologies.")
+    
+    def _validate_databases(self, databases: Dict[str, Any], ontologies: Dict[str, Any]):
+        """Validate databases section."""
+        # databases is guaranteed to be a dict by the caller config_data.get('databases', {})
+        if not databases: # Handles case where 'databases' key is missing or its value is not a dict (caller passes {})
+            self.warnings.append("Databases section is empty or not a valid dictionary structure.")
+            return
+            
+        for db_name, db_config_value in databases.items():
+            if not isinstance(db_config_value, dict):
+                self.errors.append(
+                    f"Database configuration for '{db_name}' is not a dictionary (type: {type(db_config_value).__name__}). Value: {str(db_config_value)[:100]}"
+                )
+                continue # Skip this malformed database entry for further validation
+
+            db_config = db_config_value # Now we know db_config is a dict
+            
+            # Check endpoint configuration
+            endpoint_config = db_config.get('endpoint', {})
+            if not isinstance(endpoint_config, dict):
+                self.errors.append(f"Database '{db_name}' has an 'endpoint' section that is not a dictionary (type: {type(endpoint_config).__name__}). Value: {str(endpoint_config)[:100]}")
+            else:
+                connection_details = endpoint_config.get('connection_details')
+                if connection_details is None:
+                    self.errors.append(f"Database '{db_name}', endpoint '{endpoint_config.get('name', 'N/A')}' is missing 'connection_details'.")
+                elif not isinstance(connection_details, dict):
+                    self.errors.append(f"Database '{db_name}', endpoint '{endpoint_config.get('name', 'N/A')}', has 'connection_details' that is not a dictionary (type: {type(connection_details).__name__}). Value: {str(connection_details)[:100]}")
+                else:
+                    # Validate file paths if present
+                    if 'file_path' in connection_details or 'path' in connection_details:
+                        file_path = connection_details.get('file_path') or connection_details.get('path')
+                        resolved_path = self._resolve_path(file_path)
+                        if resolved_path and not Path(resolved_path).exists():
+                            self.warnings.append(f"File not found for database '{db_name}', endpoint '{endpoint_config.get('name', 'N/A')}': {resolved_path}")
+
+            # Validate properties section
+            properties_config = db_config.get('properties', {})
+            if not isinstance(properties_config, dict):
+                self.errors.append(f"Database '{db_name}' has a 'properties' section that is not a dictionary (type: {type(properties_config).__name__}). Value: {str(properties_config)[:100]}")
+            else:
+                primary_ontology_type = properties_config.get('primary')
+                if primary_ontology_type and primary_ontology_type not in ontologies:
+                    self.errors.append(f"Database '{db_name}', properties.primary, references undefined ontology '{primary_ontology_type}'.")
+                
+                mappings_data = properties_config.get('mappings', {})
+                if not isinstance(mappings_data, dict):
+                    self.errors.append(f"Database '{db_name}', properties section, has 'mappings' that is not a dictionary (type: {type(mappings_data).__name__}). Value: {str(mappings_data)[:100]}")
+                else:
+                    for mapping_name, mapping_details in mappings_data.items():
+                        if not isinstance(mapping_details, dict):
+                            self.errors.append(f"Database '{db_name}', properties.mappings entry '{mapping_name}' is not a dictionary (type: {type(mapping_details).__name__}). Value: {str(mapping_details)[:100]}")
+                            continue
+                        
+                        ont_type = mapping_details.get('ontology_type')
+                        if ont_type and ont_type not in ontologies:
+                            self.errors.append(
+                                f"Database '{db_name}', properties.mappings.{mapping_name}, references undefined ontology '{ont_type}'"
+                            )
+            
+            # Validate mapping clients
+            for client_entry in db_config.get('mapping_clients', []): 
+                if not isinstance(client_entry, dict):
+                    self.warnings.append(f"Item in mapping_clients for database '{db_name}' is not a dictionary: {client_entry}")
+                    continue
+
+                client_name = client_entry.get('name')
+                if not client_name:
+                    self.warnings.append(f"Client entry in database '{db_name}' is missing a 'name' key: {client_entry}")
+                    # If name is crucial for further validation steps for this client, might 'continue' here.
+                    # For now, we'll proceed, but error messages might be less specific if name is missing.
+
+                input_onto = client_entry.get('input_ontology_type')
+                output_onto = client_entry.get('output_ontology_type')
+                
+                actual_client_name_for_msg = client_name if client_name else "Unnamed client"
+
+                if input_onto and input_onto not in ontologies:
+                    self.errors.append(
+                        f"Client '{actual_client_name_for_msg}' in database '{db_name}' uses undefined input ontology '{input_onto}'"
+                    )
+                if output_onto and output_onto not in ontologies:
+                    self.errors.append(
+                        f"Client '{actual_client_name_for_msg}' in database '{db_name}' uses undefined output ontology '{output_onto}'"
+                    )
+                
+                # Validate client-specific config
+                self._validate_client_config(client_name, client_entry.get('config', {}))
+    
+    def _validate_mapping_paths(self, paths: List[Dict[str, Any]], ontologies: Dict[str, Any], 
+                           databases: Dict[str, Any], additional_resources: List[Dict[str, Any]]):
+        """Validate mapping paths."""
+        # Collect all client names from all databases
+        all_clients = set()
+        for db_name, db_config_content in databases.items(): # Iterate over each database's config
+            if not isinstance(db_config_content, dict):
+                # This case should ideally be caught by _validate_databases, but good to be defensive.
+                self.warnings.append(f"Configuration for database '{db_name}' is not a dictionary in _validate_mapping_paths. Skipping its clients.")
+                continue
+
+            mapping_clients_list = db_config_content.get('mapping_clients', []) # Default to empty list
+            
+            if not isinstance(mapping_clients_list, list):
+                # This case should also be caught by _validate_databases if a client config is malformed at the top level.
+                self.warnings.append(f"Database '{db_name}' has a 'mapping_clients' section that is not a list (type: {type(mapping_clients_list).__name__}) in _validate_mapping_paths. Skipping its clients.")
+                continue
+
+            for client_entry in mapping_clients_list:
+                if isinstance(client_entry, dict):
+                    client_name = client_entry.get('name')
+                    if client_name:
+                        all_clients.add(client_name)
+                else:
+                    # Log a warning if a client entry itself is not a dictionary, as _validate_databases should have caught this.
+                    self.warnings.append(f"Encountered a non-dictionary client entry in 'mapping_clients' for database '{db_name}' within _validate_mapping_paths: {str(client_entry)[:100]}")
+        
+        # Add clients from additional_resources
+        if not isinstance(additional_resources, list):
+            self.warnings.append(f"'additional_resources' section is not a list (type: {type(additional_resources).__name__}). Skipping these resources for path validation.")
+        else:
+            for res_entry in additional_resources:
+                if isinstance(res_entry, dict):
+                    res_name = res_entry.get('name')
+                    if res_name:
+                        all_clients.add(res_name)
+                else:
+                    self.warnings.append(f"Encountered a non-dictionary entry in 'additional_resources' within _validate_mapping_paths: {str(res_entry)[:100]}")
+
+        for path in paths:
+            # Check source and target types
+            for field in ['source_type', 'target_type']:
+                ont_type = path.get(field)
+                if ont_type and ont_type not in ontologies:
+                    self.errors.append(
+                        f"Mapping path '{path.get('name')}' references "
+                        f"undefined ontology '{ont_type}' in '{field}'"
+                    )
+            
+            # Check steps reference valid resources
+            for i, step in enumerate(path.get('steps', [])):
+                resource = step.get('resource')
+                if resource not in all_clients:
+                    self.errors.append(
+                        f"Step {i+1} in path '{path.get('name')}' references "
+                        f"undefined resource '{resource}'"
+                    )
+    
+    def _validate_additional_resources(self, additional_resources: List[Dict[str, Any]], ontologies: Dict[str, Any]):
+        """Validate additional_resources section."""
+        if not isinstance(additional_resources, list):
+            self.warnings.append(f"Configuration section 'additional_resources' is not a list. Found type: {type(additional_resources).__name__}. Skipping validation of these resources.")
+            return
+
+        for i, resource_entry in enumerate(additional_resources):
+            if not isinstance(resource_entry, dict):
+                self.errors.append(f"Item at index {i} in 'additional_resources' is not a dictionary (type: {type(resource_entry).__name__}). Value: {str(resource_entry)[:100]}")
+                continue
+            
+            client_name = resource_entry.get('name')
+            if not client_name:
+                self.errors.append(f"Item at index {i} in 'additional_resources' is missing a 'name'.")
+                continue 
+
+            if not resource_entry.get('client_class_path'):
+                self.errors.append(f"Additional resource '{client_name}' (index {i}) is missing 'client_class_path'.")
+
+            for ont_key in ['input_ontology_type', 'output_ontology_type']:
+                ont_type = resource_entry.get(ont_key)
+                if ont_type and ont_type not in ontologies:
+                    self.errors.append(
+                        f"Additional resource '{client_name}' (index {i}) uses undefined ontology '{ont_type}' for '{ont_key}'."
+                    )
+            
+            # Validate client config (similar to _validate_client_config)
+            self._validate_client_config(f"additional_resource '{client_name}' (index {i})", resource_entry.get('config', {}))
+    
+    def _validate_client_config(self, client_name: str, config: Any): # Changed type hint for flexibility
+        """Validate client-specific configuration."""
+        if not isinstance(config, dict):
+            self.warnings.append(
+                f"Client '{client_name}' has a 'config' section that is not a dictionary (type: {type(config).__name__}). Skipping config validation for this client."
+            )
+            return
+        # For file-based clients, check required fields
+        if any(key in config for key in ['file_path', 'path']):
+            if 'key_column' not in config:
+                self.errors.append(f"Client '{client_name}' missing 'key_column' in config")
+            if 'value_column' not in config:
+                self.errors.append(f"Client '{client_name}' missing 'value_column' in config")
+            
+            # Check file existence
+            file_path = config.get('file_path') or config.get('path')
+            if file_path:
+                resolved_path = self._resolve_path(file_path)
+                if resolved_path and not Path(resolved_path).exists():
+                    self.warnings.append(f"File not found for client '{client_name}': {resolved_path}")
+    
+    def _resolve_path(self, path: str) -> Optional[str]:
+        """Resolve environment variables in paths."""
+        if not path:
+            return None
+        # Replace ${DATA_DIR} with actual path
+        return path.replace('${DATA_DIR}', str(settings.data_dir))
+    
+    def get_report(self) -> str:
+        """Get validation report."""
+        report = []
+        if self.errors:
+            report.append("ERRORS:")
+            report.extend(f"  - {err}" for err in self.errors)
+        if self.warnings:
+            report.append("WARNINGS:")
+            report.extend(f"  - {warn}" for warn in self.warnings)
+        return "\n".join(report) if report else "Validation passed"
+
 
 async def delete_existing_db():
-    """Deletes the existing database file if it exists, based on settings."""
+    """Deletes the existing database file if it exists."""
     db_url = settings.metamapper_db_url
     if not db_url.startswith("sqlite"):
-        logging.warning(f"Database URL {db_url} is not SQLite. Skipping deletion.")
+        logger.warning(f"Database URL {db_url} is not SQLite. Skipping deletion.")
         return
 
-    # Extract file path from URL like sqlite+aiosqlite:///path/to/file.db
-    # or sqlite:///path/to/file.db
     path_part = db_url.split("///", 1)[-1]
-    if not path_part or path_part == db_url: # Ensure splitting occurred and path is not empty
-        logging.error(f"Could not extract file path from SQLite URL: {db_url}")
+    if not path_part or path_part == db_url:
+        logger.error(f"Could not extract file path from SQLite URL: {db_url}")
         return
 
     db_file_path = Path(path_part)
-
     if db_file_path.exists():
-        logging.warning(f"Existing database found at {db_file_path}. Deleting...")
+        logger.warning(f"Existing database found at {db_file_path}. Deleting...")
         try:
             db_file_path.unlink()
-            logging.info("Existing database deleted successfully.")
+            logger.info("Existing database deleted successfully.")
         except OSError as e:
-            logging.error(f"Error deleting database file {db_file_path}: {e}")
+            logger.error(f"Error deleting database file {db_file_path}: {e}")
             raise
     else:
-        logging.info(f"No existing database found at {db_file_path}. Proceeding.")
+        logger.info(f"No existing database found at {db_file_path}. Proceeding.")
 
 
-async def populate_data(session: AsyncSession):
-    """Adds standard configuration data to the database."""
+def resolve_environment_variables(data: Any) -> Any:
+    """Recursively resolve environment variables in configuration data."""
+    if isinstance(data, str):
+        # Replace ${DATA_DIR} with actual path
+        return data.replace('${DATA_DIR}', str(settings.data_dir))
+    elif isinstance(data, dict):
+        return {k: resolve_environment_variables(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [resolve_environment_variables(item) for item in data]
+    return data
 
-    logging.info("Populating Ontologies...")
-    ontologies = { 
-        # Example: "UNIPROTKB_AC_ONTOLOGY": biomapper.db.models.Ontology(...)
-        "uniprotkb_ac": biomapper.db.models.Ontology(
-            name="UNIPROTKB_AC_ONTOLOGY", 
-            description="UniProtKB Accession Numbers",
-            identifier_prefix="UniProtKB:",
-            namespace_uri="https://www.uniprot.org/uniprot/",
-            version="2025.01"
-        ),
-        "arivale_protein_id": biomapper.db.models.Ontology(
-            name="ARIVALE_PROTEIN_ID_ONTOLOGY",
-            description="Arivale Protein Identifiers",
-            version="2025.01"
-        ),
-        "gene_name": biomapper.db.models.Ontology(
-            name="GENE_NAME",
-            description="Official Gene Symbol or Common Gene Name",
-            version="2025.01"
-        ),
-        "ensembl_protein": biomapper.db.models.Ontology(
-            name="ENSEMBL_PROTEIN_ONTOLOGY",
-            description="Ensembl Protein Identifiers",
-            identifier_prefix="ENSP:",
-            namespace_uri="https://www.ensembl.org/id/",
-            version="2025.01"
-        ),
-        "ensembl_gene": biomapper.db.models.Ontology(
-            name="ENSEMBL_GENE_ONTOLOGY",
-            description="Ensembl Gene Identifiers",
-            identifier_prefix="ENSG:",
-            namespace_uri="https://www.ensembl.org/id/",
-            version="2025.01"
-        ),
-        "pubchem_id": biomapper.db.models.Ontology(
-            name="PUBCHEM_ID_ONTOLOGY",
-            description="PubChem Compound Identifiers",
-            identifier_prefix="CID:",
-            namespace_uri="https://pubchem.ncbi.nlm.nih.gov/compound/",
-            version="2025.01"
-        ),
-        "chebi_id": biomapper.db.models.Ontology(
-            name="CHEBI_ID_ONTOLOGY",
-            description="Chemical Entities of Biological Interest Identifiers",
-            identifier_prefix="CHEBI:",
-            namespace_uri="https://www.ebi.ac.uk/chebi/searchId.do?chebiId=",
-            version="2025.01"
-        ),
-        "kegg_id": biomapper.db.models.Ontology(
-            name="KEGG_ID_ONTOLOGY",
-            description="KEGG Compound Identifiers",
-            identifier_prefix="KEGG:",
-            namespace_uri="https://www.genome.jp/dbget-bin/www_bget?cpd:",
-            version="2025.01"
-        ),
-        "ukbb_assay_id": biomapper.db.models.Ontology(
-            name="UKBB_ASSAY_ID_ONTOLOGY",
-            description="UKBB Assay Identifiers",
-            version="2025.01"
-        ),
-    }
-    session.add_all(ontologies.values())
-    await session.flush()  # Flush to get IDs
 
-    logging.info("Populating Properties...")
-    properties = [
-        # UniProtKB AC properties
-        biomapper.db.models.Property(
-            name="UNIPROTKB_AC",
-            description="UniProtKB Accession Number",
-            ontology_id=ontologies["uniprotkb_ac"].id,
-            is_primary=True,
-            data_type="string"
-        ),
-        
-        # Arivale Protein ID properties
-        biomapper.db.models.Property(
-            name="ARIVALE_PROTEIN_ID",
-            description="Arivale Protein Identifier",
-            ontology_id=ontologies["arivale_protein_id"].id,
-            is_primary=True,
-            data_type="string"
-        ),
-        
-        # Gene Name properties
-        biomapper.db.models.Property(
-            name="GENE_NAME",
-            description="Gene Name/Symbol",
-            ontology_id=ontologies["gene_name"].id,
-            is_primary=True,
-            data_type="string"
-        ),
-        
-        # Ensembl Protein properties
-        biomapper.db.models.Property(
-            name="ENSEMBL_PROTEIN",
-            description="Ensembl Protein Identifier",
-            ontology_id=ontologies["ensembl_protein"].id,
-            is_primary=True,
-            data_type="string"
-        ),
-        biomapper.db.models.Property(
-            name="ENSEMBL_PROTEIN_ID",
-            description="Ensembl Protein Identifier (Alternative naming)",
-            ontology_id=ontologies["ensembl_protein"].id,
-            is_primary=False,
-            data_type="string"
-        ),
-        
-        # Ensembl Gene properties
-        biomapper.db.models.Property(
-            name="ENSEMBL_GENE",
-            description="Ensembl Gene Identifier",
-            ontology_id=ontologies["ensembl_gene"].id,
-            is_primary=True,
-            data_type="string"
-        ),
-        
-        # PubChem properties
-        biomapper.db.models.Property(
-            name="PUBCHEM_ID",
-            description="PubChem Compound Identifier",
-            ontology_id=ontologies["pubchem_id"].id,
-            is_primary=True,
-            data_type="string"
-        ),
-        
-        # ChEBI properties
-        biomapper.db.models.Property(
-            name="CHEBI_ID",
-            description="ChEBI Identifier",
-            ontology_id=ontologies["chebi_id"].id,
-            is_primary=True,
-            data_type="string"
-        ),
-        
-        # KEGG properties
-        biomapper.db.models.Property(
-            name="KEGG_ID",
-            description="KEGG Compound Identifier",
-            ontology_id=ontologies["kegg_id"].id,
-            is_primary=True,
-            data_type="string"
-        ),
-        
-        # UKBB Assay ID properties
-        biomapper.db.models.Property(
-            name="UKBB_ASSAY_ID",
-            description="UKBB Assay Identifier",
-            ontology_id=ontologies["ukbb_assay_id"].id,
-            is_primary=True,
-            data_type="string"
-        ),
-    ]
-    session.add_all(properties)
-    await session.flush()  # Flush to get IDs
-
-    logging.info("Populating Endpoints...")
-    endpoints = {
-        # HPA Protein Endpoint
-        "hpa_protein": biomapper.db.models.Endpoint(
-            name="HPA_Protein",
-            description="HPA Protein Resource (hpa_osps.csv)",
-            connection_details=json.dumps({"file_path": "/home/ubuntu/biomapper/data/isb_osp/hpa_osps.csv"})
-        ),
-        # Qin Protein Endpoint
-        "qin_protein": biomapper.db.models.Endpoint(
-            name="QIN_Protein",
-            description="QIN Proteomics Data from ISB-OSP study",
-            connection_details=json.dumps({"file_path": "/home/ubuntu/biomapper/data/isb_osp/qin_osps.csv"})
-        ),
-        "metabolites_csv": biomapper.db.models.Endpoint(
-            name="MetabolitesCSV",
-            description="Example Metabolites CSV File",
-            connection_details='{"file_path": "data/metabolites_sample.csv", "identifier_column": "MetaboliteName"}',
-        ),
-        "spoke": biomapper.db.models.Endpoint(
-            name="SPOKE",
-            description="SPOKE Neo4j Graph Database",
-            connection_details='{"uri": "bolt://localhost:7687", "user": "neo4j", "password": "password"}',
-        ),  # Example
-        "ukbb_protein": biomapper.db.models.Endpoint(
-            name="UKBB_Protein",
-            description="UK Biobank Protein Biomarkers",
-            connection_details='{"path": "/procedure/data/local_data/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv"}',
-            primary_property_name="UNIPROTKB_AC"
-        ),  # Updated path
-        "arivale_protein": biomapper.db.models.Endpoint(
-            name="Arivale_Protein",
-            description="Arivale SomaScan Protein Metadata",
-            type="protein_tsv",
-            connection_details='{"path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv"}',
-            primary_property_name="ARIVALE_PROTEIN_ID"
-        ),
-        "arivale_chem": biomapper.db.models.Endpoint(
-            name="Arivale_Chemistry",
-            description="Arivale Clinical Lab Chemistries Metadata",
-            type="clinical_tsv",
-            connection_details='{"path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/chemistries_metadata.tsv"}',
-        ),
-    }
-    session.add_all(endpoints.values())
-    await session.flush()  # Flush to get IDs for relationships
-
-    logging.info("Populating Mapping Resources...")
-    resources = {
-        "chebi": biomapper.db.models.MappingResource(
-            name="ChEBI",
-            description="Chemical Entities of Biological Interest",
-            resource_type="ontology",
-        ),
-        "pubchem": biomapper.db.models.MappingResource(
-            name="PubChem",
-            description="NCBI chemical compound database",
-            resource_type="ontology",
-        ),
-        "kegg": biomapper.db.models.MappingResource(
-            name="KEGG",
-            description="Metabolic pathway and compound information",
-            resource_type="ontology",
-        ),
-        "unichem": biomapper.db.models.MappingResource(
-            name="UniChem",
-            description="EBI compound identifier mapping service",
-            resource_type="api",
-        ),
-        "refmet": biomapper.db.models.MappingResource(
-            name="RefMet",
-            description="Reference metabolite nomenclature",
-            resource_type="ontology",
-        ),
-        "ramp_db": biomapper.db.models.MappingResource(
-            name="RaMP DB",
-            description="Rapid Mapping Database for metabolites and pathways",
-            resource_type="database",
-        ),
-        # New resources:
-        "uniprot_name": biomapper.db.models.MappingResource(
-            name="UniProt_NameSearch",
-            description="Maps Gene Names/Symbols to UniProtKB Accession IDs using the UniProt ID Mapping API.",
-            client_class_path="biomapper.mapping.clients.uniprot_name_client.UniProtNameClient",
-            input_ontology_term="GENE_NAME",
-            output_ontology_term="UNIPROTKB_AC",
-            config_template=json.dumps(
-                {
-                    # "api_key": "YOUR_API_KEY_IF_NEEDED"
-                }
-            ),
-        ),
-        "umls_search": biomapper.db.models.MappingResource(
-            name="UMLS_Metathesaurus",
-            description="Maps UMLS CUIs to other ontology terms using the UMLS Terminology Services (UTS) API.",
-            resource_type="api",
-        ),
-        "uniprot_idmapping": biomapper.db.models.MappingResource(
-            name="UniProt_IDMapping",
-            description="UniProt ID Mapping: UniProtKB AC -> Ensembl Gene ID",
-            client_class_path="biomapper.mapping.clients.uniprot_ensembl_protein_mapping_client.UniProtEnsemblProteinMappingClient",
-            input_ontology_term="UNIPROTKB_AC",
-            output_ontology_term="ENSEMBL_GENE",
-            config_template=json.dumps(
-                {"from_db": "UniProtKB_AC-ID", "to_db": "Ensembl"}
-            ),
-        ),
-        "arivale_lookup": biomapper.db.models.MappingResource(
-            name="Arivale_UniProt_Lookup",
-            description="Direct lookup from UniProt AC to Arivale protein identifiers using the Arivale metadata file",
-            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
-            input_ontology_term="UNIPROTKB_AC",
-            output_ontology_term="ARIVALE_PROTEIN_ID",
-            config_template=json.dumps({"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "uniprot", "value_column": "name", "delimiter": "\t"}),
-        ),
-        "arivale_reverse_lookup": biomapper.db.models.MappingResource(
-            name="Arivale_Reverse_Lookup",
-            description="Direct lookup from Arivale Protein ID to UniProt AC using metadata file (reverse)",
-            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
-            input_ontology_term="ARIVALE_PROTEIN_ID",
-            output_ontology_term="UNIPROTKB_AC",
-            config_template=json.dumps({"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "name", "value_column": "uniprot", "delimiter": "\t"}),
-        ),
-        "arivale_genename_lookup": biomapper.db.models.MappingResource(
-            name="Arivale_GeneName_Lookup",
-            description="Direct lookup from Gene Name to Arivale Protein ID using the Arivale metadata file",
-            resource_type="client_lookup",
-            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
-            input_ontology_term="GENE_NAME",
-            output_ontology_term="ARIVALE_PROTEIN_ID",
-            config_template=json.dumps({"file_path": "/procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv", "key_column": "gene_name", "value_column": "name", "delimiter": "\t"}),
-        ),
-        # UKBB Assay to UniProt mapping
-        "ukbb_assay_to_uniprot": biomapper.db.models.MappingResource(
-            name="UKBB Assay ID to UniProt (File)",
-            description="Direct lookup from UKBB Assay ID to UniProt AC using UKBB metadata file",
-            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
-            input_ontology_term="UKBB_ASSAY_ID",
-            output_ontology_term="UNIPROTKB_AC",
-            config_template=json.dumps({"file_path": "data/local_data/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv", "key_column": "Assay", "value_column": "UniProt", "delimiter": "\t"}),
-        ),
-        # UniProt to UKBB Assay mapping (reverse)
-        "uniprot_to_ukbb_assay": biomapper.db.models.MappingResource(
-            name="UniProt to UKBB Assay ID (File)",
-            description="Direct lookup from UniProt AC to UKBB Assay ID using UKBB metadata file",
-            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
-            input_ontology_term="UNIPROTKB_AC",
-            output_ontology_term="UKBB_ASSAY_ID",
-            config_template=json.dumps({"file_path": "data/local_data/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv", "key_column": "UniProt", "value_column": "Assay", "delimiter": "\t"}),
-        ),
-        "uniprot_ensembl_protein_mapping": biomapper.db.models.MappingResource(
-            name="UniProtEnsemblProteinMapping",
-            description="Map Ensembl Protein IDs to UniProtKB ACs via UniProt API",
-            client_class_path="biomapper.mapping.clients.uniprot_ensembl_protein_mapping_client.UniProtEnsemblProteinMappingClient",
-            input_ontology_term="ENSEMBL_PROTEIN",
-            output_ontology_term="UNIPROTKB_AC",
-            config_template=json.dumps(
-                {
-                    "from_db": "Ensembl_Protein",
-                    "to_db": "UniProtKB_AC-ID",
-                }
-            ),
-        ),
-        "uniprot_historical_resolver": biomapper.db.models.MappingResource(
-            name="UniProtHistoricalResolver",
-            description="Resolves historical/secondary UniProt accessions to current primary accessions",
-            client_class_path="biomapper.mapping.clients.uniprot_historical_resolver_client.UniProtHistoricalResolverClient",
-            input_ontology_term="UNIPROTKB_AC",
-            output_ontology_term="UNIPROTKB_AC",
-            config_template=json.dumps(
-                {
-                    # No special config needed for the historical resolver
-                    "cache_size": 10000,
-                }
-            ),
-        ),
-        # Generic File Lookup client for UKBB Protein data (UniProt identity lookup)
-        "ukbb_protein_lookup": biomapper.db.models.MappingResource(
-            name="UKBB_Protein_UniProt_Lookup",
-            description="Lookup UniProtKB ACs within UKBB Protein Meta TSV",
-            client_class_path="biomapper.mapping.clients.generic_file_client.GenericFileLookupClient",
-            config_template=json.dumps({
-                "file_path": "/home/ubuntu/biomapper/data/UKBB_Protein_Meta_full.tsv",
-                "key_column": "UniProt",
-                "value_column": "UniProt", # For identity lookup
-                "delimiter": "\t"
-            }),
-            resource_type="LOOKUP"
-        ),
-        # HPA Protein Lookup (UniProt to Gene Name)
-        "hpa_protein_lookup": biomapper.db.models.MappingResource(
-            name="HPA_Protein_Lookup_UniProt_to_Gene",
-            description="Looks up HPA gene names by UniProt AC from hpa_osps.csv.",
-            resource_type="LOOKUP",
-            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
-            config_template=json.dumps({
-                "file_path": "/home/ubuntu/biomapper/data/isb_osp/hpa_osps.csv",
-                "key_column": "uniprot",
-                "value_column": "gene",
-                "delimiter": ","
-            }),
-            input_ontology_term="UNIPROTKB_AC",
-            output_ontology_term="GENE_NAME"
-        ),
-        # QIN Protein Lookup (UniProt to Gene Name)
-        "qin_protein_lookup": biomapper.db.models.MappingResource(
-            name="QIN_Protein_Lookup_UniProt_to_Gene",
-            description="Looks up QIN gene names by UniProt AC from qin_osps.csv.",
-            resource_type="LOOKUP",
-            client_class_path="biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient",
-            config_template=json.dumps({
-                "file_path": "/home/ubuntu/biomapper/data/isb_osp/qin_osps.csv",
-                "key_column": "uniprot",
-                "value_column": "gene",
-                "delimiter": ","
-            }),
-            input_ontology_term="UNIPROTKB_AC",
-            output_ontology_term="GENE_NAME"
-        ),
-    }
-    session.add_all(resources.values())
-    await session.flush()  # Flush to get IDs
-
-    logging.info("Populating Mapping Paths...")
-    paths = {
-        "PUBCHEM_to_CHEBI_via_UniChem": biomapper.db.models.MappingPath(
-            name="PUBCHEM_to_CHEBI_via_UniChem",
-            source_type="PUBCHEM_ID",
-            target_type="CHEBI_ID",
-            priority=10,
-            description="Map PubChem ID to ChEBI ID using UniChem.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["unichem"].id,
-                    step_order=1,
-                    description="UniChem: PubChem ID -> ChEBI ID",
-                )
-            ],
-        ),
-        "KEGG_to_CHEBI_via_UniChem": MappingPath(
-            name="KEGG_to_CHEBI_via_UniChem",
-            source_type="KEGG_ID",
-            target_type="CHEBI_ID",
-            priority=10,
-            description="Map KEGG ID to ChEBI ID using UniChem.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["unichem"].id,
-                    step_order=1,
-                    description="UniChem: KEGG_ID -> ChEBI ID",
-                )
-            ],
-        ),
-        "KEGG_to_PUBCHEM_via_UniChem": MappingPath(
-            name="KEGG_to_PUBCHEM_via_UniChem",
-            source_type="KEGG_ID",
-            target_type="PUBCHEM_ID",
-            priority=10,
-            description="Map KEGG ID to PubChem ID using UniChem.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["unichem"].id,
-                    step_order=1,
-                    description="UniChem: KEGG_ID -> PUBCHEM_ID",
-                )
-            ],
-        ),
-        "PUBCHEM_to_NAME_via_PubChem": MappingPath(
-            name="PUBCHEM_to_NAME_via_PubChem",
-            source_type="PUBCHEM_ID",
-            target_type="NAME",
-            priority=20,
-            description="Get common name from PubChem ID using PubChem PUG API.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["pubchem"].id,
-                    step_order=1,
-                    description="PubChem: PUBCHEM_ID -> NAME",
-                )
-            ],
-        ),
-        "CHEBI_to_NAME_via_ChEBI": MappingPath(
-            name="CHEBI_to_NAME_via_ChEBI",
-            source_type="CHEBI_ID",
-            target_type="NAME",
-            priority=20,
-            description="Get common name from ChEBI ID using ChEBI API.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["chebi"].id,
-                    step_order=1,
-                    description="ChEBI: CHEBI_ID -> NAME",
-                )
-            ],
-        ),
-        # --- Direct path for UKBB -> Arivale Protein (via UniProt AC) ---
-        "UKBB_to_Arivale_Protein_via_UniProt": MappingPath(
-            name="UKBB_to_Arivale_Protein_via_UniProt",
-            source_type="UNIPROTKB_AC",
-            target_type="ARIVALE_PROTEIN_ID",
-            priority=1,  # Highest priority (try this path first)
-            description="Maps UKBB UniProt AC directly to Arivale protein identifiers using the Arivale metadata file",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["arivale_lookup"].id,
-                    step_order=1,
-                    description="Direct lookup from UniProt AC to Arivale ID",
-                )
-            ],
-        ),
-        # --- Fallback path for UKBB -> Arivale Protein with historical resolution ---
-        "UKBB_to_Arivale_Protein_via_Historical_Resolution": MappingPath(
-            name="UKBB_to_Arivale_Protein_via_Historical_Resolution",
-            source_type="UNIPROTKB_AC",
-            target_type="ARIVALE_PROTEIN_ID",
-            priority=2,  # Lower priority (try after direct path)
-            description="Maps UKBB UniProt AC to Arivale protein identifiers with historical/secondary accession resolution",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["uniprot_historical_resolver"].id,
-                    step_order=1,
-                    description="Resolve historical/secondary UniProt accessions to current primary accessions",
-                ),
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["arivale_lookup"].id,
-                    step_order=2,
-                    description="Direct lookup from resolved UniProt AC to Arivale ID",
-                )
-            ],
-        ),
-        # --- Path for Arivale -> UKBB Protein (NEW: Reverse Direct UniProt AC) ---
-        "Arivale_to_UKBB_Protein_via_UniProt": MappingPath(
-            name="Arivale_to_UKBB_Protein_via_UniProt",
-            source_type="ARIVALE_PROTEIN_ID",
-            target_type="UNIPROTKB_AC",
-            priority=1,
-            description="Maps Arivale protein identifiers directly to UniProt AC using the Arivale metadata file",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["arivale_reverse_lookup"].id,
-                    step_order=1,
-                    description="Direct lookup from Arivale ID to UniProt AC",
-                )
-            ],
-        ),
-        # --- Path for Gene Name -> UniProtKB AC --- (New)
-        "GeneName_to_UniProtKB": MappingPath(
-            name="GeneName_to_UniProtKB",
-            source_type="GENE_NAME",
-            target_type="UNIPROTKB_AC",
-            priority=10,
-            description="Maps Gene Name/Symbol to UniProtKB AC using UniProt Name Search API.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["uniprot_name"].id,
-                    step_order=1,
-                    description="UniProt Name Search: Gene Name -> UniProtKB AC",
-                )
-            ],
-        ),
-        # --- Path for Ensembl Protein -> UniProtKB AC --- (New)
-        "EnsemblProtein_to_UniProtKB": MappingPath(
-            name="EnsemblProtein_to_UniProtKB",
-            source_type="ENSEMBL_PROTEIN",
-            target_type="UNIPROTKB_AC",
-            priority=5,
-            description="Maps Ensembl Protein ID to UniProtKB AC using UniProt ID Mapping service.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["uniprot_ensembl_protein_mapping"].id,
-                    step_order=1,
-                    description="UniProt ID Mapping: Ensembl Protein -> UniProtKB AC",
-                )
-            ],
-        ),
-        # Path for Ensembl Gene ID to UniProtKB Accession
-        "EnsemblGene_to_UniProtKB_via_IDMapping": MappingPath(
-            name="EnsemblGene_to_UniProtKB_via_IDMapping",
-            source_type="ENSEMBL_GENE",
-            target_type="UNIPROTKB_AC",
-            priority=5,
-            description="Map Ensembl Gene ID to UniProtKB AC using UniProt ID Mapping service.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["uniprot_idmapping"].id,
-                    step_order=1,
-                    description="UniProt ID Mapping: ENSEMBL_GENE -> UNIPROTKB_AC",
-                )
-            ],
-        ),
-        # === Protein Paths ===
-        # Ensembl Protein ID -> Arivale Protein ID (via UniProt)
-        "ensembl_arivale_path": MappingPath(
-            name="Ensembl_Arivale_Path",
-            source_type="ENSEMBL_PROTEIN",
-            target_type="ARIVALE_PROTEIN_ID",
-            priority=1,
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    step_order=1,
-                    mapping_resource_id=resources["uniprot_ensembl_protein_mapping"].id,
-                ),
-                biomapper.db.models.MappingPathStep(
-                    step_order=2,
-                    mapping_resource_id=resources["arivale_lookup"].id,
-                ),
-            ],
-        ),
-        # HPA <-> Qin
-        "HPA_Protein_to_Qin_Protein_UniProt_Identity": MappingPath(
-            name="HPA_Protein_to_Qin_Protein_UniProt_Identity",
-            source_type="UNIPROTKB_AC",
-            target_type="UNIPROTKB_AC",
-            priority=1,
-            description="Maps HPA UniProtKB AC to Qin UniProtKB AC if present in Qin data.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["qin_protein_lookup"].id,
-                    step_order=1,
-                    description="Qin Protein Lookup: HPA UniProtKB AC -> Qin UniProtKB AC",
-                )
-            ],
-        ),
-        "Qin_Protein_to_HPA_Protein_UniProt_Identity": MappingPath(
-            name="Qin_Protein_to_HPA_Protein_UniProt_Identity",
-            source_type="UNIPROTKB_AC",
-            target_type="UNIPROTKB_AC",
-            priority=1,
-            description="Maps Qin UniProtKB AC to HPA UniProtKB AC if present in HPA data.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["hpa_protein_lookup"].id,
-                    step_order=1,
-                    description="HPA Protein Lookup: Qin UniProtKB AC -> HPA UniProtKB AC",
-                )
-            ],
-        ),
-        # HPA <-> UKBB
-        "HPA_Protein_to_UKBB_Protein_UniProt_Identity": MappingPath(
-            name="HPA_Protein_to_UKBB_Protein_UniProt_Identity",
-            source_type="UNIPROTKB_AC",
-            target_type="UNIPROTKB_AC",
-            priority=1,
-            description="Maps HPA UniProtKB AC to UKBB UniProtKB AC if present in UKBB data.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["ukbb_protein_lookup"].id,
-                    step_order=1,
-                    description="UKBB Protein Lookup: HPA UniProtKB AC -> UKBB UniProtKB AC",
-                )
-            ],
-        ),
-        "UKBB_Protein_to_HPA_Protein_UniProt_Identity": MappingPath(
-            name="UKBB_Protein_to_HPA_Protein_UniProt_Identity",
-            source_type="UNIPROTKB_AC",
-            target_type="UNIPROTKB_AC",
-            priority=1,
-            description="Maps UKBB UniProtKB AC to HPA UniProtKB AC if present in HPA data.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["hpa_protein_lookup"].id,
-                    step_order=1,
-                    description="HPA Protein Lookup: UKBB UniProtKB AC -> HPA UniProtKB AC",
-                )
-            ],
-        ),
-        # Qin <-> UKBB
-        "Qin_Protein_to_UKBB_Protein_UniProt_Identity": MappingPath(
-            name="Qin_Protein_to_UKBB_Protein_UniProt_Identity",
-            source_type="UNIPROTKB_AC",
-            target_type="UNIPROTKB_AC",
-            priority=1,
-            description="Maps Qin UniProtKB AC to UKBB UniProtKB AC if present in UKBB data.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["ukbb_protein_lookup"].id,
-                    step_order=1,
-                    description="UKBB Protein Lookup: Qin UniProtKB AC -> UKBB UniProtKB AC",
-                )
-            ],
-        ),
-        "UKBB_Protein_to_Qin_Protein_UniProt_Identity": MappingPath(
-            name="UKBB_Protein_to_Qin_Protein_UniProt_Identity",
-            source_type="UNIPROTKB_AC",
-            target_type="UNIPROTKB_AC",
-            priority=1,
-            description="Maps UKBB UniProtKB AC to Qin UniProtKB AC if present in Qin data.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["qin_protein_lookup"].id,
-                    step_order=1,
-                    description="Qin Protein Lookup: UKBB UniProtKB AC -> Qin UniProtKB AC",
-                )
-            ],
-        ),
-        # New paths for UKBB UniProt to HPA/QIN Gene Names
-        "UKBB_UniProt_to_HPA_GeneName": MappingPath(
-            name="UKBB_UniProt_to_HPA_GeneName",
-            source_type="UNIPROTKB_AC",
-            target_type="GENE_NAME",
-            priority=1,
-            description="Maps UKBB UniProtKB AC to HPA Gene Name using hpa_osps.csv.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["hpa_protein_lookup"].id,
-                    step_order=1,
-                    description="Lookup HPA Gene Name from UniProt AC."
-                )
-            ],
-        ),
-        "UKBB_UniProt_to_QIN_GeneName": MappingPath(
-            name="UKBB_UniProt_to_QIN_GeneName",
-            source_type="UNIPROTKB_AC",
-            target_type="GENE_NAME",
-            priority=1,
-            description="Maps UKBB UniProtKB AC to QIN Gene Name using qin_osps.csv.",
-            steps=[
-                biomapper.db.models.MappingPathStep(
-                    mapping_resource_id=resources["qin_protein_lookup"].id,
-                    step_order=1,
-                    description="Lookup QIN Gene Name from UniProt AC."
-                )
-            ],
-        ),
-    }
-    session.add_all(paths.values())
-    await session.flush()  # Flush to get IDs
-
-    logging.info("Populating Endpoint Relationships...")
-    relationships = {
-        "arivale_to_spoke": EndpointRelationship(
-            source_endpoint_id=endpoints["metabolites_csv"].id,
-            target_endpoint_id=endpoints["spoke"].id,
-            description="Map Arivale Metabolites (by PUBCHEM) to SPOKE Compounds (prefer CHEBI)",
-        ),
-        "ukbb_protein_to_hpa_protein": EndpointRelationship(
-            source_endpoint_id=endpoints["ukbb_protein"].id,
-            target_endpoint_id=endpoints["hpa_protein"].id,
-            description="Maps UKBB Protein identifiers to HPA Protein identifiers.",
-        ),
-        "ukbb_protein_to_qin_protein": EndpointRelationship(
-            source_endpoint_id=endpoints["ukbb_protein"].id,
-            target_endpoint_id=endpoints["qin_protein"].id,
-            description="Maps UKBB Protein identifiers to QIN Protein identifiers.",
-        ),
-    }
-    ukbb_arivale_protein_rel = EndpointRelationship(
-        source_endpoint_id=endpoints["ukbb_protein"].id,
-        target_endpoint_id=endpoints["arivale_protein"].id,
-        description="Maps UKBB Olink Protein identifiers to Arivale SomaScan Protein identifiers.",
-    )
-    relationships["ukbb_arivale_protein"] = ukbb_arivale_protein_rel
-    session.add_all(relationships.values())
-    await session.flush()  # Flush to get IDs for preferences
-
-    logging.info("Populating Ontology Preferences...")
-    preferences = [
-        # Arivale source data is primarily PUBCHEM
-        OntologyPreference(
-            endpoint_id=endpoints["metabolites_csv"].id,
-            relationship_id=relationships["arivale_to_spoke"].id,
-            ontology_name="PUBCHEM_ID",
-            priority=1,
-        ),
-        # SPOKE target ideally wants CHEBI
-        OntologyPreference(
-            endpoint_id=endpoints["spoke"].id,
-            relationship_id=relationships["arivale_to_spoke"].id,
-            ontology_name="CHEBI_ID",
-            priority=1,
-        ),
-        # Fallback for SPOKE target
-        OntologyPreference(
-            endpoint_id=endpoints["spoke"].id,
-            relationship_id=relationships["arivale_to_spoke"].id,
-            ontology_name="PUBCHEM_ID",
-            priority=2,
-        ),
-        # UKBB -> Arivale Protein Relationship Preference
-        OntologyPreference(
-            relationship_id=ukbb_arivale_protein_rel.id,
-            ontology_name="UNIPROTKB_AC",
-            priority=1,
-        ),
-        # --- Add Endpoint-specific Preferences (Overrides Relationship defaults if needed) ---
-        # UKBB Protein primarily uses UNIPROT_NAME for its 'PrimaryIdentifier'
-        OntologyPreference(
-            endpoint_id=endpoints["ukbb_protein"].id,
-            ontology_name="UNIPROTKB_AC",
-            priority=0,
-        ),
-        # Arivale Protein primarily uses UNIPROTKB_AC for its 'PrimaryIdentifier'
-        OntologyPreference(
-            endpoint_id=endpoints["arivale_protein"].id,
-            ontology_name="UNIPROTKB_AC",
-            priority=0,
-        ),
-        # Preferences for UKBB Protein
-        OntologyPreference(
-            endpoint_id=endpoints["ukbb_protein"].id,
-            ontology_name="UNIPROTKB_AC",
-            priority=1,
-        ),
-        OntologyPreference(
-            endpoint_id=endpoints["ukbb_protein"].id,
-            ontology_name="GENE_NAME",
-            priority=2,
-        ),
-        # Preferences for Arivale Protein
-        OntologyPreference(
-            endpoint_id=endpoints["arivale_protein"].id,
-            ontology_name="UNIPROTKB_AC",
-            priority=1,
-        ),
-        OntologyPreference(
-            endpoint_id=endpoints["arivale_protein"].id,
-            ontology_name="ENSEMBL_PROTEIN",
-            priority=2,
-        ),
-        OntologyPreference(
-            endpoint_id=endpoints["arivale_protein"].id,
-            ontology_name="GENE_NAME",
-            priority=3,
-        ),
-        OntologyPreference(
-            endpoint_id=endpoints["arivale_protein"].id,
-            ontology_name="ENSEMBL_GENE",
-            priority=4,
-        ),
-        OntologyPreference(
-            endpoint_id=endpoints["arivale_protein"].id,
-            ontology_name="ARIVALE_PROTEIN_ID",
-            priority=5,
-        ),
-        # HPA Protein
-        OntologyPreference(
-            endpoint_id=endpoints["hpa_protein"].id,
-            ontology_name="UNIPROTKB_AC",
-            priority=1,
-        ),
-        # Qin Protein
-        OntologyPreference(
-            endpoint_id=endpoints["qin_protein"].id,
-            ontology_name="UNIPROTKB_AC",
-            priority=1,
-        ),
-    ]
-    session.add_all(preferences)
-    await session.flush()
-
-    logging.info("Populating Property Extraction Configs...")
-    prop_extract_configs = [
-        # --- UniProt Name Search ---
-        # Expects: PROTEIN_NAME or GENE_NAME, Returns: UNIPROTKB_AC
-        PropertyExtractionConfig(
-            resource_id=resources["uniprot_name"].id,
-            ontology_type="UNIPROTKB_AC",
-            property_name="identifier",
-            extraction_method="client_method",
-            extraction_pattern="find_uniprot_id_by_name",
-            result_type="string",
-        ),
-        # --- UMLS Metathesaurus Search ---
-        # Expects: TERM, Returns: CUI
-        PropertyExtractionConfig(
-            resource_id=resources["umls_search"].id,
-            ontology_type="CUI",
-            property_name="identifier",
-            extraction_method="client_method",
-            extraction_pattern="find_cui_by_term",
-            result_type="string",
-        ),
-        # Add configs for existing resources if needed...
-        # Example: UniChem expects a specific ID type and returns another
-        PropertyExtractionConfig(
-            resource_id=resources["unichem"].id,
-            ontology_type="CHEBI_ID",
-            property_name="identifier",
-            extraction_method="client_method",
-            extraction_pattern="map_id",
-            result_type="string",
-        ),
-        # Config for extracting UKBB UniProt column (MODIFIED) (index 3)
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="UNIPROTKB_AC",
-            property_name="PrimaryIdentifier",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "UniProt"}),
-            result_type="string",
-        ),
-        # Config for extracting UKBB UniProt column by property name "UniProt" (index 3b)
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="UNIPROTKB_AC",
-            property_name="UniProt",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "UniProt"}),
-            result_type="string",
-        ),
-        # Config for extracting UniProt AC from Arivale TSV (index 4)
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="UNIPROTKB_AC",
-            property_name="UniProtKB_Accession",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "uniprot"}),
-            result_type="string",
-        ),
-        # Config for extracting primary identifier (name column) from Arivale TSV
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="ARIVALE_PROTEIN_ID",
-            property_name="PrimaryIdentifier",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "name"}),
-            result_type="string",
-        ),
-        # Config for extracting Ensembl Gene ID
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="ENSEMBL_GENE",
-            property_name="EnsemblGeneID",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "ensembl_gene_id"}),
-            result_type="string",
-        ),
-        # Config for extracting Gene Name from UKBB TSV (index 7)
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="GENE_NAME",
-            property_name="GeneName",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "Assay"}),
-            result_type="string",
-        ),
-        # Config for extracting Gene Name from Arivale TSV (index 8)
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="GENE_NAME",
-            property_name="GeneName",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "gene_name"}),
-            result_type="string",
-        ),
-        # Config for extracting Ensembl Protein ID from Arivale TSV (index 9)
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="ENSEMBL_PROTEIN_ID",
-            property_name="EnsemblProteinID",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "protein_id"}),
-            result_type="string",
-        ),
-        # Config for extracting UniProt AC from HPA CSV (index 10)
-        PropertyExtractionConfig(
-            resource_id=resources["hpa_protein_lookup"].id,
-            ontology_type="UNIPROTKB_AC",
-            property_name="UniProtAccession",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "uniprot"}),
-            result_type="string",
-        ),
-        # Config for extracting UniProt AC from Qin CSV (index 11)
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="UNIPROTKB_AC",
-            property_name="UniProtAccession",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "uniprot"}),
-            result_type="string",
-        ),
-        # Config for extracting Gene Name from HPA CSV (index 12)
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="GENE_NAME",
-            property_name="gene",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "gene"}),
-            result_type="string",
-        ),
-        # Config for extracting Gene Name from QIN CSV (index 13)
-        PropertyExtractionConfig(
-            resource_id=None,
-            ontology_type="GENE_NAME",
-            property_name="gene",
-            extraction_method="column",
-            extraction_pattern=json.dumps({"column_name": "gene"}),
-            result_type="string",
-        ),
-    ]
-    session.add_all(prop_extract_configs)
-    await session.flush()  # Flush to get extraction config IDs
-
-    logging.info("Populating Endpoint Property Configs...")
-    # Find the Property objects we need by name
-    property_uniprotkb_ac = next(p for p in properties if p.name == "UNIPROTKB_AC")
-    property_arivale_protein_id = next(p for p in properties if p.name == "ARIVALE_PROTEIN_ID")
-    property_gene_name = next(p for p in properties if p.name == "GENE_NAME")
-    property_ensembl_protein = next(p for p in properties if p.name == "ENSEMBL_PROTEIN")
-    property_ensembl_protein_id = next(p for p in properties if p.name == "ENSEMBL_PROTEIN_ID")
-    property_ensembl_gene = next(p for p in properties if p.name == "ENSEMBL_GENE")
+async def populate_ontologies(session: AsyncSession, ontologies_data: Dict[str, Any], 
+                            entity_name: str) -> Dict[str, Ontology]:
+    """Populate ontologies from configuration."""
+    logger.info(f"Populating ontologies for {entity_name}...")
+    ontology_objects = {}
     
-    endpoint_prop_configs = [
-        # UKBB Protein - UniProtKB AC primary identifier
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["ukbb_protein"].id,
-            property_extraction_config_id=prop_extract_configs[3].id,
-            property_name="PrimaryIdentifier",  # The property name in the UI/config
-            ontology_type="UNIPROTKB_AC",       # The ontology type for lookup
-            is_primary_identifier=True,
-        ),
-        
-        # Arivale Protein - UniProt AC non-primary identifier
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["arivale_protein"].id,
-            property_extraction_config_id=prop_extract_configs[5].id,
-            property_name="UniProtKB_Accession",
-            ontology_type="UNIPROTKB_AC",
-        ),
-        
-        # Arivale Protein - Primary identifier
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["arivale_protein"].id,
-            property_extraction_config_id=prop_extract_configs[6].id,
-            property_name="PrimaryIdentifier",
-            ontology_type="ARIVALE_PROTEIN_ID",
-            is_primary_identifier=True,
-        ),
-        
-        # UKBB Protein - Ensembl Gene ID
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["ukbb_protein"].id,
-            property_name="EnsemblGeneID",
-            property_extraction_config_id=prop_extract_configs[7].id,
-            ontology_type="ENSEMBL_GENE",
-        ),
-        
-        # UKBB Protein - Gene Name
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["ukbb_protein"].id,
-            property_extraction_config_id=prop_extract_configs[8].id,
-            property_name="GeneName",
-            ontology_type="GENE_NAME",
-        ),
-        
-        # UKBB Protein - UniProt property (for direct column access)
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["ukbb_protein"].id,
-            property_extraction_config_id=prop_extract_configs[4].id,  # Using the new UniProt config
-            property_name="UniProt",
-            ontology_type="UNIPROTKB_AC",
-        ),
-        
-        # Arivale Protein - Gene Name
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["arivale_protein"].id,
-            property_extraction_config_id=prop_extract_configs[9].id,
-            property_name="GeneName",
-            ontology_type="GENE_NAME",
-        ),
-        
-        # Arivale Protein - Ensembl Protein ID
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["arivale_protein"].id,
-            property_extraction_config_id=prop_extract_configs[10].id,
-            property_name="EnsemblProteinID",
-            ontology_type="ENSEMBL_PROTEIN_ID",
-        ),
-        
-        # Arivale Protein - Ensembl Gene ID
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["arivale_protein"].id,
-            property_extraction_config_id=prop_extract_configs[7].id,
-            property_name="EnsemblGeneID",
-            ontology_type="ENSEMBL_GENE",
-        ),
-        # HPA Protein UNIPROTKB_AC
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["hpa_protein"].id,
-            property_extraction_config_id=prop_extract_configs[11].id,
-            property_name="UniProtAccession",
-            ontology_type="UNIPROTKB_AC",
-            is_primary_identifier=True
-        ),
-        # Qin Protein UNIPROTKB_AC
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["qin_protein"].id,
-            property_extraction_config_id=prop_extract_configs[12].id,
-            property_name="UniProtAccession",
-            ontology_type="UNIPROTKB_AC",
-            is_primary_identifier=True
-        ),
-        # HPA Protein Gene Name
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["hpa_protein"].id,
-            property_extraction_config_id=prop_extract_configs[13].id,
-            property_name="gene",
-            ontology_type="GENE_NAME",
-            is_primary_identifier=False
-        ),
-        # QIN Protein Gene Name
-        EndpointPropertyConfig(
-            endpoint_id=endpoints["qin_protein"].id,
-            property_extraction_config_id=prop_extract_configs[14].id,
-            property_name="gene",
-            ontology_type="GENE_NAME",
-            is_primary_identifier=False
-        ),
-    ]
-    session.add_all(endpoint_prop_configs)
+    for ont_name, ont_config in ontologies_data.items():
+        ontology = Ontology(
+            name=ont_name,
+            description=ont_config.get('description', ''),
+            identifier_prefix=ont_config.get('prefix'),
+            namespace_uri=ont_config.get('uri'),
+            version=ont_config.get('version', '1.0')
+        )
+        session.add(ontology)
+        ontology_objects[ont_name] = ontology
+    
+    await session.flush()
+    
+    # Create properties for each ontology
+    for ont_name, ont_config in ontologies_data.items():
+        ontology = ontology_objects[ont_name]
+        property_obj = Property(
+            name=ont_name,
+            description=ont_config.get('description', ''),
+            ontology_id=ontology.id,
+            is_primary=ont_config.get('is_primary', False),
+            data_type='string'
+        )
+        session.add(property_obj)
+    
+    await session.flush()
+    return ontology_objects
 
-    logging.info("Populating Ontology Coverage...")
-    ontology_coverage_configs = [
-        # UniProt Name Search covers NAME -> UNIPROTKB_AC via API lookup
-        OntologyCoverage(
-            resource_id=resources["uniprot_name"].id,
-            source_type="GENE_NAME",
-            target_type="UNIPROTKB_AC",
-            support_level="api_lookup",
-        ),
-        # UMLS Search covers TERM -> CUI via API lookup
-        OntologyCoverage(
-            resource_id=resources["umls_search"].id,
-            source_type="TERM",
-            target_type="CUI",
-            support_level="api_lookup",
-        ),
-        # Add coverage for existing resources...
-        # e.g., UniChem covers PUBCHEM -> CHEBI
-        OntologyCoverage(
-            resource_id=resources["unichem"].id,
-            source_type="PUBCHEM_ID",
-            target_type="CHEBI_ID",
-            support_level="api_lookup",
-        ),
-        OntologyCoverage(
-            resource_id=resources["unichem"].id,
-            source_type="CHEBI_ID",
-            target_type="PUBCHEM_ID",
-            support_level="api_lookup",
-        ),
-        # UniProt ID Mapping covers UNIPROTKB_AC -> ENSEMBL_GENE
-        OntologyCoverage(
-            resource_id=resources["uniprot_idmapping"].id,
-            source_type="UNIPROTKB_AC",
-            target_type="ENSEMBL_GENE",
-            support_level="api_lookup",
-        ),
-        # UniProt ID Mapping covers ENSEMBL_GENE -> UNIPROTKB_AC (New Coverage)
-        OntologyCoverage(
-            resource_id=resources["uniprot_idmapping"].id,
-            source_type="ENSEMBL_GENE",
-            target_type="UNIPROTKB_AC",
-            support_level="api_lookup",
-        ),
-        # Arivale UniProt Lookup covers UNIPROTKB_AC -> ARIVALE_PROTEIN_ID
-        OntologyCoverage(
-            resource_id=resources["arivale_lookup"].id,
-            source_type="UNIPROTKB_AC",
-            target_type="ARIVALE_PROTEIN_ID",
-            support_level="client_lookup",
-        ),
-        # Arivale Reverse Lookup covers ARIVALE_PROTEIN_ID -> UNIPROTKB_AC
-        OntologyCoverage(
-            resource_id=resources["arivale_reverse_lookup"].id,
-            source_type="ARIVALE_PROTEIN_ID",
-            target_type="UNIPROTKB_AC",
-            support_level="client_lookup",
-        ),
-        # UniProt Ensembl Protein Mapping covers ENSEMBL_PROTEIN -> UNIPROTKB_AC
-        OntologyCoverage(
-            resource_id=resources["uniprot_ensembl_protein_mapping"].id,
-            source_type="ENSEMBL_PROTEIN",
-            target_type="UNIPROTKB_AC",
-            support_level="api_lookup",
-        ),
-        # UniProt Historical Resolver covers UNIPROTKB_AC -> UNIPROTKB_AC (with resolution)
-        OntologyCoverage(
-            resource_id=resources["uniprot_historical_resolver"].id,
-            source_type="UNIPROTKB_AC",
-            target_type="UNIPROTKB_AC",
-            support_level="api_lookup",
-        ),
-        # UKBB Protein Lookup covers UNIPROTKB_AC -> UNIPROTKB_AC (identity)
-        OntologyCoverage(
-            resource_id=resources["ukbb_protein_lookup"].id,
-            source_type="UNIPROTKB_AC",
-            target_type="UNIPROTKB_AC",
-            support_level="client_lookup",
-        ),
-        # HPA Protein Lookup covers UNIPROTKB_AC -> GENE_NAME
-        OntologyCoverage(
-            resource_id=resources["hpa_protein_lookup"].id,
-            source_type="UNIPROTKB_AC",
-            target_type="GENE_NAME",
-            support_level="client_lookup",
-        ),
-        # Qin Protein Lookup covers UNIPROTKB_AC -> GENE_NAME
-        OntologyCoverage(
-            resource_id=resources["qin_protein_lookup"].id,
-            source_type="UNIPROTKB_AC",
-            target_type="GENE_NAME",
-            support_level="client_lookup",
-        ),
-        # Arivale GeneName Lookup covers GENE_NAME -> ARIVALE_PROTEIN_ID
-        OntologyCoverage(
-            resource_id=resources["arivale_genename_lookup"].id,
-            source_type="GENE_NAME",
-            target_type="ARIVALE_PROTEIN_ID",
-            support_level="client_lookup",
-        ),
-        # UKBB Assay to UniProt mapping
-        OntologyCoverage(
-            resource_id=resources["ukbb_assay_to_uniprot"].id,
-            source_type="UKBB_ASSAY_ID",
-            target_type="UNIPROTKB_AC",
-            support_level="client_lookup",
-        ),
-        # UniProt to UKBB Assay mapping
-        OntologyCoverage(
-            resource_id=resources["uniprot_to_ukbb_assay"].id,
-            source_type="UNIPROTKB_AC",
-            target_type="UKBB_ASSAY_ID",
-            support_level="client_lookup",
-        ),
-    ]
-    session.add_all(ontology_coverage_configs)
+
+async def populate_endpoints_and_properties(session: AsyncSession, databases_data: Dict[str, Any],
+                                          entity_name: str, ontology_objects: Dict[str, Ontology]) -> Dict[str, Any]:
+    """Populate endpoints and their property configurations."""
+    logger.info(f"Populating endpoints and properties for {entity_name}...")
+    
+    endpoints = {}
+    resources = {}
+    prop_configs = []
+    
+    for db_name, db_config in databases_data.items():
+        endpoint_config = db_config.get('endpoint', {})
+        
+        # Create endpoint
+        endpoint = Endpoint(
+            name=endpoint_config.get('name', db_name),
+            description=endpoint_config.get('description', ''),
+            type=endpoint_config.get('type'),
+            connection_details=json.dumps(resolve_environment_variables(
+                endpoint_config.get('connection_details', {})
+            )),
+            primary_property_name=endpoint_config.get('primary_property')
+        )
+        session.add(endpoint)
+        endpoints[db_name] = endpoint
+    
+    await session.flush()
+    
+    # Create property extraction configs and endpoint property configs
+    for db_name, db_config in databases_data.items():
+        endpoint = endpoints[db_name] # Endpoint object, already has ID
+        
+        properties_section = db_config.get('properties', {})
+        if not isinstance(properties_section, dict):
+            logger.warning(f"Properties section for database '{db_name}' is not a dictionary. Skipping property configs for this database.")
+            continue
+
+        primary_ontology_for_db = properties_section.get('primary')
+        mappings_dict = properties_section.get('mappings', {})
+
+        if not isinstance(mappings_dict, dict):
+            logger.warning(f"Mappings section for database '{db_name}' is not a dictionary. Skipping property configs for this database.")
+            continue
+
+        for mapping_key_name, mapping_details in mappings_dict.items():
+            if not isinstance(mapping_details, dict):
+                logger.warning(f"Details for mapping '{mapping_key_name}' in database '{db_name}' is not a dictionary. Skipping this mapping.")
+                continue
+
+            ontology_type_for_mapping = mapping_details.get('ontology_type')
+            if not ontology_type_for_mapping:
+                logger.warning(f"Mapping '{mapping_key_name}' in database '{db_name}' is missing 'ontology_type'. Skipping this mapping.")
+                continue
+
+            # Determine extraction pattern and method
+            extraction_method = mapping_details.get('extraction_method', 'column')
+            extraction_config_payload = {}
+            if extraction_method == 'column':
+                column_name = mapping_details.get('column')
+                if column_name:
+                    extraction_config_payload = {'column': column_name}
+                else:
+                    logger.warning(f"Mapping '{mapping_key_name}' in database '{db_name}' uses 'column' extraction method but is missing 'column' field. Skipping property extraction config.")
+                    continue # Cannot create PEC without column for column method
+            else:
+                extraction_config_payload = mapping_details.get('extraction_config', {})
+            
+            # Create property extraction config
+            extraction = PropertyExtractionConfig(
+                resource_id=None, # This extraction is for an endpoint property, not a generic mapping resource
+                ontology_type=ontology_type_for_mapping,
+                property_name=mapping_key_name, # The key from the 'mappings' dictionary
+                extraction_method=extraction_method,
+                extraction_pattern=json.dumps(extraction_config_payload),
+                result_type=mapping_details.get('result_type', 'string')
+            )
+            session.add(extraction)
+            try:
+                await session.flush() # Flush to get extraction.id
+            except Exception as e:
+                logger.error(f"Error flushing PropertyExtractionConfig for '{mapping_key_name}' in database '{db_name}': {e}. Skipping this property.")
+                await session.rollback() # Rollback the failed flush
+                continue
+            
+            # Create endpoint property config
+            epc = EndpointPropertyConfig(
+                endpoint_id=endpoint.id,
+                property_name=mapping_key_name, # The key from the 'mappings' dictionary
+                ontology_type=ontology_type_for_mapping,
+                is_primary_identifier=(ontology_type_for_mapping == primary_ontology_for_db),
+                property_extraction_config_id=extraction.id
+            )
+            session.add(epc)
+    
+    await session.flush()
+    return {'endpoints': endpoints, 'resources': resources}
+
+
+async def populate_mapping_resources(session: AsyncSession, databases_data: Dict[str, Any],
+                                   additional_resources_data: List[Dict[str, Any]], 
+                                   entity_name: str) -> Dict[str, MappingResource]:
+    """Populate mapping resources from configuration."""
+    logger.info(f"Populating mapping resources for {entity_name}...")
+    resources = {}
+    
+    for db_name, db_config in databases_data.items():
+        for client_entry in db_config.get('mapping_clients', []):
+            if not isinstance(client_entry, dict):
+                logger.warning(
+                    f"Skipping non-dictionary item in mapping_clients for {db_name}: {client_entry}"
+                )
+                continue
+            client_name = client_entry.get('name')
+            if not client_name:
+                logger.warning(
+                    f"Skipping client entry in mapping_clients for {db_name} without 'name' key: {client_entry}"
+                )
+                continue
+            
+            client_config = client_entry
+            
+            resource = MappingResource(
+                name=client_name,
+                description=client_config.get('description', ''),
+                resource_type=client_config.get('type', 'client'),
+                client_class_path=client_config.get('class'),
+                input_ontology_term=client_config.get('input_ontology_type'),
+                output_ontology_term=client_config.get('output_ontology_type'),
+                config_template=json.dumps(resolve_environment_variables(
+                    client_config.get('config', {})
+                ))
+            )
+            session.add(resource)
+            resources[client_name] = resource
+
+    # Process additional_resources
+    if additional_resources_data:
+        for res_entry in additional_resources_data:
+            if not isinstance(res_entry, dict):
+                logger.warning(
+                    f"Skipping non-dictionary item in additional_resources: {res_entry}"
+                )
+                continue
+            res_name = res_entry.get('name')
+            if not res_name:
+                logger.warning(
+                    f"Skipping entry in additional_resources without 'name' key: {res_entry}"
+                )
+                continue
+
+            # Ensure client_class_path is present, as it's key for a resource
+            client_class_path = res_entry.get('client_class_path')
+            if not client_class_path:
+                logger.warning(f"Skipping additional resource '{res_name}' due to missing 'client_class_path'.")
+                continue
+
+            resource = MappingResource(
+                name=res_name,
+                description=res_entry.get('description', ''),
+                resource_type=res_entry.get('type', 'client'), # Default to 'client'
+                client_class_path=client_class_path,
+                input_ontology_term=res_entry.get('input_ontology_type'),
+                output_ontology_term=res_entry.get('output_ontology_type'),
+                config_template=json.dumps(resolve_environment_variables(
+                    res_entry.get('config', {})
+                ))
+            )
+            session.add(resource)
+            resources[res_name] = resource
+    
+    # Flush to get IDs for all resources
+    await session.flush()
+    
+    # Now add ontology coverage with valid resource IDs
+    for db_name, db_config in databases_data.items():
+        for client_entry in db_config.get('mapping_clients', []):
+            if not isinstance(client_entry, dict):
+                # Already logged in the first loop, but good to be safe
+                continue 
+            client_name = client_entry.get('name')
+            if not client_name or client_name not in resources:
+                # Client might have been skipped or name missing
+                logger.warning(f"Skipping ontology coverage for client '{client_name}' in {db_name} as it was not properly registered or name is missing.")
+                continue
+
+            resource = resources[client_name]
+            input_ontology_type = client_entry.get('input_ontology_type')
+            output_ontology_type = client_entry.get('output_ontology_type')
+
+            if input_ontology_type and output_ontology_type:
+                coverage = OntologyCoverage(
+                    resource_id=resource.id,
+                    source_type=input_ontology_type,
+                    target_type=output_ontology_type,
+                    support_level=client_entry.get('support_level', 'client_lookup')
+                )
+                session.add(coverage)
+
+    # Add ontology coverage for additional_resources
+    if additional_resources_data:
+        for res_entry in additional_resources_data:
+            if not isinstance(res_entry, dict):
+                continue
+            res_name = res_entry.get('name')
+            # Check if resource was successfully registered (e.g. had client_class_path)
+            if not res_name or res_name not in resources:
+                logger.warning(f"Skipping ontology coverage for additional resource '{res_name}' as it was not properly registered or name is missing.")
+                continue
+
+            resource = resources[res_name]
+            input_ontology_type = res_entry.get('input_ontology_type')
+            output_ontology_type = res_entry.get('output_ontology_type')
+
+            if input_ontology_type and output_ontology_type:
+                coverage = OntologyCoverage(
+                    resource_id=resource.id,
+                    source_type=input_ontology_type,
+                    target_type=output_ontology_type,
+                    support_level=res_entry.get('support_level', 'client_lookup')
+                )
+                session.add(coverage)
+    
+    await session.flush()
+    return resources
+
+
+async def populate_mapping_paths(session: AsyncSession, paths_data: List[Dict[str, Any]],
+                               entity_name: str, resources: Dict[str, MappingResource]):
+    """Populate mapping paths from configuration."""
+    logger.info(f"Populating mapping paths for {entity_name}...")
+    
+    for path_config in paths_data:
+        path = MappingPath(
+            name=path_config['name'],
+            source_type=path_config['source_type'],
+            target_type=path_config['target_type'],
+            priority=path_config.get('priority', 10),
+            description=path_config.get('description', ''),
+            is_active=True
+        )
+        session.add(path)
+        await session.flush()
+        
+        # Add steps
+        for i, step_config in enumerate(path_config.get('steps', [])):
+            resource_name = step_config['resource']
+            if resource_name not in resources:
+                logger.warning(f"Resource '{resource_name}' not found for path '{path.name}'")
+                continue
+                
+            step = MappingPathStep(
+                mapping_path_id=path.id,
+                mapping_resource_id=resources[resource_name].id,
+                step_order=i + 1,
+                description=step_config.get('description', ''),
+                config_override=step_config.get('config_override')
+            )
+            session.add(step)
+    
     await session.flush()
 
-    logging.info("Populating Relationship Mapping Paths...")
-    relationship_mapping_paths = [
-        # UKBB to HPA Gene Name mapping
-        RelationshipMappingPath(
-            relationship_id=relationships["ukbb_protein_to_hpa_protein"].id,
-            ontology_path_id=paths["UKBB_UniProt_to_HPA_GeneName"].id,
-            source_ontology="UNIPROTKB_AC",
-            target_ontology="GENE_NAME"
-        ),
-        # UKBB to QIN Gene Name mapping
-        RelationshipMappingPath(
-            relationship_id=relationships["ukbb_protein_to_qin_protein"].id,
-            ontology_path_id=paths["UKBB_UniProt_to_QIN_GeneName"].id,
-            source_ontology="UNIPROTKB_AC",
-            target_ontology="GENE_NAME"
-        ),
-    ]
-    session.add_all(relationship_mapping_paths)
-    await session.flush() # Flush to get IDs if any are auto-generated and needed before commit
+
+async def populate_entity_type(session: AsyncSession, entity_name: str, config_data: Dict[str, Any]):
+    """Populate all data for a single entity type from its configuration."""
+    logger.info(f"Processing entity type: {entity_name}")
+    
+    # Populate ontologies
+    ontology_objects = await populate_ontologies(
+        session, config_data.get('ontologies', {}), entity_name
+    )
+    
+    # Populate endpoints and properties
+    db_objects = await populate_endpoints_and_properties(
+        session, config_data.get('databases', {}), entity_name, ontology_objects
+    )
+    
+    # Populate mapping resources
+    resources = await populate_mapping_resources(
+        session, 
+        config_data.get('databases', {}), 
+        config_data.get('additional_resources', []), 
+        entity_name
+    )
+    
+    # Populate mapping paths
+    if 'mapping_paths' in config_data:
+        await populate_mapping_paths(
+            session, config_data['mapping_paths'], entity_name, resources
+        )
+
+
+async def populate_from_configs(session: AsyncSession):
+    """Main function to populate database from YAML configuration files."""
+    # Get project root from config file's parent parent directory
+    project_root = Path(settings.data_dir).parent
+    configs_dir = project_root / 'configs'
+    
+    if not configs_dir.exists():
+        logger.warning(f"Configs directory not found at {configs_dir}")
+        return
+    
+    # Find all YAML configuration files
+    yaml_files = list(configs_dir.glob('*_config.yaml'))
+    
+    if not yaml_files:
+        logger.warning(f"No configuration files found in {configs_dir}")
+        return
+    
+    validator = ConfigurationValidator()
+    any_errors_during_processing = False
+    
+    for yaml_file in sorted(yaml_files):
+        logger.info(f"Processing configuration file: {yaml_file}")
+        
+        try:
+            with open(yaml_file, 'r') as f:
+                config_data = yaml.safe_load(f)
+
+            if not isinstance(config_data, dict):
+                logger.error(
+                    f"Loaded content from {yaml_file} is not a dictionary (type: {type(config_data).__name__}). "
+                    f"File might be malformed or empty. Skipping this file."
+                )
+                any_errors_during_processing = True
+                continue
+            
+            # Validate configuration
+            if not validator.validate(config_data, str(yaml_file)):
+                logger.error(f"Validation failed for {yaml_file}:")
+                logger.error(validator.get_report())
+                continue
+            
+            # Show warnings if any
+            if validator.warnings:
+                logger.warning(f"Warnings for {yaml_file}:")
+                for warning in validator.warnings:
+                    logger.warning(f"  - {warning}")
+            
+            # Get entity name from config or filename
+            entity_name = config_data.get('entity_type', yaml_file.stem.replace('_config', ''))
+            
+            # Populate this entity type
+            await populate_entity_type(session, entity_name, config_data)
+            
+        except Exception as e:
+            logger.error(f"Error processing {yaml_file}: {e}")
+            logger.exception(f"Full traceback for error in {yaml_file}:")
+            any_errors_during_processing = True
+            continue
+    
+    if any_errors_during_processing:
+        logger.error("Database population incomplete due to errors in one or more configuration files.")
+        # Depending on desired behavior, one might choose to rollback here if any error occurred.
+        # For now, we proceed to commit any data that was successfully processed from valid files.
 
     try:
         await session.commit()
-        logging.info("Successfully populated database.")
+        if not any_errors_during_processing:
+            logger.info("Successfully populated database from configuration files.")
+        else:
+            logger.info("Partially populated database. Check logs for errors in specific configuration files.")
     except Exception as e:
         await session.rollback()
-        logging.error(f"Error populating database: {e}")
+        logger.error(f"Error committing to database: {e}")
         raise
-
 
 
 async def main(drop_all=False):
     """Main function to set up DB and populate data."""
-    db_url = settings.metamapper_db_url # Use settings for the database URL
-    logging.info(f"Target database URL: {db_url}")
+    db_url = settings.metamapper_db_url
+    logger.info(f"Target database URL: {db_url}")
 
     # Delete existing DB if requested
     if drop_all:
-        # delete_existing_db is async, ensure it's awaited if kept
-        # For now, DatabaseManager's init_db(drop_all=True) handles deletion if file exists before sync Base.metadata.drop_all
-        # However, explicit deletion of the file first might be cleaner for SQLite to avoid issues with existing connections.
-        await delete_existing_db() 
+        await delete_existing_db()
 
-    # Force re-instantiation of the default DatabaseManager to ensure fresh engines
-    logging.info("Forcing re-instantiation of DatabaseManager...")
-    # Call with a dummy URL to trigger closure of any existing manager for the old DB file
-    get_db_manager(db_url="sqlite+aiosqlite:///./dummy_temp_biomapper.db", echo=False) 
-    # Now get the manager for the actual target DB URL; this will be a new instance
+    # Force re-instantiation of the default DatabaseManager
+    logger.info("Initializing DatabaseManager...")
     manager = get_db_manager(db_url=db_url, echo=True)
-    logging.info(f"Using new DatabaseManager instance: {id(manager)} with URL: {manager.db_url}")
+    logger.info(f"Using DatabaseManager instance: {id(manager)} with URL: {manager.db_url}")
 
-    # Initialize DB schema using the manager's asynchronous init_db_async method
-    # drop_all is set to False because we've already deleted the DB file.
-    logging.info(f"Initializing database schema via manager.init_db_async(drop_all=False)...")
+    # Initialize DB schema
+    logger.info("Initializing database schema...")
     await manager.init_db_async(drop_all=True)
-    logging.info("Database schema initialization via manager.init_db_async completed.")
-    logging.info(f"Tables known to Base.metadata: {biomapper.db.models.Base.metadata.tables.keys()}")
+    logger.info("Database schema initialization completed.")
 
-    # Get async session DIRECTLY from the manager instance used for init_db_async
-    logging.info("Attempting to get async session directly from the local manager instance...")
+    # Get async session and populate from configs
+    logger.info("Populating database from YAML configurations...")
     async with await manager.create_async_session() as session:
-        logging.info(f"Successfully obtained async session directly from manager: {id(session)}")
-        await populate_data(session)
-
+        logger.info(f"Successfully obtained async session: {id(session)}")
+        await populate_from_configs(session)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Populate metamapper database with configuration data")
-    parser.add_argument("--drop-all", action="store_true", help="Drop existing database before creating new one")
+    parser = argparse.ArgumentParser(
+        description="Populate metamapper database from YAML configuration files"
+    )
+    parser.add_argument(
+        "--drop-all", 
+        action="store_true", 
+        help="Drop existing database before creating new one"
+    )
     args = parser.parse_args()
     
     asyncio.run(main(drop_all=args.drop_all))
