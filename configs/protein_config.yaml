@@ -1,0 +1,541 @@
+# Protein Configuration for Biomapper
+# This file defines protein-related data sources, clients, and mapping paths
+# Version: 1.0
+
+entity_type: "protein"
+version: "1.0"
+
+# Define all protein-related ontology types
+ontologies:
+  PROTEIN_UNIPROTKB_AC_ONTOLOGY:
+    description: "UniProtKB Accession Numbers for Proteins"
+    identifier_prefix: "UniProtKB:"
+    is_primary: true
+    
+  PROTEIN_GENE_NAME_ONTOLOGY:
+    description: "Gene symbols and names for proteins"
+    identifier_prefix: "Gene:"
+    is_primary: false
+    
+  PROTEIN_ENSEMBL_ONTOLOGY:
+    description: "Ensembl protein identifiers"
+    identifier_prefix: "ENSP:"
+    is_primary: false
+    
+  PROTEIN_ENTREZ_GENE_ONTOLOGY:
+    description: "Entrez Gene identifiers"
+    identifier_prefix: "EntrezGene:"
+    is_primary: false
+
+  PROTEIN_ENSEMBL_GENE_ONTOLOGY:
+    description: "Ensembl gene identifiers"
+    identifier_prefix: "ENSG:"
+    is_primary: false
+    
+  ARIVALE_PROTEIN_ID_ONTOLOGY:
+    description: "Arivale-specific protein identifiers"
+    identifier_prefix: "Arivale:"
+    is_primary: false
+    
+  UKBB_PROTEIN_ASSAY_ID_ONTOLOGY:
+    description: "UK Biobank protein assay identifiers"
+    identifier_prefix: "UKBB:"
+    is_primary: false
+    
+  HPP_PROTEIN_ID_ONTOLOGY:
+    description: "Human Phenome Project protein identifiers"
+    identifier_prefix: "HPP:"
+    is_primary: false
+    
+  FUNCTION_HEALTH_PROTEIN_ID_ONTOLOGY:
+    description: "Function Health protein identifiers"
+    identifier_prefix: "FH:"
+    is_primary: false
+    
+  SPOKE_PROTEIN_ID_ONTOLOGY:
+    description: "SPOKE knowledge graph protein identifiers"
+    identifier_prefix: "SPOKE:"
+    is_primary: false
+    
+  KG2_PROTEIN_ID_ONTOLOGY:
+    description: "Knowledge Graph 2 protein identifiers"
+    identifier_prefix: "KG2:"
+    is_primary: false
+
+# Define databases with their endpoints and properties
+databases:
+  # 1. Arivale Protein Data
+  arivale:
+    endpoint:
+      name: "ARIVALE_PROTEIN"
+      type: "file_tsv"
+      connection_details:
+        file_path: "${DATA_DIR}/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv"
+        delimiter: "\t"
+        skip_rows: 13  # Skip metadata header lines
+        
+    properties:
+      primary: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+      mappings:
+        ARIVALE_PROTEIN_ID_ONTOLOGY:
+          column: "name"
+          ontology_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+        PROTEIN_UNIPROTKB_AC_ONTOLOGY:
+          column: "uniprot"
+          ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        PROTEIN_GENE_NAME_ONTOLOGY:
+          column: "gene_name"
+          ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+        PROTEIN_ENSEMBL_ONTOLOGY:
+          column: "protein_id"
+          ontology_type: "PROTEIN_ENSEMBL_ONTOLOGY"
+        PROTEIN_ENTREZ_GENE_ONTOLOGY:
+          column: "gene_id"
+          ontology_type: "PROTEIN_ENTREZ_GENE_ONTOLOGY"
+        PROTEIN_ENSEMBL_GENE_ONTOLOGY:
+          column: "ensembl_gene_id"
+          ontology_type: "PROTEIN_ENSEMBL_GENE_ONTOLOGY"
+          
+    mapping_clients:
+      - name: "arivale_protein_to_uniprot_lookup"
+        client_class_path: "biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient"
+        input_ontology_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv"
+          key_column: "name"
+          value_column: "uniprot"
+          delimiter: "\t"
+          
+      - name: "uniprot_to_arivale_protein_lookup"
+        client_class_path: "biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient"
+        input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_ontology_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv"
+          key_column: "uniprot"
+          value_column: "name"
+          delimiter: "\t"
+          
+      - name: "gene_name_to_arivale_protein_lookup"
+        client_class_path: "biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient"
+        input_ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+        output_ontology_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv"
+          key_column: "gene_name"
+          value_column: "name"
+          delimiter: "\t"
+
+  # 2. UK Biobank Protein Data
+  ukbb:
+    endpoint:
+      name: "UKBB_PROTEIN"
+      type: "file_tsv"
+      connection_details:
+        file_path: "${DATA_DIR}/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv"
+        delimiter: "\t"
+        
+    properties:
+      primary: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+      mappings:
+        PROTEIN_UNIPROTKB_AC_ONTOLOGY:
+          column: "UniProt"
+          ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        UKBB_PROTEIN_ASSAY_ID_ONTOLOGY:
+          column: "Assay_ID"
+          ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
+        PROTEIN_GENE_NAME_ONTOLOGY:
+          column: "Assay" # Assuming gene name can be extracted or is directly in Assay
+          ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+          
+    mapping_clients:
+      - name: "ukbb_assay_to_uniprot_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv"
+          key_column: "Assay_ID"
+          value_column: "UniProt"
+          delimiter: "\t"
+          
+      - name: "uniprot_to_ukbb_assay_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv"
+          key_column: "UniProt"
+          value_column: "Assay_ID"
+          delimiter: "\t"
+#          
+#      - name: "ukbb_uniprot_identity_lookup"
+#        client_class_path: "biomapper.mapping.clients.arivale_lookup_client.ArivaleMetadataLookupClient" # Placeholder, should be an identity client
+#        input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+#        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+#        config:
+#          file_path: "${DATA_DIR}/HPP_PHENOAI_METADATA/UKBB_Protein_Meta.tsv"
+#          key_column: "UniProt"
+#          value_column: "UniProt"
+#          delimiter: "\t"
+
+  # 3. Human Phenome Project (HPP) Protein Data
+  hpp:
+    endpoint:
+      name: "HPP_PROTEIN"
+      type: "file_csv"
+      connection_details:
+        file_path: "${DATA_DIR}/isb_osp/hpa_osps.csv"
+        delimiter: ","
+        
+    properties:
+      primary: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+      mappings:
+        PROTEIN_UNIPROTKB_AC_ONTOLOGY:
+          column: "uniprot"
+          ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        PROTEIN_GENE_NAME_ONTOLOGY:
+          column: "gene"
+          ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+          
+    mapping_clients:
+      - name: "hpp_uniprot_to_gene_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/isb_osp/hpa_osps.csv"
+          key_column: "uniprot"
+          value_column: "gene"
+          delimiter: ","
+          
+      - name: "hpp_gene_to_uniprot_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/isb_osp/hpa_osps.csv"
+          key_column: "gene"
+          value_column: "uniprot"
+          delimiter: ","
+          
+      - name: "hpp_uniprot_identity_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/isb_osp/hpa_osps.csv"
+          key_column: "uniprot"
+          value_column: "uniprot"
+          delimiter: ","
+
+  # 4. Function Health Protein Data (Placeholder - assuming similar structure to UKBB)
+  function_health:
+    endpoint:
+      name: "FUNCTION_HEALTH_PROTEIN"
+      type: "file_tsv"
+      connection_details:
+        file_path: "${DATA_DIR}/function_health/protein_metadata.tsv"
+        delimiter: "\t"
+        
+    properties:
+      primary: "FUNCTION_HEALTH_PROTEIN_ID_ONTOLOGY"
+      mappings:
+        FUNCTION_HEALTH_PROTEIN_ID_ONTOLOGY:
+          column: "assay_id"
+          ontology_type: "FUNCTION_HEALTH_PROTEIN_ID_ONTOLOGY"
+        PROTEIN_UNIPROTKB_AC_ONTOLOGY:
+          column: "uniprot_ac"
+          ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        PROTEIN_GENE_NAME_ONTOLOGY:
+          column: "gene_symbol"
+          ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+          
+    mapping_clients:
+      - name: "function_health_to_uniprot_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "FUNCTION_HEALTH_PROTEIN_ID_ONTOLOGY"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/function_health/protein_metadata.tsv"
+          key_column: "assay_id"
+          value_column: "uniprot_ac"
+          delimiter: "\t"
+          
+      - name: "uniprot_to_function_health_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_ontology_type: "FUNCTION_HEALTH_PROTEIN_ID_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/function_health/protein_metadata.tsv"
+          key_column: "uniprot_ac"
+          value_column: "assay_id"
+#          delimiter: "\t"
+
+  # 5. SPOKE Knowledge Graph Protein Data
+  spoke:
+    endpoint:
+      name: "SPOKE_PROTEIN"
+      type: "file_tsv"
+      connection_details:
+        file_path: "${DATA_DIR}/spoke_export/protein_nodes.tsv"
+        delimiter: "\t"
+        
+    properties:
+      primary: "SPOKE_PROTEIN_ID_ONTOLOGY"
+      mappings:
+        SPOKE_PROTEIN_ID_ONTOLOGY:
+          column: "node_id"
+          ontology_type: "SPOKE_PROTEIN_ID_ONTOLOGY"
+        PROTEIN_UNIPROTKB_AC_ONTOLOGY:
+          column: "uniprot_id"
+          ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        PROTEIN_GENE_NAME_ONTOLOGY:
+          column: "gene_name"
+          ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+        PROTEIN_ENSEMBL_ONTOLOGY:
+          column: "ensembl_id"
+          ontology_type: "PROTEIN_ENSEMBL_ONTOLOGY"
+          
+    mapping_clients:
+      - name: "spoke_node_to_uniprot_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "SPOKE_PROTEIN_ID_ONTOLOGY"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/spoke_export/protein_nodes.tsv"
+          key_column: "node_id" # Assuming 'node_id' is the SPOKE ID
+          value_column: "uniprot_id" # Corrected to match property definition
+          delimiter: "\t"
+          
+      - name: "uniprot_to_spoke_node_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_ontology_type: "SPOKE_PROTEIN_ID_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/spoke_export/protein_nodes.tsv"
+          key_column: "uniprot_ac"
+          value_column: "node_id"
+          delimiter: "\t"
+
+  # 6. Knowledge Graph 2 (KG2) Protein Data
+  kg2:
+    endpoint:
+      name: "KG2_PROTEIN"
+      type: "file_tsv"
+      connection_details:
+        file_path: "${DATA_DIR}/kg2_export/protein_entities.tsv"
+        delimiter: "\t"
+        
+    properties:
+      primary: "KG2_PROTEIN_ID_ONTOLOGY"
+      mappings:
+        KG2_PROTEIN_ID_ONTOLOGY:
+          column: "entity_id"
+          ontology_type: "KG2_PROTEIN_ID_ONTOLOGY"
+        PROTEIN_UNIPROTKB_AC_ONTOLOGY:
+          column: "uniprot_accession"
+          ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        PROTEIN_GENE_NAME_ONTOLOGY:
+          column: "gene_symbol"
+          ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+        PROTEIN_ENTREZ_GENE_ONTOLOGY:
+          column: "entrez_gene_id"
+          ontology_type: "PROTEIN_ENTREZ_GENE_ONTOLOGY"
+          
+    mapping_clients:
+      - name: "kg2_entity_to_uniprot_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "KG2_PROTEIN_ID_ONTOLOGY"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/kg2_export/protein_nodes.tsv"
+          key_column: "id" # Assuming 'id' is the KG2 ID
+          value_column: "uniprot_accession" # Corrected to match property definition
+          delimiter: "\t"
+          
+      - name: "uniprot_to_kg2_entity_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_ontology_type: "KG2_PROTEIN_ID_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/kg2_export/protein_nodes.tsv"
+          key_column: "uniprot_ac"
+          value_column: "id"
+          delimiter: "\t"
+
+# Define mapping paths between databases
+mapping_paths:
+  # Direct UniProt-based mappings
+  - name: "ARIVALE_TO_UKBB_VIA_UNIPROT"
+    source_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+    target_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
+    priority: 1
+    steps:
+      - resource: "arivale_protein_to_uniprot_lookup"
+        order: 1
+      - resource: "uniprot_to_ukbb_assay_lookup"
+        order: 2
+        
+  - name: "UKBB_TO_ARIVALE_VIA_UNIPROT"
+    source_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
+    target_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+    priority: 1
+    steps:
+      - resource: "ukbb_assay_to_uniprot_lookup"
+        order: 1
+      - resource: "uniprot_to_arivale_protein_lookup"
+        order: 2
+        
+  # UniProt identity mappings for databases that use UniProt as primary
+  - name: "UKBB_TO_HPP_UNIPROT_IDENTITY"
+    source_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"  # Start from UKBB Assay ID
+    target_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"  # Target is a confirmed UniProt ID in HPP
+    priority: 1
+    steps:
+      - resource: "ukbb_assay_to_uniprot_lookup"
+        order: 1
+      - resource: "hpp_uniprot_identity_lookup"
+        order: 2
+        
+  # Gene name fallback paths
+  - name: "ARIVALE_TO_HPP_VIA_GENE_NAME"
+    source_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+    target_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+    priority: 2
+    steps:
+      - resource: "arivale_protein_to_uniprot_lookup" # First map Arivale to UniProt
+        order: 1
+      - resource: "hpp_uniprot_identity_lookup" # Then use HPP's UniProt identity (effectively checking if this UniProt exists in HPP)
+        order: 2
+        
+  # Historical UniProt resolution paths
+  - name: "UKBB_TO_ARIVALE_WITH_HISTORICAL_RESOLUTION"
+    source_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+    target_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+    priority: 2
+    steps:
+      - resource: "uniprot_historical_resolver"
+        order: 1
+      - resource: "uniprot_to_arivale_protein_lookup"
+        order: 2
+        
+  # SPOKE to other databases via UniProt
+  - name: "SPOKE_TO_ARIVALE_VIA_UNIPROT"
+    source_type: "SPOKE_PROTEIN_ID_ONTOLOGY"
+    target_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+    priority: 1
+    steps:
+      - resource: "spoke_node_to_uniprot_lookup"
+        order: 1
+      - resource: "uniprot_to_arivale_protein_lookup"
+        order: 2
+        
+  - name: "SPOKE_TO_UKBB_VIA_UNIPROT"
+    source_type: "SPOKE_PROTEIN_ID_ONTOLOGY"
+    target_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
+    priority: 1
+    steps:
+      - resource: "spoke_node_to_uniprot_lookup"
+        order: 1
+      - resource: "uniprot_to_ukbb_assay_lookup"
+        order: 2
+        
+  # KG2 to other databases via UniProt
+  - name: "KG2_TO_ARIVALE_VIA_UNIPROT"
+    source_type: "KG2_PROTEIN_ID_ONTOLOGY"
+    target_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+    priority: 1
+    steps:
+      - resource: "kg2_entity_to_uniprot_lookup"
+        order: 1
+      - resource: "uniprot_to_arivale_protein_lookup"
+        order: 2
+        
+  # Function Health mappings
+  - name: "FUNCTION_HEALTH_TO_ARIVALE_VIA_UNIPROT"
+    source_type: "FUNCTION_HEALTH_PROTEIN_ID_ONTOLOGY"
+    target_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+    priority: 1
+    steps:
+      - resource: "function_health_to_uniprot_lookup"
+        order: 1
+      - resource: "uniprot_to_arivale_protein_lookup"
+        order: 2
+        
+  - name: "ARIVALE_TO_FUNCTION_HEALTH_VIA_UNIPROT"
+    source_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+    target_type: "FUNCTION_HEALTH_PROTEIN_ID_ONTOLOGY"
+    priority: 1
+    steps:
+      - resource: "arivale_protein_to_uniprot_lookup"
+        order: 1
+      - resource: "uniprot_to_function_health_lookup"
+        order: 2
+
+# Ontology preferences for iterative mapping strategy
+ontology_preferences:
+  UKBB_PROTEIN: # This should match an endpoint name
+    preferences:
+      - ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        priority: 1
+      - ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+        priority: 2
+        
+  ARIVALE_PROTEIN: # This should match an endpoint name
+    preferences:
+      - ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        priority: 1
+      - ontology_type: "PROTEIN_ENSEMBL_ONTOLOGY"
+        priority: 2
+      - ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+        priority: 3
+      - ontology_type: "PROTEIN_ENSEMBL_GENE_ONTOLOGY"
+        priority: 4
+      - ontology_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
+        priority: 5
+
+# Additional mapping resources that may be referenced
+additional_resources:
+  - name: "uniprot_historical_resolver"
+    client_class_path: "biomapper.mapping.clients.uniprot_historical_resolver_client.UniProtHistoricalResolverClient"
+    input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+    output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+    config:
+      cache_size: 10000
+      
+  - name: "uniprot_name_search"
+    client_class_path: "biomapper.mapping.clients.uniprot_name_client.UniProtNameClient"
+    input_ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+    output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+    config:
+      api_timeout: 30
+      batch_size: 100
+      
+  - name: "ensembl_protein_to_uniprot"
+    client_class_path: "biomapper.mapping.clients.uniprot_ensembl_protein_mapping_client.UniProtEnsemblProteinMappingClient"
+    input_ontology_type: "PROTEIN_ENSEMBL_ONTOLOGY"
+    output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+    config:
+      timeout: 60
+      batch_size: 100
+      
+  - name: "ensembl_gene_to_uniprot"
+    client_class_path: "biomapper.mapping.clients.uniprot_idmapping_client.UniProtIDMappingClient"
+    input_ontology_type: "PROTEIN_ENSEMBL_GENE_ONTOLOGY"
+    output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+    config:
+      from_db: "Ensembl"
+      to_db: "UniProtKB"
+      timeout: 60
+
+# Cross-entity references for future integration
+cross_entity_references:
+  - target_entity: "metabolite"
+    relationship_type: "pathway_participation"
+    mapping_hint: "via pathway databases and gene-metabolite interactions"
+    
+  - target_entity: "clinical_lab"
+    relationship_type: "biomarker_measurement"
+    mapping_hint: "via protein biomarker assays and clinical tests"
