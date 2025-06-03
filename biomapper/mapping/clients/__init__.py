@@ -8,4 +8,5 @@ from .metaboanalyst_client import (
 
 from .translator_name_resolver_client import TranslatorNameResolverClient
 from .umls_client import UMLSClient
+from .generic_file_client import GenericFileLookupClient
 from .pubchem_rag_client import PubChemRAGMappingClient
