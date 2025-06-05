@@ -18,7 +18,8 @@ from biomapper.db.models import (
     Ontology, MappingResource, MappingPath, MappingPathStep,
     OntologyPreference, EndpointRelationship, PropertyExtractionConfig,
     EndpointPropertyConfig, OntologyCoverage, Property, Endpoint,
-    MappingSessionLog, RelationshipMappingPath, Base
+    MappingSessionLog, RelationshipMappingPath, Base,
+    MappingStrategy, MappingStrategyStep
 )
 from biomapper.db.session import get_db_manager
 
@@ -55,12 +56,14 @@ class ConfigurationValidator:
         databases_data = config_data.get('databases', {})
         mapping_paths_data = config_data.get('mapping_paths', [])
         additional_resources_data = config_data.get('additional_resources', []) # Get additional_resources
+        mapping_strategies_data = config_data.get('mapping_strategies', {})
 
         self._validate_ontologies(ontologies_data)
         self._validate_databases(databases_data, ontologies_data)
         # Pass additional_resources_data to _validate_mapping_paths
         self._validate_mapping_paths(mapping_paths_data, ontologies_data, databases_data, additional_resources_data)
         self._validate_additional_resources(additional_resources_data, ontologies_data)
+        self._validate_mapping_strategies(mapping_strategies_data, ontologies_data, mapping_paths_data)
 
         return len(self.errors) == 0
     
@@ -267,6 +270,97 @@ class ConfigurationValidator:
             
             # Validate client config (similar to _validate_client_config)
             self._validate_client_config(f"additional_resource '{client_name}' (index {i})", resource_entry.get('config', {}))
+    
+    def _validate_mapping_strategies(self, strategies: Dict[str, Any], ontologies: Dict[str, Any], mapping_paths: List[Dict[str, Any]]):
+        """Validate mapping strategies section."""
+        if not isinstance(strategies, dict):
+            if strategies:  # Only warn if non-empty non-dict
+                self.warnings.append(f"mapping_strategies section is not a dictionary (type: {type(strategies).__name__})")
+            return
+        
+        # Collect all mapping path names for validation
+        path_names = {path.get('name') for path in mapping_paths if isinstance(path, dict) and path.get('name')}
+        
+        for strategy_name, strategy_data in strategies.items():
+            if not isinstance(strategy_data, dict):
+                self.errors.append(f"Strategy '{strategy_name}' is not a dictionary (type: {type(strategy_data).__name__})")
+                continue
+                
+            # Validate default source/target ontology types if present
+            for ont_field in ['default_source_ontology_type', 'default_target_ontology_type']:
+                ont_type = strategy_data.get(ont_field)
+                if ont_type and ont_type not in ontologies:
+                    self.errors.append(f"Strategy '{strategy_name}' references undefined ontology '{ont_type}' in '{ont_field}'")
+            
+            # Validate steps
+            steps = strategy_data.get('steps', [])
+            if not isinstance(steps, list):
+                self.errors.append(f"Strategy '{strategy_name}' has 'steps' that is not a list (type: {type(steps).__name__})")
+                continue
+                
+            step_ids = set()
+            for i, step in enumerate(steps):
+                if not isinstance(step, dict):
+                    self.errors.append(f"Step {i+1} in strategy '{strategy_name}' is not a dictionary")
+                    continue
+                    
+                step_id = step.get('step_id')
+                if not step_id:
+                    self.errors.append(f"Step {i+1} in strategy '{strategy_name}' is missing 'step_id'")
+                elif step_id in step_ids:
+                    self.errors.append(f"Duplicate step_id '{step_id}' in strategy '{strategy_name}'")
+                else:
+                    step_ids.add(step_id)
+                
+                # Validate action
+                action = step.get('action')
+                if not action:
+                    self.errors.append(f"Step '{step_id}' in strategy '{strategy_name}' is missing 'action'")
+                elif not isinstance(action, dict):
+                    self.errors.append(f"Step '{step_id}' in strategy '{strategy_name}' has 'action' that is not a dictionary")
+                else:
+                    action_type = action.get('type')
+                    if not action_type:
+                        self.errors.append(f"Step '{step_id}' in strategy '{strategy_name}' is missing 'action.type'")
+                    else:
+                        # Validate specific action types
+                        self._validate_action(strategy_name, step_id, action_type, action, ontologies, path_names)
+    
+    def _validate_action(self, strategy_name: str, step_id: str, action_type: str, action: Dict[str, Any], 
+                        ontologies: Dict[str, Any], path_names: set):
+        """Validate specific action types and their parameters."""
+        if action_type == "CONVERT_IDENTIFIERS_LOCAL":
+            # Required: endpoint_context, output_ontology_type
+            if 'endpoint_context' not in action:
+                self.errors.append(f"Action in step '{step_id}' of strategy '{strategy_name}' missing 'endpoint_context'")
+            elif action['endpoint_context'] not in ['SOURCE', 'TARGET']:
+                self.errors.append(f"Action in step '{step_id}' of strategy '{strategy_name}' has invalid 'endpoint_context': {action['endpoint_context']}")
+                
+            if 'output_ontology_type' not in action:
+                self.errors.append(f"Action in step '{step_id}' of strategy '{strategy_name}' missing 'output_ontology_type'")
+            elif action['output_ontology_type'] not in ontologies:
+                self.errors.append(f"Action in step '{step_id}' of strategy '{strategy_name}' references undefined ontology: {action['output_ontology_type']}")
+                
+        elif action_type == "EXECUTE_MAPPING_PATH":
+            # Required: path_name
+            if 'path_name' not in action:
+                self.errors.append(f"Action in step '{step_id}' of strategy '{strategy_name}' missing 'path_name'")
+            elif action['path_name'] not in path_names:
+                self.warnings.append(f"Action in step '{step_id}' of strategy '{strategy_name}' references mapping path '{action['path_name']}' which may not exist")
+                
+        elif action_type == "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE":
+            # Required: endpoint_context (must be TARGET), ontology_type_to_match
+            if 'endpoint_context' not in action:
+                self.errors.append(f"Action in step '{step_id}' of strategy '{strategy_name}' missing 'endpoint_context'")
+            elif action['endpoint_context'] != 'TARGET':
+                self.errors.append(f"Action in step '{step_id}' of strategy '{strategy_name}' must have endpoint_context='TARGET'")
+                
+            if 'ontology_type_to_match' not in action:
+                self.errors.append(f"Action in step '{step_id}' of strategy '{strategy_name}' missing 'ontology_type_to_match'")
+            elif action['ontology_type_to_match'] not in ontologies:
+                self.errors.append(f"Action in step '{step_id}' of strategy '{strategy_name}' references undefined ontology: {action['ontology_type_to_match']}")
+        else:
+            self.warnings.append(f"Unknown action type '{action_type}' in step '{step_id}' of strategy '{strategy_name}'")
     
     def _validate_client_config(self, client_name: str, config: Any): # Changed type hint for flexibility
         """Validate client-specific configuration."""
@@ -641,6 +735,43 @@ async def populate_mapping_paths(session: AsyncSession, paths_data: List[Dict[st
     await session.flush()
 
 
+async def populate_mapping_strategies(session: AsyncSession, strategies_data: Dict[str, Any], 
+                                     entity_name: str):
+    """Populate mapping strategies from configuration."""
+    logger.info(f"Populating mapping strategies for {entity_name}...")
+    
+    for strategy_name, strategy_config in strategies_data.items():
+        strategy = MappingStrategy(
+            name=strategy_name,
+            description=strategy_config.get('description', ''),
+            entity_type=entity_name,
+            default_source_ontology_type=strategy_config.get('default_source_ontology_type'),
+            default_target_ontology_type=strategy_config.get('default_target_ontology_type'),
+            is_active=True
+        )
+        session.add(strategy)
+        await session.flush()
+        
+        # Add steps
+        for i, step_config in enumerate(strategy_config.get('steps', [])):
+            action = step_config.get('action', {})
+            # Extract action parameters (everything except 'type')
+            action_params = {k: v for k, v in action.items() if k != 'type'}
+            
+            step = MappingStrategyStep(
+                strategy_id=strategy.id,
+                step_id=step_config['step_id'],
+                step_order=i + 1,
+                description=step_config.get('description', ''),
+                action_type=action.get('type', ''),
+                action_parameters=action_params,
+                is_active=True
+            )
+            session.add(step)
+    
+    await session.flush()
+
+
 async def populate_entity_type(session: AsyncSession, entity_name: str, config_data: Dict[str, Any]):
     """Populate all data for a single entity type from its configuration."""
     logger.info(f"Processing entity type: {entity_name}")
@@ -667,6 +798,12 @@ async def populate_entity_type(session: AsyncSession, entity_name: str, config_d
     if 'mapping_paths' in config_data:
         await populate_mapping_paths(
             session, config_data['mapping_paths'], entity_name, resources
+        )
+    
+    # Populate mapping strategies
+    if 'mapping_strategies' in config_data:
+        await populate_mapping_strategies(
+            session, config_data['mapping_strategies'], entity_name
         )
 
 
