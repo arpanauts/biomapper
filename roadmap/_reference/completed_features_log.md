@@ -11,3 +11,4 @@
 - **MappingExecutor Performance Optimization:** Completed 2025-05-30. Implemented client caching in MappingExecutor, achieving a ~16x speedup by mitigating repeated CSV loading.
 - **Update populate_metamapper_db.py for UKBB/Arivale File Resources:** Completed 2025-05-30. Enhanced script to use UKBB/Arivale metadata files for new lookup resources via ArivaleMetadataLookupClient.
 - **Fix phase3_bidirectional_reconciliation.py one-to-many bug:** Completed 2025-05-30. Corrected flag logic by filtering for valid mappings, ensuring accurate one-to-many relationship identification.
+- **YAML-Driven Metamapper Database Population:** Completed 2025-06-05. Refactored `populate_metamapper_db.py` to parse entity configurations from YAML files (e.g., `protein_config.yaml`), enabling modular and extensible database population with validation. [Link to summary.md](../3_completed/yaml_driven_metamapper_population/summary.md)

@@ -11,6 +11,9 @@
     - Successfully aligned `/home/ubuntu/biomapper/configs/protein_config.yaml` with the iterative mapping strategy and validated its parsing and population into `metamapper.db` via `/home/ubuntu/biomapper/scripts/populate_metamapper_db.py` (as per `/home/ubuntu/biomapper/roadmap/_status_updates/2025-06-03-protein-config-alignment.md`).
     - Pivoted project strategy to focus on YAML-based configuration per entity type, with `/home/ubuntu/biomapper/scripts/populate_metamapper_db.py` as the central parser (as per `/home/ubuntu/biomapper/roadmap/_status_updates/2025-06-02-extensibility-review-and-strategy-pivot.md`).
     - Resolved critical performance issues in `MappingExecutor` via client caching (as per `/home/ubuntu/biomapper/roadmap/_status_updates/2025-05-30-session-recap-and-roadmap-update.md`).
+    - **Refactored `MappingExecutor` Resource Management:**
+        - Added `async_dispose()` method for proper asynchronous disposal of database engines.
+        - Updated `scripts/test_protein_yaml_strategy.py` to use `MappingExecutor.create()` for instantiation and `async_dispose()` for cleanup, resolving previous `AttributeError`s related to lifecycle management (details in `/home/ubuntu/biomapper/roadmap/_active_prompts/feedback/2025-06-05-032500-feedback-mapping-executor-refactor.md`).
 
 ## 2. Current Project State
 
@@ -22,8 +25,11 @@
     - `/home/ubuntu/biomapper/configs/protein_config.yaml` is the current source of truth for protein data source definitions, clients, and basic mapping paths.
     - `/home/ubuntu/biomapper/scripts/populate_metamapper_db.py` is functional for parsing these entity-specific YAMLs and needs to be updated to parse the new `mapping_strategies` section.
 - **`MappingExecutor`:**
-    - Currently supports iterative mapping based on `metamapper.db` configurations.
-    - Needs enhancement to parse and execute the new YAML-defined `mapping_strategies`.
+    - Core asynchronous resource management (instantiation via `create()`, engine disposal via `async_dispose()`) has been refactored and validated.
+    - Still primarily supports iterative mapping based on `metamapper.db` configurations.
+    - Key ongoing work:
+        - Enhancing it to parse and execute the new YAML-defined `mapping_strategies`.
+        - **Resolved `AttributeError`**: The `AttributeError` related to `metamapper_session` access within `MappingExecutor` has been fixed by correcting all instances to use `self.async_metamapper_session`. Details in feedback: `/home/ubuntu/biomapper/roadmap/_active_prompts/feedback/2025-06-05-033245-feedback-fix-metamapper-session-attr.md`.
 - **Documentation:** Key architectural documents for mapping strategies and specific dataset configurations are now up-to-date or newly created.
 - **Outstanding Critical Issues/Blockers:**
     - Implementation of the `MappingExecutor`'s capability to understand and run YAML-defined strategies.
@@ -43,6 +49,8 @@
 
 ## 4. Next Steps
 
+- **Verify `MappingExecutor` Fix:** Re-run `scripts/test_protein_yaml_strategy.py` to confirm the `AttributeError` is resolved and the YAML strategy execution can proceed further.
+- **Address Code Duplication in `MappingExecutor`:** Investigate and refactor apparent code duplication (e.g., `execute_yaml_strategy` method) in `biomapper/core/mapping_executor.py` as noted in feedback `/home/ubuntu/biomapper/roadmap/_active_prompts/feedback/2025-06-05-033245-feedback-fix-metamapper-session-attr.md` (New backlog item created: `/home/ubuntu/biomapper/roadmap/0_backlog/refactor_mapping_executor_code_duplication.md`).
 - **Implement `MappingExecutor` Enhancements for YAML Strategies:**
     - Add logic to `MappingExecutor` to load and parse `mapping_strategies` from the configuration (likely from `metamapper.db` after `populate_metamapper_db.py` is updated to handle this new YAML section).
     - Implement the dispatch mechanism to route `action.type`s to their respective Python handlers.
