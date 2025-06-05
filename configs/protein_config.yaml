@@ -459,6 +459,16 @@ mapping_paths:
     steps:
       - resource: "uniprot_to_ukbb_assay_lookup"
         order: 1
+        
+  # UniProt historical resolution mapping path
+  - name: "RESOLVE_UNIPROT_HISTORY_VIA_API"
+    source_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+    target_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+    priority: 1
+    description: "Resolves UniProt ACs through UniProt API for historical changes"
+    steps:
+      - resource: "uniprot_historical_resolver"
+        order: 1
 
 # Ontology preferences for iterative mapping strategy
 # Each key represents a relationship (SourceEndpoint_TO_TargetEndpoint)
@@ -532,6 +542,41 @@ ontology_preferences:
         priority: 4
       - ontology_type: "ARIVALE_PROTEIN_ID_ONTOLOGY"
         priority: 5
+
+# Define mapping strategies for YAML-based multi-step pipelines
+mapping_strategies:
+  UKBB_TO_HPA_PROTEIN_PIPELINE:
+    description: "Maps UKBB protein assay IDs to HPA OSP native IDs via UniProt AC, including historical resolution"
+    default_source_ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
+    default_target_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
+    steps:
+      - step_id: "S1_UKBB_NATIVE_TO_UNIPROT"
+        description: "Convert UKBB Assay IDs to UniProt ACs using local UKBB data"
+        action:
+          type: "CONVERT_IDENTIFIERS_LOCAL"
+          endpoint_context: "SOURCE"
+          output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+          
+      - step_id: "S2_RESOLVE_UNIPROT_HISTORY"
+        description: "Resolve UniProt ACs via UniProt API to handle historical changes"
+        action:
+          type: "EXECUTE_MAPPING_PATH"
+          path_name: "RESOLVE_UNIPROT_HISTORY_VIA_API"
+          
+      - step_id: "S3_FILTER_BY_HPA_PRESENCE"
+        description: "Filter resolved UniProt ACs to keep only those present in HPA data"
+        action:
+          type: "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
+          endpoint_context: "TARGET"
+          ontology_type_to_match: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+          
+      - step_id: "S4_HPA_UNIPROT_TO_NATIVE"
+        description: "Convert matching UniProt ACs to HPA OSP native IDs"
+        action:
+          type: "CONVERT_IDENTIFIERS_LOCAL"
+          endpoint_context: "TARGET"
+          input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+          output_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
 
 # Additional mapping resources that may be referenced
 additional_resources:
