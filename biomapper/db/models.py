@@ -481,3 +481,58 @@ class MappingSessionLog(Base):
     
     def __repr__(self) -> str:
         return f"<MappingSessionLog id={self.id} {self.source_endpoint}->{self.target_endpoint} status={self.status}>"
+
+
+class MappingStrategy(Base):
+    """Defines YAML-configured multi-step mapping strategies."""
+    
+    __tablename__ = "mapping_strategies"
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)  # e.g., "UKBB_TO_HPA_PROTEIN_PIPELINE"
+    description = Column(Text)
+    entity_type = Column(String, nullable=False)  # e.g., "protein", "metabolite"
+    default_source_ontology_type = Column(String, nullable=True)  # Default input ontology type
+    default_target_ontology_type = Column(String, nullable=True)  # Default output ontology type
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationship to steps
+    steps = relationship(
+        "MappingStrategyStep",
+        back_populates="strategy",
+        order_by="MappingStrategyStep.step_order",
+        cascade="all, delete-orphan",
+    )
+    
+    def __repr__(self) -> str:
+        return f"<MappingStrategy id={self.id} name={self.name} entity={self.entity_type}>"
+
+
+class MappingStrategyStep(Base):
+    """Represents a single step within a MappingStrategy."""
+    
+    __tablename__ = "mapping_strategy_steps"
+    
+    id = Column(Integer, primary_key=True)
+    strategy_id = Column(Integer, ForeignKey("mapping_strategies.id"), nullable=False)
+    step_id = Column(String, nullable=False)  # e.g., "S1_UKBB_NATIVE_TO_UNIPROT"
+    step_order = Column(Integer, nullable=False)  # Numeric order for execution
+    description = Column(Text, nullable=True)
+    action_type = Column(String, nullable=False)  # e.g., "CONVERT_IDENTIFIERS_LOCAL"
+    action_parameters = Column(JSON, nullable=True)  # JSON dict of parameters for the action
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationship
+    strategy = relationship("MappingStrategy", back_populates="steps")
+    
+    __table_args__ = (
+        UniqueConstraint("strategy_id", "step_id", name="uix_strategy_step_id"),
+        UniqueConstraint("strategy_id", "step_order", name="uix_strategy_step_order"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<MappingStrategyStep id={self.id} strategy={self.strategy_id} step={self.step_id} order={self.step_order} action={self.action_type}>"
