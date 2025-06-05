@@ -42,6 +42,8 @@ from ..db.models import (
     OntologyPreference,
     EndpointRelationship,
     RelationshipMappingPath,
+    MappingStrategy,
+    MappingStrategyStep,
 )
 
 # Import models for cache DB
@@ -324,7 +326,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             A dictionary with detailed information about the path
         """
         try:
-            async with self.get_metamapper_session() as session:
+            async with self.async_metamapper_session() as session:
                 # Query the path with its steps
                 stmt = (select(MappingPath)
                         .where(MappingPath.id == path_id)
@@ -2675,6 +2677,249 @@ class MappingExecutor(CompositeIdentifierMixin):
         )
         return enriched_mappings
 
+    async def execute_yaml_strategy(
+        self,
+        strategy_name: str,
+        source_endpoint_name: str,
+        target_endpoint_name: str,
+        input_identifiers: List[str],
+        source_ontology_type: Optional[str] = None,
+        target_ontology_type: Optional[str] = None,
+        use_cache: bool = True,
+        max_cache_age_days: Optional[int] = None,
+        progress_callback: Optional[callable] = None,
+        batch_size: int = 250,
+        min_confidence: float = 0.0,
+    ) -> Dict[str, Any]:
+        """
+        Execute a YAML-defined mapping strategy.
+        
+        Args:
+            strategy_name: Name of the strategy defined in YAML configuration
+            source_endpoint_name: Name of the source endpoint
+            target_endpoint_name: Name of the target endpoint
+            input_identifiers: List of identifiers to map
+            source_ontology_type: Optional override for source ontology type
+            target_ontology_type: Optional override for target ontology type
+            use_cache: Whether to use caching
+            max_cache_age_days: Maximum cache age in days
+            progress_callback: Optional progress callback function
+            batch_size: Size of batches for processing
+            min_confidence: Minimum confidence threshold
+            
+        Returns:
+            Dictionary with mapping results including mapped values and provenance
+        """
+        
+        # Load the strategy from database
+        async with self.async_metamapper_session() as session:
+            # Query for the strategy
+            stmt = select(MappingStrategy).where(MappingStrategy.name == strategy_name)
+            result = await session.execute(stmt)
+            strategy = result.scalar_one_or_none()
+            
+            if not strategy:
+                raise ConfigurationError(f"Mapping strategy '{strategy_name}' not found in database")
+            
+            if not strategy.is_active:
+                raise ConfigurationError(f"Mapping strategy '{strategy_name}' is not active")
+            
+            # Load strategy steps with eager loading
+            stmt = (
+                select(MappingStrategyStep)
+                .where(MappingStrategyStep.strategy_id == strategy.id)
+                .order_by(MappingStrategyStep.step_order)
+            )
+            result = await session.execute(stmt)
+            steps = result.scalars().all()
+            
+            if not steps:
+                raise ConfigurationError(f"Mapping strategy '{strategy_name}' has no steps defined")
+            
+            # Load source and target endpoints
+            source_endpoint = await self._get_endpoint_by_name(session, source_endpoint_name)
+            target_endpoint = await self._get_endpoint_by_name(session, target_endpoint_name)
+            
+            if not source_endpoint:
+                raise ConfigurationError(f"Source endpoint '{source_endpoint_name}' not found")
+            if not target_endpoint:
+                raise ConfigurationError(f"Target endpoint '{target_endpoint_name}' not found")
+        
+        # Initialize working data
+        current_identifiers = input_identifiers.copy()
+        current_ontology_type = source_ontology_type or strategy.default_source_ontology_type
+        
+        # Track results for each step
+        step_results = []
+        overall_provenance = []
+        
+        # Execute each step in sequence
+        for step_idx, step in enumerate(steps):
+            self.logger.info(f"Executing step {step.step_id}: {step.description}")
+            
+            if progress_callback:
+                progress_callback(step_idx, len(steps), f"Executing {step.step_id}")
+            
+            # Dispatch to appropriate action handler
+            try:
+                step_result = await self._execute_strategy_action(
+                    step=step,
+                    current_identifiers=current_identifiers,
+                    current_ontology_type=current_ontology_type,
+                    source_endpoint=source_endpoint,
+                    target_endpoint=target_endpoint,
+                    use_cache=use_cache,
+                    max_cache_age_days=max_cache_age_days,
+                    batch_size=batch_size,
+                    min_confidence=min_confidence,
+                )
+                
+                # Update working data for next step
+                current_identifiers = step_result['output_identifiers']
+                current_ontology_type = step_result.get('output_ontology_type', current_ontology_type)
+                
+                # Track results
+                step_results.append({
+                    'step_id': step.step_id,
+                    'action_type': step.action_type,
+                    'input_count': len(step_result.get('input_identifiers', [])),
+                    'output_count': len(step_result.get('output_identifiers', [])),
+                    'success': True,
+                    'details': step_result.get('details', {})
+                })
+                
+                # Accumulate provenance
+                if 'provenance' in step_result:
+                    overall_provenance.extend(step_result['provenance'])
+                    
+            except Exception as e:
+                self.logger.error(f"Error executing step {step.step_id}: {str(e)}")
+                step_results.append({
+                    'step_id': step.step_id,
+                    'action_type': step.action_type,
+                    'success': False,
+                    'error': str(e)
+                })
+                # Depending on strategy, might want to continue or fail
+                raise MappingExecutionError(f"Strategy execution failed at step {step.step_id}: {str(e)}")
+        
+        # Prepare final results
+        final_target_ontology = target_ontology_type or strategy.default_target_ontology_type
+        
+        # Create mapping dictionary from input to final output
+        mapping_results = {}
+        
+        # If we have provenance tracking the full journey, use it
+        # Otherwise, create simple mappings
+        for i, input_id in enumerate(input_identifiers):
+            if i < len(current_identifiers):
+                mapping_results[input_id] = {
+                    'mapped_value': current_identifiers[i],
+                    'confidence': 1.0,  # Could be calculated from step results
+                    'source_ontology': source_ontology_type or strategy.default_source_ontology_type,
+                    'target_ontology': final_target_ontology,
+                    'strategy_name': strategy_name,
+                    'provenance': [p for p in overall_provenance if p.get('source_id') == input_id]
+                }
+            else:
+                mapping_results[input_id] = {
+                    'mapped_value': None,
+                    'confidence': 0.0,
+                    'error': 'Lost during processing',
+                    'strategy_name': strategy_name
+                }
+        
+        return {
+            'results': mapping_results,
+            'summary': {
+                'strategy_name': strategy_name,
+                'total_input': len(input_identifiers),
+                'total_mapped': len([r for r in mapping_results.values() if r.get('mapped_value')]),
+                'total_unmapped': len([r for r in mapping_results.values() if not r.get('mapped_value')]),
+                'steps_executed': len(step_results),
+                'step_results': step_results
+            }
+        }
+    
+    async def _execute_strategy_action(
+        self,
+        step: MappingStrategyStep,
+        current_identifiers: List[str],
+        current_ontology_type: str,
+        source_endpoint: Endpoint,
+        target_endpoint: Endpoint,
+        use_cache: bool,
+        max_cache_age_days: Optional[int],
+        batch_size: int,
+        min_confidence: float,
+    ) -> Dict[str, Any]:
+        """
+        Execute a single action from a mapping strategy.
+        
+        This method dispatches to the appropriate action handler based on action_type.
+        For now, returns placeholder results. Real implementations will be added in subtask 5.
+        """
+        action_type = step.action_type
+        action_params = step.action_parameters or {}
+        
+        self.logger.info(f"Executing action type: {action_type} with params: {action_params}")
+        
+        # Dispatch based on action type
+        if action_type == "CONVERT_IDENTIFIERS_LOCAL":
+            # Placeholder implementation
+            return {
+                'input_identifiers': current_identifiers,
+                'output_identifiers': current_identifiers,  # No conversion yet
+                'output_ontology_type': action_params.get('output_ontology_type', current_ontology_type),
+                'details': {'action': 'CONVERT_IDENTIFIERS_LOCAL', 'status': 'not_implemented'}
+            }
+            
+        elif action_type == "EXECUTE_MAPPING_PATH":
+            # Placeholder implementation
+            path_name = action_params.get('path_name')
+            return {
+                'input_identifiers': current_identifiers,
+                'output_identifiers': current_identifiers,  # No mapping yet
+                'details': {'action': 'EXECUTE_MAPPING_PATH', 'path_name': path_name, 'status': 'not_implemented'}
+            }
+            
+        elif action_type == "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE":
+            # Placeholder implementation
+            return {
+                'input_identifiers': current_identifiers,
+                'output_identifiers': current_identifiers,  # No filtering yet
+                'details': {'action': 'FILTER_IDENTIFIERS_BY_TARGET_PRESENCE', 'status': 'not_implemented'}
+            }
+            
+        else:
+            raise ConfigurationError(f"Unknown action type: {action_type}")
+    
+    async def _get_endpoint_by_name(self, session: AsyncSession, endpoint_name: str) -> Optional[Endpoint]:
+        """Get endpoint by name from database."""
+        stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def async_dispose(self):
+        """Asynchronously dispose of underlying database engines."""
+        self.logger.info("Disposing of MappingExecutor engines...")
+        
+        # Dispose metamapper engine
+        if hasattr(self, 'async_metamapper_engine') and self.async_metamapper_engine:
+            await self.async_metamapper_engine.dispose()
+            self.logger.info("Metamapper engine disposed.")
+            
+        # Dispose cache engine  
+        if hasattr(self, 'async_cache_engine') and self.async_cache_engine:
+            await self.async_cache_engine.dispose()
+            self.logger.info("Cache engine disposed.")
+            
+        # Clear client cache
+        if hasattr(self, '_client_cache'):
+            self._client_cache.clear()
+            
+        self.logger.info("MappingExecutor engines disposed.")
+
     async def track_mapping_metrics(self, event_type: str, metrics: Dict[str, Any]) -> None:
         """
         Track mapping metrics for performance monitoring.
@@ -3114,3 +3359,226 @@ class MappingExecutor(CompositeIdentifierMixin):
             f"{unidirectional_count} successful (one-directional only)"
         )
         return enriched_mappings
+
+    async def execute_yaml_strategy(
+        self,
+        strategy_name: str,
+        source_endpoint_name: str,
+        target_endpoint_name: str,
+        input_identifiers: List[str],
+        source_ontology_type: Optional[str] = None,
+        target_ontology_type: Optional[str] = None,
+        use_cache: bool = True,
+        max_cache_age_days: Optional[int] = None,
+        progress_callback: Optional[callable] = None,
+        batch_size: int = 250,
+        min_confidence: float = 0.0,
+    ) -> Dict[str, Any]:
+        """
+        Execute a YAML-defined mapping strategy.
+        
+        Args:
+            strategy_name: Name of the strategy defined in YAML configuration
+            source_endpoint_name: Name of the source endpoint
+            target_endpoint_name: Name of the target endpoint
+            input_identifiers: List of identifiers to map
+            source_ontology_type: Optional override for source ontology type
+            target_ontology_type: Optional override for target ontology type
+            use_cache: Whether to use caching
+            max_cache_age_days: Maximum cache age in days
+            progress_callback: Optional progress callback function
+            batch_size: Size of batches for processing
+            min_confidence: Minimum confidence threshold
+            
+        Returns:
+            Dictionary with mapping results including mapped values and provenance
+        """
+        
+        # Load the strategy from database
+        async with self.async_metamapper_session() as session:
+            # Query for the strategy
+            stmt = select(MappingStrategy).where(MappingStrategy.name == strategy_name)
+            result = await session.execute(stmt)
+            strategy = result.scalar_one_or_none()
+            
+            if not strategy:
+                raise ConfigurationError(f"Mapping strategy '{strategy_name}' not found in database")
+            
+            if not strategy.is_active:
+                raise ConfigurationError(f"Mapping strategy '{strategy_name}' is not active")
+            
+            # Load strategy steps with eager loading
+            stmt = (
+                select(MappingStrategyStep)
+                .where(MappingStrategyStep.strategy_id == strategy.id)
+                .order_by(MappingStrategyStep.step_order)
+            )
+            result = await session.execute(stmt)
+            steps = result.scalars().all()
+            
+            if not steps:
+                raise ConfigurationError(f"Mapping strategy '{strategy_name}' has no steps defined")
+            
+            # Load source and target endpoints
+            source_endpoint = await self._get_endpoint_by_name(session, source_endpoint_name)
+            target_endpoint = await self._get_endpoint_by_name(session, target_endpoint_name)
+            
+            if not source_endpoint:
+                raise ConfigurationError(f"Source endpoint '{source_endpoint_name}' not found")
+            if not target_endpoint:
+                raise ConfigurationError(f"Target endpoint '{target_endpoint_name}' not found")
+        
+        # Initialize working data
+        current_identifiers = input_identifiers.copy()
+        current_ontology_type = source_ontology_type or strategy.default_source_ontology_type
+        
+        # Track results for each step
+        step_results = []
+        overall_provenance = []
+        
+        # Execute each step in sequence
+        for step_idx, step in enumerate(steps):
+            self.logger.info(f"Executing step {step.step_id}: {step.description}")
+            
+            if progress_callback:
+                progress_callback(step_idx, len(steps), f"Executing {step.step_id}")
+            
+            # Dispatch to appropriate action handler
+            try:
+                step_result = await self._execute_strategy_action(
+                    step=step,
+                    current_identifiers=current_identifiers,
+                    current_ontology_type=current_ontology_type,
+                    source_endpoint=source_endpoint,
+                    target_endpoint=target_endpoint,
+                    use_cache=use_cache,
+                    max_cache_age_days=max_cache_age_days,
+                    batch_size=batch_size,
+                    min_confidence=min_confidence,
+                )
+                
+                # Update working data for next step
+                current_identifiers = step_result['output_identifiers']
+                current_ontology_type = step_result.get('output_ontology_type', current_ontology_type)
+                
+                # Track results
+                step_results.append({
+                    'step_id': step.step_id,
+                    'action_type': step.action_type,
+                    'input_count': len(step_result.get('input_identifiers', [])),
+                    'output_count': len(step_result.get('output_identifiers', [])),
+                    'success': True,
+                    'details': step_result.get('details', {})
+                })
+                
+                # Accumulate provenance
+                if 'provenance' in step_result:
+                    overall_provenance.extend(step_result['provenance'])
+                    
+            except Exception as e:
+                self.logger.error(f"Error executing step {step.step_id}: {str(e)}")
+                step_results.append({
+                    'step_id': step.step_id,
+                    'action_type': step.action_type,
+                    'success': False,
+                    'error': str(e)
+                })
+                # Depending on strategy, might want to continue or fail
+                raise MappingExecutionError(f"Strategy execution failed at step {step.step_id}: {str(e)}")
+        
+        # Prepare final results
+        final_target_ontology = target_ontology_type or strategy.default_target_ontology_type
+        
+        # Create mapping dictionary from input to final output
+        mapping_results = {}
+        
+        # If we have provenance tracking the full journey, use it
+        # Otherwise, create simple mappings
+        for i, input_id in enumerate(input_identifiers):
+            if i < len(current_identifiers):
+                mapping_results[input_id] = {
+                    'mapped_value': current_identifiers[i],
+                    'confidence': 1.0,  # Could be calculated from step results
+                    'source_ontology': source_ontology_type or strategy.default_source_ontology_type,
+                    'target_ontology': final_target_ontology,
+                    'strategy_name': strategy_name,
+                    'provenance': [p for p in overall_provenance if p.get('source_id') == input_id]
+                }
+            else:
+                mapping_results[input_id] = {
+                    'mapped_value': None,
+                    'confidence': 0.0,
+                    'error': 'Lost during processing',
+                    'strategy_name': strategy_name
+                }
+        
+        return {
+            'results': mapping_results,
+            'summary': {
+                'strategy_name': strategy_name,
+                'total_input': len(input_identifiers),
+                'total_mapped': len([r for r in mapping_results.values() if r.get('mapped_value')]),
+                'total_unmapped': len([r for r in mapping_results.values() if not r.get('mapped_value')]),
+                'steps_executed': len(step_results),
+                'step_results': step_results
+            }
+        }
+    
+    async def _execute_strategy_action(
+        self,
+        step: MappingStrategyStep,
+        current_identifiers: List[str],
+        current_ontology_type: str,
+        source_endpoint: Endpoint,
+        target_endpoint: Endpoint,
+        use_cache: bool,
+        max_cache_age_days: Optional[int],
+        batch_size: int,
+        min_confidence: float,
+    ) -> Dict[str, Any]:
+        """
+        Execute a single action from a mapping strategy.
+        
+        This method dispatches to the appropriate action handler based on action_type.
+        For now, returns placeholder results. Real implementations will be added in subtask 5.
+        """
+        action_type = step.action_type
+        action_params = step.action_parameters or {}
+        
+        self.logger.info(f"Executing action type: {action_type} with params: {action_params}")
+        
+        # Dispatch based on action type
+        if action_type == "CONVERT_IDENTIFIERS_LOCAL":
+            # Placeholder implementation
+            return {
+                'input_identifiers': current_identifiers,
+                'output_identifiers': current_identifiers,  # No conversion yet
+                'output_ontology_type': action_params.get('output_ontology_type', current_ontology_type),
+                'details': {'action': 'CONVERT_IDENTIFIERS_LOCAL', 'status': 'not_implemented'}
+            }
+            
+        elif action_type == "EXECUTE_MAPPING_PATH":
+            # Placeholder implementation
+            path_name = action_params.get('path_name')
+            return {
+                'input_identifiers': current_identifiers,
+                'output_identifiers': current_identifiers,  # No mapping yet
+                'details': {'action': 'EXECUTE_MAPPING_PATH', 'path_name': path_name, 'status': 'not_implemented'}
+            }
+            
+        elif action_type == "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE":
+            # Placeholder implementation
+            return {
+                'input_identifiers': current_identifiers,
+                'output_identifiers': current_identifiers,  # No filtering yet
+                'details': {'action': 'FILTER_IDENTIFIERS_BY_TARGET_PRESENCE', 'status': 'not_implemented'}
+            }
+            
+        else:
+            raise ConfigurationError(f"Unknown action type: {action_type}")
+    
+    async def _get_endpoint_by_name(self, session: AsyncSession, endpoint_name: str) -> Optional[Endpoint]:
+        """Get endpoint by name from database."""
+        stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
