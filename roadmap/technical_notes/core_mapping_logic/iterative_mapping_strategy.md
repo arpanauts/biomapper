@@ -2,6 +2,15 @@
 
 ## Introduction
 
+This document outlines the general iterative mapping strategy implemented by the `MappingExecutor` in Biomapper. This strategy is designed to be flexible and adaptable for various entity types, employing a prioritized approach to identifier resolution and mapping.
+
+**Relationship to Other Mapping Approaches:**
+
+*   **As a Unidirectional Mapper:** This document details the default iterative behavior of the `MappingExecutor` for achieving **unidirectional mapping** (i.e., mapping identifiers from a source endpoint to a target endpoint). It provides an automated, discovery-oriented approach when an explicit sequence of operations is not defined.
+*   **Alternative to YAML-Defined Strategies:** For scenarios requiring precise, user-defined control over a multi-step mapping pipeline, Biomapper offers **YAML-Defined Mapping Strategies**. These allow for an explicit sequence of actions to be defined in the configuration. Typically, for a given unidirectional mapping task, either the default iterative strategy *or* a YAML-defined strategy would be employed. For more details, see [YAML-Defined Mapping Strategies in Biomapper](./yaml_defined_mapping_strategies.md).
+*   **Role in Bidirectional Reconciliation:** The unidirectional mappings produced by this default iterative strategy (like those from YAML-defined strategies) can serve as input for a subsequent **bidirectional reconciliation process**. This process involves performing mappings in both directions (Source -> Target and Target -> Source) and then comparing and resolving these results to achieve a high-confidence mapping set.
+
+
 This document outlines a refined, iterative strategy for mapping entities between two endpoints within the Biomapper framework. The primary goal is to maximize the number of successful mappings by systematically leveraging both the primary shared ontology type and available secondary ontology types present in the source endpoint data.
 
 This strategy moves beyond simply finding the first available `MappingPath` and instead implements a more robust, multi-step process orchestrated by the `MappingExecutor`. The approach is designed to be entity-agnostic, supporting mappings for proteins, metabolites, genes, and other biological entities using the same underlying framework.

@@ -2,6 +2,17 @@
 
 ## Overview
 
+Bidirectional validation and reconciliation is a crucial phase in Biomapper designed to produce high-confidence mappings. It operates on the outputs of two preceding unidirectional mapping processes:
+
+1.  **Forward Mapping (Source -> Target):** This initial mapping from the source dataset to the target dataset can be generated using either:
+    *   A **YAML-Defined Mapping Strategy**: If a specific, complex pipeline is required for the Source -> Target direction (see [YAML-Defined Mapping Strategies in Biomapper](../core_mapping_logic/yaml_defined_mapping_strategies.md) for details).
+    *   The **Default Iterative Mapping Strategy**: If an automated, discovery-oriented approach is preferred for the Source -> Target direction (see [Iterative Mapping Strategy](../core_mapping_logic/iterative_mapping_strategy.md) for details).
+2.  **Reverse Mapping (Target -> Source):** Similarly, this mapping from the target dataset back to the source dataset can be generated using either:
+    *   A **YAML-Defined Mapping Strategy**: Potentially a different strategy tailored for the Target -> Source direction.
+    *   The **Default Iterative Mapping Strategy**.
+
+The reconciliation module then takes the results of these two unidirectional mappings as input to compare, validate, and resolve discrepancies, ultimately producing a more robust and reliable set of bidirectional mappings.
+
 The bidirectional validation process in our mapping system determines whether a mapping between two entities is validated in both the forward and reverse directions. A key challenge in this process arises when primary identifiers are missing or malformed, but secondary identifiers (like gene names) are available and could be used for matching.
 
 This document describes the enhancement to our bidirectional validation logic to properly handle these cases.
