@@ -205,7 +205,7 @@ cython_debug/
 # Project specific
 arivale_ukbb_comparison/
 tests_*.py*
-#tutorial_*.py*
+tutorial_*.py*
 vector_store/
 
 # SQLite database files
