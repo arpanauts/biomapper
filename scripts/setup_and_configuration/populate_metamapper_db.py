@@ -312,6 +312,11 @@ class ConfigurationValidator:
                 else:
                     step_ids.add(step_id)
                 
+                # Validate is_required field if present
+                if 'is_required' in step:
+                    if not isinstance(step['is_required'], bool):
+                        self.errors.append(f"Step '{step_id}' in strategy '{strategy_name}' has 'is_required' that is not a boolean")
+                
                 # Validate action
                 action = step.get('action')
                 if not action:
@@ -707,6 +712,7 @@ async def populate_mapping_paths(session: AsyncSession, paths_data: List[Dict[st
     for path_config in paths_data:
         path = MappingPath(
             name=path_config['name'],
+            entity_type=entity_name,  # Added entity_type
             source_type=path_config['source_type'],
             target_type=path_config['target_type'],
             priority=path_config.get('priority', 10),
@@ -765,6 +771,7 @@ async def populate_mapping_strategies(session: AsyncSession, strategies_data: Di
                 description=step_config.get('description', ''),
                 action_type=action.get('type', ''),
                 action_parameters=action_params,
+                is_required=step_config.get('is_required', True),  # Default to True if not specified
                 is_active=True
             )
             session.add(step)
