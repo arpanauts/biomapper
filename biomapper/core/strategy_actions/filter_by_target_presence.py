@@ -1,5 +1,6 @@
 """Filter identifiers based on presence in target endpoint."""
 
+import json
 import logging
 from typing import Dict, Any, List, Optional, Set
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +35,7 @@ class FilterByTargetPresenceAction(BaseStrategyAction):
         Required action_params:
             - endpoint_context: Must be "TARGET"
             - ontology_type_to_match: Ontology type to check in target
+            - conversion_path_to_match_ontology (optional): Path to convert identifiers before checking
         """
         # Validate parameters
         endpoint_context = action_params.get('endpoint_context')
@@ -49,37 +51,114 @@ class FilterByTargetPresenceAction(BaseStrategyAction):
             f"for ontology type: {ontology_type_to_match}"
         )
         
-        # In a full implementation, this would:
-        # 1. Load the target endpoint's data file
-        # 2. Find the column for the specified ontology type
-        # 3. Create a set of all values in that column
-        # 4. Filter the input identifiers by membership in that set
+        # Get the endpoint's data loader
+        from biomapper.mapping.adapters.csv_adapter import CSVAdapter
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+        from biomapper.db.models import EndpointPropertyConfig
         
-        # Placeholder: For now, return all identifiers
-        # Real implementation would perform actual filtering
-        target_identifiers_set: Set[str] = set(current_identifiers)  # Would load from target
+        # Find property configuration for the target ontology type
+        # Eagerly load the property_extraction_config relationship to avoid lazy loading issues
+        stmt = (
+            select(EndpointPropertyConfig)
+            .options(selectinload(EndpointPropertyConfig.property_extraction_config))
+            .where(
+                EndpointPropertyConfig.endpoint_id == target_endpoint.id,
+                EndpointPropertyConfig.ontology_type == ontology_type_to_match
+            )
+        )
+        result = await self.session.execute(stmt)
+        property_config = result.scalar_one_or_none()
         
+        if not property_config:
+            raise ValueError(
+                f"Target endpoint {target_endpoint.name} does not have configuration "
+                f"for ontology type: {ontology_type_to_match}"
+            )
+        
+        # Load the target endpoint data with selective column loading
+        adapter = CSVAdapter(endpoint=target_endpoint)
+        
+        # Get the column name for the ontology type
+        # For column extraction method, parse the column name from JSON extraction_pattern
+        
+        extraction_pattern = json.loads(property_config.property_extraction_config.extraction_pattern)
+        if property_config.property_extraction_config.extraction_method == 'column':
+            target_col = extraction_pattern.get('column')
+        else:
+            # For other methods, might need different parsing
+            target_col = extraction_pattern
+        
+        # Load only the column we need for filtering
+        self.logger.info(f"Loading only required column for filtering: {target_col}")
+        target_data = await adapter.load_data(columns_to_load=[target_col])
+        
+        # Create a set of all values in the target column
+        target_identifiers_set: Set[str] = set()
+        for _, row in target_data.iterrows():
+            value = str(row.get(target_col, '')).strip()
+            if value:
+                target_identifiers_set.add(value)
+        
+        self.logger.info(
+            f"Loaded {len(target_identifiers_set)} unique identifiers from target endpoint"
+        )
+        
+        # Check if we need to convert identifiers before filtering
+        conversion_path = action_params.get('conversion_path_to_match_ontology')
+        identifiers_to_check = current_identifiers
+        identifier_mapping = {id: id for id in current_identifiers}  # Default 1:1 mapping
+        
+        if conversion_path:
+            self.logger.info(f"Converting identifiers using path: {conversion_path}")
+            # Use ExecuteMappingPathAction to convert
+            from .execute_mapping_path import ExecuteMappingPathAction
+            
+            mapping_action = ExecuteMappingPathAction(self.session)
+            conversion_result = await mapping_action.execute(
+                current_identifiers=current_identifiers,
+                current_ontology_type=current_ontology_type,
+                action_params={'path_name': conversion_path},
+                source_endpoint=source_endpoint,
+                target_endpoint=target_endpoint,
+                context=context
+            )
+            
+            # Build mapping from original to converted identifiers
+            identifier_mapping = {}
+            for prov in conversion_result['provenance']:
+                if prov.get('target_id'):
+                    identifier_mapping[prov['source_id']] = prov['target_id']
+            
+            identifiers_to_check = conversion_result['output_identifiers']
+        
+        # Now filter based on presence in target
         output_identifiers = []
         provenance = []
         filtered_count = 0
         
-        for identifier in current_identifiers:
-            if identifier in target_identifiers_set:
-                output_identifiers.append(identifier)
+        for original_id in current_identifiers:
+            # Get the identifier to check (might be converted)
+            check_id = identifier_mapping.get(original_id, original_id)
+            
+            if check_id in target_identifiers_set:
+                output_identifiers.append(original_id)
                 provenance.append({
-                    'source_id': identifier,
+                    'source_id': original_id,
                     'action': 'filter_passed',
                     'target_endpoint': target_endpoint.name,
-                    'ontology_type_checked': ontology_type_to_match
+                    'ontology_type_checked': ontology_type_to_match,
+                    'checked_value': check_id if check_id != original_id else None
                 })
             else:
                 filtered_count += 1
                 provenance.append({
-                    'source_id': identifier,
+                    'source_id': original_id,
                     'action': 'filter_failed',
                     'target_endpoint': target_endpoint.name,
                     'ontology_type_checked': ontology_type_to_match,
-                    'reason': 'not_found_in_target'
+                    'reason': 'not_found_in_target',
+                    'checked_value': check_id if check_id != original_id else None
                 })
         
         return {

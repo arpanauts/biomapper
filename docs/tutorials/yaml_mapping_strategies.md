@@ -11,15 +11,20 @@ A named sequence of steps that transforms identifiers from a source ontology typ
 
 ### 2. Strategy Steps
 Individual operations within a strategy, executed in order. Each step has:
-- A unique `step_id`
-- A `description` 
-- An `action` with a `type` and parameters
+- A unique `step_name`
+- An `action` with specific parameters
+- An optional `is_required` flag (defaults to `true`)
 
 ### 3. Action Types
 Pre-defined operations that can be used in steps:
-- `CONVERT_IDENTIFIERS_LOCAL`: Convert identifiers using data within an endpoint
+- `CONVERT_IDENTIFIERS_LOCAL`: Convert identifiers using a local database table
 - `EXECUTE_MAPPING_PATH`: Execute a pre-defined mapping path
-- `FILTER_IDENTIFIERS_BY_TARGET_PRESENCE`: Filter identifiers based on target endpoint data
+- `FILTER_IDENTIFIERS_BY_TARGET_PRESENCE`: Filter identifiers based on target resource presence
+
+### 4. The `is_required` Field
+Each step can specify whether it must succeed for the strategy to continue:
+- `is_required: true` (default): Step failure stops the entire strategy
+- `is_required: false`: Step failure is logged but execution continues
 
 ## Example: UKBB to HPA Protein Mapping
 
@@ -27,38 +32,43 @@ Here's the YAML configuration for mapping UK Biobank protein assays to HPA prote
 
 ```yaml
 mapping_strategies:
-  UKBB_TO_HPA_PROTEIN_PIPELINE:
-    description: "Maps UKBB protein assay IDs to HPA OSP native IDs via UniProt AC"
-    default_source_ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
-    default_target_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
-    steps:
-      - step_id: "S1_UKBB_NATIVE_TO_UNIPROT"
-        description: "Convert UKBB Assay IDs to UniProt ACs"
-        action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          endpoint_context: "SOURCE"
-          output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
-          
-      - step_id: "S2_RESOLVE_UNIPROT_HISTORY"
-        description: "Resolve UniProt ACs via API"
-        action:
-          type: "EXECUTE_MAPPING_PATH"
-          path_name: "RESOLVE_UNIPROT_HISTORY_VIA_API"
-          
-      - step_id: "S3_FILTER_BY_HPA_PRESENCE"
-        description: "Filter to keep only those in HPA"
-        action:
-          type: "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
-          endpoint_context: "TARGET"
-          ontology_type_to_match: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
-          
-      - step_id: "S4_HPA_UNIPROT_TO_NATIVE"
-        description: "Convert to HPA native IDs"
-        action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          endpoint_context: "TARGET"
-          input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
-          output_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
+  ukbb_to_hpa_protein:
+    mapping_strategy_steps:
+      - step_name: "convert_ukbb_to_uniprot"
+        action: "CONVERT_IDENTIFIERS_LOCAL"
+        action_parameters:
+          source_column: "ukbb_protein_id"
+          target_column: "uniprot_ac"
+          conversion_table: "ukbb_protein_to_uniprot"
+          source_id_type: "UKBB_PROTEIN_ID"
+          target_id_type: "UniProt_AC"
+        is_required: true
+        
+      - step_name: "resolve_uniprot_history"
+        action: "EXECUTE_MAPPING_PATH"
+        action_parameters:
+          mapping_path: "uniprot_history_resolver"
+          source_column: "uniprot_ac"
+          target_column: "resolved_uniprot_ac"
+        is_required: false  # Continue even if history resolution fails
+        
+      - step_name: "filter_by_hpa"
+        action: "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
+        action_parameters:
+          target_resource: "HPA"
+          identifier_column: "resolved_uniprot_ac"
+          identifier_type: "UniProt_AC"
+        is_required: false  # Optional filtering step
+        
+      - step_name: "convert_to_hpa_native"
+        action: "CONVERT_IDENTIFIERS_LOCAL"
+        action_parameters:
+          source_column: "resolved_uniprot_ac"
+          target_column: "hpa_protein_id"
+          conversion_table: "hpa_uniprot_to_native"
+          source_id_type: "UniProt_AC"
+          target_id_type: "HPA_PROTEIN_ID"
+        is_required: true
 ```
 
 ## Using YAML Strategies in Code
@@ -101,6 +111,41 @@ result = await executor.execute_yaml_strategy(
     progress_callback=progress_callback
 )
 ```
+
+## Using Optional Steps
+
+The `is_required` field allows you to create more resilient mapping strategies:
+
+```yaml
+mapping_strategies:
+  flexible_mapping:
+    mapping_strategy_steps:
+      # Critical step - must succeed
+      - step_name: "get_initial_ids"
+        action: "EXECUTE_MAPPING_PATH"
+        action_parameters:
+          mapping_path: "primary_source"
+        is_required: true
+        
+      # Try enrichment - nice to have
+      - step_name: "enrich_metadata"
+        action: "EXECUTE_MAPPING_PATH"
+        action_parameters:
+          mapping_path: "metadata_enrichment"
+        is_required: false
+        
+      # Fallback option if primary fails
+      - step_name: "alternative_mapping"
+        action: "EXECUTE_MAPPING_PATH"
+        action_parameters:
+          mapping_path: "secondary_source"
+        is_required: false
+```
+
+This pattern is useful for:
+- Adding optional enrichment steps
+- Implementing fallback mechanisms
+- Continuing despite partial data availability
 
 ## Workflow
 

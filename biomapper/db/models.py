@@ -168,7 +168,8 @@ class MappingPath(Base):
     id = Column(Integer, primary_key=True)
     source_type = Column(String, nullable=False)  # e.g., 'Gene_Name'
     target_type = Column(String, nullable=False)  # e.g., 'UniProtKB_AC'
-    name = Column(String, unique=True, nullable=False)  # User-friendly name
+    name = Column(String, nullable=False)  # User-friendly name
+    entity_type = Column(String, nullable=False) # e.g., 'protein', 'gene', 'test_optional'
     description = Column(Text)
     priority = Column(Integer, default=0)  # Lower number means higher priority
     is_active = Column(Boolean, default=True)
@@ -193,8 +194,10 @@ class MappingPath(Base):
         cascade="all, delete-orphan",
     )
 
+    __table_args__ = (UniqueConstraint('name', 'entity_type', name='uq_mapping_path_name_entity_type'),)
+
     def __repr__(self):
-        return f"<MappingPath id={self.id} name='{self.name}' {self.source_type}->{self.target_type}>"
+        return f"<MappingPath id={self.id} name='{self.name}' entity_type='{self.entity_type}' {self.source_type}->{self.target_type}>"
 
 
 class MappingPathStep(Base):
@@ -522,6 +525,7 @@ class MappingStrategyStep(Base):
     description = Column(Text, nullable=True)
     action_type = Column(String, nullable=False)  # e.g., "CONVERT_IDENTIFIERS_LOCAL"
     action_parameters = Column(JSON, nullable=True)  # JSON dict of parameters for the action
+    is_required = Column(Boolean, nullable=False, default=True, server_default="true")  # Whether this step is required for strategy success
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # Default output directory relative to project root
     output_dir: Path = PROJECT_ROOT / "output"
 
+    # --- CSV Adapter Settings ---
+    # Default cache size for CSV adapter
+    csv_adapter_cache_size: int = 10
+
     # --- API Keys (Optional - prefer environment variables) ---
     # Example: openai_api_key: str | None = None
 

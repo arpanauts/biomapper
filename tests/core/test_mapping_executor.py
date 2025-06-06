@@ -1831,3 +1831,247 @@ async def test_execute_path_error_handling(mapping_executor):
         
         # Verify an empty dict is returned on error
         assert results == {}
+
+
+# Tests for the refactored legacy execute_strategy handlers
+@pytest.mark.asyncio
+async def test_handle_convert_identifiers_local_success(mapping_executor):
+    """Test _handle_convert_identifiers_local with valid parameters."""
+    action_parameters = {
+        'endpoint_context': 'SOURCE',
+        'output_ontology_type': 'TARGET_ONTOLOGY',
+        'input_ontology_type': 'SOURCE_ONTOLOGY'
+    }
+    
+    # Mock the StrategyAction to succeed
+    with patch('biomapper.core.strategy_actions.convert_identifiers_local.ConvertIdentifiersLocalAction') as mock_action_class:
+        mock_action = AsyncMock()
+        mock_action_class.return_value = mock_action
+        mock_action.execute.return_value = {
+            'output_identifiers': ['converted1', 'converted2'],
+            'output_ontology_type': 'TARGET_ONTOLOGY',
+            'details': {'converted_count': 2}
+        }
+        
+        # Call the handler
+        result = await mapping_executor._handle_convert_identifiers_local(
+            current_identifiers=['id1', 'id2'],
+            action_parameters=action_parameters,
+            current_source_ontology_type='SOURCE_ONTOLOGY',
+            target_ontology_type='TARGET_ONTOLOGY',
+            step_id='TEST_STEP',
+            step_description='Test step'
+        )
+        
+        # Verify the result
+        assert result['status'] == 'success'
+        assert result['output_identifiers'] == ['converted1', 'converted2']
+        assert result['output_ontology_type'] == 'TARGET_ONTOLOGY'
+        assert 'details' in result
+
+
+@pytest.mark.asyncio
+async def test_handle_convert_identifiers_local_fallback(mapping_executor):
+    """Test _handle_convert_identifiers_local fallback when StrategyAction fails."""
+    action_parameters = {
+        'endpoint_context': 'SOURCE',
+        'output_ontology_type': 'TARGET_ONTOLOGY',
+        'input_ontology_type': 'SOURCE_ONTOLOGY'
+    }
+    
+    # Mock the StrategyAction to fail
+    with patch('biomapper.core.strategy_actions.convert_identifiers_local.ConvertIdentifiersLocalAction') as mock_action_class:
+        mock_action = AsyncMock()
+        mock_action_class.return_value = mock_action
+        mock_action.execute.side_effect = ValueError("Missing endpoint configurations")
+        
+        # Call the handler
+        result = await mapping_executor._handle_convert_identifiers_local(
+            current_identifiers=['id1', 'id2'],
+            action_parameters=action_parameters,
+            current_source_ontology_type='SOURCE_ONTOLOGY',
+            target_ontology_type='TARGET_ONTOLOGY',
+            step_id='TEST_STEP',
+            step_description='Test step'
+        )
+        
+        # Verify the fallback result
+        assert result['status'] == 'success'
+        assert result['output_identifiers'] == ['id1', 'id2']  # Same identifiers
+        assert result['output_ontology_type'] == 'TARGET_ONTOLOGY'  # Updated ontology type
+        assert result['details']['fallback_mode'] is True
+        assert 'strategy_action_error' in result['details']
+
+
+@pytest.mark.asyncio
+async def test_handle_convert_identifiers_local_missing_output_type(mapping_executor):
+    """Test _handle_convert_identifiers_local with missing output_ontology_type."""
+    action_parameters = {
+        'endpoint_context': 'SOURCE',
+        # Missing output_ontology_type
+    }
+    
+    # Call the handler
+    result = await mapping_executor._handle_convert_identifiers_local(
+        current_identifiers=['id1', 'id2'],
+        action_parameters=action_parameters,
+        current_source_ontology_type='SOURCE_ONTOLOGY',
+        target_ontology_type='TARGET_ONTOLOGY',
+        step_id='TEST_STEP',
+        step_description='Test step'
+    )
+    
+    # Verify the error result
+    assert result['status'] == 'failed'
+    assert 'output_ontology_type is required' in result['error']
+    assert result['output_identifiers'] == ['id1', 'id2']
+
+
+@pytest.mark.asyncio
+async def test_handle_execute_mapping_path_success(mapping_executor):
+    """Test _handle_execute_mapping_path with valid parameters."""
+    action_parameters = {
+        'mapping_path_name': 'TEST_PATH'
+    }
+    
+    # Mock the StrategyAction to succeed
+    with patch('biomapper.core.strategy_actions.execute_mapping_path.ExecuteMappingPathAction') as mock_action_class:
+        mock_action = AsyncMock()
+        mock_action_class.return_value = mock_action
+        mock_action.execute.return_value = {
+            'output_identifiers': ['mapped1', 'mapped2'],
+            'output_ontology_type': 'TARGET_ONTOLOGY',
+            'details': {'mapped_count': 2}
+        }
+        
+        # Call the handler
+        result = await mapping_executor._handle_execute_mapping_path(
+            current_identifiers=['id1', 'id2'],
+            action_parameters=action_parameters,
+            current_source_ontology_type='SOURCE_ONTOLOGY',
+            target_ontology_type='TARGET_ONTOLOGY',
+            step_id='TEST_STEP',
+            step_description='Test step'
+        )
+        
+        # Verify the result
+        assert result['status'] == 'success'
+        assert result['output_identifiers'] == ['mapped1', 'mapped2']
+        assert 'details' in result
+
+
+@pytest.mark.asyncio
+async def test_handle_execute_mapping_path_fallback(mapping_executor):
+    """Test _handle_execute_mapping_path fallback when StrategyAction fails."""
+    action_parameters = {
+        'mapping_path_name': 'TEST_PATH'
+    }
+    
+    # Mock the StrategyAction to fail
+    with patch('biomapper.core.strategy_actions.execute_mapping_path.ExecuteMappingPathAction') as mock_action_class:
+        mock_action = AsyncMock()
+        mock_action_class.return_value = mock_action
+        mock_action.execute.side_effect = Exception("Path not found")
+        
+        # Call the handler
+        result = await mapping_executor._handle_execute_mapping_path(
+            current_identifiers=['id1', 'id2'],
+            action_parameters=action_parameters,
+            current_source_ontology_type='SOURCE_ONTOLOGY',
+            target_ontology_type='TARGET_ONTOLOGY',
+            step_id='TEST_STEP',
+            step_description='Test step'
+        )
+        
+        # Verify the fallback result
+        assert result['status'] == 'success'
+        assert result['output_identifiers'] == ['id1', 'id2']  # Same identifiers
+        assert result['details']['fallback_mode'] is True
+        assert 'strategy_action_error' in result['details']
+
+
+@pytest.mark.asyncio
+async def test_handle_execute_mapping_path_missing_path(mapping_executor):
+    """Test _handle_execute_mapping_path with missing path parameters."""
+    action_parameters = {
+        # Missing both mapping_path_name and resource_name
+    }
+    
+    # Call the handler
+    result = await mapping_executor._handle_execute_mapping_path(
+        current_identifiers=['id1', 'id2'],
+        action_parameters=action_parameters,
+        current_source_ontology_type='SOURCE_ONTOLOGY',
+        target_ontology_type='TARGET_ONTOLOGY',
+        step_id='TEST_STEP',
+        step_description='Test step'
+    )
+    
+    # Verify the error result
+    assert result['status'] == 'failed'
+    assert 'mapping_path_name or resource_name is required' in result['error']
+
+
+@pytest.mark.asyncio
+async def test_handle_filter_identifiers_by_target_presence_success(mapping_executor):
+    """Test _handle_filter_identifiers_by_target_presence with valid parameters."""
+    action_parameters = {
+        'endpoint_context': 'TARGET',
+        'ontology_type_to_match': 'TARGET_ONTOLOGY'
+    }
+    
+    # Mock the StrategyAction to succeed
+    with patch('biomapper.core.strategy_actions.filter_by_target_presence.FilterByTargetPresenceAction') as mock_action_class:
+        mock_action = AsyncMock()
+        mock_action_class.return_value = mock_action
+        mock_action.execute.return_value = {
+            'output_identifiers': ['filtered1'],
+            'output_ontology_type': 'SOURCE_ONTOLOGY',
+            'details': {'filtered_count': 1}
+        }
+        
+        # Call the handler
+        result = await mapping_executor._handle_filter_identifiers_by_target_presence(
+            current_identifiers=['id1', 'id2'],
+            action_parameters=action_parameters,
+            current_source_ontology_type='SOURCE_ONTOLOGY',
+            target_ontology_type='TARGET_ONTOLOGY',
+            step_id='TEST_STEP',
+            step_description='Test step'
+        )
+        
+        # Verify the result
+        assert result['status'] == 'success'
+        assert result['output_identifiers'] == ['filtered1']
+        assert 'details' in result
+
+
+@pytest.mark.asyncio
+async def test_handle_filter_identifiers_by_target_presence_fallback(mapping_executor):
+    """Test _handle_filter_identifiers_by_target_presence fallback when StrategyAction fails."""
+    action_parameters = {
+        'endpoint_context': 'TARGET',
+        'ontology_type_to_match': 'TARGET_ONTOLOGY'
+    }
+    
+    # Mock the StrategyAction to fail
+    with patch('biomapper.core.strategy_actions.filter_by_target_presence.FilterByTargetPresenceAction') as mock_action_class:
+        mock_action = AsyncMock()
+        mock_action_class.return_value = mock_action
+        mock_action.execute.side_effect = Exception("Endpoint not found")
+        
+        # Call the handler
+        result = await mapping_executor._handle_filter_identifiers_by_target_presence(
+            current_identifiers=['id1', 'id2'],
+            action_parameters=action_parameters,
+            current_source_ontology_type='SOURCE_ONTOLOGY',
+            target_ontology_type='TARGET_ONTOLOGY',
+            step_id='TEST_STEP',
+            step_description='Test step'
+        )
+        
+        # Verify the fallback result
+        assert result['status'] == 'success'
+        assert result['output_identifiers'] == ['id1', 'id2']  # Same identifiers (no filtering)
+        assert result['details']['fallback_mode'] is True
+        assert 'strategy_action_error' in result['details']

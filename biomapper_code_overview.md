@@ -9,9 +9,16 @@ Biomapper is a unified Python toolkit designed for standardizing biological iden
 - **`ResourceMetadataManager`**: Central class for managing resource capabilities, performance metrics, and ontology coverage
 - **`MappingDispatcher`**: Orchestrates mapping operations across resources based on capabilities and performance
 - **`MetamappingEngine`**: Handles multi-step mapping paths when direct mappings aren't available
+- **`MappingExecutor`**: Executes both iterative discovery and YAML-defined mapping strategies
 - Provides intelligent routing of mapping operations and optimizes performance
 
-### 2. Enhanced Entity Mappers
+### 2. YAML-Defined Mapping Strategies
+- **Declarative Pipeline Definition**: Define complex mapping workflows in YAML configuration
+- **Action Types**: Pre-defined operations including `CONVERT_IDENTIFIERS_LOCAL`, `EXECUTE_MAPPING_PATH`, and `FILTER_IDENTIFIERS_BY_TARGET_PRESENCE`
+- **Optional Steps**: Support for `is_required` field allowing graceful handling of step failures
+- **Strategy Actions**: Modular action handlers in `biomapper/core/strategy_actions/`
+
+### 3. Enhanced Entity Mappers
 - **`AbstractEntityMapper`**: Base class for all entity mappers with common functionality
 - **`MetaboliteNameMapper`**: Maps metabolite names to standard identifiers (ChEBI, HMDB, etc.)
 - **`ProteinNameMapper`**: Maps protein names and identifiers (UniProt, PDB, etc.)
@@ -19,7 +26,7 @@ Biomapper is a unified Python toolkit designed for standardizing biological iden
 - **`DiseaseMapper`**: Maps disease terms to standard ontologies (MONDO, DOID, etc.)
 - **`PathwayMapper`**: Maps pathway names to standard identifiers (Reactome, KEGG, etc.)
 
-### 3. Resource Adapters
+### 4. Resource Adapters
 - **`CacheResourceAdapter`**: Interfaces with the SQLite mapping cache
 - **`SpokeResourceAdapter`**: Connects to the SPOKE knowledge graph
 - **`APIResourceAdapter`**: Generic adapter for external API clients
@@ -28,18 +35,18 @@ Biomapper is a unified Python toolkit designed for standardizing biological iden
   - **`UniChemAdapter`**: Cross-referencing of chemical structure identifiers
   - **`UniProtAdapter`**: Universal Protein Resource integration
 
-### 4. API Clients
+### 5. API Clients
 - **`ChEBIClient`**: Client for the ChEBI database
 - **`RefMetClient`**: Client for the RefMet database
 - **`UniChemClient`**: Client for the UniChem service
 - **`UniProtClient`**: Client for the UniProt database
 
-### 5. RAG Components
+### 6. RAG Components
 - **`ChromaCompoundStore`**: Vector database for storing compound information
 - **`PromptManager`**: Manages prompts for LLM-based mapping
 - **`RAGMapper`**: Mapping using retrieval augmented generation
 
-### 6. Utilities
+### 7. Utilities
 - Monitoring tools for tracking performance
 - Optimization utilities for LLM prompts
 - Data loaders and processors
@@ -57,6 +64,8 @@ Biomapper is a unified Python toolkit designed for standardizing biological iden
 biomapper/
 ├── biomapper/          # Main package source code
 │   ├── core/           # Core abstract classes and base functionality
+│   │   ├── strategy_actions/    # YAML strategy action handlers
+│   │   ├── mapping_executor.py  # Executes mapping strategies
 │   ├── llm/            # LLM integration components
 │   ├── loaders/        # Data loading utilities
 │   ├── mapping/        # Ontology mapping components
@@ -142,7 +151,30 @@ for result in results:
                   f"via {step['resource']}")
 ```
 
-### 3. LLM-Based Mapping
+### 3. YAML-Defined Mapping Strategy
+```python
+from biomapper.core.mapping_executor import MappingExecutor
+
+# Execute a multi-step strategy defined in YAML
+executor = MappingExecutor()
+result = await executor.execute_yaml_strategy(
+    strategy_name="ukbb_to_hpa_protein",
+    source_endpoint_name="UKBB", 
+    target_endpoint_name="HPA",
+    input_identifiers=["ADAMTS13", "ALB"],
+    use_cache=True
+)
+
+# Access mapped values and step details
+for source_id, mapping in result['results'].items():
+    print(f"{source_id} -> {mapping['mapped_value']}")
+    
+# View execution details for each step
+for step in result['step_results']:
+    print(f"Step: {step['step_name']}, Status: {step['status']}")
+```
+
+### 4. LLM-Based Mapping
 ```python
 from biomapper.mapping.llm_mapper import LLMMapper
 
@@ -150,7 +182,7 @@ mapper = LLMMapper(model="gpt-4")
 result = mapper.map_term("ATP", target_ontology="CHEBI")
 ```
 
-### 4. RAG-Based Mapping
+### 5. RAG-Based Mapping
 ```python
 # Requires setup of ChromaDB and configuration
 from biomapper.mapping.rag.store import ChromaCompoundStore

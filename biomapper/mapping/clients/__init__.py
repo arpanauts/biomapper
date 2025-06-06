@@ -9,4 +9,10 @@ from .metaboanalyst_client import (
 from .translator_name_resolver_client import TranslatorNameResolverClient
 from .umls_client import UMLSClient
 from .generic_file_client import GenericFileLookupClient
-from .pubchem_rag_client import PubChemRAGMappingClient
+
+# Conditional import for optional dependencies
+try:
+    from .pubchem_rag_client import PubChemRAGMappingClient
+except ImportError:
+    # PubChemRAGMappingClient requires qdrant_client which may not be installed
+    PubChemRAGMappingClient = None

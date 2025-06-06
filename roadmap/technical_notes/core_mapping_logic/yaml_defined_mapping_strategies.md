@@ -12,7 +12,7 @@
 
 ## 2. Core Concept: The `mapping_strategies` YAML Section
 
-*   **Location:** Defined within the relevant `*_config.yaml` file (e.g., `protein_config.yaml`) or potentially a shared `strategies.yaml`.
+*   **Location and Context:** The `mapping_strategies` section is a key part of the comprehensive `*_config.yaml` files (e.g., `protein_config.yaml`). These YAML files also define other critical entities such as `ontologies`, `databases` (Endpoints), `additional_resources` (MappingResources), and importantly, `mapping_paths`. All these definitions are parsed by a script (e.g., `scripts/populate_metamapper_db.py`) and loaded into the `metamapper.db` database, making them available at runtime.
 *   **Structure:**
     *   A top-level `mapping_strategies` key.
     *   Under this, each key is a unique `strategy_name` (e.g., `HPA_TO_UKBB_PROTEIN_RESOLVED`).
@@ -20,34 +20,39 @@
         *   `description` (String): Human-readable explanation.
         *   `default_source_ontology_type` (String, Optional): The expected input ID type for the strategy's first step if not overridden in the `execute_mapping` call.
         *   `default_target_ontology_type` (String, Optional): The final output ID type for the strategy's last step if not overridden.
-        *   `steps` (List): An ordered sequence of operations.
+        *   `mapping_strategy_steps` (List): An ordered sequence of operations.
             *   Each step is an object with:
-                *   `step_id` (String): A unique identifier for the step (for logging, debugging).
-                *   `description` (String, Optional): Explanation of the step's purpose.
-                *   `action` (Object): Defines the operation for this step.
-                    *   `type` (String): Specifies the kind of operation (e.g., `CONVERT_IDENTIFIERS_LOCAL`). This is a key from a predefined set of action types.
-                    *   Additional parameters specific to the `action.type`.
+                *   `step_name` (String): A descriptive name for the step (for logging, debugging).
+                *   `action` (String): Specifies the kind of operation (e.g., `CONVERT_IDENTIFIERS_LOCAL`). This is a key from a predefined set of action types.
+                *   `action_parameters` (Object): Parameters specific to the action type.
+                *   `is_required` (Boolean, Optional): Whether the step must succeed for the strategy to continue. Defaults to `true`. When `false`, step failures are logged but execution continues.
 *   **Data Flow:** The output (a list/set of identifiers, potentially with associated metadata) from `step N` automatically becomes the input for `step N+1`. The `MappingExecutor` manages these intermediate results.
 
 ## 3. `action.type` Primitives
 
 *   **Concept:** Each `action.type` string is a command that instructs the `MappingExecutor` to execute a specific, modular piece of Python logic (an action handler).
-*   **Initial Proposed `action.type`s:**
+*   **Initial Proposed Action Types:**
     *   **`CONVERT_IDENTIFIERS_LOCAL`**
-        *   **Description:** Converts identifiers from one ontology type to another using the local data and mappings defined within a single endpoint.
-        *   **YAML Parameters:**
-            *   `endpoint_context` (String: "SOURCE" or "TARGET"): Specifies whether to use the source or target endpoint passed to `execute_mapping`.
-            *   `output_ontology_type` (String): The desired ontology type for the output identifiers.
-            *   `input_ontology_type` (String, Optional): The ontology type of the input identifiers for this step. If omitted, it's inferred from the previous step's output or the strategy's `default_source_ontology_type`.
+        *   **Description:** Converts identifiers from one type to another using a local database table.
+        *   **Action Parameters:**
+            *   `source_column` (String): The column containing source identifiers.
+            *   `target_column` (String): The column name for converted identifiers.
+            *   `conversion_table` (String): The database table to use for conversion.
+            *   `source_id_type` (String): The type of the source identifiers.
+            *   `target_id_type` (String): The desired target identifier type.
     *   **`EXECUTE_MAPPING_PATH`**
-        *   **Description:** Executes a predefined atomic `mapping_path` (which typically involves a mapping client).
-        *   **YAML Parameters:**
-            *   `path_name` (String): The name of the `mapping_path` (defined in the `mapping_paths` section of the YAML) to execute.
+        *   **Description:** Executes a `MappingPath` that is pre-defined in the `mapping_paths` section of a `*_config.yaml` file and has been loaded into the `metamapper.db`.
+        *   **Functionality:** This action type allows a strategy to leverage complex, multi-step transformation routes as a single, reusable step. The `MappingExecutor` looks up the specified `MappingPath` by its name and entity type in the database and then executes its defined sequence of path steps.
+        *   **Action Parameters:**
+            *   `path_name` (String): The unique name of the `MappingPath` (as defined in the `mapping_paths` section of the YAML and loaded into the database) to execute.
+            *   `source_column` (String, Optional): Override the default source column.
+            *   `target_column` (String, Optional): Override the default target column.
     *   **`FILTER_IDENTIFIERS_BY_TARGET_PRESENCE`**
-        *   **Description:** Filters a list of identifiers, retaining only those that are present in a specified ontology type within the target endpoint's data.
-        *   **YAML Parameters:**
-            *   `endpoint_context` (String: must be "TARGET" or resolve to the target endpoint).
-            *   `ontology_type_to_match` (String): The ontology type in the target endpoint against which the input identifiers will be checked.
+        *   **Description:** Filters the dataset to only include rows where identifiers exist in the target resource.
+        *   **Action Parameters:**
+            *   `target_resource` (String): The target resource to check against.
+            *   `identifier_column` (String): The column containing identifiers to check.
+            *   `identifier_type` (String): The type of identifiers being checked.
 *   **Adding New `action.type`s:**
     *   Define a new, unique `action.type` string.
     *   Implement a corresponding Python handler module/function (see Code Organization).
@@ -77,41 +82,61 @@
 ```yaml
 # In protein_config.yaml
 mapping_strategies:
-  HPA_TO_UKBB_PROTEIN_RESOLVED:
-    description: "Maps HPA OSP proteins to UKBB proteins, including UniProt historical resolution, outputting UKBB native IDs."
-    default_source_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
-    default_target_ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
-    steps:
-      - step_id: "S1_HPA_NATIVE_TO_UNIPROT"
-        description: "Convert source HPA native IDs to their UniProt ACs."
-        action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          endpoint_context: "SOURCE"
-          output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+  hpa_to_ukbb_protein:
+    mapping_strategy_steps:
+      - step_name: "convert_hpa_to_uniprot"
+        action: "CONVERT_IDENTIFIERS_LOCAL"
+        action_parameters:
+          source_column: "hpa_protein_id"
+          target_column: "uniprot_ac"
+          conversion_table: "hpa_uniprot_mapping"
+          source_id_type: "HPA_PROTEIN_ID"
+          target_id_type: "UniProt_AC"
+        is_required: true
 
-      - step_id: "S2_RESOLVE_UNIPROT_HISTORY"
-        description: "Resolve UniProt ACs via UniProt API."
-        action:
-          type: "EXECUTE_MAPPING_PATH"
-          path_name: "RESOLVE_UNIPROT_HISTORY_VIA_API"
+      - step_name: "resolve_uniprot_history"
+        action: "EXECUTE_MAPPING_PATH"
+        action_parameters:
+          mapping_path: "uniprot_history_resolver"
+          source_column: "uniprot_ac"
+          target_column: "resolved_uniprot_ac"
+        is_required: false  # Optional: Continue if API fails
 
-      - step_id: "S3_MATCH_RESOLVED_UNIPROT_IN_UKBB"
-        description: "Filter resolved UniProt ACs by presence in UKBB data."
-        action:
-          type: "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
-          endpoint_context: "TARGET"
-          ontology_type_to_match: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+      - step_name: "filter_by_ukbb_presence"
+        action: "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
+        action_parameters:
+          target_resource: "UKBB"
+          identifier_column: "resolved_uniprot_ac"
+          identifier_type: "UniProt_AC"
+        is_required: false  # Optional: Allow partial results
 
-      - step_id: "S4_UKBB_UNIPROT_TO_NATIVE"
-        description: "Convert matching UKBB UniProt ACs to UKBB native Assay IDs."
-        action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          endpoint_context: "TARGET"
-          input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY" # Explicitly stating input for clarity
-          output_ontology_type: "{{STRATEGY_TARGET_ONTOLOGY_TYPE}}" # Uses strategy's default target
+      - step_name: "convert_to_ukbb_assay"
+        action: "CONVERT_IDENTIFIERS_LOCAL"
+        action_parameters:
+          source_column: "resolved_uniprot_ac"
+          target_column: "ukbb_assay_id"
+          conversion_table: "ukbb_uniprot_to_assay"
+          source_id_type: "UniProt_AC"
+          target_id_type: "UKBB_ASSAY_ID"
+        is_required: true
 ```
 
-## 7. Documentation and Management of Actions & Strategies
+## 7. The `is_required` Field and Error Handling
+
+*   **Purpose:** The `is_required` field provides fine-grained control over strategy execution flow in the presence of step failures.
+*   **Behavior:**
+    *   `is_required: true` (default): If the step fails, the entire strategy execution halts. Previous successful steps' results are preserved and returned.
+    *   `is_required: false`: If the step fails, a warning is logged, but execution continues with the next step. This enables:
+        *   **Optional enrichment steps** that enhance data when possible but aren't critical
+        *   **Fallback mechanisms** where multiple approaches are tried in sequence
+        *   **Partial result scenarios** where some mappings are better than none
+*   **Use Cases:**
+    *   **Critical conversions:** Set `is_required: true` for steps that convert between essential identifier types
+    *   **API calls:** Set `is_required: false` for external API calls that might fail due to network issues
+    *   **Filtering steps:** Often set `is_required: false` as filtering is typically an optimization
+    *   **Alternative paths:** Use multiple optional steps to try different mapping approaches
+
+## 8. Documentation and Management of Actions & Strategies
 
 *   **Action Type Registry:** A central place (e.g., in documentation or a dedicated registry within the code) should list all available `action.type`s.
 *   **Action Documentation:** Each `action.type` must be documented with:
@@ -121,7 +146,7 @@ mapping_strategies:
 *   **Strategy Documentation:** Complex or commonly used strategies should be documented, explaining their purpose and flow.
 *   **Schema Validation:** Consider implementing JSON Schema validation for the `mapping_strategies` section in the YAML to catch structural errors early.
 
-## 8. Relationship to Other Mapping Approaches
+## 9. Relationship to Other Mapping Approaches
 
 It's important to understand how YAML-Defined Mapping Strategies fit within the broader Biomapper mapping ecosystem, particularly in relation to the default iterative mapping strategy and the concept of bidirectional mapping with reconciliation.
 

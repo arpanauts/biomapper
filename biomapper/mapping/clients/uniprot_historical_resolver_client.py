@@ -91,9 +91,12 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
             async with self.semaphore:
                 async with aiohttp.ClientSession(timeout=request_timeout) as session:
                     logger.debug(f"Querying UniProt REST API: {self.base_url} with params: {params}")
+                    logger.info(f"UniProtClient DEBUG: Querying UniProt with: {query}")
                     async with session.get(self.base_url, params=params) as response:
                         if response.status == 200:
-                            return await response.json()
+                            data = await response.json()
+                            logger.info(f"UniProtClient DEBUG: Response for query [{query}]: {len(data.get('results', []))} results")
+                            return data
                         else:
                             error_text = await response.text()
                             error_msg = f"UniProt API error: Status {response.status}, Message: {error_text}"
@@ -199,16 +202,26 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
         # Process the results
         primary_map = {id: False for id in ids}
         
+        logger.info(f"UniProtClient DEBUG: Checking primary accessions for {ids}")
+        
         if "results" in results:
+            logger.info(f"UniProtClient DEBUG: Found {len(results['results'])} entries in API response")
             for entry in results["results"]:
                 primary_acc = entry.get("primaryAccession")
                 if not primary_acc:
+                    logger.debug(f"UniProtClient DEBUG: Entry without primaryAccession: {entry}")
                     continue
                     
                 # Check if this primary accession matches any of our input IDs
                 if primary_acc in primary_map:
                     primary_map[primary_acc] = True
+                    logger.info(f"UniProtClient DEBUG: Found primary accession match: {primary_acc}")
+                else:
+                    logger.debug(f"UniProtClient DEBUG: Primary accession {primary_acc} not in our input list")
+        else:
+            logger.warning(f"UniProtClient DEBUG: No 'results' key in API response: {results.keys()}")
         
+        logger.info(f"UniProtClient DEBUG: Primary accession check results: {primary_map}")
         return primary_map
     
     async def _resolve_batch(self, batch_ids: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -277,13 +290,17 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
             logger.info("No valid UniProt IDs to process")
             return results
             
+        logger.info(f"UniProtClient DEBUG: _resolve_batch processing {len(valid_ids)} valid IDs: {valid_ids}")
+            
         try:
             # STEP 1: Check if any of these IDs appear as secondary accessions in other entries
             # This helps detect demerged IDs that map to multiple primaries
             secondary_map = await self._check_as_secondary_accessions(valid_ids)
+            logger.info(f"UniProtClient DEBUG: Secondary accession check found: {len([k for k,v in secondary_map.items() if v])} IDs as secondary")
             
             # STEP 2: For IDs that don't appear as secondary accessions, check if they are primary accessions
             non_secondary_ids = [id for id in valid_ids if not secondary_map.get(id)]
+            logger.info(f"UniProtClient DEBUG: Checking {len(non_secondary_ids)} IDs as potential primary accessions: {non_secondary_ids}")
             primary_map = await self._check_as_primary_accessions(non_secondary_ids)
             
             # Process the results - first handle those that appear as secondary accessions
@@ -327,7 +344,16 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
                 else:
                     # If not found as primary and not in secondary_map, it's obsolete
                     # This is already the default state in results, no need to update
+                    logger.info(f"UniProtClient DEBUG: ID {acc_id} not found as primary (already marked obsolete)")
                     pass
+            
+            # Log final results
+            logger.info(f"UniProtClient DEBUG: _resolve_batch final results summary:")
+            for acc_id, info in results.items():
+                if info["found"]:
+                    logger.info(f"  {acc_id}: Found=True, Primary={info['is_primary']}, PrimaryIDs={info['primary_ids']}")
+                else:
+                    logger.info(f"  {acc_id}: Found=False (obsolete)")
                         
             return results
             
@@ -354,6 +380,7 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
         Args:
             identifiers: List of UniProt accession identifiers to resolve.
             config: Optional per-call configuration overrides.
+                    Can include 'bypass_cache': True to skip cache checking.
             
         Returns:
             Dictionary mapping each input identifier to a tuple:
@@ -376,17 +403,25 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
             await self._preload_cache()
             self._cache_preload_needed = False
         
+        # Check if cache should be bypassed
+        bypass_cache = config and config.get('bypass_cache', False)
+        if bypass_cache:
+            logger.info("UniProtHistoricalResolverClient: Bypassing cache as requested")
+        
         # Process identifiers in batches
         batch_size = 25  # Smaller batches for reliability
         batches = [identifiers[i:i+batch_size] for i in range(0, len(identifiers), batch_size)]
         
         for batch in batches:
-            # Check cache first
+            # Check cache first (unless bypassed)
             filtered_batch = []
             for identifier in batch:
-                cached_result = await self._get_from_cache(identifier)
-                if cached_result is not None:
-                    results[identifier] = cached_result
+                if not bypass_cache:
+                    cached_result = await self._get_from_cache(identifier)
+                    if cached_result is not None:
+                        results[identifier] = cached_result
+                    else:
+                        filtered_batch.append(identifier)
                 else:
                     filtered_batch.append(identifier)
             
@@ -416,14 +451,16 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
                         else:
                             result = (None, "obsolete")
                             
-                        # Store in results and cache
+                        # Store in results and cache (unless bypassed)
                         results[identifier] = result
-                        await self._add_to_cache(identifier, result)
+                        if not bypass_cache:
+                            await self._add_to_cache(identifier, result)
                     else:
                         # Should not happen, but handle for safety
                         error_result = (None, "error:not_processed")
                         results[identifier] = error_result
-                        await self._add_to_cache(identifier, error_result)
+                        if not bypass_cache:
+                            await self._add_to_cache(identifier, error_result)
                         
             except Exception as e:
                 logger.error(f"Error processing batch: {str(e)}")
@@ -431,7 +468,8 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
                     if identifier not in results:
                         error_result = (None, f"error:{str(e)}")
                         results[identifier] = error_result
-                        await self._add_to_cache(identifier, error_result)
+                        if not bypass_cache:
+                            await self._add_to_cache(identifier, error_result)
         
         # Count statistics for logging
         primary_count = secondary_count = demerged_count = obsolete_count = error_count = 0

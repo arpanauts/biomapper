@@ -1,0 +1,65 @@
+# Test configuration for optional steps in mapping strategies
+entity_type: test
+version: "1.0"
+
+ontologies:
+  TEST_SOURCE_ONTOLOGY:
+    name: Test Source Ontology
+    description: Test source ontology
+    is_primary: true
+  
+  TEST_INTERMEDIATE_ONTOLOGY:
+    name: Test Intermediate Ontology
+    description: Test intermediate ontology
+    is_primary: false
+  
+  TEST_TARGET_ONTOLOGY:
+    name: Test Target Ontology
+    description: Test target ontology
+    is_primary: false
+
+databases:
+  test_db:
+    endpoint:
+      name: test_endpoint
+      description: Test endpoint
+      connection_details:
+        type: test
+    properties:
+      primary: TEST_SOURCE_ONTOLOGY
+      mappings:
+        intermediate:
+          ontology_type: TEST_INTERMEDIATE_ONTOLOGY
+        target:
+          ontology_type: TEST_TARGET_ONTOLOGY
+
+mapping_strategies:
+  TEST_STRATEGY_WITH_OPTIONAL_STEPS:
+    description: Test strategy with both required and optional steps
+    default_source_ontology_type: TEST_SOURCE_ONTOLOGY
+    default_target_ontology_type: TEST_TARGET_ONTOLOGY
+    steps:
+      - step_id: S1_REQUIRED_CONVERSION
+        description: Required conversion step
+        is_required: true
+        action:
+          type: CONVERT_IDENTIFIERS_LOCAL
+          endpoint_context: SOURCE
+          output_ontology_type: TEST_INTERMEDIATE_ONTOLOGY
+      
+      - step_id: S2_OPTIONAL_FILTER
+        description: Optional filtering step that might fail
+        is_required: false
+        action:
+          type: FILTER_IDENTIFIERS_BY_TARGET_PRESENCE
+          endpoint_context: TARGET
+          ontology_type_to_match: TEST_INTERMEDIATE_ONTOLOGY
+      
+      - step_id: S3_REQUIRED_FINAL_CONVERSION
+        description: Required final conversion
+        is_required: true
+        action:
+          type: CONVERT_IDENTIFIERS_LOCAL
+          endpoint_context: TARGET
+          input_ontology_type: TEST_INTERMEDIATE_ONTOLOGY
+          output_ontology_type: TEST_TARGET_ONTOLOGY

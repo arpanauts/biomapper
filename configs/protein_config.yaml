@@ -64,8 +64,8 @@ ontologies:
 
   HPA_OSP_PROTEIN_ID_ONTOLOGY:
     name: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
-    description: "HPA Olink Sample Panel Protein Identifier"
-    identifier_prefix: "HPAOSP_"
+    description: "HPA Olink Sample Panel Protein Identifier (currently using Gene Symbols as proxy)"
+    identifier_prefix: "Gene:" # Changed from HPAOSP_ to align with data in hpa_osps.csv's 'gene' column
     is_primary: false
 
   QIN_OSP_PROTEIN_ID_ONTOLOGY:
@@ -145,7 +145,7 @@ databases:
       name: "UKBB_PROTEIN"
       type: "file_tsv"
       connection_details:
-        file_path: "${DATA_DIR}/../../../../procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
+        file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
         delimiter: "\t"
         
     properties:
@@ -155,7 +155,7 @@ databases:
           column: "UniProt"
           ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
         UKBB_PROTEIN_ASSAY_ID_ONTOLOGY:
-          column: "Assay_ID"
+          column: "Assay"
           ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
         PROTEIN_GENE_NAME_ONTOLOGY:
           column: "Assay" # Assuming gene name can be extracted or is directly in Assay
@@ -167,8 +167,8 @@ databases:
         input_ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
         output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
         config:
-          file_path: "${DATA_DIR}/../../../../procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
-          key_column: "Assay_ID"
+          file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
+          key_column: "Assay"
           value_column: "UniProt"
           delimiter: "\t"
           
@@ -177,9 +177,9 @@ databases:
         input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
         output_ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
         config:
-          file_path: "${DATA_DIR}/../../../../procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
+          file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
           key_column: "UniProt"
-          value_column: "Assay_ID"
+          value_column: "Assay"
           delimiter: "\t"
 #          
 #      - name: "ukbb_uniprot_identity_lookup"
@@ -187,7 +187,7 @@ databases:
 #        input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
 #        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
 #        config:
-#          file_path: "${DATA_DIR}/../../../../procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
+#          file_path: "${DATA_DIR}/UKBB_Protein_Meta_test.tsv"
 #          key_column: "UniProt"
 #          value_column: "UniProt"
 #          delimiter: "\t"
@@ -270,10 +270,10 @@ databases:
   hpa_osp:
     endpoint:
       name: "HPA_OSP_PROTEIN"
-      type: "file_csv"
+      type: "file_csv" # CSV format for HPA file
       connection_details:
-        file_path: "${DATA_DIR}/../../../../procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
-        delimiter: ","
+        file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
+        delimiter: "," # Comma delimiter for CSV
         
     properties:
       primary: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
@@ -291,20 +291,20 @@ databases:
         input_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
         output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
         config:
-          file_path: "${DATA_DIR}/../../../../procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
+          file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
           key_column: "gene"
           value_column: "uniprot"
-          delimiter: ","
+          delimiter: "," # Comma delimiter for CSV
           
       - name: "uniprot_to_hpa_osp_lookup"
         client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
         input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
         output_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
         config:
-          file_path: "${DATA_DIR}/../../../../procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
+          file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
           key_column: "uniprot"
           value_column: "gene"
-          delimiter: ","
+          delimiter: "," # Comma delimiter for CSV
 
   # 7. QIN OSP Protein Data
   qin_osp:

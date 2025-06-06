@@ -1,0 +1,22 @@
+UKBB to HPA Protein Mapping Results Summary
+==========================================
+Date: 2025-06-05
+Script: run_full_ukbb_hpa_mapping.py
+
+Input Dataset: /procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv
+Target Dataset: /procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv
+
+Total UKBB Identifiers: 2923
+Results:
+- Successfully Mapped: 465 (15.9%)
+- Filtered Out (Not in HPA): 2458 (84.1%)
+- Errors: 0 (0%)
+
+The mapping pipeline successfully executed with:
+1. Correct full dataset paths loaded from metamapper.db
+2. All 2923 UKBB identifiers processed
+3. 465 identifiers found matches in HPA dataset
+4. 2458 identifiers filtered out (not present in HPA)
+5. No errors encountered during mapping
+
+The results show that approximately 16% of UKBB protein identifiers have corresponding entries in the HPA dataset, which is a reasonable overlap for these two different protein panels.

@@ -40,13 +40,14 @@ To enable seamless data integration and advanced analytics by providing a robust
 ## Biomapper's Strategic Pillars
 
 1.  **Centralized Metadata Hub (`metamapper.db`):**
-    *   Stores configurations for data sources, ontologies, mapping clients, and mapping paths.
-    *   Acts as the single source of truth for how mappings are performed.
+    *   Stores configurations for data sources (Endpoints), ontologies, `MappingResource`s, detailed `MappingPath` definitions (the specific routes for transformation), and `MappingStrategy` definitions (loaded from YAML).
+    *   Acts as the single source of truth for how mappings are structured and performed.
 
-2.  **Declarative Mapping Pipelines (YAML DSL):**
-    *   Complex mapping strategies defined in human-readable YAML files.
-    *   Allows domain experts to configure workflows without deep coding knowledge.
-    *   Provides flexibility and rapid adaptation to new mapping needs.
+2.  **Declarative Mapping Strategies (YAML DSL):**
+    *   Complex `MappingStrategy`s are defined in human-readable YAML files.
+    *   Each strategy consists of a sequence of steps. Each step specifies an `ActionType` (e.g., convert, filter, fetch, or execute a pre-defined `MappingPath`) and its required parameters.
+    *   This allows domain experts to orchestrate mapping workflows without deep coding knowledge for the strategy itself.
+    *   Provides flexibility and rapid adaptation to new mapping needs by combining various `ActionType`s and `MappingPath`s.
 
 3.  **Modular & Extensible Architecture:**
     *   Plugin-based system for data clients and action handlers.

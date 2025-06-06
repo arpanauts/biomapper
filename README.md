@@ -40,6 +40,7 @@ graph TD
 ### Core Functionality
 - **ID Standardization**: Unified interface for standardizing biological identifiers
 - **Ontology Mapping**: Comprehensive ontology mapping using major biological databases and AI-powered techniques
+- **YAML-Defined Mapping Strategies**: Declarative multi-step mapping pipelines with optional step support
 - **High-Performance Caching**: SQLite-based mapping cache with bidirectional transitivity 
 - **Knowledge Graph Integration**: Seamless integration with SPOKE graph database
 - **Intelligent Resource Routing**: Metadata-driven orchestration of mapping resources
@@ -150,7 +151,48 @@ poetry run python examples/tutorials/tutorial_basic_llm_mapping.py
 ```
 
 Refer to the [examples documentation](examples/README.md) for detailed information about each example.
+
+## Quick Start: YAML Mapping Strategies
+
+Biomapper supports declarative YAML-defined mapping strategies for complex, multi-step workflows:
+
+```yaml
+# Define a mapping strategy in your configuration
+mapping_strategies:
+  ukbb_to_hpa_protein:
+    mapping_strategy_steps:
+      - step_name: "convert_to_uniprot"
+        action: "CONVERT_IDENTIFIERS_LOCAL"
+        action_parameters:
+          source_column: "ukbb_id"
+          target_column: "uniprot_ac"
+          conversion_table: "ukbb_to_uniprot"
+          source_id_type: "UKBB_ID"
+          target_id_type: "UniProt_AC"
+        is_required: true  # Must succeed
+        
+      - step_name: "optional_enrichment"
+        action: "EXECUTE_MAPPING_PATH"
+        action_parameters:
+          mapping_path: "uniprot_metadata"
+        is_required: false  # Continue if fails
 ```
+
+Execute the strategy in Python:
+
+```python
+from biomapper.core.mapping_executor import MappingExecutor
+
+executor = MappingExecutor()
+result = await executor.execute_yaml_strategy(
+    strategy_name="ukbb_to_hpa_protein",
+    source_endpoint_name="UKBB",
+    target_endpoint_name="HPA",
+    input_identifiers=["ADAMTS13", "ALB"]
+)
+```
+
+See the [YAML Strategies Tutorial](docs/tutorials/yaml_mapping_strategies.md) for more details.
 
 ## Project Structure
 

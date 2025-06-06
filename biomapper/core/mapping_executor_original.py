@@ -2,7 +2,6 @@ import asyncio
 import enum
 import importlib
 import json
-import os
 import time # Add import time
 from typing import List, Dict, Any, Optional, Tuple, Set, Union, Type
 from datetime import datetime, timezone, timedelta
@@ -244,24 +243,7 @@ class MappingResultBundle:
 
 
 class MappingExecutor(CompositeIdentifierMixin):
-    """
-    Main execution engine for biomapper mapping operations.
-    
-    The MappingExecutor handles the execution of mapping strategies and individual mapping
-    paths based on configurations stored in the metamapper database. It supports both
-    YAML-defined multi-step mapping strategies and direct path-based mappings.
-    
-    Key capabilities:
-    - Execute YAML-defined mapping strategies with multiple sequential steps
-    - Execute individual mapping paths between endpoints  
-    - Manage caching of mapping results and path configurations
-    - Handle bidirectional mapping validation
-    - Support composite identifier processing
-    - Track mapping metrics and performance
-    
-    The executor integrates with dedicated strategy action classes for specific operations
-    and provides comprehensive result tracking with provenance information.
-    """
+    """Executes mapping tasks based on configurations in metamapper.db."""
 
     def __init__(
         self,
@@ -1352,38 +1334,21 @@ class MappingExecutor(CompositeIdentifierMixin):
                 # {'primary_ids': [...], 'input_to_primary': {in:out}, 'errors': [...]}
                 # This needs to be converted to Dict[str, Tuple[Optional[List[str]], Optional[str]]]
                 mapping_start = time.time()
-                # Check if we should bypass cache for specific clients
-                client_config = None
-                if (hasattr(client_instance, '__class__') and 
-                    client_instance.__class__.__name__ == 'UniProtHistoricalResolverClient' and
-                    os.environ.get('BYPASS_UNIPROT_CACHE', '').lower() == 'true'):
-                    self.logger.info("Bypassing cache for UniProtHistoricalResolverClient")
-                    client_config = {'bypass_cache': True}
-                
-                client_results_from_map_identifiers = await client_instance.map_identifiers(input_values, config=client_config)
+                client_results_dict = await client_instance.map_identifiers(input_values)
                 self.logger.debug(f"TIMING: client.map_identifiers took {time.time() - mapping_start:.3f}s")
-            
-                processed_step_results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
-            
-                # Iterate through the results from the client
-                # client_results_from_map_identifiers is Dict[str, Tuple[Optional[List[str]], Optional[str_metadata]]]
-                for input_id, client_tuple in client_results_from_map_identifiers.items():
-                    mapped_ids_list, _ = client_tuple # metadata_or_component_id is the second part
                 
-                    # _execute_mapping_step is documented to return:
-                    # Dict[input_ID, Tuple[Optional[List[output_IDs]], Optional[successful_source_component_ID]]]
-                    # We will pass the mapped_ids_list as is.
-                    # The metadata from UniProtHistoricalResolver (e.g., "primary") is not a structural component_id.
-                    # So, pass None for the component_id part of the tuple here.
-                    if mapped_ids_list:
-                        processed_step_results[input_id] = (mapped_ids_list, None) 
-                    else:
-                        # Client indicated no mapping or an error for this specific ID in its structure
-                        processed_step_results[input_id] = (None, None)
-
-                # Ensure all original input_values passed to the step have an entry in the output
-                # This handles cases where an input_id might not even be in client_results_from_map_identifiers' keys
-                for val in input_values:
+                processed_step_results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
+                successful_mappings = client_results_dict.get('input_to_primary', {})
+                for input_id, mapped_primary_id in successful_mappings.items():
+                    processed_step_results[input_id] = ([mapped_primary_id], None) 
+                
+                errors_list = client_results_dict.get('errors', [])
+                for error_detail in errors_list:
+                    error_input_id = error_detail.get('input_id')
+                    if error_input_id:
+                        processed_step_results[error_input_id] = (None, None)
+                        
+                for val in input_values: # Ensure all original inputs are covered
                     if val not in processed_step_results:
                         processed_step_results[val] = (None, None)
                 self.logger.debug(f"TIMING: _execute_mapping_step completed in {time.time() - step_start:.3f}s")
@@ -1689,7 +1654,6 @@ class MappingExecutor(CompositeIdentifierMixin):
                         results[mapping.source_id] = {
                             "source_identifier": mapping.source_id,
                             "target_identifiers": target_identifiers,
-                            "mapped_value": target_identifiers[0] if target_identifiers else None,  # First target ID is the primary mapped value
                             "status": PathExecutionStatus.SUCCESS.value,
                             "message": "Found in cache.",
                             "confidence_score": mapping.confidence_score or 0.8,  # Default if not set
@@ -2399,7 +2363,6 @@ class MappingExecutor(CompositeIdentifierMixin):
             return {input_id: {
                 "source_identifier": input_id,
                 "target_identifiers": None,
-                "mapped_value": None,  # No mapping due to skip
                 "status": PathExecutionStatus.SKIPPED.value,
                 "message": f"Path skipped (hop count {path_hop_count} exceeds max_hop_count {max_hop_count})",
                 "path_id": path.id,
@@ -2465,7 +2428,6 @@ class MappingExecutor(CompositeIdentifierMixin):
                     
                     # Start with the initial input identifiers
                     current_input_ids = batch_set
-                    self.logger.info(f"EXEC_PATH_DEBUG ({path.name}): Batch {batch_index+1} current_input_ids: {current_input_ids}")
                     # Dict to track execution progress: input_id -> {final_ids: List[str], provenance: List[Dict]}
                     execution_progress = {input_id: {
                         'final_ids': [],
@@ -2498,16 +2460,11 @@ class MappingExecutor(CompositeIdentifierMixin):
                         
                         try:
                             # Execute the mapping step with the current set of input IDs
-                            input_values_for_step = list(step_input_ids)
-                            self.logger.info(f"EXEC_PATH_DEBUG ({path.name}): Step '{step.id}', inputs: {input_values_for_step}")
-                            
                             step_results = await self._execute_mapping_step(
                                 step=step,
-                                input_values=input_values_for_step,
+                                input_values=list(step_input_ids),
                                 is_reverse=is_reverse_execution
                             )
-                            
-                            self.logger.info(f"EXEC_PATH_DEBUG ({path.name}): Step '{step.id}', step_results: {step_results}")
                             
                             # Track which original inputs connect to which outputs through this step
                             # and update provenance information
@@ -2601,8 +2558,6 @@ class MappingExecutor(CompositeIdentifierMixin):
                     # Now execution_progress contains our raw results
                     raw_results = execution_progress
                     
-                    self.logger.info(f"EXEC_PATH_DEBUG ({path.name}): Batch {batch_index+1} final execution_progress: {execution_progress}")
-                    
                     # Transform the results
                     batch_results = {}
                     for original_id, result_data in raw_results.items():
@@ -2671,7 +2626,6 @@ class MappingExecutor(CompositeIdentifierMixin):
                         batch_results[original_id] = {
                             "source_identifier": original_id,
                             "target_identifiers": final_ids,
-                            "mapped_value": final_ids[0] if final_ids else None,  # First target ID is the primary mapped value
                             "status": PathExecutionStatus.SUCCESS.value,
                             "message": f"Successfully mapped via path: {path_name}",
                             "confidence_score": confidence_score,
@@ -2699,7 +2653,6 @@ class MappingExecutor(CompositeIdentifierMixin):
                     return {input_id: {
                         "source_identifier": input_id,
                         "target_identifiers": None,
-                        "mapped_value": None,  # No mapping due to error
                         "status": PathExecutionStatus.EXECUTION_ERROR.value,
                         "message": f"Error during path execution: {str(e)}",
                         "confidence_score": 0.0,
@@ -2733,7 +2686,6 @@ class MappingExecutor(CompositeIdentifierMixin):
                 combined_results[input_id] = {
                     "source_identifier": input_id,
                     "target_identifiers": None,
-                    "mapped_value": None,  # No mapping found
                     "status": PathExecutionStatus.NO_MAPPING_FOUND.value,
                     "message": f"No mapping found via path: {path.name}",
                     "confidence_score": 0.0,
@@ -2865,28 +2817,11 @@ class MappingExecutor(CompositeIdentifierMixin):
         entity_type: Optional[str] = None,
     ) -> MappingResultBundle:
         """
-        Execute a named mapping strategy from the database (legacy method).
+        Execute a named mapping strategy from the database.
         
-        **LEGACY METHOD**: This method is maintained for backward compatibility with 
-        older database-stored strategies that use the action handler approach. It loads 
-        a strategy and its steps from the metamapper database and attempts to execute 
-        them using legacy `_handle_*` methods.
-        
-        **IMPORTANT**: The handler methods (`_handle_convert_identifiers_local`, 
-        `_handle_execute_mapping_path`, `_handle_filter_identifiers_by_target_presence`) 
-        referenced by this method are currently **not implemented** in this class. 
-        They exist as references in the action_handlers dictionary but will raise 
-        "Handler not found" errors when called.
-        
-        **Current Status**: This method is incomplete and will fail for strategies 
-        that require the missing handler implementations. For functional strategy 
-        execution, use `execute_yaml_strategy()` which uses the newer strategy action 
-        classes in `biomapper.core.strategy_actions`.
-        
-        **Usage Notes**: 
-        - Use `execute_yaml_strategy()` for YAML-defined strategies (recommended)
-        - This method should only be used if the missing handlers are implemented
-        - The newer strategy action architecture provides better modularity and testing
+        This method loads a strategy and its steps from the metamapper database
+        and executes them in sequence, tracking the evolution of identifiers
+        and associated metadata through each step.
         
         Args:
             strategy_name: Name of the strategy to execute
@@ -2901,8 +2836,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         Raises:
             StrategyNotFoundError: If the strategy is not found in the database
             InactiveStrategyError: If the strategy is not active
-            MappingExecutionError: If an error occurs during execution or if required
-                handlers are not implemented
+            MappingExecutionError: If an error occurs during execution
         """
         self.logger.info(f"Starting execution of strategy '{strategy_name}' with {len(initial_identifiers)} identifiers")
         
@@ -3107,6 +3041,175 @@ class MappingExecutor(CompositeIdentifierMixin):
             raise MappingExecutionError(error_msg, details={"strategy_name": strategy_name}) from e
         
         return result_bundle
+    
+    async def _handle_convert_identifiers_local(
+        self,
+        current_identifiers: List[str],
+        action_parameters: Dict[str, Any],
+        current_source_ontology_type: Optional[str],
+        target_ontology_type: Optional[str],
+        step_id: str,
+        step_description: Optional[str]
+    ) -> Dict[str, Any]:
+        """
+        Handler for CONVERT_IDENTIFIERS_LOCAL action.
+        
+        Converts identifiers from one type to another using a local database table.
+        This is currently a placeholder that should be replaced with the actual
+        implementation from biomapper.core.strategy_actions.convert_identifiers_local.
+        
+        Expected action_parameters:
+            - source_column: The column containing source identifiers
+            - target_column: The column name for converted identifiers
+            - conversion_table: The database table to use for conversion
+            - source_id_type: The type of the source identifiers
+            - target_id_type: The desired target identifier type
+            
+        Args:
+            current_identifiers: List of identifiers to convert
+            action_parameters: Parameters from the strategy step
+            current_source_ontology_type: Current ontology type of identifiers
+            target_ontology_type: Overall target ontology type for the strategy
+            step_id: Unique identifier for this step
+            step_description: Human-readable description of the step
+            
+        Returns:
+            Dictionary with:
+                - output_identifiers: List of converted identifiers
+                - output_ontology_type: The new ontology type
+                - status: Execution status
+                - details: Additional execution details
+        """
+        self.logger.info(f"[PLACEHOLDER] _handle_convert_identifiers_local called for step '{step_id}'")
+        self.logger.info(f"  Parameters: {action_parameters}")
+        self.logger.info(f"  Input count: {len(current_identifiers)}")
+        
+        # Extract output ontology type from parameters
+        output_ontology_type = action_parameters.get("output_ontology_type", current_source_ontology_type)
+        
+        return {
+            "output_identifiers": current_identifiers,  # No conversion in placeholder
+            "output_ontology_type": output_ontology_type,
+            "status": "not_implemented",
+            "details": {
+                "action": "CONVERT_IDENTIFIERS_LOCAL",
+                "message": "Placeholder implementation - no conversion performed",
+                "input_count": len(current_identifiers),
+                "output_count": len(current_identifiers),
+                "parameters": action_parameters
+            }
+        }
+    
+    async def _handle_execute_mapping_path(
+        self,
+        current_identifiers: List[str],
+        action_parameters: Dict[str, Any],
+        current_source_ontology_type: Optional[str],
+        target_ontology_type: Optional[str],
+        step_id: str,
+        step_description: Optional[str]
+    ) -> Dict[str, Any]:
+        """
+        Handler for EXECUTE_MAPPING_PATH action.
+        
+        Executes a predefined mapping path to map identifiers between resources.
+        This is currently a placeholder that should be replaced with the actual
+        implementation from biomapper.core.strategy_actions.execute_mapping_path.
+        
+        Expected action_parameters:
+            - mapping_path: The name of the mapping path to execute
+            - source_column: (Optional) Override the default source column
+            - target_column: (Optional) Override the default target column
+            
+        Args:
+            current_identifiers: List of identifiers to map
+            action_parameters: Parameters from the strategy step
+            current_source_ontology_type: Current ontology type of identifiers
+            target_ontology_type: Overall target ontology type for the strategy
+            step_id: Unique identifier for this step
+            step_description: Human-readable description of the step
+            
+        Returns:
+            Dictionary with:
+                - output_identifiers: List of mapped identifiers
+                - output_ontology_type: The resulting ontology type
+                - status: Execution status
+                - details: Additional execution details including mapping statistics
+        """
+        self.logger.info(f"[PLACEHOLDER] _handle_execute_mapping_path called for step '{step_id}'")
+        self.logger.info(f"  Parameters: {action_parameters}")
+        self.logger.info(f"  Input count: {len(current_identifiers)}")
+        
+        path_name = action_parameters.get("path_name", "unknown")
+        
+        return {
+            "output_identifiers": current_identifiers,  # No mapping in placeholder
+            "output_ontology_type": current_source_ontology_type,  # No change in placeholder
+            "status": "not_implemented",
+            "details": {
+                "action": "EXECUTE_MAPPING_PATH",
+                "message": "Placeholder implementation - no mapping performed",
+                "path_name": path_name,
+                "input_count": len(current_identifiers),
+                "output_count": len(current_identifiers),
+                "parameters": action_parameters
+            }
+        }
+    
+    async def _handle_filter_identifiers_by_target_presence(
+        self,
+        current_identifiers: List[str],
+        action_parameters: Dict[str, Any],
+        current_source_ontology_type: Optional[str],
+        target_ontology_type: Optional[str],
+        step_id: str,
+        step_description: Optional[str]
+    ) -> Dict[str, Any]:
+        """
+        Handler for FILTER_IDENTIFIERS_BY_TARGET_PRESENCE action.
+        
+        Filters the dataset to only include rows where identifiers exist in the target resource.
+        This is currently a placeholder that should be replaced with the actual
+        implementation from biomapper.core.strategy_actions.filter_by_target_presence.
+        
+        Expected action_parameters:
+            - target_resource: The target resource to check against
+            - identifier_column: The column containing identifiers to check
+            - identifier_type: The type of identifiers being checked
+            
+        Args:
+            current_identifiers: List of identifiers to filter
+            action_parameters: Parameters from the strategy step
+            current_source_ontology_type: Current ontology type of identifiers
+            target_ontology_type: Overall target ontology type for the strategy
+            step_id: Unique identifier for this step
+            step_description: Human-readable description of the step
+            
+        Returns:
+            Dictionary with:
+                - output_identifiers: List of filtered identifiers (only those present in target)
+                - output_ontology_type: The ontology type (unchanged)
+                - status: Execution status
+                - details: Additional execution details including filter statistics
+        """
+        self.logger.info(f"[PLACEHOLDER] _handle_filter_identifiers_by_target_presence called for step '{step_id}'")
+        self.logger.info(f"  Parameters: {action_parameters}")
+        self.logger.info(f"  Input count: {len(current_identifiers)}")
+        
+        return {
+            "output_identifiers": current_identifiers,  # No filtering in placeholder
+            "output_ontology_type": current_source_ontology_type,  # No change
+            "status": "not_implemented",
+            "details": {
+                "action": "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE",
+                "message": "Placeholder implementation - no filtering performed",
+                "input_count": len(current_identifiers),
+                "output_count": len(current_identifiers),
+                "filtered_count": 0,
+                "parameters": action_parameters
+            }
+        }
+
     async def execute_yaml_strategy(
         self,
         strategy_name: str,
@@ -3122,13 +3225,12 @@ class MappingExecutor(CompositeIdentifierMixin):
         min_confidence: float = 0.0,
     ) -> Dict[str, Any]:
         """
-        Execute a YAML-defined mapping strategy using dedicated strategy action classes.
+        Execute a YAML-defined mapping strategy.
         
         This method executes a multi-step mapping strategy defined in YAML configuration.
-        Each step in the strategy is executed sequentially using dedicated action classes
-        (ConvertIdentifiersLocalAction, ExecuteMappingPathAction, FilterByTargetPresenceAction),
-        with the output of one step becoming the input for the next. The `is_required` field 
-        on each step controls whether step failures halt execution or allow it to continue.
+        Each step in the strategy is executed sequentially, with the output of one step
+        becoming the input for the next. The `is_required` field on each step controls
+        whether step failures halt execution or allow it to continue.
         
         Args:
             strategy_name: Name of the strategy defined in YAML configuration
@@ -3144,18 +3246,16 @@ class MappingExecutor(CompositeIdentifierMixin):
             min_confidence: Minimum confidence threshold (default: 0.0)
             
         Returns:
-            Dict[str, Any]: A MappingResultBundle-structured dictionary containing:
+            MappingResultBundle: A dictionary containing:
                 - 'results': Dict[str, Dict] mapping source IDs to their mapped values
-                - 'metadata': Dict with execution metadata including step-by-step provenance
+                - 'metadata': Dict with execution metadata
                 - 'step_results': List[Dict] with detailed results from each step
                 - 'statistics': Dict with mapping statistics
-                - 'final_identifiers': List of identifiers after all steps
-                - 'final_ontology_type': Final ontology type after all conversions
                 
         Raises:
-            ConfigurationError: If the strategy doesn't exist, is inactive, has no steps,
-                               or if source/target endpoints are not found
-            MappingExecutionError: If a required step fails during execution
+            StrategyNotFoundError: If the strategy doesn't exist
+            InactiveStrategyError: If the strategy is marked as inactive
+            MappingExecutionError: If a required step fails
             
         Example:
             >>> executor = MappingExecutor()
@@ -3166,8 +3266,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             ...     input_identifiers=["ADAMTS13", "ALB"],
             ...     use_cache=True
             ... )
-            >>> print(f"Final identifiers: {result['final_identifiers']}")
-            >>> print(f"Step results: {len(result['step_results'])}")
+            >>> print(result['results']['ADAMTS13']['mapped_value'])
         """
         
         # Load the strategy from database
@@ -3313,37 +3412,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         min_confidence: float,
     ) -> Dict[str, Any]:
         """
-        Execute a single strategy action step using dedicated action classes.
+        Execute a single action from a mapping strategy.
         
-        This internal method dispatches to the appropriate strategy action class based on 
-        the step's action_type. It instantiates and calls one of the dedicated action classes:
-        - ConvertIdentifiersLocalAction: For CONVERT_IDENTIFIERS_LOCAL actions
-        - ExecuteMappingPathAction: For EXECUTE_MAPPING_PATH actions  
-        - FilterByTargetPresenceAction: For FILTER_IDENTIFIERS_BY_TARGET_PRESENCE actions
-        
-        Each action class receives an ActionContext object containing database session,
-        cache settings, mapping executor reference, and processing parameters.
-        
-        Args:
-            step: The MappingStrategyStep containing action type and parameters
-            current_identifiers: List of identifiers to process
-            current_ontology_type: Current ontology type of the identifiers
-            source_endpoint: Source endpoint configuration
-            target_endpoint: Target endpoint configuration
-            use_cache: Whether to use caching for this action
-            max_cache_age_days: Maximum age for cached results
-            batch_size: Size of batches for processing
-            min_confidence: Minimum confidence threshold for results
-            
-        Returns:
-            Dict[str, Any]: Action result containing:
-                - output_identifiers: List of identifiers after processing
-                - output_ontology_type: Ontology type after processing
-                - Additional action-specific metadata and statistics
-                
-        Raises:
-            ConfigurationError: If the action_type is unknown/unsupported
-            MappingExecutionError: If the action execution fails
+        This method dispatches to the appropriate action handler based on action_type.
         """
         # Import strategy actions
         from biomapper.core.strategy_actions.convert_identifiers_local import ConvertIdentifiersLocalAction
@@ -3357,7 +3428,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Create context for actions
         context = {
-            "db_session": self.async_metamapper_session,  # Pass the session factory
+            "db_session": self.db_session,
             "cache_settings": {
                 "use_cache": use_cache,
                 "max_cache_age_days": max_cache_age_days
@@ -3367,55 +3438,41 @@ class MappingExecutor(CompositeIdentifierMixin):
             "min_confidence": min_confidence
         }
         
-        # Execute within a database session
-        async with self.async_metamapper_session() as session:
-            # Update context with actual session
-            context["db_session"] = session
+        # Route to appropriate action handler
+        if action_type == "CONVERT_IDENTIFIERS_LOCAL":
+            action = ConvertIdentifiersLocalAction(self.db_session)
+        elif action_type == "EXECUTE_MAPPING_PATH":
+            action = ExecuteMappingPathAction(self.db_session)
+        elif action_type == "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE":
+            action = FilterByTargetPresenceAction(self.db_session)
+        else:
+            raise ConfigurationError(f"Unknown action type: {action_type}")
+        
+        # Execute the action
+        try:
+            result = await action.execute(
+                current_identifiers=current_identifiers,
+                current_ontology_type=current_ontology_type,
+                action_params=action_params,
+                source_endpoint=source_endpoint,
+                target_endpoint=target_endpoint,
+                context=context
+            )
             
-            # Route to appropriate action handler
-            if action_type == "CONVERT_IDENTIFIERS_LOCAL":
-                action = ConvertIdentifiersLocalAction(session)
-            elif action_type == "EXECUTE_MAPPING_PATH":
-                action = ExecuteMappingPathAction(session)
-            elif action_type == "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE":
-                action = FilterByTargetPresenceAction(session)
-            else:
-                raise ConfigurationError(f"Unknown action type: {action_type}")
+            # Ensure result has required fields
+            if 'output_identifiers' not in result:
+                result['output_identifiers'] = result.get('input_identifiers', current_identifiers)
+            if 'output_ontology_type' not in result:
+                result['output_ontology_type'] = current_ontology_type
+                
+            return result
             
-            # Execute the action
-            try:
-                result = await action.execute(
-                    current_identifiers=current_identifiers,
-                    current_ontology_type=current_ontology_type,
-                    action_params=action_params,
-                    source_endpoint=source_endpoint,
-                    target_endpoint=target_endpoint,
-                    context=context
-                )
-                
-                # Ensure result has required fields
-                if 'output_identifiers' not in result:
-                    result['output_identifiers'] = result.get('input_identifiers', current_identifiers)
-                if 'output_ontology_type' not in result:
-                    result['output_ontology_type'] = current_ontology_type
-                    
-                return result
-                
-            except Exception as e:
-                self.logger.error(f"Error executing strategy action {action_type}: {str(e)}")
-                raise MappingExecutionError(f"Strategy action {action_type} failed: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"Error executing strategy action {action_type}: {str(e)}")
+            raise MappingExecutionError(f"Strategy action {action_type} failed: {str(e)}")
     
     async def _get_endpoint_by_name(self, session: AsyncSession, endpoint_name: str) -> Optional[Endpoint]:
-        """
-        Retrieve an endpoint configuration by name from the metamapper database.
-        
-        Args:
-            session: Active database session
-            endpoint_name: Name of the endpoint to retrieve
-            
-        Returns:
-            Endpoint object if found, None otherwise
-        """
+        """Get endpoint by name from database."""
         stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
@@ -3791,382 +3848,358 @@ class MappingExecutor(CompositeIdentifierMixin):
                 return "ramp"
                 
         return default_source
-    
-    # Legacy Handler Methods (Placeholder Implementations)
-    # These methods are referenced by the legacy execute_strategy method but are not implemented.
-    # They are maintained for backward compatibility but will raise NotImplementedError when called.
-    
-    async def _handle_convert_identifiers_local(
-        self,
-        current_identifiers: List[str],
-        action_parameters: Dict[str, Any],
-        current_source_ontology_type: str,
-        target_ontology_type: str,
-        step_id: str,
-        step_description: str,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """
-        Legacy handler for CONVERT_IDENTIFIERS_LOCAL action type.
-        
-        This method has been refactored to use the newer ConvertIdentifiersLocalAction
-        class while maintaining backward compatibility with the legacy execute_strategy
-        method.
-        
-        Args:
-            current_identifiers: List of identifiers to convert
-            action_parameters: Action configuration parameters
-            current_source_ontology_type: Current ontology type of identifiers
-            target_ontology_type: Target ontology type for the overall strategy
-            step_id: Step identifier for logging
-            step_description: Step description for logging
-            **kwargs: Additional parameters from the legacy execution context
-            
-        Returns:
-            Dict[str, Any]: Mapping results with converted identifiers
-        """
-        try:
-            # Extract parameters from action_parameters
-            endpoint_context = action_parameters.get('endpoint_context', 'SOURCE')
-            output_ontology_type = action_parameters.get('output_ontology_type')
-            input_ontology_type = action_parameters.get('input_ontology_type', current_source_ontology_type)
-            
-            if not output_ontology_type:
-                return {
-                    "output_identifiers": current_identifiers,
-                    "output_ontology_type": current_source_ontology_type,
-                    "status": "failed",
-                    "error": "output_ontology_type is required in action_parameters",
-                    "details": {"action_parameters": action_parameters}
-                }
-            
-            # For legacy compatibility with ConvertIdentifiersLocalAction,
-            # we'll provide a basic implementation that performs ontology type
-            # conversion without requiring full endpoint database configurations.
-            # This maintains backward compatibility while using the StrategyAction framework.
-            
-            self.logger.info(f"Legacy convert identifiers: {input_ontology_type} -> {output_ontology_type}")
-            
-            try:
-                # Import the StrategyAction class
-                from biomapper.core.strategy_actions.convert_identifiers_local import ConvertIdentifiersLocalAction
-                
-                async with self.async_metamapper_session() as session:
-                    # Create the action instance
-                    action = ConvertIdentifiersLocalAction(session)
-                    
-                    # Create minimal mock endpoints
-                    from unittest.mock import MagicMock
-                    from biomapper.db.models import Endpoint
-                    
-                    mock_endpoint = MagicMock(spec=Endpoint)
-                    mock_endpoint.id = 1
-                    mock_endpoint.name = "LEGACY_ENDPOINT"
-                    
-                    # Create action parameters
-                    action_params = {
-                        'endpoint_context': endpoint_context,
-                        'output_ontology_type': output_ontology_type,
-                        'input_ontology_type': input_ontology_type
-                    }
-                    
-                    # Create context
-                    context = {
-                        "db_session": session,
-                        "mapping_executor": self,
-                        "legacy_mode": True
-                    }
-                    
-                    # Try to execute the action
-                    result = await action.execute(
-                        current_identifiers=current_identifiers,
-                        current_ontology_type=current_source_ontology_type,
-                        action_params=action_params,
-                        source_endpoint=mock_endpoint,
-                        target_endpoint=mock_endpoint,
-                        context=context
-                    )
-                    
-                    # Convert result to legacy format
-                    return {
-                        "output_identifiers": result.get('output_identifiers', current_identifiers),
-                        "output_ontology_type": result.get('output_ontology_type', output_ontology_type),
-                        "status": "success",
-                        "details": result.get('details', {})
-                    }
-                    
-            except Exception as action_error:
-                # If the StrategyAction fails (e.g., due to missing endpoint configurations),
-                # fall back to a basic implementation that just changes the ontology type
-                self.logger.warning(
-                    f"StrategyAction failed in legacy mode, using basic fallback: {str(action_error)}"
-                )
-                
-                # Basic fallback: just update the ontology type without actual conversion
-                return {
-                    "output_identifiers": current_identifiers,  # Keep same identifiers
-                    "output_ontology_type": output_ontology_type,  # Update ontology type
-                    "status": "success",
-                    "details": {
-                        "fallback_mode": True,
-                        "conversion_type": "ontology_type_only",
-                        "input_ontology_type": input_ontology_type,
-                        "output_ontology_type": output_ontology_type,
-                        "strategy_action_error": str(action_error)
-                    }
-                }
-                
-        except Exception as e:
-            self.logger.error(f"Error in _handle_convert_identifiers_local: {str(e)}", exc_info=True)
-            return {
-                "output_identifiers": current_identifiers,
-                "output_ontology_type": current_source_ontology_type,
-                "status": "failed",
-                "error": f"Action execution failed: {str(e)}",
-                "details": {"exception_type": type(e).__name__}
-            }
-    
-    async def _handle_execute_mapping_path(
-        self,
-        current_identifiers: List[str],
-        action_parameters: Dict[str, Any],
-        current_source_ontology_type: str,
-        target_ontology_type: str,
-        step_id: str,
-        step_description: str,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """
-        Legacy handler for EXECUTE_MAPPING_PATH action type.
-        
-        This method has been refactored to use the newer ExecuteMappingPathAction
-        class while maintaining backward compatibility with the legacy execute_strategy
-        method.
-        
-        Args:
-            current_identifiers: List of identifiers to map
-            action_parameters: Action configuration parameters
-            current_source_ontology_type: Current ontology type of identifiers
-            target_ontology_type: Target ontology type for the overall strategy
-            step_id: Step identifier for logging
-            step_description: Step description for logging
-            **kwargs: Additional parameters from the legacy execution context
-            
-        Returns:
-            Dict[str, Any]: Mapping results with mapped identifiers
-        """
-        try:
-            # Extract parameters from action_parameters
-            mapping_path_name = action_parameters.get('mapping_path_name')
-            resource_name = action_parameters.get('resource_name')
-            
-            if not mapping_path_name and not resource_name:
-                return {
-                    "output_identifiers": current_identifiers,
-                    "output_ontology_type": current_source_ontology_type,
-                    "status": "failed",
-                    "error": "Either mapping_path_name or resource_name is required in action_parameters",
-                    "details": {"action_parameters": action_parameters}
-                }
-            
-            self.logger.info(f"Legacy execute mapping path: {mapping_path_name or resource_name}")
-            
-            try:
-                # Import the StrategyAction class
-                from biomapper.core.strategy_actions.execute_mapping_path import ExecuteMappingPathAction
-                
-                async with self.async_metamapper_session() as session:
-                    # Create the action instance
-                    action = ExecuteMappingPathAction(session)
-                    
-                    # Create minimal mock endpoints
-                    from unittest.mock import MagicMock
-                    from biomapper.db.models import Endpoint
-                    
-                    mock_source_endpoint = MagicMock(spec=Endpoint)
-                    mock_source_endpoint.id = 1
-                    mock_source_endpoint.name = "LEGACY_SOURCE_ENDPOINT"
-                    
-                    mock_target_endpoint = MagicMock(spec=Endpoint)
-                    mock_target_endpoint.id = 2
-                    mock_target_endpoint.name = "LEGACY_TARGET_ENDPOINT"
-                    
-                    # Create context with legacy settings
-                    context = {
-                        "db_session": session,
-                        "cache_settings": {
-                            "use_cache": True,
-                            "max_cache_age_days": None
-                        },
-                        "mapping_executor": self,
-                        "batch_size": 250,
-                        "min_confidence": 0.0,
-                        "legacy_mode": True
-                    }
-                    
-                    # Try to execute the action
-                    result = await action.execute(
-                        current_identifiers=current_identifiers,
-                        current_ontology_type=current_source_ontology_type,
-                        action_params=action_parameters,
-                        source_endpoint=mock_source_endpoint,
-                        target_endpoint=mock_target_endpoint,
-                        context=context
-                    )
-                    
-                    # Convert result to legacy format
-                    return {
-                        "output_identifiers": result.get('output_identifiers', current_identifiers),
-                        "output_ontology_type": result.get('output_ontology_type', current_source_ontology_type),
-                        "status": "success",
-                        "details": result.get('details', {})
-                    }
-                    
-            except Exception as action_error:
-                # If the StrategyAction fails, provide a basic fallback
-                self.logger.warning(
-                    f"StrategyAction failed in legacy mode, using basic fallback: {str(action_error)}"
-                )
-                
-                # Basic fallback: return identifiers unchanged
-                return {
-                    "output_identifiers": current_identifiers,
-                    "output_ontology_type": current_source_ontology_type,
-                    "status": "success",
-                    "details": {
-                        "fallback_mode": True,
-                        "mapping_type": "no_change",
-                        "mapping_path_name": mapping_path_name,
-                        "resource_name": resource_name,
-                        "strategy_action_error": str(action_error)
-                    }
-                }
-                
-        except Exception as e:
-            self.logger.error(f"Error in _handle_execute_mapping_path: {str(e)}", exc_info=True)
-            return {
-                "output_identifiers": current_identifiers,
-                "output_ontology_type": current_source_ontology_type,
-                "status": "failed",
-                "error": f"Action execution failed: {str(e)}",
-                "details": {"exception_type": type(e).__name__}
-            }
-    
-    async def _handle_filter_identifiers_by_target_presence(
-        self,
-        current_identifiers: List[str],
-        action_parameters: Dict[str, Any],
-        current_source_ontology_type: str,
-        target_ontology_type: str,
-        step_id: str,
-        step_description: str,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """
-        Legacy handler for FILTER_IDENTIFIERS_BY_TARGET_PRESENCE action type.
-        
-        This method has been refactored to use the newer FilterByTargetPresenceAction
-        class while maintaining backward compatibility with the legacy execute_strategy
-        method.
-        
-        Args:
-            current_identifiers: List of identifiers to filter
-            action_parameters: Action configuration parameters
-            current_source_ontology_type: Current ontology type of identifiers
-            target_ontology_type: Target ontology type for the overall strategy
-            step_id: Step identifier for logging
-            step_description: Step description for logging
-            **kwargs: Additional parameters from the legacy execution context
-            
-        Returns:
-            Dict[str, Any]: Filtered identifiers based on target presence
-        """
-        try:
-            # Extract parameters from action_parameters
-            endpoint_context = action_parameters.get('endpoint_context', 'TARGET')
-            ontology_type_to_match = action_parameters.get('ontology_type_to_match', current_source_ontology_type)
-            
-            self.logger.info(f"Legacy filter by target presence: {ontology_type_to_match}")
-            
-            try:
-                # Import the StrategyAction class
-                from biomapper.core.strategy_actions.filter_by_target_presence import FilterByTargetPresenceAction
-                
-                async with self.async_metamapper_session() as session:
-                    # Create the action instance
-                    action = FilterByTargetPresenceAction(session)
-                    
-                    # Create minimal mock endpoints
-                    from unittest.mock import MagicMock
-                    from biomapper.db.models import Endpoint
-                    
-                    mock_source_endpoint = MagicMock(spec=Endpoint)
-                    mock_source_endpoint.id = 1
-                    mock_source_endpoint.name = "LEGACY_SOURCE_ENDPOINT"
-                    
-                    mock_target_endpoint = MagicMock(spec=Endpoint)
-                    mock_target_endpoint.id = 2
-                    mock_target_endpoint.name = "LEGACY_TARGET_ENDPOINT"
-                    
-                    # Create action parameters in the format expected by the action class
-                    action_params = {
-                        'endpoint_context': endpoint_context,
-                        'ontology_type_to_match': ontology_type_to_match
-                    }
-                    action_params.update(action_parameters)  # Include any additional parameters
-                    
-                    # Create context
-                    context = {
-                        "db_session": session,
-                        "mapping_executor": self,
-                        "legacy_mode": True
-                    }
-                    
-                    # Try to execute the action
-                    result = await action.execute(
-                        current_identifiers=current_identifiers,
-                        current_ontology_type=current_source_ontology_type,
-                        action_params=action_params,
-                        source_endpoint=mock_source_endpoint,
-                        target_endpoint=mock_target_endpoint,
-                        context=context
-                    )
-                    
-                    # Convert result to legacy format
-                    return {
-                        "output_identifiers": result.get('output_identifiers', current_identifiers),
-                        "output_ontology_type": result.get('output_ontology_type', current_source_ontology_type),
-                        "status": "success",
-                        "details": result.get('details', {})
-                    }
-                    
-            except Exception as action_error:
-                # If the StrategyAction fails, provide a basic fallback
-                self.logger.warning(
-                    f"StrategyAction failed in legacy mode, using basic fallback: {str(action_error)}"
-                )
-                
-                # Basic fallback: return all identifiers (no filtering)
-                return {
-                    "output_identifiers": current_identifiers,
-                    "output_ontology_type": current_source_ontology_type,
-                    "status": "success",
-                    "details": {
-                        "fallback_mode": True,
-                        "filter_type": "no_filtering",
-                        "endpoint_context": endpoint_context,
-                        "ontology_type_to_match": ontology_type_to_match,
-                        "strategy_action_error": str(action_error)
-                    }
-                }
-                
-        except Exception as e:
-            self.logger.error(f"Error in _handle_filter_identifiers_by_target_presence: {str(e)}", exc_info=True)
-            return {
-                "output_identifiers": current_identifiers,
-                "output_ontology_type": current_source_ontology_type,
-                "status": "failed",
-                "error": f"Action execution failed: {str(e)}",
-                "details": {"exception_type": type(e).__name__}
-            }
 
+    async def _reconcile_bidirectional_mappings(
+        self,
+        forward_mappings: Dict[str, Dict[str, Any]],
+        reverse_results: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Enrich forward mappings with bidirectional validation status.
+        
+        Instead of filtering, this adds validation status information to each mapping
+        that succeeded in the primary S->T direction.
+        
+        Args:
+            forward_mappings: Dictionary of source_id -> mapping_result from forward mapping
+            reverse_results: Dictionary of target_id -> reverse_mapping_result from reverse mapping
+            
+        Returns:
+            Dictionary of enriched source_id -> mapping_result with validation status added
+        """
+        validated_count = 0
+        unidirectional_count = 0
+        
+        target_to_sources = {} # Stores target_id -> set of all source_ids it can reverse map to
+        for target_id, rev_res_item in reverse_results.items():
+            if rev_res_item and rev_res_item.get("target_identifiers"):
+                all_reverse_mapped_to_source_ids = set(rev_res_item["target_identifiers"])
+                
+                # Handle Arivale ID components in reverse mapped IDs
+                # If client returns "INF_P12345", ensure "P12345" is also considered.
+                current_set_copy = set(all_reverse_mapped_to_source_ids) # Iterate over a copy
+                for rs_id in current_set_copy:
+                    if any(rs_id.startswith(p) for p in ('INF_', 'CAM_', 'CVD_', 'CVD2_', 'DEV_')):
+                        parts = rs_id.split('_', 1)
+                        if len(parts) > 1:
+                            all_reverse_mapped_to_source_ids.add(parts[1]) # Add the UniProt part
+            
+                target_to_sources[target_id] = all_reverse_mapped_to_source_ids
+    
+        enriched_mappings = {}
+        for source_id, fwd_res_item in forward_mappings.items():
+            enriched_result = fwd_res_item.copy()
+            
+            if not fwd_res_item or not fwd_res_item.get("target_identifiers"):
+                enriched_result["validation_status"] = "Successful (NoFwdTarget)"
+                unidirectional_count += 1
+            else:
+                forward_mapped_target_ids = fwd_res_item["target_identifiers"]
+                current_status_for_source = None
+
+                for target_id_from_fwd_map in forward_mapped_target_ids:
+                    if target_id_from_fwd_map in target_to_sources: # This forward target has reverse mapping data
+                        all_possible_reverse_sources_for_target = target_to_sources[target_id_from_fwd_map]
+                        
+                        if source_id in all_possible_reverse_sources_for_target: # Original source_id is among them
+                            primary_reverse_mapped_id = reverse_results.get(target_id_from_fwd_map, {}).get("mapped_value")
+                            
+                            # Normalize primary_reverse_mapped_id if it's an Arivale ID
+                            normalized_primary_reverse_id = primary_reverse_mapped_id
+                            if primary_reverse_mapped_id and any(primary_reverse_mapped_id.startswith(p) for p in ('INF_', 'CAM_', 'CVD_', 'CVD2_', 'DEV_')):
+                                parts = primary_reverse_mapped_id.split('_', 1)
+                                if len(parts) > 1:
+                                    normalized_primary_reverse_id = parts[1]
+
+                            if normalized_primary_reverse_id == source_id:
+                                current_status_for_source = "Validated"
+                            else:
+                                current_status_for_source = "Validated (Ambiguous)"
+                            break # Found validation status for this source_id
+            
+                if current_status_for_source:
+                    enriched_result["validation_status"] = current_status_for_source
+                    validated_count += 1
+                else: # No validation path found to the original source_id
+                    any_fwd_target_had_reverse_data = any(tid in target_to_sources for tid in forward_mapped_target_ids)
+                    if any_fwd_target_had_reverse_data:
+                        enriched_result["validation_status"] = "Successful"
+                    else:
+                        enriched_result["validation_status"] = "Successful (NoReversePath)"
+                    unidirectional_count += 1
+            
+            # Add this entry to the enriched_mappings dictionary
+            enriched_mappings[source_id] = enriched_result
+    
+        self.logger.info(
+            f"Validation status: {validated_count} validated (bidirectional), "
+            f"{unidirectional_count} successful (one-directional only)"
+        )
+        return enriched_mappings
+
+    async def execute_yaml_strategy(
+        self,
+        strategy_name: str,
+        source_endpoint_name: str,
+        target_endpoint_name: str,
+        input_identifiers: List[str],
+        source_ontology_type: Optional[str] = None,
+        target_ontology_type: Optional[str] = None,
+        use_cache: bool = True,
+        max_cache_age_days: Optional[int] = None,
+        progress_callback: Optional[callable] = None,
+        batch_size: int = 250,
+        min_confidence: float = 0.0,
+    ) -> Dict[str, Any]:
+        """
+        Execute a YAML-defined mapping strategy.
+        
+        This method executes a multi-step mapping strategy defined in YAML configuration.
+        Each step in the strategy is executed sequentially, with the output of one step
+        becoming the input for the next. The `is_required` field on each step controls
+        whether step failures halt execution or allow it to continue.
+        
+        Args:
+            strategy_name: Name of the strategy defined in YAML configuration
+            source_endpoint_name: Name of the source endpoint
+            target_endpoint_name: Name of the target endpoint
+            input_identifiers: List of identifiers to map
+            source_ontology_type: Optional override for source ontology type
+            target_ontology_type: Optional override for target ontology type
+            use_cache: Whether to use caching (default: True)
+            max_cache_age_days: Maximum cache age in days
+            progress_callback: Optional callback function(current_step, total_steps, status)
+            batch_size: Size of batches for processing (default: 250)
+            min_confidence: Minimum confidence threshold (default: 0.0)
+            
+        Returns:
+            MappingResultBundle: A dictionary containing:
+                - 'results': Dict[str, Dict] mapping source IDs to their mapped values
+                - 'metadata': Dict with execution metadata
+                - 'step_results': List[Dict] with detailed results from each step
+                - 'statistics': Dict with mapping statistics
+                
+        Raises:
+            StrategyNotFoundError: If the strategy doesn't exist
+            InactiveStrategyError: If the strategy is marked as inactive
+            MappingExecutionError: If a required step fails
+            
+        Example:
+            >>> executor = MappingExecutor()
+            >>> result = await executor.execute_yaml_strategy(
+            ...     strategy_name="ukbb_to_hpa_protein",
+            ...     source_endpoint_name="UKBB",
+            ...     target_endpoint_name="HPA",
+            ...     input_identifiers=["ADAMTS13", "ALB"],
+            ...     use_cache=True
+            ... )
+            >>> print(result['results']['ADAMTS13']['mapped_value'])
+        """
+        
+        # Load the strategy from database
+        async with self.async_metamapper_session() as session:
+            # Query for the strategy
+            stmt = select(MappingStrategy).where(MappingStrategy.name == strategy_name)
+            result = await session.execute(stmt)
+            strategy = result.scalar_one_or_none()
+            
+            if not strategy:
+                raise ConfigurationError(f"Mapping strategy '{strategy_name}' not found in database")
+            
+            if not strategy.is_active:
+                raise ConfigurationError(f"Mapping strategy '{strategy_name}' is not active")
+            
+            # Load strategy steps with eager loading
+            stmt = (
+                select(MappingStrategyStep)
+                .where(MappingStrategyStep.strategy_id == strategy.id)
+                .order_by(MappingStrategyStep.step_order)
+            )
+            result = await session.execute(stmt)
+            steps = result.scalars().all()
+            
+            if not steps:
+                raise ConfigurationError(f"Mapping strategy '{strategy_name}' has no steps defined")
+            
+            # Load source and target endpoints
+            source_endpoint = await self._get_endpoint_by_name(session, source_endpoint_name)
+            target_endpoint = await self._get_endpoint_by_name(session, target_endpoint_name)
+            
+            if not source_endpoint:
+                raise ConfigurationError(f"Source endpoint '{source_endpoint_name}' not found")
+            if not target_endpoint:
+                raise ConfigurationError(f"Target endpoint '{target_endpoint_name}' not found")
+        
+        # Initialize working data
+        current_identifiers = input_identifiers.copy()
+        current_ontology_type = source_ontology_type or strategy.default_source_ontology_type
+        
+        # Track results for each step
+        step_results = []
+        overall_provenance = []
+        
+        # Execute each step in sequence
+        for step_idx, step in enumerate(steps):
+            self.logger.info(f"Executing step {step.step_id}: {step.description}")
+            
+            if progress_callback:
+                progress_callback(step_idx, len(steps), f"Executing {step.step_id}")
+            
+            # Dispatch to appropriate action handler
+            try:
+                step_result = await self._execute_strategy_action(
+                    step=step,
+                    current_identifiers=current_identifiers,
+                    current_ontology_type=current_ontology_type,
+                    source_endpoint=source_endpoint,
+                    target_endpoint=target_endpoint,
+                    use_cache=use_cache,
+                    max_cache_age_days=max_cache_age_days,
+                    batch_size=batch_size,
+                    min_confidence=min_confidence,
+                )
+                
+                # Update working data for next step
+                current_identifiers = step_result['output_identifiers']
+                current_ontology_type = step_result.get('output_ontology_type', current_ontology_type)
+                
+                # Track results
+                step_results.append({
+                    'step_id': step.step_id,
+                    'action_type': step.action_type,
+                    'input_count': len(step_result.get('input_identifiers', [])),
+                    'output_count': len(step_result.get('output_identifiers', [])),
+                    'success': True,
+                    'details': step_result.get('details', {})
+                })
+                
+                # Accumulate provenance
+                if 'provenance' in step_result:
+                    overall_provenance.extend(step_result['provenance'])
+                    
+            except Exception as e:
+                self.logger.error(f"Error executing step {step.step_id}: {str(e)}")
+                step_results.append({
+                    'step_id': step.step_id,
+                    'action_type': step.action_type,
+                    'success': False,
+                    'error': str(e)
+                })
+                # Depending on strategy, might want to continue or fail
+                raise MappingExecutionError(f"Strategy execution failed at step {step.step_id}: {str(e)}")
+        
+        # Prepare final results
+        final_target_ontology = target_ontology_type or strategy.default_target_ontology_type
+        
+        # Create mapping dictionary from input to final output
+        mapping_results = {}
+        
+        # If we have provenance tracking the full journey, use it
+        # Otherwise, create simple mappings
+        for i, input_id in enumerate(input_identifiers):
+            if i < len(current_identifiers):
+                mapping_results[input_id] = {
+                    'mapped_value': current_identifiers[i],
+                    'confidence': 1.0,  # Could be calculated from step results
+                    'source_ontology': source_ontology_type or strategy.default_source_ontology_type,
+                    'target_ontology': final_target_ontology,
+                    'strategy_name': strategy_name,
+                    'provenance': [p for p in overall_provenance if p.get('source_id') == input_id]
+                }
+            else:
+                mapping_results[input_id] = {
+                    'mapped_value': None,
+                    'confidence': 0.0,
+                    'error': 'Lost during processing',
+                    'strategy_name': strategy_name
+                }
+        
+        return {
+            'results': mapping_results,
+            'summary': {
+                'strategy_name': strategy_name,
+                'total_input': len(input_identifiers),
+                'total_mapped': len([r for r in mapping_results.values() if r.get('mapped_value')]),
+                'total_unmapped': len([r for r in mapping_results.values() if not r.get('mapped_value')]),
+                'steps_executed': len(step_results),
+                'step_results': step_results
+            }
+        }
+    
+    async def _execute_strategy_action(
+        self,
+        step: MappingStrategyStep,
+        current_identifiers: List[str],
+        current_ontology_type: str,
+        source_endpoint: Endpoint,
+        target_endpoint: Endpoint,
+        use_cache: bool,
+        max_cache_age_days: Optional[int],
+        batch_size: int,
+        min_confidence: float,
+    ) -> Dict[str, Any]:
+        """
+        Execute a single action from a mapping strategy.
+        
+        This method dispatches to the appropriate action handler based on action_type.
+        """
+        # Import strategy actions
+        from biomapper.core.strategy_actions.convert_identifiers_local import ConvertIdentifiersLocalAction
+        from biomapper.core.strategy_actions.execute_mapping_path import ExecuteMappingPathAction
+        from biomapper.core.strategy_actions.filter_by_target_presence import FilterByTargetPresenceAction
+        
+        action_type = step.action_type
+        action_params = step.action_parameters or {}
+        
+        self.logger.info(f"Executing action type: {action_type} with params: {action_params}")
+        
+        # Create context for actions
+        context = {
+            "db_session": self.db_session,
+            "cache_settings": {
+                "use_cache": use_cache,
+                "max_cache_age_days": max_cache_age_days
+            },
+            "mapping_executor": self,  # For ExecuteMappingPathAction
+            "batch_size": batch_size,
+            "min_confidence": min_confidence
+        }
+        
+        # Route to appropriate action handler
+        if action_type == "CONVERT_IDENTIFIERS_LOCAL":
+            action = ConvertIdentifiersLocalAction(self.db_session)
+        elif action_type == "EXECUTE_MAPPING_PATH":
+            action = ExecuteMappingPathAction(self.db_session)
+        elif action_type == "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE":
+            action = FilterByTargetPresenceAction(self.db_session)
+        else:
+            raise ConfigurationError(f"Unknown action type: {action_type}")
+        
+        # Execute the action
+        try:
+            result = await action.execute(
+                current_identifiers=current_identifiers,
+                current_ontology_type=current_ontology_type,
+                action_params=action_params,
+                source_endpoint=source_endpoint,
+                target_endpoint=target_endpoint,
+                context=context
+            )
+            
+            # Ensure result has required fields
+            if 'output_identifiers' not in result:
+                result['output_identifiers'] = result.get('input_identifiers', current_identifiers)
+            if 'output_ontology_type' not in result:
+                result['output_ontology_type'] = current_ontology_type
+                
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error executing strategy action {action_type}: {str(e)}")
+            raise MappingExecutionError(f"Strategy action {action_type} failed: {str(e)}")
+    
+    async def _get_endpoint_by_name(self, session: AsyncSession, endpoint_name: str) -> Optional[Endpoint]:
+        """Get endpoint by name from database."""
+        stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()

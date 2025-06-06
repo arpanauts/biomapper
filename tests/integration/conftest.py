@@ -7,6 +7,7 @@ including database mocks and configurations.
 
 import asyncio
 import pytest
+import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,16 +51,22 @@ def mock_mapping_executor():
     """Create a MappingExecutor with mocked database sessions."""
     executor = MappingExecutor()
     
-    # Mock session creation methods
-    executor.async_metamapper_session = AsyncMock()
-    executor.async_cache_session = AsyncMock()
-    
     # Mock session context managers to return mock sessions
     mock_meta_session = AsyncMock(spec=AsyncSession)
     mock_cache_session = AsyncMock(spec=AsyncSession)
     
-    executor.async_metamapper_session.return_value.__aenter__.return_value = mock_meta_session
-    executor.async_cache_session.return_value.__aenter__.return_value = mock_cache_session
+    # Create proper async context managers
+    mock_meta_context = AsyncMock()
+    mock_meta_context.__aenter__.return_value = mock_meta_session
+    mock_meta_context.__aexit__.return_value = None
+    
+    mock_cache_context = AsyncMock()
+    mock_cache_context.__aenter__.return_value = mock_cache_session
+    mock_cache_context.__aexit__.return_value = None
+    
+    # Mock the session factories to return context managers directly
+    executor.async_metamapper_session = MagicMock(return_value=mock_meta_context)
+    executor.async_cache_session = MagicMock(return_value=mock_cache_context)
     
     # Mock frequently used methods
     executor._create_mapping_session_log = AsyncMock(return_value=1)  # Return a fake session ID
@@ -80,6 +87,7 @@ def mock_direct_path():
     path.source_type = "UNIPROTKB_AC"
     path.target_type = "ARIVALE_PROTEIN_ID"
     path.priority = 1
+    path.is_reverse = False  # Add is_reverse attribute
     
     # Mock steps
     step = MagicMock(spec=MappingPathStep)
@@ -100,6 +108,7 @@ def mock_historical_path():
     path.source_type = "UNIPROTKB_AC"
     path.target_type = "ARIVALE_PROTEIN_ID"
     path.priority = 2
+    path.is_reverse = False  # Add is_reverse attribute
     
     # Mock steps for historical resolution
     step1 = MagicMock(spec=MappingPathStep)
@@ -123,10 +132,22 @@ def setup_mock_endpoints():
         source_endpoint = MagicMock(spec=Endpoint)
         source_endpoint.id = 1
         source_endpoint.name = source_endpoint_name
+        # Add connection_details for CSV adapter
+        source_endpoint.connection_details = {
+            "file_path": f"tests/integration/data/mock_client_files/{source_endpoint_name.lower()}.tsv",
+            "delimiter": "\t"
+        }
+        source_endpoint.file_path = source_endpoint.connection_details["file_path"]  # Direct attribute access
         
         target_endpoint = MagicMock(spec=Endpoint)
         target_endpoint.id = 2
         target_endpoint.name = target_endpoint_name
+        # Add connection_details for CSV adapter
+        target_endpoint.connection_details = {
+            "file_path": f"tests/integration/data/mock_client_files/{target_endpoint_name.lower()}.tsv",
+            "delimiter": "\t"
+        }
+        target_endpoint.file_path = target_endpoint.connection_details["file_path"]  # Direct attribute access
         
         # Mock endpoint properties
         source_property_config = MagicMock(spec=EndpointPropertyConfig)
@@ -138,32 +159,44 @@ def setup_mock_endpoints():
         target_property_config.ontology_type = target_property
         
         # Configure the mock session to return our mocked objects
-        def execute_side_effect(stmt, **kwargs):
+        async def execute_side_effect(stmt, **kwargs):
             result_mock = MagicMock()
             scalars_mock = MagicMock()
             
             # Handle endpoint queries
-            if isinstance(stmt, select) and "Endpoint" in str(stmt):
-                if source_endpoint_name in str(stmt):
-                    scalars_mock.return_value.first.return_value = source_endpoint
-                    scalars_mock.return_value.all.return_value = [source_endpoint]
-                elif target_endpoint_name in str(stmt):
-                    scalars_mock.return_value.first.return_value = target_endpoint
-                    scalars_mock.return_value.all.return_value = [target_endpoint]
+            stmt_str = str(stmt)
+            if "endpoints" in stmt_str.lower():
+                if source_endpoint_name in stmt_str:
+                    scalars_mock.first.return_value = source_endpoint
+                    scalars_mock.all.return_value = [source_endpoint]
+                elif target_endpoint_name in stmt_str:
+                    scalars_mock.first.return_value = target_endpoint
+                    scalars_mock.all.return_value = [target_endpoint]
+                else:
+                    scalars_mock.first.return_value = None
+                    scalars_mock.all.return_value = []
                     
             # Handle property config queries
-            elif isinstance(stmt, select) and "EndpointPropertyConfig" in str(stmt):
-                if source_endpoint_name in str(stmt) and source_property in str(stmt):
-                    scalars_mock.return_value.first.return_value = source_property_config
-                    scalars_mock.return_value.all.return_value = [source_property_config]
-                elif target_endpoint_name in str(stmt) and target_property in str(stmt):
-                    scalars_mock.return_value.first.return_value = target_property_config
-                    scalars_mock.return_value.all.return_value = [target_property_config]
+            elif "endpoint_property_configs" in stmt_str.lower():
+                # Handle queries for source property config
+                if str(source_endpoint.id) in stmt_str and source_property in stmt_str:
+                    scalars_mock.first.return_value = source_property_config
+                    scalars_mock.all.return_value = [source_property_config]
+                # Handle queries for target property config
+                elif str(target_endpoint.id) in stmt_str and target_property in stmt_str:
+                    scalars_mock.first.return_value = target_property_config
+                    scalars_mock.all.return_value = [target_property_config]
+                else:
+                    scalars_mock.first.return_value = None
+                    scalars_mock.all.return_value = []
+            else:
+                scalars_mock.first.return_value = None
+                scalars_mock.all.return_value = []
             
             result_mock.scalars.return_value = scalars_mock
-            return AsyncMock(return_value=result_mock)
+            return result_mock
             
-        mock_meta_session.execute.side_effect = execute_side_effect
+        mock_session.execute = AsyncMock(side_effect=execute_side_effect)
     
     return configure
 
@@ -173,21 +206,61 @@ def setup_mock_paths(mock_direct_path, mock_historical_path):
     """Configure mock path-related query responses."""
     def configure(mock_session, source_ontology, target_ontology):
         # Configure the mock session to return our mocked path objects
-        def execute_side_effect(stmt, **kwargs):
+        async def execute_side_effect(stmt, **kwargs):
             result_mock = MagicMock()
-            scalars_mock = MagicMock()
             
-            # Handle path queries
-            if isinstance(stmt, select) and "MappingPath" in str(stmt):
-                if source_ontology in str(stmt) and target_ontology in str(stmt):
+            # Handle different types of queries
+            stmt_str = str(stmt)
+            
+            # Handle the complex query from _find_direct_paths
+            if "mapping_paths" in stmt_str and "mapping_path_steps" in stmt_str:
+                # This is the complex join query from _find_direct_paths
+                scalars_mock = MagicMock()
+                scalars_mock.all.return_value = [mock_direct_path, mock_historical_path]
+                result_mock.scalars.return_value = scalars_mock
+                return result_mock
+            
+            # Handle simple path queries
+            elif "MappingPath" in stmt_str:
+                scalars_mock = MagicMock()
+                if source_ontology in stmt_str and target_ontology in stmt_str:
                     # Return both paths ordered by priority
-                    scalars_mock.return_value.all.return_value = [mock_direct_path, mock_historical_path]
+                    scalars_mock.all.return_value = [mock_direct_path, mock_historical_path]
                     # First path (direct) as default for single result
-                    scalars_mock.return_value.first.return_value = mock_direct_path
-                
-            result_mock.scalars.return_value = scalars_mock
-            return AsyncMock(return_value=result_mock)
+                    scalars_mock.first.return_value = mock_direct_path
+                else:
+                    scalars_mock.all.return_value = []
+                    scalars_mock.first.return_value = None
+                result_mock.scalars.return_value = scalars_mock
+                return result_mock
             
-        mock_meta_session.execute.side_effect = execute_side_effect
+            # Default return for other queries
+            scalars_mock = MagicMock()
+            scalars_mock.all.return_value = []
+            scalars_mock.first.return_value = None
+            result_mock.scalars.return_value = scalars_mock
+            return result_mock
+            
+        # Keep existing execute mock for backward compatibility
+        if hasattr(mock_session.execute, 'side_effect'):
+            original_side_effect = mock_session.execute.side_effect
+            
+            async def combined_side_effect(stmt, **kwargs):
+                # Try new handler first
+                result = await execute_side_effect(stmt, **kwargs)
+                if result.scalars.return_value.all.return_value:
+                    return result
+                # Fall back to original if exists
+                if original_side_effect:
+                    # Check if original is async
+                    if asyncio.iscoroutinefunction(original_side_effect):
+                        return await original_side_effect(stmt, **kwargs)
+                    else:
+                        return original_side_effect(stmt, **kwargs)
+                return result
+                
+            mock_session.execute.side_effect = combined_side_effect
+        else:
+            mock_session.execute = AsyncMock(side_effect=execute_side_effect)
     
     return configure
