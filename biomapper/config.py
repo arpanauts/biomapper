@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # --- Database Settings ---
     # Metamapper DB URL (config/metadata)
     # Default location: data/metamapper.db relative to project root
-    metamapper_db_url: str = f"sqlite+aiosqlite:///{PROJECT_ROOT / 'metamapper.db'}"
+    metamapper_db_url: str = f"sqlite+aiosqlite:///{PROJECT_ROOT / 'data' / 'metamapper.db'}"
 
     # Cache DB URL (runtime results)
     # Default location: data/mapping_cache.db relative to project root

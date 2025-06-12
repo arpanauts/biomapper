@@ -578,6 +578,25 @@ mapping_strategies:
           input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
           output_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
 
+  UKBB_HPA_PROTEIN_RECONCILIATION:
+    description: "Resolves UniProt IDs from UKBB and HPA and finds the overlap"
+    target_ontology: "UNIPROTKB_AC"
+    steps:
+      - name: "Resolve UKBB UniProt IDs"
+        action:
+          type: "RESOLVE_UNIPROT_HISTORY"
+        inputs:
+          - "UKBB_PROTEIN_LIST" # This is a placeholder name for the input data
+        outputs:
+          - "UKBB_RESOLVED_UNIPROTS"
+      - name: "Resolve HPA UniProt IDs"
+        action:
+          type: "RESOLVE_UNIPROT_HISTORY"
+        inputs:
+          - "HPA_PROTEIN_LIST" # Placeholder
+        outputs:
+          - "HPA_RESOLVED_UNIPROTS"
+
 # Additional mapping resources that may be referenced
 additional_resources:
   - name: "uniprot_historical_resolver"
