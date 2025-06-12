@@ -136,3 +136,54 @@ To determine current project priorities:
 This dynamic approach ensures you're always working with the most current priorities rather than relying on static lists that may become outdated.
 
 **Note:** The iterative mapping strategy document (`/roadmap/technical_notes/core_mapping_logic/iterative_mapping_strategy.md`) is consistently a central guiding document for the project and should be referenced when implementing any mapping-related features.
+
+## Notebook-Driven Development Workflow
+
+The Biomapper project leverages Jupyter Notebooks for several key aspects of development, including:
+- Rapid prototyping of mapping strategies and client functionalities.
+- Iterative development of complex data transformation and matching logic.
+- Hands-on exploration of datasets and mapping challenges.
+- Creation of practical mapping results.
+- Generation of tutorial documentation that demonstrates Biomapper's capabilities and workflows.
+
+When working with or creating Jupyter Notebooks, adhere to the following guidelines:
+
+### Guidelines for Notebooks
+
+1.  **Purpose Clarity:**
+    *   Clearly define and state the purpose of each notebook at the beginning (e.g., exploratory data analysis, development of a specific mapping client, tutorial for a workflow, generation of a specific mapping dataset).
+
+2.  **Structure and Readability:**
+    *   Organize notebooks logically with clear markdown explanations for each step.
+    *   Use meaningful variable names and add comments to code cells where necessary.
+    *   Break down long processes into smaller, manageable cells.
+
+3.  **Data Handling:**
+    *   When loading data, prefer using configurations and paths managed by Biomapper (e.g., referencing `Endpoint` definitions from `metamapper.db` or YAML configs) rather than hardcoding paths directly in the notebook, especially for reusable workflows.
+    *   Clearly document data sources and any preprocessing steps.
+
+4.  **Biomapper Library Integration:**
+    *   Notebooks should serve as a development and testing ground for `biomapper` core library components (`MappingExecutor`, clients, actions, etc.).
+    *   Prioritize using and extending existing library functionalities over implementing standalone solutions within the notebook if the logic is intended to be core to Biomapper.
+
+5.  **Refactoring into Core Library:**
+    *   Logic developed and validated in notebooks that proves to be generalizable, reusable, or critical for Biomapper's functionality should be refactored into the main `biomapper` Python package.
+    *   This includes creating appropriate classes, functions, modules, and adding comprehensive unit and integration tests.
+    *   The notebook can then be updated to *use* the new library components, serving as a demonstration or tutorial.
+
+6.  **Version Control:**
+    *   Clear cell outputs before committing notebooks to version control to reduce noise in diffs. (`jupyter nbconvert --ClearOutputPreprocessor.enabled=True --inplace my_notebook.ipynb`)
+    *   Consider using tools like `jupytext` to pair notebooks with plain text versions if merge conflicts become frequent or difficult to resolve.
+
+7.  **Testing:**
+    *   Notebooks provide an excellent environment for interactive testing and experimentation.
+    *   However, this does not replace the need for formal, automated tests (e.g., `pytest`) for core library components. Logic refactored from notebooks into the library must be accompanied by such tests.
+
+8.  **Reproducibility:**
+    *   Ensure notebooks are reproducible by clearly specifying dependencies (which should be managed by `pyproject.toml` via Poetry) and data versions.
+    *   Document the expected execution order of cells if it's not strictly linear.
+
+9.  **Separation of Concerns:**
+    *   Maintain a clear distinction: notebooks are often *clients* or *drivers* of the Biomapper library. The library itself should contain the robust, well-tested, and reusable core logic.
+
+By following these guidelines, we can effectively use notebooks to accelerate development, produce tangible mapping outcomes, and create valuable tutorial materials, while ensuring the long-term health and maintainability of the core Biomapper library.
