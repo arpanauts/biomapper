@@ -11,6 +11,8 @@ import aiohttp
 from typing import Dict, List, Optional, Any, Tuple, Set
 
 from biomapper.core.exceptions import ClientInitializationError, ClientExecutionError
+from typing import Dict, List, Optional, Any, Tuple, Set # Added Set
+
 from biomapper.mapping.clients.base_client import (
     BaseMappingClient,
     CachedMappingClientMixin,
@@ -372,6 +374,17 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
                 }
             return results
     
+    def _preprocess_ids(self, identifiers: List[str]) -> List[str]:
+        """Preprocess identifiers to split composite IDs and remove duplicates."""
+        processed_ids: Set[str] = set()
+        for identifier in identifiers:
+            # Split by comma, then by underscore, and flatten the list
+            parts = [part.strip() for p_comma in identifier.split(',') for part in p_comma.split('_') if part.strip()]
+            for part in parts:
+                if part: # Ensure non-empty string after stripping
+                    processed_ids.add(part)
+        return list(processed_ids)
+
     async def map_identifiers(
         self, identifiers: List[str], config: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Tuple[Optional[List[str]], Optional[str]]]:
@@ -408,73 +421,184 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
         if bypass_cache:
             logger.info("UniProtHistoricalResolverClient: Bypassing cache as requested")
         
-        # Process identifiers in batches
-        batch_size = 25  # Smaller batches for reliability
-        batches = [identifiers[i:i+batch_size] for i in range(0, len(identifiers), batch_size)]
+        # Preprocess identifiers to handle composite IDs
+        original_identifiers = list(identifiers) # Keep a copy of the original input
+        processed_identifiers = self._preprocess_ids(identifiers)
+
+        # Initialize results dictionary - this will store results for preprocessed IDs
+        # We will map these back to original_identifiers at the end
+        processed_results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = { 
+            identifier: (None, "error:not_processed") for identifier in processed_identifiers
+        }
         
-        for batch in batches:
-            # Check cache first (unless bypassed)
-            filtered_batch = []
-            for identifier in batch:
-                if not bypass_cache:
-                    cached_result = await self._get_from_cache(identifier)
-                    if cached_result is not None:
-                        results[identifier] = cached_result
-                    else:
-                        filtered_batch.append(identifier)
+        # Filter out already cached identifiers if cache is enabled
+        if not bypass_cache:
+            cached_results = await self._get_from_cache(processed_identifiers)
+            # Update results with cached entries and identify non-cached IDs
+            non_cached_ids = []
+            for identifier in processed_identifiers:
+                if identifier in cached_results:
+                    processed_results[identifier] = cached_results[identifier]
                 else:
-                    filtered_batch.append(identifier)
-            
-            # Skip if all were in cache
-            if not filtered_batch:
-                continue
-                
+                    non_cached_ids.append(identifier)
+        else:
+            non_cached_ids = list(processed_identifiers)
+        
+        if not non_cached_ids:
+            logger.info("All preprocessed UniProt IDs found in cache.")
+            # Map results back to original identifiers
+            final_results = {}
+            for orig_id in original_identifiers:
+                # For a composite original ID, we need to decide how to aggregate results
+                # For now, let's take the first part's result as a placeholder strategy
+                # A more sophisticated strategy might be needed depending on requirements
+                current_processed_ids_for_orig = self._preprocess_ids([orig_id])
+                if current_processed_ids_for_orig:
+                    final_results[orig_id] = processed_results.get(current_processed_ids_for_orig[0], (None, "error:split_id_not_found"))
+                else:
+                    final_results[orig_id] = (None, "error:empty_after_preprocess")
+            return final_results
+        
+        logger.info(f"Resolving {len(non_cached_ids)} preprocessed UniProt IDs from API (total {len(processed_identifiers)} preprocessed, from {len(original_identifiers)} original requested).")
+        
+        # Process batches using preprocessed IDs
+        batch_size = 50  # UniProt recommends batching for multiple queries
+        for i in range(0, len(non_cached_ids), batch_size):
+            batch = non_cached_ids[i:i + batch_size]
             try:
-                # Resolve the batch
-                batch_results = await self._resolve_batch(filtered_batch)
-                
-                # Process the results
-                for identifier in filtered_batch:
-                    if identifier in batch_results:
-                        resolution_info = batch_results[identifier]
-                        
-                        if resolution_info["found"]:
-                            # Determine resolution type
-                            if resolution_info["is_primary"]:
-                                metadata = "primary"
-                            elif len(resolution_info["primary_ids"]) > 1:
-                                metadata = "demerged"
-                            else:
-                                metadata = f"secondary:{resolution_info['primary_ids'][0]}"
-                                
-                            result = (resolution_info["primary_ids"], metadata)
-                        else:
-                            result = (None, "obsolete")
-                            
-                        # Store in results and cache (unless bypassed)
-                        results[identifier] = result
-                        if not bypass_cache:
-                            await self._add_to_cache(identifier, result)
-                    else:
-                        # Should not happen, but handle for safety
-                        error_result = (None, "error:not_processed")
-                        results[identifier] = error_result
-                        if not bypass_cache:
-                            await self._add_to_cache(identifier, error_result)
-                        
+                batch_results_for_processed = await self._resolve_batch(batch)
+                for identifier, raw_result_dict in batch_results_for_processed.items():
+                    final_primary_ids: Optional[List[str]] = raw_result_dict.get("primary_ids")
+                    metadata_str: Optional[str] = None
+
+                    is_primary = raw_result_dict.get("is_primary", False)
+                    is_secondary = raw_result_dict.get("is_secondary", False)
+                    found = raw_result_dict.get("found", False)
+
+                    if is_primary:
+                        metadata_str = "primary"
+                        # Ensure final_primary_ids is [identifier] for primary, as per _resolve_batch convention
+                        final_primary_ids = [identifier]
+                    elif is_secondary:
+                        if final_primary_ids and len(final_primary_ids) == 1:
+                            metadata_str = f"secondary:{final_primary_ids[0]}"
+                        elif final_primary_ids and len(final_primary_ids) > 1: # Secondary that demerged
+                            metadata_str = "demerged"
+                            # primary_ids are already set correctly by _resolve_batch for this
+                        else: # is_secondary but no/empty primary_ids from _resolve_batch
+                            metadata_str = "error:secondary_no_target"
+                            final_primary_ids = None
+                    elif found: # Not primary, not secondary, but _resolve_batch marked as found
+                        if final_primary_ids and len(final_primary_ids) > 1:
+                            metadata_str = "demerged"
+                        elif final_primary_ids and len(final_primary_ids) == 1:
+                            # Found, one primary_id, but not categorized as primary or secondary by _resolve_batch.
+                            # This indicates an unexpected state or a gap in _resolve_batch's classification.
+                            metadata_str = "error:found_unclassified"
+                            final_primary_ids = None 
+                        else: # Found but no primary_ids or an empty list of primary_ids
+                            metadata_str = "obsolete" # Treat as obsolete if found but no valid primary IDs
+                            final_primary_ids = None
+                    else: # Not found (found is False)
+                        metadata_str = "obsolete"
+                        final_primary_ids = None
+                    
+                    # Fallback if metadata_str somehow wasn't set (should be covered by above logic)
+                    if metadata_str is None:
+                        metadata_str = "error:metadata_processing_failed"
+                        final_primary_ids = None
+                    
+                    # Ensure primary_ids is None if metadata indicates error or no resolution (e.g. "obsolete")
+                    if metadata_str == "obsolete" or metadata_str.startswith("error:"):
+                        final_primary_ids = None
+                    
+                    transformed_result: Tuple[Optional[List[str]], Optional[str]] = (final_primary_ids, metadata_str)
+                    
+                    processed_results[identifier] = transformed_result
+                    if not bypass_cache:
+                        await self._add_to_cache(identifier, transformed_result)
             except Exception as e:
-                logger.error(f"Error processing batch: {str(e)}")
-                for identifier in filtered_batch:
-                    if identifier not in results:
-                        error_result = (None, f"error:{str(e)}")
-                        results[identifier] = error_result
+                logger.error(f"Error processing batch {batch}: {str(e)}")
+                for identifier in batch:
+                    if identifier not in processed_results or processed_results[identifier][1] == "error:not_processed":
+                        error_result = (None, f"error:batch_processing_failed:{str(e)}")
+                        processed_results[identifier] = error_result
                         if not bypass_cache:
                             await self._add_to_cache(identifier, error_result)
         
-        # Count statistics for logging
+        # Map processed_results back to original_identifiers for the final output
+        final_results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
+        for orig_id in original_identifiers:
+            # Get the constituent parts of the original ID. _preprocess_ids cleans and splits.
+            split_parts = self._preprocess_ids([orig_id]) 
+
+            if not split_parts:
+                final_results[orig_id] = (None, "error:empty_after_preprocess")
+                continue
+
+            if len(split_parts) == 1:
+                # The original ID (possibly after cleaning) corresponds to a single processed ID.
+                single_part_key = split_parts[0]
+                result_tuple = processed_results.get(single_part_key)
+                if result_tuple:
+                    final_results[orig_id] = result_tuple
+                else:
+                    # This case should ideally not happen if all processed_ids are in processed_results
+                    final_results[orig_id] = (None, f"error:part_not_found_in_results:{single_part_key}")
+            else:
+                # This orig_id was composite and split into multiple parts. Aggregate results.
+                collected_primary_ids: Set[str] = set()
+                collected_metadata_details: List[str] = [] # To store "part_id:metadata_str"
+                
+                has_successful_resolution = False # True if any part yields primary IDs
+                has_error_in_parts = False       # True if any part's metadata indicates an error
+
+                for part_id in split_parts:
+                    # Default if part_id is somehow not in processed_results (should not happen with current logic)
+                    part_primary_ids, part_meta_str = processed_results.get(part_id, (None, f"error:part_not_found:{part_id}"))
+                    
+                    if part_primary_ids:
+                        collected_primary_ids.update(part_primary_ids)
+                        has_successful_resolution = True
+                    
+                    if part_meta_str:
+                        collected_metadata_details.append(f"{part_id}:{part_meta_str}")
+                        if part_meta_str.startswith("error:"):
+                            has_error_in_parts = True
+                    else: # Should not happen if processed_results is populated correctly by transformation logic
+                        collected_metadata_details.append(f"{part_id}:error:missing_metadata")
+                        has_error_in_parts = True
+
+                final_agg_primary_ids: Optional[List[str]] = sorted(list(collected_primary_ids)) if collected_primary_ids else None
+                
+                # Construct the aggregated metadata string
+                final_agg_metadata_str: str
+                unique_metadata_strings = sorted(list(set(collected_metadata_details))) # Unique, sorted details from each part
+
+                if has_error_in_parts:
+                    final_agg_metadata_str = "composite:error_in_parts|" + "|".join(unique_metadata_strings)
+                elif not final_agg_primary_ids: # No primary IDs resolved from any part, and no specific errors flagged above
+                    # Check if all parts were strictly 'obsolete'
+                    all_strictly_obsolete = True
+                    for part_id_check in split_parts:
+                        # Need to re-fetch from processed_results to check original metadata string for 'obsolete'
+                        _, meta_check = processed_results.get(part_id_check, (None, "")) # Default meta to empty if not found
+                        if meta_check != "obsolete":
+                            all_strictly_obsolete = False
+                            break
+                    if all_strictly_obsolete:
+                        final_agg_metadata_str = "composite:all_parts_obsolete"
+                    else:
+                        final_agg_metadata_str = "composite:no_primary_ids_found|" + "|".join(unique_metadata_strings)
+                else: # Has primary IDs and no errors in parts
+                    final_agg_metadata_str = "composite:resolved|" + "|".join(unique_metadata_strings)
+                
+                final_results[orig_id] = (final_agg_primary_ids, final_agg_metadata_str)
+
+        # Count statistics for logging based on processed_results (reflects API interaction)
         primary_count = secondary_count = demerged_count = obsolete_count = error_count = 0
         
-        for _, (primary_ids, metadata) in results.items():
+        for _, (primary_ids, metadata) in processed_results.items():
             if metadata == "primary":
                 primary_count += 1
             elif metadata and metadata.startswith("secondary:"):
@@ -488,12 +612,12 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
         
         # Log statistics
         logger.info(
-            f"Resolved {len(identifiers)} UniProt IDs: "
+            f"Resolved {len(processed_identifiers)} preprocessed UniProt IDs (from {len(original_identifiers)} original): "
             f"{primary_count} primary, {secondary_count} secondary, "
             f"{demerged_count} demerged, {obsolete_count} obsolete, {error_count} errors"
         )
         
-        return results
+        return final_results
 
     async def reverse_map_identifiers(
         self, identifiers: List[str], config: Optional[Dict[str, Any]] = None
