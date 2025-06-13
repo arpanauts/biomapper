@@ -3212,6 +3212,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         step_results = []
         overall_provenance = []
         
+        # Initialize strategy-level context that persists across steps
+        strategy_context = {}
+        
         # Execute each step in sequence
         for step_idx, step in enumerate(steps):
             self.logger.info(f"Executing step {step.step_id}: {step.description}")
@@ -3231,6 +3234,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                     max_cache_age_days=max_cache_age_days,
                     batch_size=batch_size,
                     min_confidence=min_confidence,
+                    strategy_context=strategy_context,  # Pass strategy context
                 )
                 
                 # Update working data for next step
@@ -3392,7 +3396,8 @@ class MappingExecutor(CompositeIdentifierMixin):
                 'total_unmapped': len([r for r in mapping_results.values() if not r.get('mapped_value')]),
                 'steps_executed': len(step_results),
                 'step_results': step_results
-            }
+            },
+            'context': strategy_context  # Include the final strategy context
         }
     
     async def _execute_strategy_action(
@@ -3406,6 +3411,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         max_cache_age_days: Optional[int],
         batch_size: int,
         min_confidence: float,
+        strategy_context: Dict[str, Any] = None,
     ) -> Dict[str, Any]:
         """
         Execute a single strategy action step using dedicated action classes.
@@ -3441,17 +3447,38 @@ class MappingExecutor(CompositeIdentifierMixin):
             MappingExecutionError: If the action execution fails
         """
         # Import strategy actions
+        from biomapper.core.strategy_actions.bidirectional_match import BidirectionalMatchAction
         from biomapper.core.strategy_actions.convert_identifiers_local import ConvertIdentifiersLocalAction
         from biomapper.core.strategy_actions.execute_mapping_path import ExecuteMappingPathAction
         from biomapper.core.strategy_actions.filter_by_target_presence import FilterByTargetPresenceAction
+        from biomapper.core.strategy_actions.resolve_and_match_forward import ResolveAndMatchForwardAction
+        from biomapper.core.strategy_actions.resolve_and_match_reverse import ResolveAndMatchReverse
         
         action_type = step.action_type
         action_params = step.action_parameters or {}
         
-        self.logger.info(f"Executing action type: {action_type} with params: {action_params}")
+        # Process action parameters to handle context references
+        processed_params = {}
+        for key, value in action_params.items():
+            if isinstance(value, str) and value.startswith("context."):
+                # This is a reference to context, strip the prefix
+                context_key = value[8:]  # Remove "context." prefix
+                processed_params[key] = context_key
+            else:
+                processed_params[key] = value
         
-        # Create context for actions
-        context = {
+        self.logger.info(f"Executing action type: {action_type} with params: {processed_params}")
+        
+        # Initialize strategy context if not provided
+        if strategy_context is None:
+            strategy_context = {}
+            
+        # Use strategy context directly, adding execution parameters
+        # This ensures modifications persist between steps
+        context = strategy_context
+        
+        # Add/update execution parameters
+        context.update({
             "db_session": self.async_metamapper_session,  # Pass the session factory
             "cache_settings": {
                 "use_cache": use_cache,
@@ -3460,7 +3487,9 @@ class MappingExecutor(CompositeIdentifierMixin):
             "mapping_executor": self,  # For ExecuteMappingPathAction
             "batch_size": batch_size,
             "min_confidence": min_confidence
-        }
+        })
+        
+        self.logger.debug(f"Context before action: {list(context.keys())}")
         
         # Execute within a database session
         async with self.async_metamapper_session() as session:
@@ -3474,6 +3503,12 @@ class MappingExecutor(CompositeIdentifierMixin):
                 action = ExecuteMappingPathAction(session)
             elif action_type == "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE":
                 action = FilterByTargetPresenceAction(session)
+            elif action_type == "RESOLVE_AND_MATCH_FORWARD":
+                action = ResolveAndMatchForwardAction(session)
+            elif action_type == "RESOLVE_AND_MATCH_REVERSE":
+                action = ResolveAndMatchReverse(session)
+            elif action_type == "BIDIRECTIONAL_MATCH":
+                action = BidirectionalMatchAction(session)
             else:
                 raise ConfigurationError(f"Unknown action type: {action_type}")
             
@@ -3482,7 +3517,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                 result = await action.execute(
                     current_identifiers=current_identifiers,
                     current_ontology_type=current_ontology_type,
-                    action_params=action_params,
+                    action_params=processed_params,
                     source_endpoint=source_endpoint,
                     target_endpoint=target_endpoint,
                     context=context
