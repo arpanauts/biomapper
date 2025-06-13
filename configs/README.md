@@ -202,3 +202,199 @@ If you have existing entity configs with mapping strategies:
 2. **Update references** if any scripts directly reference strategy names
 3. **Test thoroughly** to ensure strategies still work correctly
 4. **Remove old sections** from entity configs once migration is verified
+
+## Approaching New Mappings: A Systematic Workflow
+
+When faced with a new mapping requirement, follow this systematic discovery-to-implementation workflow:
+
+### Phase 1: Discovery - Examine the Actual Data
+
+Before creating any configuration, thoroughly understand your data:
+
+```bash
+# Examine source data structure
+head -20 /path/to/source_data.csv
+# Note: Column names, identifier formats, sample values
+
+# Examine target data structure  
+head -20 /path/to/target_data.csv
+# Note: What identifiers are available, data quality
+
+# Check for missing values, duplicates, formatting issues
+```
+
+### Phase 2: Strategy Design - Plan the Mapping Approach
+
+Based on your discovery, answer these key questions:
+
+1. **What identifiers does the source have?**
+   - Primary identifiers (e.g., proprietary assay IDs)
+   - Secondary identifiers (e.g., UniProt, Gene names)
+   - Are identifiers composite or simple?
+
+2. **What identifiers does the target expect?**
+   - What is the target's primary identifier?
+   - What secondary identifiers are available for matching?
+
+3. **Is there a direct path or do we need bridges?**
+   - Do source and target share any identifier types?
+   - If not, what intermediate identifier can connect them?
+   - For proteins: UniProt often serves as a universal bridge
+
+4. **Are there deprecated/obsolete IDs to resolve?**
+   - Do identifiers need historical resolution (e.g., old UniProt IDs)?
+   - Are there versioning issues to handle?
+
+5. **Should we filter by target presence?**
+   - Is it valuable to reduce the dataset early?
+   - Will filtering improve performance without losing mappings?
+
+6. **Are there composite/complex identifiers?**
+   - Do any IDs contain multiple values (e.g., "Q14213_Q8NEV9")?
+   - Do IDs need parsing or transformation?
+
+### Phase 3: Configuration - Fill the Gaps
+
+Based on your strategy design, update the configuration files:
+
+#### In Entity Configuration (e.g., `protein_config.yaml`):
+
+1. **Define new ontologies** if needed:
+   ```yaml
+   ontologies:
+     - id: "NEW_ID_TYPE_ONTOLOGY"
+       name: "Human Readable Name"
+       description: "What this identifier represents"
+   ```
+
+2. **Add endpoint definitions** for new data sources:
+   ```yaml
+   databases:
+     new_dataset:
+       name: "New Dataset Name"
+       endpoint:
+         type: "PRIMARY_ONTOLOGY_TYPE"
+         properties:
+           primary: "PRIMARY_ONTOLOGY_TYPE"
+           mappings:
+             PRIMARY_ONTOLOGY_TYPE:
+               column: "id_column_name"
+               ontology_type: "PRIMARY_ONTOLOGY_TYPE"
+             SECONDARY_ONTOLOGY_TYPE:
+               column: "secondary_id_column"
+               ontology_type: "SECONDARY_ONTOLOGY_TYPE"
+       connection_details:
+         type: "file.csv"  # or file.tsv
+         path: "${DATA_DIR}/path/to/file.csv"
+   ```
+
+3. **Create mapping clients** if external resolution is needed:
+   ```yaml
+   mapping_clients:
+     new_resolver_client:
+       type: "biomapper.mapping.clients.NewResolverClient"
+       input_ontology_type: "INPUT_TYPE"
+       output_ontology_type: "OUTPUT_TYPE"
+       config:
+         api_endpoint: "https://api.example.com"
+   ```
+
+#### In Strategies Configuration (`mapping_strategies_config.yaml`):
+
+Design your mapping strategy step by step:
+
+```yaml
+entity_strategies:
+  protein:  # or metabolite, gene, etc.
+    NEW_MAPPING_PIPELINE:
+      description: "Maps X to Y via Z"
+      default_source_ontology_type: "SOURCE_PRIMARY_ONTOLOGY"
+      default_target_ontology_type: "TARGET_PRIMARY_ONTOLOGY"
+      steps:
+        - step_id: "S1_INITIAL_CONVERSION"
+          description: "Convert source IDs to bridge format"
+          action:
+            type: "CONVERT_IDENTIFIERS_LOCAL"
+            endpoint_context: "SOURCE"
+            output_ontology_type: "BRIDGE_ONTOLOGY_TYPE"
+        
+        - step_id: "S2_RESOLVE_IF_NEEDED"
+          description: "Resolve deprecated IDs"
+          action:
+            type: "EXECUTE_MAPPING_PATH"
+            path_name: "RESOLVER_PATH_NAME"
+        
+        - step_id: "S3_FILTER_BY_TARGET"
+          description: "Keep only IDs present in target"
+          action:
+            type: "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
+            endpoint_context: "TARGET"
+            ontology_type_to_match: "BRIDGE_ONTOLOGY_TYPE"
+        
+        - step_id: "S4_FINAL_CONVERSION"
+          description: "Convert to target's native IDs"
+          action:
+            type: "CONVERT_IDENTIFIERS_LOCAL"
+            endpoint_context: "TARGET"
+            input_ontology_type: "BRIDGE_ONTOLOGY_TYPE"
+            output_ontology_type: "TARGET_PRIMARY_ONTOLOGY"
+```
+
+### Phase 4: Implementation - Load and Test
+
+1. **Validate configuration**:
+   ```bash
+   python scripts/setup_and_configuration/validate_config_separation.py
+   ```
+
+2. **Load into database**:
+   ```bash
+   python scripts/setup_and_configuration/populate_metamapper_db.py --drop-all
+   ```
+
+3. **Test with small sample**:
+   - Use the notebook to test on a subset
+   - Verify each step produces expected results
+   - Check for data quality issues
+
+4. **Run full pipeline**:
+   - Create a script following the pattern in `run_full_ukbb_hpa_mapping.py`
+   - Monitor performance and results
+
+### Example: UKBB to HPA Protein Mapping
+
+This real example illustrates the workflow:
+
+**Discovery**:
+- UKBB has proprietary assay IDs + UniProt column
+- HPA uses gene names + UniProt column
+- Both have UniProt → can use as bridge
+
+**Strategy Design**:
+- Path: UKBB ID → UniProt → Resolved UniProt → Filter by HPA → HPA Gene
+- Need UniProt resolution for obsolete IDs
+- Filter improves performance
+
+**Configuration**:
+- Added UKBB_PROTEIN_ASSAY_ID_ONTOLOGY to ontologies
+- Created UKBB_PROTEIN and HPA_OSP_PROTEIN endpoints
+- Designed 4-step UKBB_TO_HPA_PROTEIN_PIPELINE strategy
+
+**Result**: Successfully maps 487 of 2,923 proteins (after filtering)
+
+### Best Practices
+
+1. **Always examine real data first** - Don't assume column names or formats
+2. **Start simple** - Test direct matching before adding complexity
+3. **Use existing bridges** - UniProt for proteins, InChIKey for metabolites
+4. **Filter strategically** - Balance performance with mapping coverage
+5. **Document your reasoning** - Explain why each step is necessary
+6. **Test incrementally** - Verify each step before adding the next
+
+### Common Pitfalls to Avoid
+
+- **Assuming identifier formats** - Always check actual data
+- **Over-engineering** - Start with the simplest strategy that works
+- **Ignoring data quality** - Handle missing values and formatting issues
+- **Skipping validation** - Test thoroughly before full runs
+- **Hardcoding paths** - Use configuration-driven approach
