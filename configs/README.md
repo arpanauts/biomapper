@@ -1,10 +1,28 @@
 # Biomapper Configuration Files (`configs/`)
 
-This directory contains YAML configuration files (e.g., `protein_config.yaml`, `metabolite_config.yaml`) that define the data sources, ontologies, and mapping strategies for different biological entity types within the Biomapper system. These configurations are crucial for populating the `metamapper.db` metadata database and guiding the `MappingExecutor` during the mapping processes.
+This directory contains YAML configuration files that define the data sources, ontologies, and mapping strategies for different biological entity types within the Biomapper system. These configurations are crucial for populating the `metamapper.db` metadata database and guiding the `MappingExecutor` during the mapping processes.
 
-## Structure of `*_config.yaml` Files
+## Configuration Structure
 
-Each `*_config.yaml` file follows a structured format to provide a comprehensive definition of an entity type, its associated identifier types (ontologies), the data sources (endpoints) that contain these entities, and the methods (clients and paths) to map between different identifier types.
+The configuration system is divided into two types of files:
+
+### 1. Entity Configuration Files (e.g., `protein_config.yaml`, `metabolite_config.yaml`)
+These files define:
+- **Ontologies**: Identifier types for the entity
+- **Databases**: Data sources and their endpoints
+- **Mapping Paths**: Direct conversion sequences between ontologies
+- **Additional Resources**: External API clients and services
+
+### 2. Mapping Strategies Configuration (`mapping_strategies_config.yaml`)
+This centralized file contains:
+- **Generic Strategies**: Reusable across all entity types
+- **Entity-Specific Strategies**: Complex pipelines for specific entities
+- **Composition Rules**: How strategies can be combined
+- **Selection Hints**: Guidance on when to use each strategy
+
+## Structure of Entity Configuration Files
+
+Each entity configuration file follows a structured format to provide a comprehensive definition of an entity type, its associated identifier types (ontologies), the data sources (endpoints) that contain these entities, and the methods (clients and paths) to map between different identifier types.
 
 Below is a meta-level overview of the common components found in these YAML files:
 
@@ -124,21 +142,7 @@ Below is a meta-level overview of the common components found in these YAML file
 
 This structured configuration approach enables Biomapper to be highly flexible and adaptable to new data sources and mapping requirements.
 
-8.  **`mapping_strategies` (Object, Optional)**:
-    *   **Purpose**: Defines named, ordered pipelines of mapping operations for specific, complex mapping tasks. This allows for explicit control over multi-step mapping processes.
-    *   **Details**: For a comprehensive explanation of how to define and use mapping strategies, please refer to [YAML-Defined Mapping Strategies in Biomapper](../roadmap/technical_notes/core_mapping_logic/yaml_defined_mapping_strategies.md).
-    *   **Example Snippet**:
-        ```yaml
-        mapping_strategies:
-          MY_COMPLEX_PROTEIN_STRATEGY:
-            description: "A specific strategy for mapping X to Y with intermediate steps."
-            steps:
-              - step_id: "S1_INITIAL_CONVERSION"
-                action:
-                  type: "CONVERT_IDENTIFIERS_LOCAL"
-                  # ... other parameters
-              # ... more steps
-        ```
+**Note**: Mapping strategies have been moved to a separate configuration file (`mapping_strategies_config.yaml`) for better organization and reusability across entity types. Entity configuration files should no longer contain a `mapping_strategies` section.
 
 ## Strategy for Configuring "UniProt-Complete" Datasets (e.g., HPA, QIN, UKBB Proteins)
 
@@ -160,3 +164,41 @@ For datasets like HPA, QIN, and UKBB protein data, where UniProt Accession numbe
         3.  To use these "expanded" UniProt ACs for a subsequent round of comparison against the target dataset.
 
 This layered approach simplifies initial configuration while allowing for sophisticated enhancements to mapping recall. The `MappingExecutor` can be guided to use UniProt AC as the PSO, and specific `mapping_paths` can be defined to leverage the `UniProtMappingClient` for the secondary step.
+
+## Action Types Reference
+
+For information about the action types available in mapping strategies, see:
+- `/home/ubuntu/biomapper/docs/ACTION_TYPES_REFERENCE.md`
+
+Action types are the building blocks of mapping strategies, each corresponding to a method in the MappingExecutor. Understanding these action types is essential for creating new mapping strategies.
+
+## Mapping Strategies Configuration
+
+Mapping strategies are now centralized in `mapping_strategies_config.yaml`. This file contains:
+
+### Generic Strategies
+Reusable strategies that work across entity types:
+- **DIRECT_SHARED_ONTOLOGY_MATCH**: Simple matching when endpoints share an ontology
+- **BRIDGE_VIA_COMMON_ID**: Use a common identifier as bridge between endpoints
+- **RESOLVE_AND_MATCH**: Handle deprecated/historical identifiers before matching
+
+### Entity-Specific Strategies
+Complex pipelines tailored to specific entity types:
+- **protein.UKBB_TO_HPA_PROTEIN_PIPELINE**: Maps UKBB assay IDs to HPA gene names
+- **protein.HANDLE_COMPOSITE_UNIPROT**: Processes composite UniProt IDs
+- **metabolite.PUBCHEM_TO_HMDB_VIA_INCHIKEY**: Maps using chemical structure keys
+
+### Using the Separated Configuration
+
+1. **Loading Order**: The `populate_metamapper_db.py` script processes entity configs first, then mapping strategies
+2. **Config Type Detection**: Files with `config_type: "mapping_strategies"` are handled differently
+3. **Backward Compatibility**: The system warns if strategies are found in entity configs but continues to work
+
+## Migration Guide
+
+If you have existing entity configs with mapping strategies:
+
+1. **Move strategies** to `mapping_strategies_config.yaml` under appropriate sections
+2. **Update references** if any scripts directly reference strategy names
+3. **Test thoroughly** to ensure strategies still work correctly
+4. **Remove old sections** from entity configs once migration is verified
