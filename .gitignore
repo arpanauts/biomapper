@@ -33,6 +33,7 @@ MANIFEST
 *.xlsx
 *.xls
 *.json
+!configs/schemas/*.json
 #*.yaml
 *.yml
 *.jsonl

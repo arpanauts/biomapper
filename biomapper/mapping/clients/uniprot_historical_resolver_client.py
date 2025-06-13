@@ -433,7 +433,13 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
         
         # Filter out already cached identifiers if cache is enabled
         if not bypass_cache:
-            cached_results = await self._get_from_cache(processed_identifiers)
+            # Check cache for each identifier individually
+            cached_results = {}
+            for identifier in processed_identifiers:
+                cached_result = await self._get_from_cache(identifier)
+                if cached_result is not None:
+                    cached_results[identifier] = cached_result
+            
             # Update results with cached entries and identify non-cached IDs
             non_cached_ids = []
             for identifier in processed_identifiers:
