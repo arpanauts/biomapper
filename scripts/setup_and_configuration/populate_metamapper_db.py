@@ -43,7 +43,11 @@ class ConfigurationValidator:
         self.warnings = []
         self.config_filename = config_filename
 
-        # Basic structure validation
+        # Check if this is a strategies-only config
+        if config_data.get('config_type') == 'mapping_strategies':
+            return self._validate_strategies_config(config_data)
+
+        # Basic structure validation for entity configs
         required_top_level_keys = ['entity_type', 'version', 'ontologies', 'databases'] # 'mapping_paths' is optional
         for key in required_top_level_keys:
             if key not in config_data:
@@ -66,6 +70,60 @@ class ConfigurationValidator:
         self._validate_mapping_strategies(mapping_strategies_data, ontologies_data, mapping_paths_data)
 
         return len(self.errors) == 0
+    
+    def _validate_strategies_config(self, config_data: Dict[str, Any]) -> bool:
+        """Validate strategies-only configuration file."""
+        # Check required fields
+        if 'version' not in config_data:
+            self.errors.append("Missing required 'version' field in strategies config")
+        
+        # Check for at least one strategy type
+        has_strategies = ('generic_strategies' in config_data or 
+                         'entity_strategies' in config_data)
+        
+        if not has_strategies:
+            self.errors.append("Strategies config must contain 'generic_strategies' or 'entity_strategies'")
+            return False
+        
+        # Validate strategy structure
+        all_strategy_names = set()
+        
+        # Check generic strategies
+        if 'generic_strategies' in config_data:
+            for name, strategy in config_data['generic_strategies'].items():
+                if name in all_strategy_names:
+                    self.errors.append(f"Duplicate strategy name: {name}")
+                all_strategy_names.add(name)
+                self._validate_single_strategy(name, strategy)
+        
+        # Check entity strategies
+        if 'entity_strategies' in config_data:
+            for entity_type, strategies in config_data['entity_strategies'].items():
+                for name, strategy in strategies.items():
+                    if name in all_strategy_names:
+                        self.errors.append(f"Duplicate strategy name: {name}")
+                    all_strategy_names.add(name)
+                    self._validate_single_strategy(name, strategy)
+        
+        return len(self.errors) == 0
+    
+    def _validate_single_strategy(self, name: str, strategy: Dict[str, Any]):
+        """Validate a single strategy definition."""
+        if 'steps' not in strategy:
+            self.errors.append(f"Strategy '{name}' missing required 'steps' field")
+            return
+            
+        if not isinstance(strategy['steps'], list):
+            self.errors.append(f"Strategy '{name}' steps must be a list")
+            return
+            
+        for i, step in enumerate(strategy['steps']):
+            if 'step_id' not in step:
+                self.errors.append(f"Step {i} in strategy '{name}' missing 'step_id'")
+            if 'action' not in step:
+                self.errors.append(f"Step {i} in strategy '{name}' missing 'action'")
+            elif 'type' not in step['action']:
+                self.errors.append(f"Step {i} in strategy '{name}' action missing 'type'")
     
     def _validate_ontologies(self, ontologies: Dict[str, Any]):
         """Validate ontologies section."""
@@ -814,6 +872,26 @@ async def populate_entity_type(session: AsyncSession, entity_name: str, config_d
         )
 
 
+async def populate_strategies_from_config(session: AsyncSession, config_data: Dict[str, Any]):
+    """Populate strategies from a strategies-only config file."""
+    logger.info("Processing mapping strategies configuration")
+    
+    # Process generic strategies
+    if 'generic_strategies' in config_data:
+        for strategy_name, strategy_data in config_data['generic_strategies'].items():
+            # Use 'generic' as the entity_type for generic strategies
+            await populate_mapping_strategies(
+                session, {strategy_name: strategy_data}, entity_name='generic'
+            )
+    
+    # Process entity-specific strategies
+    if 'entity_strategies' in config_data:
+        for entity_type, strategies in config_data['entity_strategies'].items():
+            await populate_mapping_strategies(
+                session, strategies, entity_name=entity_type
+            )
+
+
 async def populate_from_configs(session: AsyncSession):
     """Main function to populate database from YAML configuration files."""
     # Get project root from config file's parent parent directory
@@ -861,11 +939,23 @@ async def populate_from_configs(session: AsyncSession):
                 for warning in validator.warnings:
                     logger.warning(f"  - {warning}")
             
-            # Get entity name from config or filename
-            entity_name = config_data.get('entity_type', yaml_file.stem.replace('_config', ''))
-            
-            # Populate this entity type
-            await populate_entity_type(session, entity_name, config_data)
+            # Handle different config types
+            if config_data.get('config_type') == 'mapping_strategies':
+                # This is a strategies-only config
+                await populate_strategies_from_config(session, config_data)
+            else:
+                # This is an entity config
+                entity_name = config_data.get('entity_type', yaml_file.stem.replace('_config', ''))
+                
+                # Warn if strategies are still in entity config
+                if 'mapping_strategies' in config_data:
+                    logger.warning(
+                        f"Found mapping_strategies in entity config {yaml_file.name}. "
+                        "Consider moving to mapping_strategies_config.yaml"
+                    )
+                
+                # Populate this entity type
+                await populate_entity_type(session, entity_name, config_data)
             
         except Exception as e:
             logger.error(f"Error processing {yaml_file}: {e}")

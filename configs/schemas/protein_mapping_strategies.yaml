@@ -1,0 +1,57 @@
+# Protein Mapping Strategies Configuration
+# This file defines YAML-based multi-step mapping pipelines for protein entity mappings
+# Version: 1.0
+
+# Define mapping strategies for YAML-based multi-step pipelines
+mapping_strategies:
+  UKBB_TO_HPA_PROTEIN_PIPELINE:
+    description: "Maps UKBB protein assay IDs to HPA OSP native IDs via UniProt AC, including historical resolution"
+    default_source_ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
+    default_target_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
+    steps:
+      - step_id: "S1_UKBB_NATIVE_TO_UNIPROT"
+        description: "Convert UKBB Assay IDs to UniProt ACs using local UKBB data"
+        action:
+          type: "CONVERT_IDENTIFIERS_LOCAL"
+          endpoint_context: "SOURCE"
+          output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+          
+      - step_id: "S2_RESOLVE_UNIPROT_HISTORY"
+        description: "Resolve UniProt ACs via UniProt API to handle historical changes"
+        action:
+          type: "EXECUTE_MAPPING_PATH"
+          path_name: "RESOLVE_UNIPROT_HISTORY_VIA_API"
+          
+      - step_id: "S3_FILTER_BY_HPA_PRESENCE"
+        description: "Filter resolved UniProt ACs to keep only those present in HPA data"
+        action:
+          type: "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
+          endpoint_context: "TARGET"
+          ontology_type_to_match: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+          
+      - step_id: "S4_HPA_UNIPROT_TO_NATIVE"
+        description: "Convert matching UniProt ACs to HPA OSP native IDs"
+        action:
+          type: "CONVERT_IDENTIFIERS_LOCAL"
+          endpoint_context: "TARGET"
+          input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+          output_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
+
+#   UKBB_HPA_PROTEIN_RECONCILIATION:
+#     description: "Resolves UniProt IDs from UKBB and HPA and finds the overlap"
+#     target_ontology: "UNIPROTKB_AC"
+#     steps:
+#       - name: "Resolve UKBB UniProt IDs"
+#         action:
+#           type: "RESOLVE_UNIPROT_HISTORY"
+#         inputs:
+#           - "UKBB_PROTEIN_LIST" # This is a placeholder name for the input data
+#         outputs:
+#           - "UKBB_RESOLVED_UNIPROTS"
+#       - name: "Resolve HPA UniProt IDs"
+#         action:
+#           type: "RESOLVE_UNIPROT_HISTORY"
+#         inputs:
+#           - "HPA_PROTEIN_LIST" # Placeholder
+#         outputs:
+#           - "HPA_RESOLVED_UNIPROTS"

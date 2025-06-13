@@ -1,0 +1,238 @@
+# Mapping Strategies Configuration
+# This file defines reusable mapping strategies that can work across different entity types
+# Version: 1.0
+
+config_type: "mapping_strategies"  # New field to identify this as a strategies-only config
+version: "1.0"
+
+# Generic strategies that work with any entity type
+generic_strategies:
+  
+  DIRECT_SHARED_ONTOLOGY_MATCH:
+    description: "Simple direct matching when source and target share an ontology type"
+    applicable_to: ["protein", "metabolite", "clinical_lab", "gene"]
+    parameters:
+      - name: "shared_ontology_type"
+        description: "The ontology type that both endpoints have"
+        required: true
+    steps:
+      - step_id: "S1_MATCH"
+        description: "Match identifiers using shared ontology"
+        action:
+          type: "MATCH_SHARED_ONTOLOGY"
+          shared_ontology_type: "${shared_ontology_type}"
+  
+  BRIDGE_VIA_COMMON_ID:
+    description: "Map between endpoints using a common identifier type as bridge"
+    applicable_to: ["protein", "metabolite", "clinical_lab", "gene"]
+    parameters:
+      - name: "bridge_ontology_type"
+        description: "The ontology type to use as bridge"
+        required: true
+    steps:
+      - step_id: "S1_CONVERT_TO_BRIDGE"
+        description: "Convert source identifiers to bridge ontology"
+        action:
+          type: "CONVERT_IDENTIFIERS_LOCAL"
+          endpoint_context: "SOURCE"
+          output_ontology_type: "${bridge_ontology_type}"
+      
+      - step_id: "S2_FILTER_BY_TARGET"
+        description: "Keep only identifiers present in target"
+        action:
+          type: "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
+          endpoint_context: "TARGET"
+          ontology_type_to_match: "${bridge_ontology_type}"
+      
+      - step_id: "S3_CONVERT_TO_TARGET"
+        description: "Convert to target's native identifier"
+        action:
+          type: "CONVERT_IDENTIFIERS_LOCAL"
+          endpoint_context: "TARGET"
+          input_ontology_type: "${bridge_ontology_type}"
+          output_ontology_type: "${target_native_ontology_type}"
+
+  RESOLVE_AND_MATCH:
+    description: "Resolve deprecated/historical identifiers before matching"
+    applicable_to: ["protein", "metabolite", "gene"]
+    parameters:
+      - name: "resolver_service"
+        description: "Service to use for resolution"
+        required: true
+      - name: "match_ontology_type"
+        description: "Ontology type to match after resolution"
+        required: true
+    steps:
+      - step_id: "S1_RESOLVE_HISTORICAL"
+        description: "Resolve historical/deprecated identifiers"
+        action:
+          type: "RESOLVE_DEPRECATED_IDENTIFIERS"
+          resolver_service: "${resolver_service}"
+          include_secondary: true
+      
+      - step_id: "S2_DEDUPLICATE"
+        description: "Remove any duplicates from resolution"
+        action:
+          type: "DEDUPLICATE_IDENTIFIERS"
+          dedup_strategy: "keep_first"
+          case_sensitive: true
+      
+      - step_id: "S3_FILTER_BY_TARGET"
+        description: "Filter by target presence"
+        action:
+          type: "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
+          endpoint_context: "TARGET"
+          ontology_type_to_match: "${match_ontology_type}"
+
+# Entity-specific strategies
+entity_strategies:
+  
+  protein:
+    UKBB_TO_HPA_PROTEIN_PIPELINE:
+      description: "Maps UKBB protein assay IDs to HPA OSP native IDs via UniProt AC"
+      default_source_ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
+      default_target_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
+      steps:
+        - step_id: "S1_UKBB_NATIVE_TO_UNIPROT"
+          description: "Convert UKBB Assay IDs to UniProt ACs"
+          action:
+            type: "CONVERT_IDENTIFIERS_LOCAL"
+            endpoint_context: "SOURCE"
+            output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        
+        - step_id: "S2_RESOLVE_UNIPROT_HISTORY"
+          description: "Resolve UniProt ACs via UniProt API"
+          action:
+            type: "EXECUTE_MAPPING_PATH"
+            path_name: "RESOLVE_UNIPROT_HISTORY_VIA_API"
+        
+        - step_id: "S3_FILTER_BY_HPA_PRESENCE"
+          description: "Filter to keep only proteins in HPA"
+          action:
+            type: "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
+            endpoint_context: "TARGET"
+            ontology_type_to_match: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        
+        - step_id: "S4_HPA_UNIPROT_TO_NATIVE"
+          description: "Convert UniProt ACs to HPA gene names"
+          action:
+            type: "CONVERT_IDENTIFIERS_LOCAL"
+            endpoint_context: "TARGET"
+            input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+            output_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
+
+    HANDLE_COMPOSITE_UNIPROT:
+      description: "Process composite UniProt IDs like Q14213_Q8NEV9"
+      applicable_endpoints: ["any_with_composite_uniprot"]
+      steps:
+        - step_id: "S1_SPLIT_COMPOSITES"
+          description: "Split composite UniProt IDs"
+          action:
+            type: "SPLIT_COMPOSITE_IDENTIFIERS"
+            delimiter: "_"
+            keep_original: false
+        
+        - step_id: "S2_VALIDATE_FORMAT"
+          description: "Validate UniProt ID format"
+          action:
+            type: "VALIDATE_IDENTIFIERS"
+            validation_type: "regex"
+            validation_pattern: "^[A-Z][0-9][A-Z0-9]{3}[0-9](-[0-9]+)?$"
+            on_invalid: "remove"
+
+  metabolite:
+    PUBCHEM_TO_HMDB_VIA_INCHIKEY:
+      description: "Map PubChem CIDs to HMDB IDs using InChIKey"
+      default_source_ontology_type: "PUBCHEM_CID_ONTOLOGY"
+      default_target_ontology_type: "HMDB_ID_ONTOLOGY"
+      steps:
+        - step_id: "S1_CID_TO_INCHIKEY"
+          description: "Convert PubChem CIDs to InChIKeys"
+          action:
+            type: "BATCH_API_LOOKUP"
+            api_endpoint: "pubchem_compound_to_inchikey"
+            batch_size: 100
+            rate_limit: 5
+        
+        - step_id: "S2_FILTER_BY_HMDB"
+          description: "Keep only compounds in HMDB"
+          action:
+            type: "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
+            endpoint_context: "TARGET"
+            ontology_type_to_match: "INCHIKEY_ONTOLOGY"
+        
+        - step_id: "S3_INCHIKEY_TO_HMDB"
+          description: "Convert InChIKeys to HMDB IDs"
+          action:
+            type: "CONVERT_IDENTIFIERS_LOCAL"
+            endpoint_context: "TARGET"
+            input_ontology_type: "INCHIKEY_ONTOLOGY"
+            output_ontology_type: "HMDB_ID_ONTOLOGY"
+
+  clinical_lab:
+    NORMALIZE_LAB_UNITS:
+      description: "Normalize clinical lab units to standard units"
+      applicable_to: ["any_clinical_lab_dataset"]
+      steps:
+        - step_id: "S1_EXTRACT_UNITS"
+          description: "Extract unit information"
+          action:
+            type: "ENRICH_WITH_METADATA"
+            metadata_source: "ENDPOINT_SELF"
+            metadata_fields: ["unit", "unit_type"]
+        
+        - step_id: "S2_NORMALIZE_UNITS"
+          description: "Convert to standard units"
+          action:
+            type: "TRANSFORM_IDENTIFIERS"
+            transformation_type: "unit_conversion"
+            transformation_value: "SI_UNITS"
+
+# Strategy composition rules
+composition_rules:
+  
+  # Allow combining generic strategies with entity-specific ones
+  allow_generic_entity_combination: true
+  
+  # Define which strategies can be chained
+  chainable_strategies:
+    - from: "HANDLE_COMPOSITE_UNIPROT"
+      to: ["UKBB_TO_HPA_PROTEIN_PIPELINE", "BRIDGE_VIA_COMMON_ID"]
+    
+    - from: "NORMALIZE_LAB_UNITS"
+      to: ["DIRECT_SHARED_ONTOLOGY_MATCH"]
+  
+  # Strategies that should not be combined
+  incompatible_strategies:
+    - ["DIRECT_SHARED_ONTOLOGY_MATCH", "BRIDGE_VIA_COMMON_ID"]
+
+# Strategy selection hints
+selection_hints:
+  
+  # When to use each generic strategy
+  use_direct_match_when:
+    - "Source and target have the same identifier type"
+    - "No transformation is needed"
+    - "Performance is critical"
+  
+  use_bridge_when:
+    - "No direct identifier match exists"
+    - "A common identifier type is available in both datasets"
+    - "Some data loss is acceptable (filtering)"
+  
+  use_resolve_and_match_when:
+    - "Dealing with historical data"
+    - "Identifiers may be deprecated"
+    - "Maximum recall is important"
+
+# Future strategy categories (placeholder)
+future_categories:
+  
+  machine_learning_strategies:
+    description: "Strategies using ML for fuzzy matching"
+    status: "planned"
+  
+  multi_entity_strategies:
+    description: "Strategies that link different entity types"
+    status: "planned"
+    example: "Link proteins to metabolites via pathways"

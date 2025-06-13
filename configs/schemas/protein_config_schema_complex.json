@@ -1,0 +1,412 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Biomapper Protein Configuration Schema",
+  "description": "Schema for protein_config.yaml, defining the structure for protein entity configurations in Biomapper.",
+  "type": "object",
+  "properties": {
+    "entity_type": {
+      "type": "string",
+      "description": "The type of entity this configuration pertains to.",
+      "const": "protein"
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of this configuration file."
+    },
+    "ontologies": {
+      "type": "object",
+      "description": "Definitions of ontology types used throughout this configuration.",
+      "patternProperties": {
+        "^[A-Z0-9_]+_ONTOLOGY$": {
+          "$ref": "#/definitions/ontologyDefinition"
+        }
+      },
+      "additionalProperties": false
+    },
+    "databases": {
+      "type": "object",
+      "description": "Configuration for various data sources (databases, files, APIs).",
+      "patternProperties": {
+        "^[a-z0-9_]+$": {
+          "$ref": "#/definitions/databaseDefinition"
+        }
+      },
+      "additionalProperties": false
+    },
+    "mapping_paths": {
+      "type": "array",
+      "description": "Defines multi-step mapping paths between ontology types.",
+      "items": {
+        "$ref": "#/definitions/mappingPathDefinition"
+      }
+    },
+    "ontology_preferences": {
+      "type": "object",
+      "description": "Defines preferences for iterative mapping strategy between different protein sources.",
+      "patternProperties": {
+        "^[A-Z0-9_]+_TO_[A-Z0-9_]+$|^[A-Z0-9_]+$": {
+          "$ref": "#/definitions/ontologyPreferenceDefinition"
+        }
+      },
+      "additionalProperties": false
+    },
+    "mapping_strategies": {
+      "type": "object",
+      "description": "Defines YAML-based multi-step mapping pipelines.",
+      "patternProperties": {
+        "^[A-Z0-9_]+$": {
+          "$ref": "#/definitions/mappingStrategyDefinition"
+        }
+      },
+      "additionalProperties": false
+    },
+    "additional_resources": {
+      "type": "array",
+      "description": "Configuration for additional mapping resources not tied to specific databases.",
+      "items": {
+        "$ref": "#/definitions/additionalResourceDefinition"
+      }
+    },
+    "cross_entity_references": {
+      "type": "array",
+      "description": "References to configurations for other entity types.",
+      "items": {
+        "$ref": "#/definitions/crossEntityReferenceDefinition"
+      }
+    }
+  },
+  "required": [
+    "entity_type",
+    "version",
+    "ontologies",
+    "databases",
+    "mapping_paths"
+  ],
+  "definitions": {
+    "ontologyDefinition": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Description of the ontology type."
+        },
+        "identifier_prefix": {
+          "type": "string",
+          "description": "Prefix used for identifiers of this type (e.g., 'UniProtKB:', 'Gene:')."
+        },
+        "is_primary": {
+          "type": "boolean",
+          "description": "Whether this is a primary identifier type.",
+          "default": false
+        }
+      },
+      "required": ["description", "identifier_prefix", "is_primary"]
+    },
+    "databaseDefinition": {
+      "type": "object",
+      "properties": {
+        "endpoint": {
+          "$ref": "#/definitions/endpointDefinition"
+        },
+        "properties": {
+          "$ref": "#/definitions/propertiesDefinition"
+        },
+        "mapping_clients": {
+          "type": "array",
+          "description": "List of mapping clients for this database.",
+          "items": {
+            "$ref": "#/definitions/mappingClientDefinition"
+          }
+        }
+      },
+      "required": ["endpoint", "properties"]
+    },
+    "endpointDefinition": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique name for the endpoint."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["file_tsv", "file_csv", "api", "database_table", "sparql_endpoint"],
+          "description": "Type of the endpoint."
+        },
+        "connection_details": {
+          "type": "object",
+          "description": "Details specific to the endpoint type.",
+          "properties": {
+            "file_path": {
+              "type": "string",
+              "description": "Path to the file (for file-based endpoints)."
+            },
+            "delimiter": {
+              "type": "string",
+              "description": "Delimiter used in the file (e.g., '\\t' for TSV, ',' for CSV)."
+            },
+            "api_url": {
+              "type": "string",
+              "description": "API endpoint URL (for API-based endpoints)."
+            }
+          }
+        }
+      },
+      "required": ["name", "type", "connection_details"]
+    },
+    "propertiesDefinition": {
+      "type": "object",
+      "properties": {
+        "primary": {
+          "type": "string",
+          "description": "The primary ontology type for this database."
+        },
+        "mappings": {
+          "type": "object",
+          "description": "Column to ontology type mappings.",
+          "patternProperties": {
+            "^[A-Z0-9_]+_ONTOLOGY$": {
+              "type": "object",
+              "properties": {
+                "column": {
+                  "type": "string",
+                  "description": "Column name in the data source."
+                },
+                "ontology_type": {
+                  "type": "string",
+                  "description": "Ontology type this column maps to."
+                }
+              },
+              "required": ["column", "ontology_type"]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": ["primary", "mappings"]
+    },
+    "mappingClientDefinition": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique name for the mapping client."
+        },
+        "client_class_path": {
+          "type": "string",
+          "description": "Full Python path to the client class."
+        },
+        "input_ontology_type": {
+          "type": "string",
+          "description": "Ontology type for input identifiers."
+        },
+        "output_ontology_type": {
+          "type": "string",
+          "description": "Ontology type for output identifiers."
+        },
+        "config": {
+          "type": "object",
+          "description": "Client-specific configuration parameters.",
+          "properties": {
+            "file_path": {
+              "type": "string",
+              "description": "Path to lookup file (for file-based clients)."
+            },
+            "key_column": {
+              "type": "string",
+              "description": "Column containing input identifiers."
+            },
+            "value_column": {
+              "type": "string",
+              "description": "Column containing output identifiers."
+            },
+            "delimiter": {
+              "type": "string",
+              "description": "Delimiter used in the file."
+            },
+            "cache_size": {
+              "type": "integer",
+              "description": "Size of the cache (for API-based clients)."
+            }
+          }
+        }
+      },
+      "required": ["name", "client_class_path", "input_ontology_type", "output_ontology_type", "config"]
+    },
+    "mappingPathDefinition": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique name for the mapping path."
+        },
+        "source_type": {
+          "type": "string",
+          "description": "Starting ontology type for the path."
+        },
+        "target_type": {
+          "type": "string",
+          "description": "Ending ontology type for the path."
+        },
+        "priority": {
+          "type": "integer",
+          "description": "Priority of this path (lower numbers = higher priority)."
+        },
+        "steps": {
+          "type": "array",
+          "description": "Ordered list of resources to use in the path.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "resource": {
+                "type": "string",
+                "description": "Name of the mapping client or resource to use."
+              }
+            },
+            "required": ["resource"]
+          }
+        }
+      },
+      "required": ["name", "source_type", "target_type", "priority", "steps"]
+    },
+    "ontologyPreferenceDefinition": {
+      "type": "object",
+      "properties": {
+        "primary_shared_ontology": {
+          "type": "string",
+          "description": "The main ontology type to use for conversion between sources."
+        },
+        "source_conversion_preference": {
+          "type": "array",
+          "description": "Prioritized list of ontology types to try for conversion.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["primary_shared_ontology", "source_conversion_preference"]
+    },
+    "mappingStrategyDefinition": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Description of what this strategy does."
+        },
+        "default_source_ontology_type": {
+          "type": "string",
+          "description": "Default ontology type for input identifiers."
+        },
+        "default_target_ontology_type": {
+          "type": "string",
+          "description": "Default ontology type for output identifiers."
+        },
+        "steps": {
+          "type": "array",
+          "description": "Ordered list of steps in the strategy.",
+          "items": {
+            "$ref": "#/definitions/strategyStepDefinition"
+          }
+        }
+      },
+      "required": ["description", "steps"]
+    },
+    "strategyStepDefinition": {
+      "type": "object",
+      "properties": {
+        "step_id": {
+          "type": "string",
+          "description": "Unique identifier for this step."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of what this step does."
+        },
+        "action": {
+          "type": "object",
+          "description": "Action configuration for this step.",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "CONVERT_IDENTIFIERS_LOCAL",
+                "EXECUTE_MAPPING_PATH",
+                "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE",
+                "FILTER_BY_TARGET_PRESENCE",
+                "MATCH_SHARED_ONTOLOGY"
+              ],
+              "description": "Type of action to perform."
+            },
+            "endpoint_context": {
+              "type": "string",
+              "enum": ["SOURCE", "TARGET"],
+              "description": "Which endpoint to use (for endpoint-specific actions)."
+            },
+            "output_ontology_type": {
+              "type": "string",
+              "description": "Ontology type for the output of this step."
+            },
+            "input_ontology_type": {
+              "type": "string",
+              "description": "Ontology type for the input to this step."
+            },
+            "path_name": {
+              "type": "string",
+              "description": "Name of the mapping path to execute (for EXECUTE_MAPPING_PATH actions)."
+            },
+            "ontology_type_to_match": {
+              "type": "string",
+              "description": "Ontology type to match against (for filter actions)."
+            }
+          },
+          "required": ["type"]
+        }
+      },
+      "required": ["step_id", "description", "action"]
+    },
+    "additionalResourceDefinition": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique name for the resource."
+        },
+        "client_class_path": {
+          "type": "string",
+          "description": "Full Python path to the client class."
+        },
+        "input_ontology_type": {
+          "type": "string",
+          "description": "Ontology type for input identifiers."
+        },
+        "output_ontology_type": {
+          "type": "string",
+          "description": "Ontology type for output identifiers."
+        },
+        "config": {
+          "type": "object",
+          "description": "Client-specific configuration parameters."
+        }
+      },
+      "required": ["name", "client_class_path", "input_ontology_type", "output_ontology_type", "config"]
+    },
+    "crossEntityReferenceDefinition": {
+      "type": "object",
+      "properties": {
+        "target_entity": {
+          "type": "string",
+          "description": "The entity type this relates to."
+        },
+        "relationship_type": {
+          "type": "string",
+          "description": "Type of relationship between entities."
+        },
+        "mapping_hint": {
+          "type": "string",
+          "description": "Guidance for how to implement the relationship."
+        }
+      },
+      "required": ["target_entity", "relationship_type", "mapping_hint"]
+    }
+  }
+}
