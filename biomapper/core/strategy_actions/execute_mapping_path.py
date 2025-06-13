@@ -86,9 +86,32 @@ class ExecuteMappingPathAction(BaseStrategyAction):
             provenance = []
             
             # The result is a dictionary mapping input IDs to mapping results
-            for source_id, mapping_result_dict in result.items():
+            # IMPORTANT: Iterate in the order of current_identifiers to preserve order
+            for source_id in current_identifiers:
+                if source_id not in result:
+                    continue  # Skip if no result for this identifier
+                mapping_result_dict = result[source_id]
                 self.logger.info(f"ACTION_DEBUG: For source_id {source_id}, received mapping_result_dict: {mapping_result_dict}")
-                if mapping_result_dict and 'mapped_value' in mapping_result_dict:
+                # Use target_identifiers instead of mapped_value to handle multiple IDs
+                if mapping_result_dict and 'target_identifiers' in mapping_result_dict:
+                    target_ids = mapping_result_dict['target_identifiers']
+                    if target_ids and isinstance(target_ids, list):
+                        # Add all target IDs (e.g., when UniProt Historical Resolver returns multiple current IDs)
+                        for target_id in target_ids:
+                            if target_id:  # Skip None/empty values
+                                output_identifiers.append(target_id)
+                                provenance.append({
+                                    'source_id': source_id,
+                                    'source_ontology': current_ontology_type,
+                                    'target_id': target_id,
+                                    'target_ontology': mapping_path.target_type,
+                                    'method': 'mapping_path',
+                                    'path_name': path_name,
+                                    'confidence': mapping_result_dict.get('confidence_score', 1.0),
+                                    'mapping_source': mapping_result_dict.get('mapping_source', 'unknown')
+                                })
+                elif mapping_result_dict and 'mapped_value' in mapping_result_dict:
+                    # Fallback to mapped_value for backward compatibility
                     mapped_value = mapping_result_dict['mapped_value']
                     if mapped_value:
                         output_identifiers.append(mapped_value)
@@ -99,7 +122,7 @@ class ExecuteMappingPathAction(BaseStrategyAction):
                             'target_ontology': mapping_path.target_type,
                             'method': 'mapping_path',
                             'path_name': path_name,
-                            'confidence': mapping_result_dict.get('confidence', 1.0),
+                            'confidence': mapping_result_dict.get('confidence_score', 1.0),
                             'mapping_source': mapping_result_dict.get('mapping_source', 'unknown')
                         })
             

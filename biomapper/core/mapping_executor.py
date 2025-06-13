@@ -3268,28 +3268,123 @@ class MappingExecutor(CompositeIdentifierMixin):
         # Create mapping dictionary from input to final output
         mapping_results = {}
         
-        # If we have provenance tracking the full journey, use it
-        # Otherwise, create simple mappings
-        for i, input_id in enumerate(input_identifiers):
-            if i < len(current_identifiers):
-                mapping_results[input_id] = {
-                    'mapped_value': current_identifiers[i],
-                    'confidence': 1.0,  # Could be calculated from step results
-                    'source_ontology': source_ontology_type or strategy.default_source_ontology_type,
-                    'target_ontology': final_target_ontology,
-                    'strategy_name': strategy_name,
-                    'provenance': [p for p in overall_provenance if p.get('source_id') == input_id]
-                }
-            else:
-                mapping_results[input_id] = {
-                    'mapped_value': None,
-                    'confidence': 0.0,
-                    'error': 'Lost during processing',
-                    'strategy_name': strategy_name
-                }
+        # Build a mapping from input identifiers to their final mapped values using provenance
+        # Track which input IDs have been successfully mapped through the entire pipeline
+        input_to_final_mapping = {}
+        
+        # First, initialize all input identifiers as unmapped
+        for input_id in input_identifiers:
+            mapping_results[input_id] = {
+                'mapped_value': None,
+                'confidence': 0.0,
+                'error': 'No mapping found',
+                'source_ontology': source_ontology_type or strategy.default_source_ontology_type,
+                'target_ontology': final_target_ontology,
+                'strategy_name': strategy_name,
+                'provenance': []
+            }
+        
+        # Process provenance to build complete mapping chains
+        if overall_provenance:
+            # Helper function to trace through the complete mapping chain
+            def trace_mapping_chain(source_id, provenance_list, visited=None):
+                """Recursively trace through the mapping chain to find final target."""
+                # Initialize visited set on first call
+                if visited is None:
+                    visited = set()
+                
+                # Check if we've already visited this ID to prevent infinite recursion
+                if source_id in visited:
+                    return []
+                
+                # Mark this ID as visited
+                visited.add(source_id)
+                
+                # Find provenance entries where this ID is the source
+                mappings = [p for p in provenance_list if p.get('source_id') == source_id and p.get('target_id')]
+                
+                if not mappings:
+                    # No mapping found, check if it was filtered but passed
+                    filter_entries = [p for p in provenance_list if p.get('source_id') == source_id and p.get('action') == 'filter_passed']
+                    if filter_entries:
+                        # It passed the filter but has no further mapping, return the ID itself
+                        return [source_id]
+                    return []
+                
+                # For each mapping, trace to see if it maps further
+                final_targets = []
+                for mapping in mappings:
+                    target = mapping['target_id']
+                    # Check if this target maps to something else
+                    further_mappings = trace_mapping_chain(target, provenance_list, visited)
+                    if further_mappings:
+                        final_targets.extend(further_mappings)
+                    else:
+                        # This target doesn't map further, so it's a final target
+                        final_targets.append(target)
+                
+                return final_targets
+            
+            # For each original input identifier, trace through the provenance chain
+            for input_id in input_identifiers:
+                # Find all provenance entries related to this input
+                input_provenance = [p for p in overall_provenance if p.get('source_id') == input_id]
+                
+                # Trace through the chain to find final targets
+                final_targets = trace_mapping_chain(input_id, overall_provenance)
+                
+                if final_targets:
+                    # Calculate confidence based on the provenance chain
+                    confidence = 1.0
+                    for prov in input_provenance:
+                        if 'confidence' in prov:
+                            confidence = min(confidence, prov['confidence'])
+                    
+                    mapping_results[input_id] = {
+                        'mapped_value': final_targets[0],
+                        'all_mapped_values': final_targets,  # Include all mapped values
+                        'confidence': confidence,
+                        'source_ontology': source_ontology_type or strategy.default_source_ontology_type,
+                        'target_ontology': final_target_ontology,
+                        'strategy_name': strategy_name,
+                        'provenance': input_provenance
+                    }
+        else:
+            # Fallback: If no provenance but we have current_identifiers, 
+            # it means all steps preserved order (no filtering/expansion)
+            # This is unlikely with the current action implementations but kept for safety
+            if len(current_identifiers) == len(input_identifiers):
+                for i, input_id in enumerate(input_identifiers):
+                    if i < len(current_identifiers) and current_identifiers[i]:
+                        mapping_results[input_id] = {
+                            'mapped_value': current_identifiers[i],
+                            'confidence': 1.0,
+                            'source_ontology': source_ontology_type or strategy.default_source_ontology_type,
+                            'target_ontology': final_target_ontology,
+                            'strategy_name': strategy_name,
+                            'provenance': []
+                        }
         
         return {
             'results': mapping_results,
+            'metadata': {
+                'strategy_name': strategy_name,
+                'source_endpoint': source_endpoint_name,
+                'target_endpoint': target_endpoint_name,
+                'source_ontology': source_ontology_type or strategy.default_source_ontology_type,
+                'target_ontology': final_target_ontology,
+                'steps_executed': len(step_results),
+                'provenance_entries': len(overall_provenance)
+            },
+            'step_results': step_results,
+            'statistics': {
+                'total_input': len(input_identifiers),
+                'total_mapped': len([r for r in mapping_results.values() if r.get('mapped_value')]),
+                'total_unmapped': len([r for r in mapping_results.values() if not r.get('mapped_value')]),
+                'success_rate': len([r for r in mapping_results.values() if r.get('mapped_value')]) / len(input_identifiers) * 100 if input_identifiers else 0
+            },
+            'final_identifiers': current_identifiers,
+            'final_ontology_type': current_ontology_type,
             'summary': {
                 'strategy_name': strategy_name,
                 'total_input': len(input_identifiers),
