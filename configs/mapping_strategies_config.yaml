@@ -121,6 +121,72 @@ entity_strategies:
             input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
             output_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
 
+    UKBB_TO_HPA_BIDIRECTIONAL_OPTIMIZED:
+      description: "Optimized bidirectional mapping using direct UniProt matching with historical resolution"
+      default_source_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+      default_target_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
+      steps:
+        - step_id: "S1_BIDIRECTIONAL_UNIPROT_MATCH"
+          description: "Direct bidirectional UniProt matching with composite/M2M handling"
+          action:
+            type: "BIDIRECTIONAL_MATCH"
+            source_ontology: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+            target_ontology: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+            match_mode: "many_to_many"
+            composite_handling: "split_and_match"
+            track_unmatched: true
+            save_matched_to: "context.direct_matches"
+            save_unmatched_source_to: "context.unmatched_ukbb"
+            save_unmatched_target_to: "context.unmatched_hpa"
+        
+        - step_id: "S2_RESOLVE_UKBB_FORWARD"
+          description: "Resolve remaining UKBB UniProts and match to HPA"
+          action:
+            type: "RESOLVE_AND_MATCH_FORWARD"
+            input_from: "context.unmatched_ukbb"
+            match_against: "TARGET"
+            target_ontology: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+            resolver: "UNIPROT_HISTORICAL_API"
+            append_matched_to: "context.all_matches"
+            update_unmatched: "context.unmatched_ukbb"
+            batch_size: 100
+        
+        - step_id: "S3_RESOLVE_HPA_REVERSE"
+          description: "Resolve remaining HPA UniProts and match to remaining UKBB"
+          action:
+            type: "RESOLVE_AND_MATCH_REVERSE"
+            input_from: "context.unmatched_hpa"
+            match_against_remaining: "context.unmatched_ukbb"
+            source_ontology: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+            resolver: "UNIPROT_HISTORICAL_API"
+            append_matched_to: "context.all_matches"
+            save_final_unmatched: "context.final_unmatched"
+            batch_size: 100
+        
+        - step_id: "S4_CONVERT_TO_HPA_GENES"
+          description: "Convert all matched UniProt pairs to HPA gene names"
+          action:
+            type: "CONVERT_IDENTIFIERS_LOCAL"
+            input_from: "context.all_matches"
+            endpoint_context: "TARGET"
+            input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+            output_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
+
+    UKBB_TO_HPA_DIRECT_GENE_MATCH:
+      description: "Simple direct gene name matching (less robust but fast)"
+      default_source_ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
+      default_target_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
+      steps:
+        - step_id: "S1_DIRECT_GENE_MATCH"
+          description: "Direct match UKBB Assay (gene) to HPA gene"
+          action:
+            type: "BIDIRECTIONAL_MATCH"
+            source_ontology: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
+            target_ontology: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
+            match_mode: "many_to_many"
+            composite_handling: "none"  # Gene names shouldn't be composite
+            case_sensitive: false  # Gene names might have case differences
+
     HANDLE_COMPOSITE_UNIPROT:
       description: "Process composite UniProt IDs like Q14213_Q8NEV9"
       applicable_endpoints: ["any_with_composite_uniprot"]
