@@ -51,6 +51,35 @@ class ConvertIdentifiersLocalAction(BaseStrategyAction):
         input_ontology_type = action_params.get('input_ontology_type', current_ontology_type)
         mapping_path_name = action_params.get('mapping_path_name')
         
+        # Check if we should read from context
+        input_from = action_params.get('input_from')
+        if input_from:
+            # Read identifiers from context
+            context_value = context.get(input_from)
+            if isinstance(context_value, list):
+                # If it's a list of pairs (from matched results), extract the target identifiers
+                if context_value and isinstance(context_value[0], (list, tuple)) and len(context_value[0]) == 2:
+                    current_identifiers = [pair[1] for pair in context_value]  # Use target (second) identifiers
+                    self.logger.info(f"Using {len(current_identifiers)} target identifiers from context['{input_from}']")
+                else:
+                    current_identifiers = context_value
+                    self.logger.info(f"Using {len(current_identifiers)} identifiers from context['{input_from}']")
+            else:
+                self.logger.warning(f"Context key '{input_from}' is not a list, using current_identifiers")
+        
+        # Early exit for empty input
+        if not current_identifiers:
+            return {
+                'input_identifiers': [],
+                'output_identifiers': [],
+                'output_ontology_type': output_ontology_type,
+                'provenance': [],
+                'details': {
+                    'action': 'CONVERT_IDENTIFIERS_LOCAL',
+                    'skipped': 'empty_input'
+                }
+            }
+        
         # Select the appropriate endpoint
         endpoint = source_endpoint if endpoint_context == 'SOURCE' else target_endpoint
         
