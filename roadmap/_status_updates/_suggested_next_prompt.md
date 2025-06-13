@@ -1,72 +1,90 @@
 # Suggested Next Prompt for Biomapper Development
 
 ## Context Brief
-The biomapper configuration system has been successfully refactored to separate mapping strategies from entity configurations, improving maintainability and reusability. The UKBB-HPA pipeline is fully functional with the new configuration-driven approach, and comprehensive documentation has been created for the new architecture.
+The biomapper project has successfully implemented a complete bidirectional mapping strategy with three new action types, fixing critical context persistence issues along the way. The optimized UKBB→HPA strategy eliminates unnecessary conversions and is ready for full dataset testing, though performance optimization is needed for large-scale UniProt resolution.
 
 ## Initial Steps
 1. Begin by reviewing `/home/ubuntu/biomapper/CLAUDE.md` for overall project context and guidelines
-2. Check `/home/ubuntu/biomapper/roadmap/_status_updates/2025-06-13-configuration-separation-implementation.md` for details about the configuration separation
-3. Review `/home/ubuntu/biomapper/docs/CONFIGURATION_MIGRATION_GUIDE.md` to understand the new structure
-4. Check `/home/ubuntu/biomapper/configs/CONFIGURATION_QUICK_REFERENCE.md` for a quick overview
+2. Check `/home/ubuntu/biomapper/roadmap/_status_updates/2025-06-13-comprehensive-action-types-implementation.md` for the full implementation details
+3. Review the new action implementations in `/home/ubuntu/biomapper/biomapper/core/strategy_actions/`
+4. Look at `/home/ubuntu/biomapper/scripts/main_pipelines/run_full_ukbb_hpa_mapping_bidirectional.py` for the optimized pipeline
 
 ## Work Priorities
 
-### Priority 1: Update UKBB-HPA Jupyter Notebook
-The notebook at `/home/ubuntu/biomapper/notebooks/2_use_cases/ukbb_to_hpa_protein.ipynb` needs updating to:
-- Handle async MappingExecutor functions properly in Jupyter
-- Use configuration from metamapper.db instead of hardcoded paths
-- Demonstrate the new result structure with provenance tracking
-- Add visualization of mapping results
+### Priority 1: Performance Optimization for Large-Scale Resolution
+The RESOLVE_AND_MATCH_REVERSE action times out with 2991 HPA identifiers. Critical optimizations needed:
+- Implement concurrent API calls within rate limits
+- Add comprehensive progress tracking
+- Optimize batch processing strategy
+- Consider more aggressive caching
 
-### Priority 2: Test and Fix Other Protein Pipelines
-Apply configuration-driven approach to:
-- QIN OSP protein mapping pipeline
-- Arivale protein mapping pipeline
-- Verify they work with the separated configuration structure
-- Fix any issues similar to those found in UKBB-HPA pipeline
+### Priority 2: Full Dataset Comparison
+Once performance is optimized:
+- Run original UKBB→HPA strategy and capture metrics
+- Run bidirectional strategy on same dataset
+- Compare: execution time, coverage, memory usage
+- Document findings and recommendations
 
-### Priority 3: Create Strategy Development Guide
-Document how to:
-- Design new mapping strategies (generic vs entity-specific)
-- Use action types effectively
-- Test strategies in isolation
-- Debug strategy execution
+### Priority 3: Strategy Comparison Framework
+Build tooling to systematically compare strategies:
+- Create comparison script that runs multiple strategies
+- Capture standardized metrics
+- Generate comparison reports
+- Help users select optimal strategies
 
 ## References
-- Configuration files: `/home/ubuntu/biomapper/configs/` (protein_config.yaml, mapping_strategies_config.yaml)
-- Database population script: `/home/ubuntu/biomapper/scripts/setup_and_configuration/populate_metamapper_db.py`
-- Validation script: `/home/ubuntu/biomapper/scripts/setup_and_configuration/validate_config_separation.py`
-- Action types reference: `/home/ubuntu/biomapper/docs/ACTION_TYPES_REFERENCE.md`
-- Working pipeline example: `/home/ubuntu/biomapper/scripts/main_pipelines/run_full_ukbb_hpa_mapping.py`
+- **New action implementations**: `/home/ubuntu/biomapper/biomapper/core/strategy_actions/[bidirectional_match|resolve_and_match_forward|resolve_and_match_reverse].py`
+- **Test suites**: `/home/ubuntu/biomapper/tests/unit/core/strategy_actions/test_*.py`
+- **Bidirectional pipeline**: `/home/ubuntu/biomapper/scripts/main_pipelines/run_full_ukbb_hpa_mapping_bidirectional.py`
+- **Test script**: `/home/ubuntu/biomapper/scripts/main_pipelines/test_bidirectional_ukbb_hpa_mapping.py`
+- **Strategy config**: `/home/ubuntu/biomapper/configs/mapping_strategies_config.yaml`
 
 ## Workflow Integration
 
-Consider using Claude to:
+Consider using Claude for specific tasks:
 
-1. **Design Strategy Test Framework** - Ask Claude to design a testing framework for mapping strategies that allows testing individual strategies without full pipeline execution
-
-2. **Optimize Jupyter Async Handling** - Provide Claude with the current notebook code and ask for the best approach to handle async functions in Jupyter
-
-3. **Create Strategy Templates** - Ask Claude to create template strategies for common mapping patterns
-
-Example Claude prompt for Jupyter updates:
+### 1. **Performance Optimization Task**
+Provide Claude with the timeout issue details and ask for optimization:
 ```
-I have a Jupyter notebook at /home/ubuntu/biomapper/notebooks/2_use_cases/ukbb_to_hpa_protein.ipynb that needs to work with async functions from the MappingExecutor class. The notebook should:
-1. Load configuration from metamapper.db instead of hardcoded paths
-2. Handle async operations properly in Jupyter cells
-3. Display progress during long-running operations
-4. Visualize the mapping results
+The RESOLVE_AND_MATCH_REVERSE action at /home/ubuntu/biomapper/biomapper/core/strategy_actions/resolve_and_match_reverse.py times out when processing 2991 identifiers through the UniProt API. Current implementation processes in batches of 100 sequentially.
 
-Please suggest the best approach for handling async operations in Jupyter and provide code examples for updating the notebook.
+Please optimize this to:
+1. Use concurrent API calls while respecting rate limits
+2. Add progress tracking that works with the MappingExecutor's progress_callback
+3. Implement smarter batching based on API response times
+4. Add timeout handling and retry logic
 ```
 
-Example Claude prompt for strategy design:
+### 2. **Strategy Comparison Framework**
+Ask Claude to design the comparison framework:
 ```
-Based on the biomapper's action types (CONVERT_IDENTIFIERS_LOCAL, EXECUTE_MAPPING_PATH, FILTER_IDENTIFIERS_BY_TARGET_PRESENCE), please design a generic mapping strategy template that could work for any two datasets that share a common identifier type. The strategy should:
-1. Be parameterizable for different ontology types
-2. Handle optional filtering steps
-3. Include proper error handling
-4. Follow the structure used in mapping_strategies_config.yaml
+Please create a strategy comparison framework at /home/ubuntu/biomapper/scripts/analysis_and_reporting/compare_mapping_strategies.py that:
 
-Explain when this generic strategy would be preferred over entity-specific strategies.
+1. Accepts a list of strategy names and a common dataset
+2. Runs each strategy and captures: execution time, memory usage, coverage metrics, step-by-step timings
+3. Handles strategy failures gracefully
+4. Generates both JSON metrics and human-readable reports
+5. Includes visualization of results (coverage vs time trade-offs)
+
+The framework should work with the existing MappingExecutor and support progress tracking.
 ```
+
+### 3. **Jupyter Notebook Updates**
+For async handling in notebooks:
+```
+The notebook at /home/ubuntu/biomapper/notebooks/2_use_cases/ukbb_to_hpa_protein.ipynb needs to work with async MappingExecutor methods. Please:
+
+1. Show the best pattern for handling async calls in Jupyter
+2. Demonstrate both original and bidirectional strategies
+3. Add progress bars for long operations
+4. Visualize the matching process showing context flow
+5. Create comparison visualizations
+
+Include proper error handling and make it educational for users learning the system.
+```
+
+## Next Session Recommendations
+
+Start with performance optimization as it blocks full dataset testing. The timeout issue with 2991 identifiers is the critical path. Once resolved, the strategy comparison can provide quantitative evidence for the improvements achieved with the bidirectional approach.
+
+The parallel development approach proved highly effective - consider using multiple Claude instances again for independent tasks like creating the comparison framework while optimizing performance.
