@@ -2,23 +2,37 @@
 """
 Full UKBB to HPA Protein Mapping Script
 
-This script processes a full UKBB protein dataset through the UKBB_TO_HPA_PROTEIN_PIPELINE
-strategy using the MappingExecutor, and saves comprehensive mapping results to a CSV file.
+This script processes a full UKBB protein dataset through a
+mapping strategy (e.g., UKBB_TO_HPA_BIDIRECTIONAL_EFFICIENT) using the MappingExecutor
+with robust execution features.
 
-The script uses the configuration-driven approach:
-- Data file paths are loaded from metamapper.db (populated from protein_config.yaml)
-- No hardcoded file paths are needed
-- Only endpoint names and strategy name need to be specified
+Key features of the typical mapping process:
+- Direct UniProt matching
+- Historical UniProt ID resolution for comprehensive coverage
+- Context-based tracking of matched/unmatched identifiers
+- Composite identifier handling
+
+Enhanced script features:
+- Checkpointing for resumable execution
+- Retry logic for external API calls
+- Progress tracking and reporting
+- Batch processing with configurable sizes
 
 Usage:
-    1. Ensure metamapper.db is populated: python scripts/populate_metamapper_db.py
+    1. Ensure metamapper.db is populated: python scripts/setup_and_configuration/populate_metamapper_db.py
     2. Ensure the biomapper Poetry environment is active
-    3. Run: python scripts/main_pipelines/run_full_ukbb_hpa_mapping.py
+    3. Run: python scripts/main_pipelines/run_full_ukbb_hpa_mapping.py [options]
+    
+Options:
+    --checkpoint: Enable checkpoint saving (default: True)
+    --batch-size N: Number of identifiers per batch (default: 250)
+    --max-retries N: Maximum retries per operation (default: 3)
+    --no-progress: Disable progress reporting
     
 The script will automatically:
-- Load UKBB protein data from the configured endpoint
-- Execute the UKBB_TO_HPA_PROTEIN_PIPELINE strategy
-- Save results to /home/ubuntu/biomapper/data/results/
+- Utilize a strategy to load UKBB protein data (UniProt IDs)
+- Execute the specified mapping strategy with robust features
+- Save comprehensive results to /home/ubuntu/biomapper/data/results/
 """
 
 import asyncio
@@ -28,14 +42,15 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+import json
 
 # Add project root to sys.path for module resolution
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+BIOMAPPER_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(BIOMAPPER_ROOT))
 
 import pandas as pd
-from biomapper.core.mapping_executor import MappingExecutor
+from biomapper.core import MappingExecutor
 from biomapper.config import settings
-from biomapper.core.exceptions import ConfigurationError
 
 # Configure logging
 logging.basicConfig(
@@ -53,11 +68,20 @@ OUTPUT_RESULTS_DIR = "/home/ubuntu/biomapper/data/results/"
 OUTPUT_RESULTS_FILENAME = "full_ukbb_to_hpa_mapping_results.csv"
 OUTPUT_RESULTS_FILE_PATH = os.path.join(OUTPUT_RESULTS_DIR, OUTPUT_RESULTS_FILENAME)
 
+# Summary file for tracking strategy performance
+SUMMARY_FILENAME = "full_ukbb_to_hpa_mapping_summary.json"
+SUMMARY_FILE_PATH = os.path.join(OUTPUT_RESULTS_DIR, SUMMARY_FILENAME)
+
 # Default data directory (set as environment variable if not already set)
 DEFAULT_DATA_DIR = "/home/ubuntu/biomapper/data"
 
-# Strategy name to execute
-STRATEGY_NAME = "UKBB_TO_HPA_PROTEIN_PIPELINE"
+# Checkpoint directory for robust execution
+CHECKPOINT_DIR = "/home/ubuntu/biomapper/data/checkpoints"
+
+# Strategy name to execute - typically a strategy like UKBB_TO_HPA_BIDIRECTIONAL_EFFICIENT
+# Note: The OPTIMIZED strategy has a design flaw where it processes ALL unmatched HPA proteins,
+# causing timeouts even with small datasets. Use EFFICIENT instead.
+STRATEGY_NAME = "UKBB_TO_HPA_BIDIRECTIONAL_EFFICIENT"
 
 # Endpoint names as defined in metamapper.db (from protein_config.yaml)
 SOURCE_ENDPOINT_NAME = "UKBB_PROTEIN"
@@ -68,12 +92,35 @@ TARGET_ENDPOINT_NAME = "HPA_OSP_PROTEIN"
 # ============================================================================
 
 
-async def run_full_mapping():
+async def run_full_mapping(checkpoint_enabled: bool = True, batch_size: int = 250, 
+                          max_retries: int = 3, enable_progress: bool = True):
     """
-    Main function to execute the full UKBB to HPA protein mapping.
+    Main function to execute the full UKBB to HPA protein mapping using an enhanced strategy.
+    
+    Args:
+        checkpoint_enabled: Enable checkpoint saving for resumable execution
+        batch_size: Number of identifiers per batch for processing
+        max_retries: Maximum retry attempts for failed operations
+        enable_progress: Enable progress reporting callbacks
     """
     start_time = datetime.now()
-    logger.info(f"Starting full UKBB to HPA protein mapping at {start_time}")
+    execution_id = f"ukbb_hpa_bidirectional_{start_time.strftime('%Y%m%d_%H%M%S')}"
+    
+    logger.info(f"Starting ENHANCED BIDIRECTIONAL UKBB to HPA protein mapping at {start_time}")
+    logger.info("=" * 80)
+    logger.info("Using enhanced bidirectional strategy with:")
+    logger.info("- Direct UniProt matching (no conversion needed)")
+    logger.info("- Composite identifier handling")
+    logger.info("- Bidirectional resolution for maximum coverage")
+    logger.info("- Context-based tracking throughout")
+    logger.info("")
+    logger.info("Enhanced features:")
+    logger.info(f"- Checkpointing: {'Enabled' if checkpoint_enabled else 'Disabled'}")
+    logger.info(f"- Batch size: {batch_size}")
+    logger.info(f"- Max retries: {max_retries}")
+    logger.info(f"- Progress tracking: {'Enabled' if enable_progress else 'Disabled'}")
+    logger.info(f"- Execution ID: {execution_id}")
+    logger.info("=" * 80)
     
     # Ensure output directory exists
     os.makedirs(OUTPUT_RESULTS_DIR, exist_ok=True)
@@ -84,20 +131,53 @@ async def run_full_mapping():
         os.environ['DATA_DIR'] = DEFAULT_DATA_DIR
         logger.info(f"Set DATA_DIR environment variable to: {DEFAULT_DATA_DIR}")
     
+    # Set OUTPUT_DIR environment variable for the strategy
+    if 'OUTPUT_DIR' not in os.environ:
+        os.environ['OUTPUT_DIR'] = OUTPUT_RESULTS_DIR
+        logger.info(f"Set OUTPUT_DIR environment variable to: {OUTPUT_RESULTS_DIR}")
+    
     # Initialize variables
     executor = None
-    input_identifiers = []
-    
+
     try:
-        # Initialize MappingExecutor
-        logger.info("Initializing MappingExecutor...")
+        # Initialize MappingExecutor with robust features
+        logger.info("Initializing MappingExecutor with robust features...")
+        logger.info(f"Attempting to connect to Metamapper DB at: {settings.metamapper_db_url}")
+
         executor = await MappingExecutor.create(
             metamapper_db_url=settings.metamapper_db_url,
             mapping_cache_db_url=settings.cache_db_url,
             echo_sql=False,
-            enable_metrics=True
+            enable_metrics=True,
+            # Enhanced features
+            checkpoint_enabled=checkpoint_enabled,
+            checkpoint_dir=CHECKPOINT_DIR,
+            batch_size=batch_size,
+            max_retries=max_retries,
+            retry_delay=2  # 2 second delay between retries
         )
-        logger.info("MappingExecutor created successfully")
+        logger.info("MappingExecutor created successfully with robust features")
+        
+        # Add progress tracking if enabled
+        if enable_progress:
+            def progress_callback(progress_data: Dict[str, Any]):
+                """Handle progress updates from the executor."""
+                if progress_data['type'] == 'batch_complete':
+                    logger.info(
+                        f"Progress: {progress_data['total_processed']}/{progress_data['total_count']} "
+                        f"({progress_data['progress_percent']:.1f}%) - "
+                        f"{progress_data['processor']}"
+                    )
+                elif progress_data['type'] == 'checkpoint_saved':
+                    logger.info(f"Checkpoint saved: {progress_data['state_summary']}")
+                elif progress_data['type'] == 'retry_attempt':
+                    logger.warning(
+                        f"Retry {progress_data['attempt']}/{progress_data['max_attempts']} "
+                        f"for {progress_data['operation']}"
+                    )
+            
+            executor.add_progress_callback(progress_callback)
+            logger.info("Progress tracking enabled")
         
         # Check if strategy exists using new API
         logger.info(f"Checking if strategy '{STRATEGY_NAME}' exists in database...")
@@ -112,156 +192,105 @@ async def run_full_mapping():
         logger.info(f"Strategy '{STRATEGY_NAME}' found in database")
         
         # Get the source ontology type from the strategy
-        if not strategy.default_source_ontology_type:
-            raise ValueError(f"Strategy '{STRATEGY_NAME}' does not have a default_source_ontology_type defined")
-        
         source_ontology_type = strategy.default_source_ontology_type
         logger.info(f"Strategy uses source ontology type: {source_ontology_type}")
+        logger.info(f"Note: This is UniProt directly - no conversion needed!")
         
-        # Load input identifiers from the source endpoint using new API
-        logger.info(f"Loading identifiers from source endpoint '{SOURCE_ENDPOINT_NAME}'...")
-        input_identifiers = await executor.load_endpoint_identifiers(
-            endpoint_name=SOURCE_ENDPOINT_NAME,
-            ontology_type=source_ontology_type
-        )
+        # Loading of identifiers is now handled by the strategy's first step (LoadEndpointIdentifiersAction)
+        logger.info(f"Source endpoint '{SOURCE_ENDPOINT_NAME}' will be loaded by the strategy")
         
-        if not input_identifiers:
-            logger.warning("No identifiers found in the source endpoint. Exiting.")
-            return
+        # Check for existing checkpoint
+        checkpoint_state = await executor.load_checkpoint(execution_id)
+        if checkpoint_state:
+            logger.info("Found existing checkpoint - attempting to resume execution...")
         
-        # Execute mapping strategy
-        logger.info(f"Executing mapping strategy on {len(input_identifiers)} identifiers...")
+        # Execute mapping strategy with robust features
+        logger.info(f"Executing enhanced bidirectional mapping strategy...")
+        logger.info("Using robust execution with checkpointing and retry logic...")
         logger.info("This may take some time for large datasets...")
         
-        result = await executor.execute_yaml_strategy(
+        # Set additional environment variables for the actions to use
+        os.environ['EXECUTION_ID'] = execution_id
+        os.environ['STRATEGY_NAME'] = STRATEGY_NAME
+        os.environ['START_TIME'] = start_time.isoformat()
+        
+        # Set strategy output directory as environment variable for actions to use
+        os.environ['STRATEGY_OUTPUT_DIRECTORY'] = OUTPUT_RESULTS_DIR
+
+        result = await executor.execute_yaml_strategy_robust(
             strategy_name=STRATEGY_NAME,
+            input_identifiers=[],  # Empty because strategy loads identifiers itself
             source_endpoint_name=SOURCE_ENDPOINT_NAME,
             target_endpoint_name=TARGET_ENDPOINT_NAME,
-            input_identifiers=input_identifiers,
-            use_cache=True,  # Enable caching for full runs
-            progress_callback=lambda curr, total, status: logger.info(
-                f"Progress: {curr}/{total} - {status}"
-            )
+            execution_id=execution_id,
+            resume_from_checkpoint=checkpoint_enabled,
+            use_cache=True  # Enable caching for full runs
         )
         
         logger.info("Mapping execution completed")
         
-        # Process and save results
-        logger.info("Processing mapping results...")
+        # The FormatAndSaveResultsAction now handles all result processing and saving
+        # Just extract some basic info for logging
+        context = result.get('context', {})
         
-        # Debug: log the structure of the result
-        logger.info(f"Result keys: {list(result.keys())}")
+        # Check if the action saved the files
+        saved_csv_path = context.get('saved_csv_path')
+        saved_json_path = context.get('saved_json_summary_path')
+        formatted_summary = context.get('formatted_summary', {})
         
-        # The execute_yaml_strategy returns results in 'results' key
-        results_dict = result.get('results', {})
-        final_identifiers = set(result.get('final_identifiers', []))
-        output_rows = []
-        
-        # Get step results for parsing
-        step_results = result.get('summary', {}).get('step_results', [])
-        
-        # Process each input identifier
-        for input_id in input_identifiers:
-            # Default values
-            final_mapped_id = None
-            mapping_status = 'UNMAPPED'
-            final_step_reached = 'Unknown'
-            error_message = None
-            
-            # Check if this ID has results
-            if input_id in results_dict:
-                mapping_result = results_dict[input_id]
-                all_mapped_values = mapping_result.get('all_mapped_values', [])
-                
-                # Check if this identifier made it to the final set
-                # The last value in all_mapped_values should be the final HPA gene if it passed all steps
-                if all_mapped_values and len(all_mapped_values) > 0:
-                    # Check if any of the mapped values are in the final identifiers
-                    made_it_through = any(val in final_identifiers for val in all_mapped_values)
-                    
-                    if made_it_through and len(all_mapped_values) > 1:
-                        # Successfully mapped through all steps
-                        final_mapped_id = all_mapped_values[-1]  # Last value is the HPA gene
-                        mapping_status = 'MAPPED'
-                        final_step_reached = 'S4_HPA_UNIPROT_TO_NATIVE'
-                    else:
-                        # Filtered out somewhere
-                        final_mapped_id = None
-                        mapping_status = 'FILTERED_OUT'
-                        # Find where it was filtered
-                        for step in step_results:
-                            if (step.get('action_type') == 'FILTER_IDENTIFIERS_BY_TARGET_PRESENCE' or
-                                step.get('action_type') == 'FILTER_BY_TARGET_PRESENCE'):
-                                final_step_reached = step.get('step_id', 'S3_FILTER_BY_HPA_PRESENCE')
-                                break
-                else:
-                    # No mapping found
-                    mapping_status = 'UNMAPPED'
-                    final_mapped_id = None
-                
-                # Check for any error in mapping result
-                if mapping_result.get('status') == 'error':
-                    mapping_status = 'ERROR_DURING_PIPELINE'
-                    error_message = mapping_result.get('message', 'Unknown error')
-            else:
-                # ID was not in final results - it was lost or filtered
-                # Check if it made it through any steps by looking at step outputs
-                last_successful_step = None
-                for step in step_results:
-                    if step.get('success'):
-                        step_output = step.get('output_data', [])
-                        if not isinstance(step_output, list):
-                            continue
-                        # Check if this ID appears in any intermediate output
-                        # Note: This is a simplified check - in reality we'd need to track ID transformations
-                        last_successful_step = step.get('step_id')
-                        
-                        # If this is a filter step and output < input, it was filtered here
-                        if (step.get('action_type') == 'FILTER_IDENTIFIERS_BY_TARGET_PRESENCE' and 
-                            step.get('output_count', 0) < step.get('input_count', 0)):
-                            mapping_status = 'FILTERED_OUT'
-                            final_step_reached = step.get('step_id', 'S3_FILTER_BY_HPA_PRESENCE')
-                            break
-                
-                if final_step_reached == 'Unknown' and last_successful_step:
-                    final_step_reached = last_successful_step
-            
-            output_rows.append({
-                'Input_UKBB_Assay_ID': input_id,
-                'Final_Mapped_HPA_ID': final_mapped_id,
-                'Mapping_Status': mapping_status,
-                'Final_Step_ID_Reached': final_step_reached,
-                'Error_Message': error_message
-            })
-        
-        # Create DataFrame and save to CSV
-        output_df = pd.DataFrame(output_rows)
-        output_df.to_csv(OUTPUT_RESULTS_FILE_PATH, index=False)
-        logger.info(f"Results saved to: {OUTPUT_RESULTS_FILE_PATH}")
-        
-        # Log summary statistics
-        summary = result.get('summary', {})
-        logger.info("=" * 60)
-        logger.info("MAPPING SUMMARY:")
-        logger.info(f"Total input identifiers: {summary.get('total_input', 0)}")
-        logger.info(f"Successfully mapped: {summary.get('successful_mappings', 0)}")
-        logger.info(f"Failed mappings: {summary.get('failed_mappings', 0)}")
-        logger.info(f"Lost during processing: {summary.get('lost_during_processing', 0)}")
-        
-        # Additional statistics from output DataFrame
-        if not output_df.empty and 'Mapping_Status' in output_df.columns:
-            status_counts = output_df['Mapping_Status'].value_counts()
-            logger.info("\nDetailed status breakdown:")
-            for status, count in status_counts.items():
-                logger.info(f"  {status}: {count}")
+        if saved_csv_path:
+            logger.info(f"Results saved to CSV: {saved_csv_path}")
         else:
-            logger.warning("No mapping results to analyze")
+            logger.warning("CSV output path not found in context")
+            
+        if saved_json_path:
+            logger.info(f"Summary saved to JSON: {saved_json_path}")
+        else:
+            logger.warning("JSON summary path not found in context")
         
-        # Calculate execution time
-        end_time = datetime.now()
-        duration = end_time - start_time
-        logger.info(f"\nTotal execution time: {duration}")
-        logger.info("=" * 60)
+        # Log summary from the formatted results if available
+        if formatted_summary:
+            logger.info("=" * 80)
+            logger.info("MAPPING SUMMARY (from FormatAndSaveResultsAction):")
+            
+            input_analysis = formatted_summary.get('input_analysis', {})
+            mapping_results = formatted_summary.get('mapping_results', {})
+            
+            logger.info(f"Total input identifiers: {input_analysis.get('total_input', 'N/A')}")
+            logger.info(f"Composite identifiers: {input_analysis.get('composite_identifiers', 'N/A')}")
+            logger.info(f"Direct matches: {mapping_results.get('direct_matches', 'N/A')}")
+            logger.info(f"Resolved matches: {mapping_results.get('resolved_matches', 'N/A')}")
+            logger.info(f"Total successfully mapped: {mapping_results.get('total_mapped', 'N/A')}")
+            logger.info(f"Total unmapped: {mapping_results.get('total_unmapped', 'N/A')}")
+            
+            # Mapping method breakdown
+            mapping_methods = formatted_summary.get('mapping_methods', {})
+            if mapping_methods:
+                logger.info("\nMapping method breakdown:")
+                for method, count in mapping_methods.items():
+                    logger.info(f"  {method}: {count}")
+            
+            # Execution time
+            execution_info = formatted_summary.get('execution_info', {})
+            duration = execution_info.get('duration_seconds', 0)
+            logger.info(f"\nTotal execution time: {duration:.2f} seconds")
+            
+            # Robust execution features
+            robust_features = execution_info.get('robust_features', {})
+            logger.info(f"\nRobust execution features:")
+            logger.info(f"  Checkpointing: {'Used' if robust_features.get('checkpoint_used') else 'Available' if robust_features.get('checkpoint_enabled') else 'Disabled'}")
+            logger.info(f"  Batch processing: {robust_features.get('batch_size', 'N/A')} identifiers per batch")
+            logger.info(f"  Retry logic: {robust_features.get('max_retries', 'N/A')} max attempts")
+            logger.info(f"  Progress tracking: {'Enabled' if robust_features.get('progress_tracking') else 'Disabled'}")
+            
+            logger.info("=" * 80)
+        
+        # Compare with original approach
+        logger.info("\nRefactored approach benefits:")
+        logger.info("- Strategy now loads identifiers directly (LoadEndpointIdentifiersAction)")
+        logger.info("- Results formatting and saving handled by strategy (FormatAndSaveResultsAction)")
+        logger.info("- Script simplified to just orchestration and logging")
+        logger.info("- All logic now modular and reusable in strategy actions")
         
     except ValueError as e:
         logger.error(f"Configuration error: {e}")
@@ -285,10 +314,49 @@ async def run_full_mapping():
 # ============================================================================
 
 if __name__ == "__main__":
+    import argparse
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="Enhanced UKBB to HPA mapping with robust execution"
+    )
+    parser.add_argument(
+        "--no-checkpoint", 
+        action="store_true", 
+        help="Disable checkpoint saving"
+    )
+    parser.add_argument(
+        "--batch-size", 
+        type=int, 
+        default=250, 
+        help="Number of identifiers per batch (default: 250)"
+    )
+    parser.add_argument(
+        "--max-retries", 
+        type=int, 
+        default=3, 
+        help="Maximum retry attempts for failed operations (default: 3)"
+    )
+    parser.add_argument(
+        "--no-progress", 
+        action="store_true", 
+        help="Disable progress reporting"
+    )
+    
+    args = parser.parse_args()
+    
     try:
-        # Run the main async function
-        asyncio.run(run_full_mapping())
+        # Run the main async function with parsed arguments
+        asyncio.run(run_full_mapping(
+            checkpoint_enabled=not args.no_checkpoint,
+            batch_size=args.batch_size,
+            max_retries=args.max_retries,
+            enable_progress=not args.no_progress
+        ))
         logger.info("Script completed successfully")
+    except KeyboardInterrupt:
+        logger.warning("Script interrupted by user")
+        sys.exit(1)
     except Exception as e:
         logger.error(f"Script failed with error: {e}")
         sys.exit(1)

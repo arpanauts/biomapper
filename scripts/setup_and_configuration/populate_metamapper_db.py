@@ -122,8 +122,8 @@ class ConfigurationValidator:
                 self.errors.append(f"Step {i} in strategy '{name}' missing 'step_id'")
             if 'action' not in step:
                 self.errors.append(f"Step {i} in strategy '{name}' missing 'action'")
-            elif 'type' not in step['action']:
-                self.errors.append(f"Step {i} in strategy '{name}' action missing 'type'")
+            elif 'type' not in step['action'] and 'action_class_path' not in step['action']:
+                self.errors.append(f"Step {i} in strategy '{name}' action missing both 'type' and 'action_class_path'")
     
     def _validate_ontologies(self, ontologies: Dict[str, Any]):
         """Validate ontologies section."""
@@ -803,8 +803,10 @@ async def populate_mapping_strategies(session: AsyncSession, strategies_data: Di
                                      entity_name: str):
     """Populate mapping strategies from configuration."""
     logger.info(f"Populating mapping strategies for {entity_name}...")
+    logger.info(f"DIAGNOSTIC: About to insert {len(strategies_data)} strategies for entity '{entity_name}'")
     
     for strategy_name, strategy_config in strategies_data.items():
+        logger.info(f"DIAGNOSTIC: Inserting strategy '{strategy_name}' for entity '{entity_name}'")
         strategy = MappingStrategy(
             name=strategy_name,
             description=strategy_config.get('description', ''),
@@ -819,15 +821,26 @@ async def populate_mapping_strategies(session: AsyncSession, strategies_data: Di
         # Add steps
         for i, step_config in enumerate(strategy_config.get('steps', [])):
             action = step_config.get('action', {})
-            # Extract action parameters (everything except 'type')
-            action_params = {k: v for k, v in action.items() if k != 'type'}
+            
+            # Determine action type - could be 'type' or 'action_class_path'
+            action_type = action.get('type', '')
+            if not action_type and 'action_class_path' in action:
+                action_type = action['action_class_path']
+            
+            # Extract action parameters
+            # For 'type' actions: everything except 'type'
+            # For 'action_class_path' actions: use 'params' if present, otherwise everything except 'action_class_path'
+            if 'params' in action:
+                action_params = action['params']
+            else:
+                action_params = {k: v for k, v in action.items() if k not in ['type', 'action_class_path']}
             
             step = MappingStrategyStep(
                 strategy_id=strategy.id,
                 step_id=step_config['step_id'],
                 step_order=i + 1,
                 description=step_config.get('description', ''),
-                action_type=action.get('type', ''),
+                action_type=action_type,
                 action_parameters=action_params,
                 is_required=step_config.get('is_required', True),  # Default to True if not specified
                 is_active=True
@@ -876,8 +889,15 @@ async def populate_strategies_from_config(session: AsyncSession, config_data: Di
     """Populate strategies from a strategies-only config file."""
     logger.info("Processing mapping strategies configuration")
     
+    # Collect all strategy names for diagnostic logging
+    all_strategy_names = []
+    
     # Process generic strategies
     if 'generic_strategies' in config_data:
+        generic_names = list(config_data['generic_strategies'].keys())
+        all_strategy_names.extend(generic_names)
+        logger.info(f"Found {len(generic_names)} generic strategies: {', '.join(generic_names)}")
+        
         for strategy_name, strategy_data in config_data['generic_strategies'].items():
             # Use 'generic' as the entity_type for generic strategies
             await populate_mapping_strategies(
@@ -887,9 +907,17 @@ async def populate_strategies_from_config(session: AsyncSession, config_data: Di
     # Process entity-specific strategies
     if 'entity_strategies' in config_data:
         for entity_type, strategies in config_data['entity_strategies'].items():
+            entity_names = list(strategies.keys())
+            all_strategy_names.extend(entity_names)
+            logger.info(f"Found {len(entity_names)} strategies for entity '{entity_type}': {', '.join(entity_names)}")
+            
             await populate_mapping_strategies(
                 session, strategies, entity_name=entity_type
             )
+    
+    # Log summary of all strategies found
+    logger.info(f"DIAGNOSTIC: Total strategies to be populated: {len(all_strategy_names)}")
+    logger.info(f"DIAGNOSTIC: Strategy names: {', '.join(sorted(all_strategy_names))}")
 
 
 async def populate_from_configs(session: AsyncSession):
@@ -991,7 +1019,7 @@ async def main(drop_all=False):
 
     # Force re-instantiation of the default DatabaseManager
     logger.info("Initializing DatabaseManager...")
-    manager = get_db_manager(db_url=db_url, echo=True)
+    manager = get_db_manager(db_url=settings.metamapper_db_url, echo=True)
     logger.info(f"Using DatabaseManager instance: {id(manager)} with URL: {manager.db_url}")
 
     # Initialize DB schema
