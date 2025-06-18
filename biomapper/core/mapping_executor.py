@@ -48,6 +48,7 @@ from biomapper.core.engine_components.session_manager import SessionManager
 from biomapper.core.engine_components.progress_reporter import ProgressReporter
 from biomapper.core.engine_components.identifier_loader import IdentifierLoader
 from biomapper.core.engine_components.config_loader import ConfigLoader
+from biomapper.core.services.metadata_query_service import MetadataQueryService
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
 from biomapper.core.engine_components.robust_execution_coordinator import RobustExecutionCoordinator
 
@@ -252,6 +253,9 @@ class MappingExecutor(CompositeIdentifierMixin):
             mapping_cache_db_url=self.mapping_cache_db_url,
             echo_sql=echo_sql
         )
+        
+        # Initialize MetadataQueryService
+        self.metadata_query_service = MetadataQueryService(self.session_manager)
         
         # Create convenience references for backward compatibility
         self.async_metamapper_engine = self.session_manager.async_metamapper_engine
@@ -513,20 +517,11 @@ class MappingExecutor(CompositeIdentifierMixin):
 
     async def _get_endpoint_properties(self, session: AsyncSession, endpoint_name: str) -> List[EndpointPropertyConfig]:
         """Get all property configurations for an endpoint."""
-        stmt = select(EndpointPropertyConfig).join(Endpoint, EndpointPropertyConfig.endpoint_id == Endpoint.id).where(Endpoint.name == endpoint_name)
-        result = await session.execute(stmt)
-        return result.scalars().all()
+        return await self.metadata_query_service.get_endpoint_properties(session, endpoint_name)
 
     async def _get_ontology_preferences(self, session: AsyncSession, endpoint_name: str) -> List[OntologyPreference]:
         """Get ontology preferences for an endpoint."""
-        # Join Endpoint to OntologyPreference via endpoint_id
-        stmt = select(OntologyPreference).join(
-            Endpoint, 
-            OntologyPreference.endpoint_id == Endpoint.id
-        ).where(Endpoint.name == endpoint_name)
-        
-        result = await session.execute(stmt)
-        return result.scalars().all()
+        return await self.metadata_query_service.get_ontology_preferences(session, endpoint_name)
 
     async def _get_endpoint(self, session: AsyncSession, endpoint_name: str) -> Optional[Endpoint]:
         """Retrieves an endpoint by name.
@@ -538,64 +533,11 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             The Endpoint if found, None otherwise
         """
-        try:
-            stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
-            result = await session.execute(stmt)
-            endpoint = result.scalar_one_or_none()
-            
-            if endpoint:
-                self.logger.debug(f"Found endpoint: {endpoint.name} (ID: {endpoint.id})")
-            else:
-                self.logger.warning(f"Endpoint not found: {endpoint_name}")
-                
-            return endpoint
-        except SQLAlchemyError as e:
-            self.logger.error(f"Database error retrieving endpoint {endpoint_name}: {e}", exc_info=True)
-            raise DatabaseQueryError(
-                f"Database error fetching endpoint",
-                details={"endpoint": endpoint_name, "error": str(e)}
-            ) from e
+        return await self.metadata_query_service.get_endpoint(session, endpoint_name)
     
     async def _get_ontology_type(self, session: AsyncSession, endpoint_name: str, property_name: str) -> Optional[str]:
         """Retrieves the primary ontology type for a given endpoint and property name."""
-        self.logger.debug(f"Getting ontology type for {endpoint_name}.{property_name}")
-        try:
-            # Join EndpointPropertyConfig with Endpoint
-            stmt = (
-                select(EndpointPropertyConfig.ontology_type)
-                .join(Endpoint, Endpoint.id == EndpointPropertyConfig.endpoint_id)
-                .where(Endpoint.name == endpoint_name)
-                .where(EndpointPropertyConfig.property_name == property_name)
-                .limit(1)
-            )
-            result = await session.execute(stmt)
-            ontology_type = result.scalar_one_or_none()
-            
-            if ontology_type:
-                self.logger.debug(f"Found ontology type: {ontology_type}")
-            else:
-                self.logger.warning(f"Ontology type not found for {endpoint_name}.{property_name}")
-            
-            return ontology_type
-        except SQLAlchemyError as e:
-            self.logger.error(
-                f"Database error retrieving ontology type for {endpoint_name}.{property_name}: {e}",
-                exc_info=True
-            )
-            raise DatabaseQueryError(
-                f"Database error fetching ontology type",
-                details={"endpoint": endpoint_name, "property": property_name, "error": str(e)}
-            ) from e
-        except Exception as e:
-            self.logger.error(
-                f"Unexpected error retrieving ontology type for {endpoint_name}.{property_name}: {e}",
-                exc_info=True
-            )
-            raise BiomapperError(
-                f"An unexpected error occurred while retrieving ontology type",
-                error_code=ErrorCode.DATABASE_QUERY_ERROR,  # Changed to DATABASE_QUERY_ERROR to match test
-                details={"endpoint": endpoint_name, "property": property_name, "error": str(e)}
-            ) from e
+        return await self.metadata_query_service.get_ontology_type(session, endpoint_name, property_name)
 
 
     async def _load_client(self, mapping_resource):
@@ -2294,9 +2236,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Endpoint object if found, None otherwise
         """
-        stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
-        result = await session.execute(stmt)
-        return result.scalar_one_or_none()
+        return await self.metadata_query_service.get_endpoint(session, endpoint_name)
 
     async def async_dispose(self):
         """Asynchronously dispose of underlying database engines."""
