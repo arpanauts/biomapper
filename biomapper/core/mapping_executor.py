@@ -42,6 +42,7 @@ from biomapper.core.engine_components.reversible_path import ReversiblePath
 from biomapper.core.engine_components.path_execution_manager import PathExecutionManager
 from biomapper.core.engine_components.cache_manager import CacheManager
 from biomapper.core.engine_components.strategy_orchestrator import StrategyOrchestrator
+from biomapper.core.engine_components.checkpoint_manager import CheckpointManager
 from biomapper.core.engine_components.client_manager import ClientManager
 
 # Import utilities
@@ -293,24 +294,18 @@ class MappingExecutor(CompositeIdentifierMixin):
         self.echo_sql = echo_sql
         
         # Robust execution parameters
-        self.checkpoint_enabled = checkpoint_enabled
-        self.checkpoint_dir = checkpoint_dir
         self.batch_size = batch_size
         self.max_retries = max_retries
         self.retry_delay = retry_delay
         
-        # Set up checkpoint directory
-        if self.checkpoint_enabled and self.checkpoint_dir:
-            self.checkpoint_dir = Path(self.checkpoint_dir)
-            self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        elif self.checkpoint_enabled:
-            # Default checkpoint directory
-            self.checkpoint_dir = Path.home() / '.biomapper' / 'checkpoints'
-            self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-            
-        # Progress tracking
+        # Initialize checkpoint manager
+        self.checkpoint_manager = CheckpointManager(
+            checkpoint_dir=checkpoint_dir if checkpoint_enabled else None,
+            logger=self.logger
+        )
+        
+        # Progress tracking (delegate to checkpoint manager)
         self._progress_callbacks: List[Callable] = []
-        self._current_checkpoint_file: Optional[Path] = None
         
         # Concurrency settings
         self.max_concurrent_batches = max_concurrent_batches
@@ -407,13 +402,13 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Update the path execution manager with the session factory
         self.path_execution_manager.metamapper_session_factory = self.MetamapperSessionFactory
-        
+
         # Initialize CacheManager
         self.cache_manager = CacheManager(
             cache_sessionmaker=self.CacheSessionFactory,
             logger=self.logger
         )
-        
+
         # Initialize StrategyOrchestrator
         self.strategy_orchestrator = StrategyOrchestrator(
             metamapper_session_factory=self.MetamapperSessionFactory,
@@ -3514,6 +3509,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             callback: Function that takes a progress dict as argument
         """
         self._progress_callbacks.append(callback)
+        self.checkpoint_manager.add_progress_callback(callback)
     
     def _report_progress(self, progress_data: Dict[str, Any]):
         """
@@ -3528,122 +3524,6 @@ class MappingExecutor(CompositeIdentifierMixin):
             except Exception as e:
                 self.logger.warning(f"Progress callback failed: {e}")
     
-    def _get_checkpoint_file(self, execution_id: str) -> Path:
-        """
-        Get the checkpoint file path for a given execution.
-        
-        Args:
-            execution_id: Unique identifier for the execution
-            
-        Returns:
-            Path to the checkpoint file
-        """
-        return self.checkpoint_dir / f"{execution_id}.checkpoint"
-    
-    async def save_checkpoint(self, execution_id: str, state: Dict[str, Any]):
-        """
-        Save execution state to a checkpoint file.
-        
-        Args:
-            execution_id: Unique identifier for the execution
-            state: State dictionary to save
-        """
-        if not self.checkpoint_enabled:
-            return
-            
-        checkpoint_file = self._get_checkpoint_file(execution_id)
-        self._current_checkpoint_file = checkpoint_file
-        
-        try:
-            # Add timestamp to state
-            state['checkpoint_time'] = datetime.utcnow().isoformat()
-            
-            # Save to temporary file first
-            temp_file = checkpoint_file.with_suffix('.tmp')
-            with open(temp_file, 'wb') as f:
-                pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
-            
-            # Atomic rename
-            temp_file.replace(checkpoint_file)
-            
-            self.logger.info(f"Checkpoint saved: {checkpoint_file}")
-            
-            # Report progress
-            self._report_progress({
-                'type': 'checkpoint_saved',
-                'execution_id': execution_id,
-                'checkpoint_file': str(checkpoint_file),
-                'state_summary': {
-                    'processed_count': state.get('processed_count', 0),
-                    'total_count': state.get('total_count', 0)
-                }
-            })
-            
-        except Exception as e:
-            self.logger.error(f"Failed to save checkpoint: {e}")
-            raise BiomapperError(f"Checkpoint save failed: {e}")
-    
-    async def load_checkpoint(self, execution_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Load execution state from a checkpoint file.
-        
-        Args:
-            execution_id: Unique identifier for the execution
-            
-        Returns:
-            State dictionary if checkpoint exists, None otherwise
-        """
-        if not self.checkpoint_enabled:
-            return None
-            
-        checkpoint_file = self._get_checkpoint_file(execution_id)
-        
-        if not checkpoint_file.exists():
-            return None
-            
-        try:
-            with open(checkpoint_file, 'rb') as f:
-                state = pickle.load(f)
-            
-            self.logger.info(f"Checkpoint loaded: {checkpoint_file}")
-            self._current_checkpoint_file = checkpoint_file
-            
-            # Report progress
-            self._report_progress({
-                'type': 'checkpoint_loaded',
-                'execution_id': execution_id,
-                'checkpoint_file': str(checkpoint_file),
-                'checkpoint_time': state.get('checkpoint_time'),
-                'state_summary': {
-                    'processed_count': state.get('processed_count', 0),
-                    'total_count': state.get('total_count', 0)
-                }
-            })
-            
-            return state
-            
-        except Exception as e:
-            self.logger.error(f"Failed to load checkpoint: {e}")
-            return None
-    
-    async def clear_checkpoint(self, execution_id: str):
-        """
-        Remove checkpoint file after successful completion.
-        
-        Args:
-            execution_id: Unique identifier for the execution
-        """
-        if not self.checkpoint_enabled:
-            return
-            
-        checkpoint_file = self._get_checkpoint_file(execution_id)
-        
-        if checkpoint_file.exists():
-            try:
-                checkpoint_file.unlink()
-                self.logger.info(f"Checkpoint cleared: {checkpoint_file}")
-            except Exception as e:
-                self.logger.warning(f"Failed to clear checkpoint: {e}")
     
     async def execute_with_retry(
         self,
@@ -3807,7 +3687,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                             if key not in checkpoint_data:
                                 checkpoint_data[key] = value
                                 
-                    await self.save_checkpoint(execution_id, checkpoint_data)
+                    await self.checkpoint_manager.save_checkpoint(execution_id, checkpoint_data)
                 
                 # Report batch completion
                 self._report_progress({
@@ -3875,7 +3755,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         # Try to load checkpoint
         checkpoint_state = None
         if resume_from_checkpoint:
-            checkpoint_state = await self.load_checkpoint(execution_id)
+            checkpoint_state = await self.checkpoint_manager.load_checkpoint(execution_id)
             
         start_time = datetime.utcnow()
         
@@ -3914,8 +3794,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             }
             
             # Clear checkpoint on success
-            if self.checkpoint_enabled:
-                await self.clear_checkpoint(execution_id)
+            await self.checkpoint_manager.clear_checkpoint(execution_id)
                 
             return result
             
@@ -3926,7 +3805,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                 'execution_id': execution_id,
                 'strategy': strategy_name,
                 'error': str(e),
-                'checkpoint_available': self._current_checkpoint_file is not None
+                'checkpoint_available': self.checkpoint_manager.current_checkpoint_file is not None
             })
             
             # Re-raise with additional context
@@ -3934,7 +3813,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                 f"Strategy execution failed: {strategy_name}",
                 details={
                     'execution_id': execution_id,
-                    'checkpoint_available': self._current_checkpoint_file is not None,
+                    'checkpoint_available': self.checkpoint_manager.current_checkpoint_file is not None,
                     'error': str(e)
                 }
             )
