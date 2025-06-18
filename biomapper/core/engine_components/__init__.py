@@ -7,6 +7,7 @@ from .checkpoint_manager import CheckpointManager
 from .client_manager import ClientManager
 from .path_execution_manager import PathExecutionManager
 from .identifier_loader import IdentifierLoader
+from .mapping_executor_initializer import MappingExecutorInitializer
 from .path_execution_manager import PathExecutionManager
 from .path_finder import PathFinder
 from .progress_reporter import ProgressReporter
@@ -22,6 +23,7 @@ __all__ = [
     "ClientManager",
     "PathExecutionManager",
     "IdentifierLoader",
+    "MappingExecutorInitializer",
     "PathExecutionManager",
     "PathFinder",
     "ProgressReporter",

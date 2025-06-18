@@ -50,6 +50,7 @@ sys.path.insert(0, str(BIOMAPPER_ROOT))
 
 import pandas as pd
 from biomapper.core import MappingExecutor
+from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
 from biomapper.config import settings
 
 # Configure logging
@@ -165,9 +166,9 @@ async def run_full_mapping(checkpoint_enabled: bool = True, batch_size: int = 25
 
     executor = None
     try:
-        # Initialize MappingExecutor with robust features
+        # Initialize MappingExecutor with robust features using MappingExecutorInitializer
         logger.info("Initializing MappingExecutor...")
-        executor = await MappingExecutor.create(
+        initializer = MappingExecutorInitializer(
             metamapper_db_url=settings.metamapper_db_url,
             mapping_cache_db_url=settings.cache_db_url,
             echo_sql=False,
@@ -178,6 +179,7 @@ async def run_full_mapping(checkpoint_enabled: bool = True, batch_size: int = 25
             max_retries=max_retries,
             retry_delay=2
         )
+        executor = await initializer.create_executor()
         logger.info("MappingExecutor created successfully.")
         
         # Add progress tracking if enabled
