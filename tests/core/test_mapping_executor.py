@@ -855,7 +855,7 @@ async def test_load_client_json_decode_error(mapping_executor):
 
         # Call _load_client and verify it raises ClientInitializationError
         with pytest.raises(ClientInitializationError) as exc_info:
-            await mapping_executor._load_client(mock_resource)
+            await mapping_executor.client_manager.get_client_instance(mock_resource)
 
         # Verify the error details
         assert "Invalid configuration template JSON" in str(exc_info.value)
@@ -883,7 +883,7 @@ async def test_load_client_initialization_exception(mapping_executor):
     ):
         # Call _load_client and verify it raises ClientInitializationError
         with pytest.raises(ClientInitializationError) as exc_info:
-            await mapping_executor._load_client(mock_resource)
+            await mapping_executor.client_manager.get_client_instance(mock_resource)
 
         # Verify the error details
         assert "Unexpected error initializing client" in str(exc_info.value)
@@ -943,7 +943,7 @@ async def test_execute_mapping_step_generic_exception(mapping_executor):
     mock_step.mapping_resource.name = "test_client"
 
     # Mock the _load_client method to return our mock client
-    with patch.object(mapping_executor, "_load_client", return_value=mock_client):
+    with patch.object(mapping_executor.client_manager, "get_client_instance", return_value=mock_client):
         # Call _execute_mapping_step and verify it raises ClientExecutionError
         with pytest.raises(ClientExecutionError) as exc_info:
             await mapping_executor._execute_mapping_step(
@@ -1562,7 +1562,7 @@ async def test_run_path_steps_basic(mapping_executor):
     }
     mock_client = MockStepClient(results=client_results)
     
-    with patch.object(mapping_executor, '_load_client', new=AsyncMock(return_value=mock_client)):
+    with patch.object(mapping_executor.client_manager, 'get_client_instance', new=AsyncMock(return_value=mock_client)):
         # Run the function
         results = await mapping_executor._run_path_steps(
             path=mock_path,
@@ -1625,7 +1625,7 @@ async def test_run_path_steps_multi_step(mapping_executor):
             return mock_client2
         return None
     
-    with patch.object(mapping_executor, '_load_client', new=AsyncMock(side_effect=mock_load_client)):
+    with patch.object(mapping_executor.client_manager, 'get_client_instance', new=AsyncMock(side_effect=mock_load_client)):
         # Run the function with initial input IDs
         results = await mapping_executor._run_path_steps(
             path=mock_path,
@@ -1690,7 +1690,7 @@ async def test_run_path_steps_one_to_many(mapping_executor):
             return mock_client2
         return None
     
-    with patch.object(mapping_executor, '_load_client', new=AsyncMock(side_effect=mock_load_client)):
+    with patch.object(mapping_executor.client_manager, 'get_client_instance', new=AsyncMock(side_effect=mock_load_client)):
         # Run the function
         results = await mapping_executor._run_path_steps(
             path=mock_path,
@@ -1734,7 +1734,7 @@ async def test_run_path_steps_error_handling(mapping_executor):
     # Patch _load_and_initialize_client to return a client that raises an error
     mock_client = MockStepClient(raise_error=True, error_msg="Simulated client failure")
     
-    with patch.object(mapping_executor, '_load_client', new=AsyncMock(return_value=mock_client)):
+    with patch.object(mapping_executor.client_manager, 'get_client_instance', new=AsyncMock(return_value=mock_client)):
         # Run the function and expect a MappingExecutionError
         with pytest.raises(MappingExecutionError) as excinfo:
             await mapping_executor._run_path_steps(
