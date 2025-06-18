@@ -44,6 +44,7 @@ from biomapper.core.engine_components.cache_manager import CacheManager
 from biomapper.core.engine_components.strategy_orchestrator import StrategyOrchestrator
 from biomapper.core.engine_components.checkpoint_manager import CheckpointManager
 from biomapper.core.engine_components.client_manager import ClientManager
+from biomapper.core.engine_components.progress_reporter import ProgressReporter
 from biomapper.core.engine_components.identifier_loader import IdentifierLoader
 from biomapper.core.engine_components.config_loader import ConfigLoader
 
@@ -178,8 +179,8 @@ class MappingExecutor(CompositeIdentifierMixin):
             logger=self.logger
         )
         
-        # Progress tracking (delegate to checkpoint manager)
-        self._progress_callbacks: List[Callable] = []
+        # Progress tracking
+        self.progress_reporter = ProgressReporter()
         
         # Concurrency settings
         self.max_concurrent_batches = max_concurrent_batches
@@ -3189,21 +3190,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         Args:
             callback: Function that takes a progress dict as argument
         """
-        self._progress_callbacks.append(callback)
+        self.progress_reporter.add_callback(callback)
         self.checkpoint_manager.add_progress_callback(callback)
-    
-    def _report_progress(self, progress_data: Dict[str, Any]):
-        """
-        Report progress to all registered callbacks.
-        
-        Args:
-            progress_data: Dictionary containing progress information
-        """
-        for callback in self._progress_callbacks:
-            try:
-                callback(progress_data)
-            except Exception as e:
-                self.logger.warning(f"Progress callback failed: {e}")
     
     
     async def execute_with_retry(
@@ -3230,7 +3218,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         for attempt in range(self.max_retries):
             try:
                 # Report attempt
-                self._report_progress({
+                self.progress_reporter.report({
                     'type': 'retry_attempt',
                     'operation': operation_name,
                     'attempt': attempt + 1,
@@ -3261,7 +3249,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         self.logger.error(f"{error_msg}: {last_error}")
         
         # Report failure
-        self._report_progress({
+        self.progress_reporter.report({
             'type': 'retry_exhausted',
             'operation': operation_name,
             'attempts': self.max_retries,
@@ -3328,7 +3316,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             )
             
             # Report batch start
-            self._report_progress({
+            self.progress_reporter.report({
                 'type': 'batch_start',
                 'processor': processor_name,
                 'batch_num': batch_num,
@@ -3371,7 +3359,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                     await self.checkpoint_manager.save_checkpoint(execution_id, checkpoint_data)
                 
                 # Report batch completion
-                self._report_progress({
+                self.progress_reporter.report({
                     'type': 'batch_complete',
                     'processor': processor_name,
                     'batch_num': batch_num,
@@ -3388,7 +3376,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                 )
                 
                 # Report batch failure
-                self._report_progress({
+                self.progress_reporter.report({
                     'type': 'batch_failed',
                     'processor': processor_name,
                     'batch_num': batch_num,
@@ -3481,7 +3469,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             
         except Exception as e:
             # Report execution failure
-            self._report_progress({
+            self.progress_reporter.report({
                 'type': 'execution_failed',
                 'execution_id': execution_id,
                 'strategy': strategy_name,
