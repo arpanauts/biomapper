@@ -1,6 +1,17 @@
-# Enhanced Mapping Executor
+# Mapping Executor Robust Features (Deprecated Documentation)
 
-The `EnhancedMappingExecutor` extends the base `MappingExecutor` with robust execution features including checkpointing, retry logic, and progress tracking. These features are essential for large-scale mapping operations that may take hours to complete or involve unreliable external services.
+> **⚠️ DEPRECATION NOTICE**
+> 
+> The `EnhancedMappingExecutor` class has been deprecated and removed. All robust execution features 
+> (checkpointing, retry logic, batch processing, and progress tracking) have been integrated directly 
+> into the main `MappingExecutor` class.
+>
+> This document is preserved for reference but describes features that are now part of the standard 
+> `MappingExecutor`. Please refer to the main MappingExecutor documentation for current usage.
+
+## Overview
+
+This document describes the robust features that are now available in the standard `MappingExecutor`. These features are essential for large-scale mapping operations that may take hours to complete or involve unreliable external services.
 
 ## Features
 
@@ -33,10 +44,10 @@ The `EnhancedMappingExecutor` extends the base `MappingExecutor` with robust exe
 ### Basic Usage
 
 ```python
-from biomapper.core.mapping_executor_enhanced import EnhancedMappingExecutor
+from biomapper.core.mapping_executor import MappingExecutor
 
 # Create executor with robust features enabled
-executor = await EnhancedMappingExecutor.create(
+executor = await MappingExecutor.create(
     checkpoint_enabled=True,
     checkpoint_dir="/path/to/checkpoints",
     batch_size=250,
@@ -150,17 +161,19 @@ The enhanced executor provides multiple levels of error handling:
 - Thread-safe checkpoint operations
 - Progress callbacks executed asynchronously
 
-## Migration from Standard MappingExecutor
+## Migration from EnhancedMappingExecutor
 
-The `EnhancedMappingExecutor` is a drop-in replacement for `MappingExecutor`:
+The `EnhancedMappingExecutor` has been deprecated and its features are now part of the standard `MappingExecutor`:
 
 ```python
-# Before
-executor = await MappingExecutor.create()
-
-# After
+# Before (deprecated)
 executor = await EnhancedMappingExecutor.create(
-    checkpoint_enabled=True  # Opt-in to robust features
+    checkpoint_enabled=True
+)
+
+# After (current)
+executor = await MappingExecutor.create(
+    checkpoint_enabled=True  # All robust features available
 )
 ```
 
@@ -168,11 +181,11 @@ executor = await EnhancedMappingExecutor.create(
 
 ```python
 import asyncio
-from biomapper.core.mapping_executor_enhanced import EnhancedMappingExecutor
+from biomapper.core.mapping_executor import MappingExecutor
 
 async def robust_mapping_pipeline():
     # Create executor with all robust features
-    executor = await EnhancedMappingExecutor.create(
+    executor = await MappingExecutor.create(
         checkpoint_enabled=True,
         batch_size=500,
         max_retries=5,
