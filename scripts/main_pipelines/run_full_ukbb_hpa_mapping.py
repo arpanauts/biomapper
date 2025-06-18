@@ -35,10 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pandas as pd
 from biomapper.core.mapping_executor import MappingExecutor
 from biomapper.config import settings
-from biomapper.db.models import PropertyExtractionConfig
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from biomapper.db.models import MappingStrategy
+from biomapper.core.exceptions import ConfigurationError
 
 # Configure logging
 logging.basicConfig(
@@ -67,161 +64,8 @@ SOURCE_ENDPOINT_NAME = "UKBB_PROTEIN"
 TARGET_ENDPOINT_NAME = "HPA_OSP_PROTEIN"
 
 # ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
-
-async def check_strategy_exists(executor: MappingExecutor, strategy_name: str) -> bool:
-    """
-    Check if a strategy exists in the metamapper database.
-    
-    Args:
-        executor: MappingExecutor instance
-        strategy_name: Name of the strategy to check
-        
-    Returns:
-        True if strategy exists, False otherwise
-    """
-    try:
-        async with executor.async_metamapper_session() as session:
-            stmt = select(MappingStrategy).where(MappingStrategy.name == strategy_name)
-            result = await session.execute(stmt)
-            strategy = result.scalar_one_or_none()
-            return strategy is not None
-    except Exception as e:
-        logger.error(f"Error checking for strategy {strategy_name}: {e}")
-        return False
-
-
-
-
-# ============================================================================
 # MAIN MAPPING FUNCTION
 # ============================================================================
-
-async def get_column_for_ontology_type(executor: MappingExecutor, endpoint_name: str, ontology_type: str) -> str:
-    """
-    Get the column name for a given ontology type from an endpoint's property configuration.
-    
-    Args:
-        executor: MappingExecutor instance
-        endpoint_name: Name of the endpoint
-        ontology_type: Ontology type to look up
-        
-    Returns:
-        Column name for the ontology type
-    """
-    async with executor.async_metamapper_session() as session:
-        from biomapper.db.models import Endpoint, EndpointPropertyConfig
-        
-        # Get the endpoint
-        stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
-        result = await session.execute(stmt)
-        endpoint = result.scalar_one_or_none()
-        
-        if not endpoint:
-            raise ValueError(f"Endpoint '{endpoint_name}' not found in database")
-        
-        # Get the property config for the ontology type
-        stmt = select(EndpointPropertyConfig).where(
-            EndpointPropertyConfig.endpoint_id == endpoint.id,
-            EndpointPropertyConfig.ontology_type == ontology_type
-        )
-        result = await session.execute(stmt)
-        property_config = result.scalar_one_or_none()
-        
-        if not property_config:
-            raise ValueError(f"No property configuration found for ontology type '{ontology_type}' in endpoint '{endpoint_name}'")
-        
-        # Get the extraction config to find the column name
-        stmt = select(PropertyExtractionConfig).where(
-            PropertyExtractionConfig.id == property_config.property_extraction_config_id
-        )
-        result = await session.execute(stmt)
-        extraction_config = result.scalar_one_or_none()
-        
-        if not extraction_config:
-            raise ValueError(f"No extraction configuration found for property config ID {property_config.property_extraction_config_id}")
-        
-        # Parse the extraction pattern to get the column name
-        # The extraction_pattern is a JSON string like '{"column": "UniProt"}'
-        import json
-        try:
-            pattern_data = json.loads(extraction_config.extraction_pattern)
-            column_name = pattern_data.get('column')
-            if not column_name:
-                raise ValueError(f"No 'column' field found in extraction pattern: {extraction_config.extraction_pattern}")
-            return column_name
-        except json.JSONDecodeError:
-            raise ValueError(f"Invalid JSON in extraction pattern: {extraction_config.extraction_pattern}")
-
-
-async def load_identifiers_from_endpoint(executor: MappingExecutor, endpoint_name: str, ontology_type: str) -> List[str]:
-    """
-    Load identifiers from an endpoint using its configuration in metamapper.db.
-    
-    Args:
-        executor: MappingExecutor instance
-        endpoint_name: Name of the endpoint to load from
-        ontology_type: Ontology type of the identifiers to load
-        
-    Returns:
-        List of unique identifiers
-    """
-    try:
-        # First get the column name for the ontology type
-        column_name = await get_column_for_ontology_type(executor, endpoint_name, ontology_type)
-        logger.info(f"Ontology type '{ontology_type}' maps to column '{column_name}'")
-        
-        # Get endpoint configuration from metamapper.db
-        async with executor.async_metamapper_session() as session:
-            from biomapper.db.models import Endpoint
-            
-            stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
-            result = await session.execute(stmt)
-            endpoint = result.scalar_one_or_none()
-            
-            if not endpoint:
-                raise ValueError(f"Endpoint '{endpoint_name}' not found in database")
-            
-            # Parse connection details (it's a JSON string)
-            import json
-            connection_details = json.loads(endpoint.connection_details)
-            file_path = connection_details.get('file_path', '')
-            delimiter = connection_details.get('delimiter', ',')
-            
-            # Handle environment variable substitution
-            if '${DATA_DIR}' in file_path:
-                data_dir = os.environ.get('DATA_DIR', DEFAULT_DATA_DIR)
-                file_path = file_path.replace('${DATA_DIR}', data_dir)
-            
-            logger.info(f"Loading identifiers from endpoint '{endpoint_name}'")
-            logger.info(f"File path: {file_path}")
-            
-            # Load the file
-            if endpoint.type == 'file_tsv':
-                df = pd.read_csv(file_path, sep=delimiter)
-            elif endpoint.type == 'file_csv':
-                df = pd.read_csv(file_path, sep=delimiter)
-            else:
-                raise ValueError(f"Unsupported endpoint type: {endpoint.type}")
-            
-            logger.info(f"Loaded dataframe with shape: {df.shape}")
-            
-            # Extract unique identifiers
-            if column_name not in df.columns:
-                raise KeyError(
-                    f"Column '{column_name}' not found in {endpoint_name} data.\n"
-                    f"Available columns: {list(df.columns)}"
-                )
-            
-            identifiers = df[column_name].dropna().unique().tolist()
-            logger.info(f"Found {len(identifiers)} unique identifiers in column '{column_name}'")
-            
-            return identifiers
-            
-    except Exception as e:
-        logger.error(f"Error loading identifiers from endpoint {endpoint_name}: {e}")
-        raise
 
 
 async def run_full_mapping():
@@ -255,11 +99,11 @@ async def run_full_mapping():
         )
         logger.info("MappingExecutor created successfully")
         
-        # Check if strategy exists
+        # Check if strategy exists using new API
         logger.info(f"Checking if strategy '{STRATEGY_NAME}' exists in database...")
-        strategy_exists = await check_strategy_exists(executor, STRATEGY_NAME)
+        strategy = await executor.get_strategy(STRATEGY_NAME)
         
-        if not strategy_exists:
+        if not strategy:
             raise ValueError(
                 f"Strategy '{STRATEGY_NAME}' not found in database.\n"
                 f"Please run: python scripts/populate_metamapper_db.py"
@@ -267,22 +111,16 @@ async def run_full_mapping():
         
         logger.info(f"Strategy '{STRATEGY_NAME}' found in database")
         
-        # Get the source ontology type from the strategy configuration
-        async with executor.async_metamapper_session() as session:
-            stmt = select(MappingStrategy).where(MappingStrategy.name == STRATEGY_NAME)
-            result = await session.execute(stmt)
-            strategy = result.scalar_one_or_none()
-            
-            if not strategy or not strategy.default_source_ontology_type:
-                raise ValueError(f"Strategy '{STRATEGY_NAME}' does not have a default_source_ontology_type defined")
-            
-            source_ontology_type = strategy.default_source_ontology_type
-            logger.info(f"Strategy uses source ontology type: {source_ontology_type}")
+        # Get the source ontology type from the strategy
+        if not strategy.default_source_ontology_type:
+            raise ValueError(f"Strategy '{STRATEGY_NAME}' does not have a default_source_ontology_type defined")
         
-        # Load input identifiers from the source endpoint
+        source_ontology_type = strategy.default_source_ontology_type
+        logger.info(f"Strategy uses source ontology type: {source_ontology_type}")
+        
+        # Load input identifiers from the source endpoint using new API
         logger.info(f"Loading identifiers from source endpoint '{SOURCE_ENDPOINT_NAME}'...")
-        input_identifiers = await load_identifiers_from_endpoint(
-            executor=executor,
+        input_identifiers = await executor.load_endpoint_identifiers(
             endpoint_name=SOURCE_ENDPOINT_NAME,
             ontology_type=source_ontology_type
         )

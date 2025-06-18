@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 """
-Full UKBB to HPA Protein Mapping Script - Bidirectional Strategy
+Full UKBB to HPA Protein Mapping Script - Enhanced Bidirectional Strategy
 
 This script processes a full UKBB protein dataset through the optimized
-UKBB_TO_HPA_BIDIRECTIONAL_OPTIMIZED strategy using the MappingExecutor.
+UKBB_TO_HPA_BIDIRECTIONAL_OPTIMIZED strategy using the EnhancedMappingExecutor
+with robust execution features.
 
 Key improvements over the original strategy:
 - Direct UniProt matching (no initial conversion needed)
@@ -11,14 +12,26 @@ Key improvements over the original strategy:
 - Context-based tracking of matched/unmatched identifiers
 - Composite identifier handling built-in
 
+Enhanced features:
+- Checkpointing for resumable execution
+- Retry logic for external API calls
+- Progress tracking and reporting
+- Batch processing with configurable sizes
+
 Usage:
     1. Ensure metamapper.db is populated: python scripts/populate_metamapper_db.py
     2. Ensure the biomapper Poetry environment is active
-    3. Run: python scripts/main_pipelines/run_full_ukbb_hpa_mapping_bidirectional.py
+    3. Run: python scripts/main_pipelines/run_full_ukbb_hpa_mapping_bidirectional.py [options]
+    
+Options:
+    --checkpoint: Enable checkpoint saving (default: True)
+    --batch-size N: Number of identifiers per batch (default: 250)
+    --max-retries N: Maximum retries per operation (default: 3)
+    --no-progress: Disable progress reporting
     
 The script will automatically:
 - Load UKBB protein data (UniProt IDs) from the configured endpoint
-- Execute the bidirectional mapping strategy
+- Execute the bidirectional mapping strategy with robust features
 - Save comprehensive results to /home/ubuntu/biomapper/data/results/
 """
 
@@ -35,12 +48,8 @@ import json
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import pandas as pd
-from biomapper.core.mapping_executor import MappingExecutor
+from biomapper.core.mapping_executor_enhanced import EnhancedMappingExecutor
 from biomapper.config import settings
-from biomapper.db.models import PropertyExtractionConfig
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from biomapper.db.models import MappingStrategy
 
 # Configure logging
 logging.basicConfig(
@@ -65,183 +74,51 @@ SUMMARY_FILE_PATH = os.path.join(OUTPUT_RESULTS_DIR, SUMMARY_FILENAME)
 # Default data directory (set as environment variable if not already set)
 DEFAULT_DATA_DIR = "/home/ubuntu/biomapper/data"
 
-# Strategy name to execute - using the new bidirectional strategy
-STRATEGY_NAME = "UKBB_TO_HPA_BIDIRECTIONAL_OPTIMIZED"
+# Checkpoint directory for robust execution
+CHECKPOINT_DIR = "/home/ubuntu/biomapper/data/checkpoints"
+
+# Strategy name to execute - using the EFFICIENT bidirectional strategy
+# Note: The OPTIMIZED strategy has a design flaw where it processes ALL unmatched HPA proteins,
+# causing timeouts even with small datasets. Use EFFICIENT instead.
+STRATEGY_NAME = "UKBB_TO_HPA_BIDIRECTIONAL_EFFICIENT"
 
 # Endpoint names as defined in metamapper.db (from protein_config.yaml)
 SOURCE_ENDPOINT_NAME = "UKBB_PROTEIN"
 TARGET_ENDPOINT_NAME = "HPA_OSP_PROTEIN"
 
 # ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
-
-async def check_strategy_exists(executor: MappingExecutor, strategy_name: str) -> bool:
-    """
-    Check if a strategy exists in the metamapper database.
-    
-    Args:
-        executor: MappingExecutor instance
-        strategy_name: Name of the strategy to check
-        
-    Returns:
-        True if strategy exists, False otherwise
-    """
-    try:
-        async with executor.async_metamapper_session() as session:
-            stmt = select(MappingStrategy).where(MappingStrategy.name == strategy_name)
-            result = await session.execute(stmt)
-            strategy = result.scalar_one_or_none()
-            return strategy is not None
-    except Exception as e:
-        logger.error(f"Error checking for strategy {strategy_name}: {e}")
-        return False
-
-
-# ============================================================================
 # MAIN MAPPING FUNCTION
 # ============================================================================
 
-async def get_column_for_ontology_type(executor: MappingExecutor, endpoint_name: str, ontology_type: str) -> str:
+
+async def run_full_mapping(checkpoint_enabled: bool = True, batch_size: int = 250, 
+                          max_retries: int = 3, enable_progress: bool = True):
     """
-    Get the column name for a given ontology type from an endpoint's property configuration.
+    Main function to execute the full UKBB to HPA protein mapping using the enhanced bidirectional strategy.
     
     Args:
-        executor: MappingExecutor instance
-        endpoint_name: Name of the endpoint
-        ontology_type: Ontology type to look up
-        
-    Returns:
-        Column name for the ontology type
-    """
-    async with executor.async_metamapper_session() as session:
-        from biomapper.db.models import Endpoint, EndpointPropertyConfig
-        
-        # Get the endpoint
-        stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
-        result = await session.execute(stmt)
-        endpoint = result.scalar_one_or_none()
-        
-        if not endpoint:
-            raise ValueError(f"Endpoint '{endpoint_name}' not found in database")
-        
-        # Get the property config for the ontology type
-        stmt = select(EndpointPropertyConfig).where(
-            EndpointPropertyConfig.endpoint_id == endpoint.id,
-            EndpointPropertyConfig.ontology_type == ontology_type
-        )
-        result = await session.execute(stmt)
-        property_config = result.scalar_one_or_none()
-        
-        if not property_config:
-            raise ValueError(f"No property configuration found for ontology type '{ontology_type}' in endpoint '{endpoint_name}'")
-        
-        # Get the extraction config to find the column name
-        stmt = select(PropertyExtractionConfig).where(
-            PropertyExtractionConfig.id == property_config.property_extraction_config_id
-        )
-        result = await session.execute(stmt)
-        extraction_config = result.scalar_one_or_none()
-        
-        if not extraction_config:
-            raise ValueError(f"No extraction configuration found for property config ID {property_config.property_extraction_config_id}")
-        
-        # Parse the extraction pattern to get the column name
-        pattern_data = json.loads(extraction_config.extraction_pattern)
-        column_name = pattern_data.get('column')
-        if not column_name:
-            raise ValueError(f"No 'column' field found in extraction pattern: {extraction_config.extraction_pattern}")
-        return column_name
-
-
-async def load_identifiers_from_endpoint(executor: MappingExecutor, endpoint_name: str, ontology_type: str) -> List[str]:
-    """
-    Load identifiers from an endpoint using its configuration in metamapper.db.
-    
-    For the bidirectional strategy, we load UniProt IDs directly.
-    
-    Args:
-        executor: MappingExecutor instance
-        endpoint_name: Name of the endpoint to load from
-        ontology_type: Ontology type of the identifiers to load
-        
-    Returns:
-        List of unique identifiers
-    """
-    try:
-        # First get the column name for the ontology type
-        column_name = await get_column_for_ontology_type(executor, endpoint_name, ontology_type)
-        logger.info(f"Ontology type '{ontology_type}' maps to column '{column_name}'")
-        
-        # Get endpoint configuration from metamapper.db
-        async with executor.async_metamapper_session() as session:
-            from biomapper.db.models import Endpoint
-            
-            stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
-            result = await session.execute(stmt)
-            endpoint = result.scalar_one_or_none()
-            
-            if not endpoint:
-                raise ValueError(f"Endpoint '{endpoint_name}' not found in database")
-            
-            # Parse connection details (it's a JSON string)
-            connection_details = json.loads(endpoint.connection_details)
-            file_path = connection_details.get('file_path', '')
-            delimiter = connection_details.get('delimiter', ',')
-            
-            # Handle environment variable substitution
-            if '${DATA_DIR}' in file_path:
-                data_dir = os.environ.get('DATA_DIR', DEFAULT_DATA_DIR)
-                file_path = file_path.replace('${DATA_DIR}', data_dir)
-            
-            logger.info(f"Loading identifiers from endpoint '{endpoint_name}'")
-            logger.info(f"File path: {file_path}")
-            
-            # Load the file
-            if endpoint.type == 'file_tsv':
-                df = pd.read_csv(file_path, sep=delimiter)
-            elif endpoint.type == 'file_csv':
-                df = pd.read_csv(file_path, sep=delimiter)
-            else:
-                raise ValueError(f"Unsupported endpoint type: {endpoint.type}")
-            
-            logger.info(f"Loaded dataframe with shape: {df.shape}")
-            
-            # Extract unique identifiers
-            if column_name not in df.columns:
-                raise KeyError(
-                    f"Column '{column_name}' not found in {endpoint_name} data.\n"
-                    f"Available columns: {list(df.columns)}"
-                )
-            
-            identifiers = df[column_name].dropna().unique().tolist()
-            logger.info(f"Found {len(identifiers)} unique identifiers in column '{column_name}'")
-            
-            # Log sample of identifiers including any composites
-            sample_ids = identifiers[:10]
-            composite_count = sum(1 for id in identifiers if '_' in str(id))
-            logger.info(f"Sample identifiers: {sample_ids}")
-            logger.info(f"Composite identifiers found: {composite_count} (with '_' delimiter)")
-            
-            return identifiers
-            
-    except Exception as e:
-        logger.error(f"Error loading identifiers from endpoint {endpoint_name}: {e}")
-        raise
-
-
-async def run_full_mapping():
-    """
-    Main function to execute the full UKBB to HPA protein mapping using the bidirectional strategy.
+        checkpoint_enabled: Enable checkpoint saving for resumable execution
+        batch_size: Number of identifiers per batch for processing
+        max_retries: Maximum retry attempts for failed operations
+        enable_progress: Enable progress reporting callbacks
     """
     start_time = datetime.now()
-    logger.info(f"Starting BIDIRECTIONAL UKBB to HPA protein mapping at {start_time}")
+    execution_id = f"ukbb_hpa_bidirectional_{start_time.strftime('%Y%m%d_%H%M%S')}"
+    
+    logger.info(f"Starting ENHANCED BIDIRECTIONAL UKBB to HPA protein mapping at {start_time}")
     logger.info("=" * 80)
-    logger.info("Using optimized bidirectional strategy with:")
+    logger.info("Using enhanced bidirectional strategy with:")
     logger.info("- Direct UniProt matching (no conversion needed)")
     logger.info("- Composite identifier handling")
     logger.info("- Bidirectional resolution for maximum coverage")
     logger.info("- Context-based tracking throughout")
+    logger.info("")
+    logger.info("Enhanced features:")
+    logger.info(f"- Checkpointing: {'Enabled' if checkpoint_enabled else 'Disabled'}")
+    logger.info(f"- Batch size: {batch_size}")
+    logger.info(f"- Max retries: {max_retries}")
+    logger.info(f"- Progress tracking: {'Enabled' if enable_progress else 'Disabled'}")
+    logger.info(f"- Execution ID: {execution_id}")
     logger.info("=" * 80)
     
     # Ensure output directory exists
@@ -253,26 +130,58 @@ async def run_full_mapping():
         os.environ['DATA_DIR'] = DEFAULT_DATA_DIR
         logger.info(f"Set DATA_DIR environment variable to: {DEFAULT_DATA_DIR}")
     
+    # Set OUTPUT_DIR environment variable for the strategy
+    if 'OUTPUT_DIR' not in os.environ:
+        os.environ['OUTPUT_DIR'] = OUTPUT_RESULTS_DIR
+        logger.info(f"Set OUTPUT_DIR environment variable to: {OUTPUT_RESULTS_DIR}")
+    
     # Initialize variables
     executor = None
     input_identifiers = []
     
     try:
-        # Initialize MappingExecutor
-        logger.info("Initializing MappingExecutor...")
-        executor = await MappingExecutor.create(
+        # Initialize EnhancedMappingExecutor with robust features
+        logger.info("Initializing EnhancedMappingExecutor with robust features...")
+        executor = await EnhancedMappingExecutor.create(
             metamapper_db_url=settings.metamapper_db_url,
             mapping_cache_db_url=settings.cache_db_url,
             echo_sql=False,
-            enable_metrics=True
+            enable_metrics=True,
+            # Enhanced features
+            checkpoint_enabled=checkpoint_enabled,
+            checkpoint_dir=CHECKPOINT_DIR,
+            batch_size=batch_size,
+            max_retries=max_retries,
+            retry_delay=2  # 2 second delay between retries
         )
-        logger.info("MappingExecutor created successfully")
+        logger.info("EnhancedMappingExecutor created successfully with robust features")
         
-        # Check if strategy exists
+        # Add progress tracking if enabled
+        if enable_progress:
+            def progress_callback(progress_data: Dict[str, Any]):
+                """Handle progress updates from the executor."""
+                if progress_data['type'] == 'batch_complete':
+                    logger.info(
+                        f"Progress: {progress_data['total_processed']}/{progress_data['total_count']} "
+                        f"({progress_data['progress_percent']:.1f}%) - "
+                        f"{progress_data['processor']}"
+                    )
+                elif progress_data['type'] == 'checkpoint_saved':
+                    logger.info(f"Checkpoint saved: {progress_data['state_summary']}")
+                elif progress_data['type'] == 'retry_attempt':
+                    logger.warning(
+                        f"Retry {progress_data['attempt']}/{progress_data['max_attempts']} "
+                        f"for {progress_data['operation']}"
+                    )
+            
+            executor.add_progress_callback(progress_callback)
+            logger.info("Progress tracking enabled")
+        
+        # Check if strategy exists using new API
         logger.info(f"Checking if strategy '{STRATEGY_NAME}' exists in database...")
-        strategy_exists = await check_strategy_exists(executor, STRATEGY_NAME)
+        strategy = await executor.get_strategy(STRATEGY_NAME)
         
-        if not strategy_exists:
+        if not strategy:
             raise ValueError(
                 f"Strategy '{STRATEGY_NAME}' not found in database.\n"
                 f"Please run: python scripts/populate_metamapper_db.py"
@@ -280,20 +189,14 @@ async def run_full_mapping():
         
         logger.info(f"Strategy '{STRATEGY_NAME}' found in database")
         
-        # Get the source ontology type from the strategy configuration
-        async with executor.async_metamapper_session() as session:
-            stmt = select(MappingStrategy).where(MappingStrategy.name == STRATEGY_NAME)
-            result = await session.execute(stmt)
-            strategy = result.scalar_one_or_none()
-            
-            source_ontology_type = strategy.default_source_ontology_type
-            logger.info(f"Strategy uses source ontology type: {source_ontology_type}")
-            logger.info(f"Note: This is UniProt directly - no conversion needed!")
+        # Get the source ontology type from the strategy
+        source_ontology_type = strategy.default_source_ontology_type
+        logger.info(f"Strategy uses source ontology type: {source_ontology_type}")
+        logger.info(f"Note: This is UniProt directly - no conversion needed!")
         
-        # Load input identifiers from the source endpoint
+        # Load input identifiers from the source endpoint using new API
         logger.info(f"Loading UniProt identifiers from source endpoint '{SOURCE_ENDPOINT_NAME}'...")
-        input_identifiers = await load_identifiers_from_endpoint(
-            executor=executor,
+        input_identifiers = await executor.load_endpoint_identifiers(
             endpoint_name=SOURCE_ENDPOINT_NAME,
             ontology_type=source_ontology_type
         )
@@ -302,19 +205,24 @@ async def run_full_mapping():
             logger.warning("No identifiers found in the source endpoint. Exiting.")
             return
         
-        # Execute mapping strategy
-        logger.info(f"Executing bidirectional mapping strategy on {len(input_identifiers)} identifiers...")
+        # Check for existing checkpoint
+        checkpoint_state = await executor.load_checkpoint(execution_id)
+        if checkpoint_state:
+            logger.info("Found existing checkpoint - attempting to resume execution...")
+        
+        # Execute mapping strategy with robust features
+        logger.info(f"Executing enhanced bidirectional mapping strategy on {len(input_identifiers)} identifiers...")
+        logger.info("Using robust execution with checkpointing and retry logic...")
         logger.info("This may take some time for large datasets...")
         
-        result = await executor.execute_yaml_strategy(
+        result = await executor.execute_yaml_strategy_robust(
             strategy_name=STRATEGY_NAME,
+            input_identifiers=input_identifiers,
             source_endpoint_name=SOURCE_ENDPOINT_NAME,
             target_endpoint_name=TARGET_ENDPOINT_NAME,
-            input_identifiers=input_identifiers,
-            use_cache=True,  # Enable caching for full runs
-            progress_callback=lambda curr, total, status: logger.info(
-                f"Progress: {curr}/{total} - {status}"
-            )
+            execution_id=execution_id,
+            resume_from_checkpoint=checkpoint_enabled,
+            use_cache=True  # Enable caching for full runs
         )
         
         logger.info("Mapping execution completed")
@@ -396,13 +304,21 @@ async def run_full_mapping():
         # Create comprehensive summary
         summary = result.get('summary', {})
         
-        # Enhanced summary with bidirectional tracking
+        # Enhanced summary with bidirectional tracking and robust execution info
         enhanced_summary = {
             'execution_info': {
                 'strategy': STRATEGY_NAME,
                 'start_time': start_time.isoformat(),
                 'end_time': datetime.now().isoformat(),
-                'duration_seconds': (datetime.now() - start_time).total_seconds()
+                'duration_seconds': (datetime.now() - start_time).total_seconds(),
+                'execution_id': execution_id,
+                'robust_features': {
+                    'checkpoint_enabled': checkpoint_enabled,
+                    'checkpoint_used': checkpoint_state is not None,
+                    'batch_size': batch_size,
+                    'max_retries': max_retries,
+                    'progress_tracking': enable_progress
+                }
             },
             'input_analysis': {
                 'total_input': len(input_identifiers),
@@ -417,6 +333,7 @@ async def run_full_mapping():
             },
             'step_performance': [],
             'mapping_methods': output_df['Mapping_Method'].value_counts().to_dict() if 'Mapping_Method' in output_df.columns else {},
+            'robust_execution_metadata': result.get('robust_execution', {}),
             'original_summary': summary
         }
         
@@ -454,6 +371,21 @@ async def run_full_mapping():
         
         # Calculate execution time
         logger.info(f"\nTotal execution time: {enhanced_summary['execution_info']['duration_seconds']:.2f} seconds")
+        
+        # Log robust execution information
+        robust_info = enhanced_summary['execution_info']['robust_features']
+        logger.info(f"\nRobust execution features:")
+        logger.info(f"  Checkpointing: {'Used' if robust_info['checkpoint_used'] else 'Available' if robust_info['checkpoint_enabled'] else 'Disabled'}")
+        logger.info(f"  Batch processing: {robust_info['batch_size']} identifiers per batch")
+        logger.info(f"  Retry logic: {robust_info['max_retries']} max attempts")
+        logger.info(f"  Progress tracking: {'Enabled' if robust_info['progress_tracking'] else 'Disabled'}")
+        
+        # Log robust execution metadata from the strategy result
+        if result.get('robust_execution'):
+            robust_meta = result['robust_execution']
+            logger.info(f"  Actual execution time: {robust_meta.get('execution_time', 'N/A')} seconds")
+            logger.info(f"  Retries configured: {robust_meta.get('retries_configured', 'N/A')}")
+        
         logger.info("=" * 80)
         
         # Compare with original strategy (if we have previous results)
@@ -484,10 +416,49 @@ async def run_full_mapping():
 # ============================================================================
 
 if __name__ == "__main__":
+    import argparse
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description="Enhanced UKBB to HPA bidirectional mapping with robust execution"
+    )
+    parser.add_argument(
+        "--no-checkpoint", 
+        action="store_true", 
+        help="Disable checkpoint saving"
+    )
+    parser.add_argument(
+        "--batch-size", 
+        type=int, 
+        default=250, 
+        help="Number of identifiers per batch (default: 250)"
+    )
+    parser.add_argument(
+        "--max-retries", 
+        type=int, 
+        default=3, 
+        help="Maximum retry attempts for failed operations (default: 3)"
+    )
+    parser.add_argument(
+        "--no-progress", 
+        action="store_true", 
+        help="Disable progress reporting"
+    )
+    
+    args = parser.parse_args()
+    
     try:
-        # Run the main async function
-        asyncio.run(run_full_mapping())
+        # Run the main async function with parsed arguments
+        asyncio.run(run_full_mapping(
+            checkpoint_enabled=not args.no_checkpoint,
+            batch_size=args.batch_size,
+            max_retries=args.max_retries,
+            enable_progress=not args.no_progress
+        ))
         logger.info("Script completed successfully")
+    except KeyboardInterrupt:
+        logger.warning("Script interrupted by user")
+        sys.exit(1)
     except Exception as e:
         logger.error(f"Script failed with error: {e}")
         sys.exit(1)
