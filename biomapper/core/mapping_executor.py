@@ -44,6 +44,7 @@ from biomapper.core.engine_components.cache_manager import CacheManager
 from biomapper.core.engine_components.strategy_orchestrator import StrategyOrchestrator
 from biomapper.core.engine_components.checkpoint_manager import CheckpointManager
 from biomapper.core.engine_components.client_manager import ClientManager
+from biomapper.core.engine_components.session_manager import SessionManager
 
 # Import utilities
 from biomapper.core.utils.placeholder_resolver import resolve_placeholders
@@ -236,54 +237,33 @@ class MappingExecutor(CompositeIdentifierMixin):
         self.logger.info(f"Using Mapping Cache DB URL: {self.mapping_cache_db_url}")
         self.logger.info(f"Initialized with path_cache_size={path_cache_size}, concurrent_batches={max_concurrent_batches}")
 
-        # Ensure directories for file-based DBs exist
-        for db_url in [self.metamapper_db_url, self.mapping_cache_db_url]:
-            if db_url.startswith("sqlite"):
-                try:
-                    # Extract path after '///'
-                    db_path_str = db_url.split(":///", 1)[1]
-                    db_path = Path(db_path_str)
-                    db_path.parent.mkdir(parents=True, exist_ok=True)
-                    self.logger.debug(f"Ensured directory exists: {db_path.parent}")
-                except IndexError:
-                    self.logger.error(f"Could not parse file path from SQLite URL: {db_url}")
-                except Exception as e:
-                    self.logger.error(f"Error ensuring directory for {db_url}: {e}")
-
-        # Setup SQLAlchemy engines and sessions for Metamapper
-        meta_async_url = self.metamapper_db_url
-        if self.metamapper_db_url.startswith("sqlite:///"):
-            meta_async_url = self.metamapper_db_url.replace("sqlite:///", "sqlite+aiosqlite:///")
-        self.async_metamapper_engine = create_async_engine(meta_async_url, echo=self.echo_sql)
-        self.MetamapperSessionFactory = sessionmaker(
-            self.async_metamapper_engine, class_=AsyncSession, expire_on_commit=False
+        # Initialize the SessionManager
+        self.session_manager = SessionManager(
+            metamapper_db_url=self.metamapper_db_url,
+            mapping_cache_db_url=self.mapping_cache_db_url,
+            echo_sql=echo_sql
         )
-        # Define an async session property for easier access
-        self.async_metamapper_session = self.MetamapperSessionFactory
-
-        # Setup SQLAlchemy engines and sessions for Mapping Cache
-        cache_async_url = self.mapping_cache_db_url
-        if self.mapping_cache_db_url.startswith("sqlite:///"):
-            cache_async_url = self.mapping_cache_db_url.replace("sqlite:///", "sqlite+aiosqlite:///")
-        self.async_cache_engine = create_async_engine(cache_async_url, echo=self.echo_sql)
-        self.CacheSessionFactory = sessionmaker(
-            self.async_cache_engine, class_=AsyncSession, expire_on_commit=False
-        )
-        # Define an async session property for easier access
-        self.async_cache_session = self.CacheSessionFactory
+        
+        # Create convenience references for backward compatibility
+        self.async_metamapper_engine = self.session_manager.async_metamapper_engine
+        self.MetamapperSessionFactory = self.session_manager.MetamapperSessionFactory
+        self.async_metamapper_session = self.session_manager.async_metamapper_session
+        self.async_cache_engine = self.session_manager.async_cache_engine
+        self.CacheSessionFactory = self.session_manager.CacheSessionFactory
+        self.async_cache_session = self.session_manager.async_cache_session
         
         # Update the path execution manager with the session factory
-        self.path_execution_manager.metamapper_session_factory = self.MetamapperSessionFactory
+        self.path_execution_manager.metamapper_session_factory = self.session_manager.MetamapperSessionFactory
 
         # Initialize CacheManager
         self.cache_manager = CacheManager(
-            cache_sessionmaker=self.CacheSessionFactory,
+            cache_sessionmaker=self.session_manager.CacheSessionFactory,
             logger=self.logger
         )
 
         # Initialize StrategyOrchestrator
         self.strategy_orchestrator = StrategyOrchestrator(
-            metamapper_session_factory=self.MetamapperSessionFactory,
+            metamapper_session_factory=self.session_manager.MetamapperSessionFactory,
             cache_manager=self.cache_manager,
             strategy_handler=self.strategy_handler,
             mapping_executor=self,  # Pass self for backwards compatibility
