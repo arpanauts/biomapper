@@ -523,60 +523,6 @@ class MappingExecutor(CompositeIdentifierMixin):
         return self.async_cache_session()
 
 
-    async def _get_path_details(self, path_id: int) -> Dict[str, Any]:
-        """
-        Get detailed information about a mapping path including all steps.
-        
-        Args:
-            path_id: The ID of the mapping path
-            
-        Returns:
-            A dictionary with detailed information about the path
-        """
-        try:
-            async with self.async_metamapper_session() as session:
-                # Query the path with its steps
-                stmt = (select(MappingPath)
-                        .where(MappingPath.id == path_id)
-                        .options(selectinload(MappingPath.steps)
-                                .selectinload(MappingPathStep.mapping_resource)))
-
-                result = await session.execute(stmt)
-                path = result.scalar_one_or_none()
-
-                if not path:
-                    self.logger.warning(f"Path with ID {path_id} not found in metamapper DB.")
-                    return {}
-
-                path_details = {}
-                # Add details for each step in the path
-                # Sort steps to ensure consistent ordering in details
-                sorted_steps = sorted(path.steps, key=lambda s: s.step_order)
-                for step in sorted_steps:
-                    step_order = step.step_order
-                    resource = step.mapping_resource
-
-                    # Create a step entry with relevant details
-                    step_key = f"step_{step_order}"
-                    path_details[step_key] = {
-                        "resource_id": resource.id if resource else None,
-                        "resource_name": resource.name if resource else "Unknown",
-                        "resource_client": resource.client_class_path if resource else "Unknown",
-                        # Use the actual ontology terms stored in the resource
-                        "input_ontology": resource.input_ontology_term if resource else "Unknown",
-                        "output_ontology": resource.output_ontology_term if resource else "Unknown",
-                    }
-                
-                self.logger.debug(f"Retrieved details for path {path_id}: {path_details}")
-                return path_details
-
-        except SQLAlchemyError as e:
-            self.logger.warning(f"SQLAlchemyError getting path details for {path_id}: {str(e)}")
-            return {} # Return empty dict on DB error, don't block the main operation
-        except Exception as e:
-            # Catch other potential errors during detail retrieval
-            self.logger.warning(f"Unexpected error getting path details for {path_id}: {str(e)}", exc_info=True)
-            return {} # Return empty dict on error, don't block the main operation
 
     async def _find_paths_for_relationship(
         self, 
