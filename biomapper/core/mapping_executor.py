@@ -48,6 +48,7 @@ from biomapper.core.engine_components.session_manager import SessionManager
 from biomapper.core.engine_components.progress_reporter import ProgressReporter
 from biomapper.core.engine_components.identifier_loader import IdentifierLoader
 from biomapper.core.engine_components.config_loader import ConfigLoader
+from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
 from biomapper.core.engine_components.robust_execution_coordinator import RobustExecutionCoordinator
 
 # Import utilities
@@ -156,8 +157,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         # Initialize the CompositeIdentifierMixin
         super().__init__()
 
-        self.logger = logging.getLogger(__name__) # Moved logger initialization before Langfuse setup
-
+        self.logger = logging.getLogger(__name__)
+        
+        # Store core parameters for backward compatibility
         self.metamapper_db_url = (
             metamapper_db_url
             if metamapper_db_url is not None
@@ -169,8 +171,6 @@ class MappingExecutor(CompositeIdentifierMixin):
             else settings.cache_db_url
         )
         self.echo_sql = echo_sql
-        
-        # Robust execution parameters
         self.batch_size = batch_size
         self.max_retries = max_retries
         self.retry_delay = retry_delay
@@ -187,10 +187,11 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Concurrency settings
         self.max_concurrent_batches = max_concurrent_batches
-        
-        # Performance monitoring
         self.enable_metrics = enable_metrics
         self._metrics_tracker = None
+        
+        # Initialize all components using the MappingExecutorInitializer
+        self._initializer = MappingExecutorInitializer(
         self._langfuse_tracker = None
         
         # Initialize metrics tracking if enabled and langfuse is available
@@ -386,15 +387,35 @@ class MappingExecutor(CompositeIdentifierMixin):
             retry_delay=retry_delay,
         )
         
-        # Initialize cache database tables
-        await executor._init_db_tables(executor.async_cache_engine, CacheBase.metadata)
+        # Initialize all components
+        components = self._initializer.initialize_components(self)
         
-        # Note: We don't initialize metamapper tables here because they're assumed to be
-        # already set up and populated. The issue is specifically with cache tables.
+        # Assign components to self
+        self.session_manager = components['session_manager']
+        self.client_manager = components['client_manager']
+        self.config_loader = components['config_loader']
+        self.strategy_handler = components['strategy_handler']
+        self.path_finder = components['path_finder']
+        self.path_execution_manager = components['path_execution_manager']
+        self.cache_manager = components['cache_manager']
+        self.identifier_loader = components['identifier_loader']
+        self.strategy_orchestrator = components['strategy_orchestrator']
+        self.checkpoint_manager = components['checkpoint_manager']
+        self.progress_reporter = components['progress_reporter']
+        self._langfuse_tracker = components['langfuse_tracker']
         
-        executor.logger.info("MappingExecutor instance created and database tables initialized.")
-        return executor
-    
+        # Create convenience references for backward compatibility
+        convenience_refs = self._initializer.get_convenience_references()
+        self.async_metamapper_engine = convenience_refs['async_metamapper_engine']
+        self.MetamapperSessionFactory = convenience_refs['MetamapperSessionFactory']
+        self.async_metamapper_session = convenience_refs['async_metamapper_session']
+        self.async_cache_engine = convenience_refs['async_cache_engine']
+        self.CacheSessionFactory = convenience_refs['CacheSessionFactory']
+        self.async_cache_session = convenience_refs['async_cache_session']
+        
+        # Set function references after MappingExecutor is fully initialized
+        self._initializer.set_executor_function_references(self)
+
     def get_cache_session(self):
         """Get a cache database session."""
         return self.async_cache_session()
