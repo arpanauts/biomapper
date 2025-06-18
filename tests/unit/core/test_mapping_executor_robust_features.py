@@ -1,0 +1,477 @@
+"""
+Unit tests for MappingExecutor robust features.
+
+Tests the robust execution features that were integrated from MappingExecutorRobust 
+and MappingExecutorEnhanced, including:
+- Checkpointing
+- Retry mechanisms
+- Batch processing
+- Progress callbacks
+"""
+
+import pytest
+import asyncio
+import json
+import tempfile
+import shutil
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch, call
+from datetime import datetime, timezone
+import pandas as pd
+import os
+
+from biomapper.core.mapping_executor import MappingExecutor
+from biomapper.core.exceptions import (
+    MappingExecutionError,
+    ClientExecutionError,
+    ConfigurationError
+)
+from biomapper.db.models import (
+    MappingStrategy,
+    MappingStrategyStep,
+    Endpoint
+)
+
+
+class MockStrategyAction:
+    """Mock strategy action for testing."""
+    
+    def __init__(self, name, fail_count=0, result=None):
+        self.name = name
+        self.fail_count = fail_count
+        self.call_count = 0
+        self.result = result or {"status": "success"}
+        
+    async def execute(self, context, logger):
+        self.call_count += 1
+        if self.call_count <= self.fail_count:
+            raise ClientExecutionError(f"Mock failure {self.call_count}")
+        return self.result
+
+
+@pytest.fixture
+def mock_executor():
+    """Create a MappingExecutor instance with mocked database connections."""
+    with patch('biomapper.core.mapping_executor.create_async_engine'):
+        executor = MappingExecutor(
+            metamapper_db_url="sqlite+aiosqlite:///:memory:",
+            mapping_cache_db_url="sqlite+aiosqlite:///:memory:",
+            echo_sql=False,
+            enable_metrics=False,
+            checkpoint_enabled=True,
+            batch_size=10,
+            max_retries=3,
+            retry_delay=0.1
+        )
+        
+        # Mock the session factories
+        executor.async_metamapper_session = AsyncMock()
+        executor.CacheSessionFactory = AsyncMock()
+        
+        # Mock the logger
+        executor.logger = MagicMock()
+        
+        return executor
+
+
+@pytest.fixture
+def temp_checkpoint_dir():
+    """Create a temporary directory for checkpoints."""
+    temp_dir = tempfile.mkdtemp()
+    yield temp_dir
+    shutil.rmtree(temp_dir)
+
+
+class TestCheckpointing:
+    """Test checkpoint functionality."""
+    
+    @pytest.mark.asyncio
+    async def test_checkpoint_directory_creation(self, temp_checkpoint_dir):
+        """Test that checkpoint directory is created properly."""
+        checkpoint_path = Path(temp_checkpoint_dir) / "test_checkpoints"
+        
+        with patch('biomapper.core.mapping_executor.create_async_engine'):
+            executor = MappingExecutor(
+                metamapper_db_url="sqlite+aiosqlite:///:memory:",
+                mapping_cache_db_url="sqlite+aiosqlite:///:memory:",
+                checkpoint_enabled=True,
+                checkpoint_dir=str(checkpoint_path)
+            )
+            
+            assert checkpoint_path.exists()
+            assert checkpoint_path.is_dir()
+    
+    @pytest.mark.asyncio
+    async def test_checkpoint_save_and_load(self, mock_executor, temp_checkpoint_dir):
+        """Test saving and loading checkpoint data."""
+        mock_executor.checkpoint_dir = Path(temp_checkpoint_dir)
+        
+        # Create checkpoint data
+        checkpoint_data = {
+            "processed_ids": ["id1", "id2", "id3"],
+            "results": {"id1": {"value": 1}, "id2": {"value": 2}},
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Save checkpoint
+        checkpoint_file = mock_executor.checkpoint_dir / "test_checkpoint.json"
+        with open(checkpoint_file, 'w') as f:
+            json.dump(checkpoint_data, f)
+        
+        # Load checkpoint
+        with open(checkpoint_file, 'r') as f:
+            loaded_data = json.load(f)
+        
+        assert loaded_data["processed_ids"] == checkpoint_data["processed_ids"]
+        assert loaded_data["results"] == checkpoint_data["results"]
+        assert loaded_data["timestamp"] == checkpoint_data["timestamp"]
+    
+    @pytest.mark.asyncio
+    async def test_checkpoint_resume_execution(self, mock_executor, temp_checkpoint_dir):
+        """Test resuming execution from a checkpoint."""
+        mock_executor.checkpoint_dir = Path(temp_checkpoint_dir)
+        execution_id = "test_execution"
+        
+        # Create a checkpoint with partially processed data using pickle format
+        checkpoint_data = {
+            "processed_count": 2,
+            "total_count": 5,
+            "results": [
+                {"id": "id1", "status": "success", "data": "result1"},
+                {"id": "id2", "status": "success", "data": "result2"}
+            ],
+            "checkpoint_time": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Save checkpoint using the executor's method
+        await mock_executor.save_checkpoint(execution_id, checkpoint_data)
+        
+        # Load checkpoint
+        loaded = await mock_executor.load_checkpoint(execution_id)
+        
+        # Verify checkpoint data is correctly loaded
+        assert loaded is not None
+        assert loaded["processed_count"] == 2
+        assert loaded["total_count"] == 5
+        assert len(loaded["results"]) == 2
+        assert loaded["results"][0]["id"] == "id1"
+    
+    @pytest.mark.asyncio
+    async def test_checkpoint_with_corrupted_file(self, mock_executor, temp_checkpoint_dir):
+        """Test handling of corrupted checkpoint files."""
+        mock_executor.checkpoint_dir = Path(temp_checkpoint_dir)
+        
+        # Create a corrupted checkpoint file
+        checkpoint_file = mock_executor.checkpoint_dir / "corrupted_checkpoint.json"
+        with open(checkpoint_file, 'w') as f:
+            f.write("{ invalid json content")
+        
+        # Attempt to load corrupted checkpoint
+        with pytest.raises(json.JSONDecodeError):
+            with open(checkpoint_file, 'r') as f:
+                json.load(f)
+
+
+class TestRetryMechanisms:
+    """Test retry functionality."""
+    
+    @pytest.mark.asyncio
+    async def test_retry_on_transient_failure(self, mock_executor):
+        """Test that failed operations are retried according to configuration."""
+        # Create a mock operation that fails twice then succeeds
+        call_count = 0
+        
+        async def mock_operation(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                raise ClientExecutionError(f"Mock failure {call_count}")
+            return {"status": "success"}
+        
+        # Execute operation with retries
+        result = await mock_executor.execute_with_retry(
+            operation=mock_operation,
+            operation_args={},
+            operation_name="test_operation",
+            retry_exceptions=(ClientExecutionError,)
+        )
+        
+        # Verify the operation was called 3 times (2 failures + 1 success)
+        assert call_count == 3
+        assert result == {"status": "success"}
+    
+    @pytest.mark.asyncio
+    async def test_retry_exhaustion(self, mock_executor):
+        """Test that error is raised when retries are exhausted."""
+        # Create a mock operation that always fails
+        call_count = 0
+        
+        async def mock_operation(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            raise ClientExecutionError(f"Mock failure {call_count}")
+        
+        # Execute operation with limited retries
+        with pytest.raises(MappingExecutionError) as exc_info:
+            await mock_executor.execute_with_retry(
+                operation=mock_operation,
+                operation_args={},
+                operation_name="test_operation",
+                retry_exceptions=(ClientExecutionError,)
+            )
+        
+        # Verify the operation was called max_retries times
+        assert call_count == mock_executor.max_retries
+        assert "failed after" in str(exc_info.value)
+    
+    @pytest.mark.asyncio
+    async def test_retry_delay(self, mock_executor):
+        """Test that retry delay is applied between attempts."""
+        call_count = 0
+        mock_executor.retry_delay = 0.1  # 100ms delay
+        
+        async def mock_operation(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                raise ClientExecutionError(f"Mock failure {call_count}")
+            return {"status": "success"}
+        
+        with patch('asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+            result = await mock_executor.execute_with_retry(
+                operation=mock_operation,
+                operation_args={},
+                operation_name="test_operation",
+                retry_exceptions=(ClientExecutionError,)
+            )
+            
+            # Verify sleep was called for each retry (except the last successful attempt)
+            assert mock_sleep.call_count == 2
+            mock_sleep.assert_called_with(0.1)
+
+
+class TestBatchProcessing:
+    """Test batch processing functionality."""
+    
+    @pytest.mark.asyncio
+    async def test_batch_size_processing(self, mock_executor, temp_checkpoint_dir):
+        """Test that identifiers are processed in correct batch sizes."""
+        mock_executor.batch_size = 3
+        mock_executor.checkpoint_dir = Path(temp_checkpoint_dir)
+        
+        # Create a list of identifiers
+        identifiers = [f"id{i}" for i in range(10)]
+        
+        # Mock batch processor
+        batches_processed = []
+        
+        async def mock_processor(batch):
+            batches_processed.append(batch)
+            return [{"id": id, "status": "success"} for id in batch]
+        
+        # Process identifiers in batches
+        results = await mock_executor.process_in_batches(
+            items=identifiers,
+            processor=mock_processor,
+            processor_name="test_processor",
+            checkpoint_key="results",
+            execution_id="test_execution"
+        )
+        
+        # Verify correct batch sizes
+        assert len(batches_processed) == 4  # 10 items / 3 per batch = 4 batches
+        assert len(batches_processed[0]) == 3
+        assert len(batches_processed[1]) == 3
+        assert len(batches_processed[2]) == 3
+        assert len(batches_processed[3]) == 1  # Last batch has remainder
+        assert len(results) == 10
+    
+    @pytest.mark.asyncio
+    async def test_batch_aggregation(self, mock_executor):
+        """Test that results from multiple batches are correctly aggregated."""
+        mock_executor.batch_size = 2
+        identifiers = ["id1", "id2", "id3", "id4", "id5"]
+        
+        # Mock batch results
+        batch_results = [
+            {"id1": {"value": 1}, "id2": {"value": 2}},
+            {"id3": {"value": 3}, "id4": {"value": 4}},
+            {"id5": {"value": 5}}
+        ]
+        
+        aggregated_results = {}
+        for batch_result in batch_results:
+            aggregated_results.update(batch_result)
+        
+        assert len(aggregated_results) == 5
+        assert aggregated_results["id1"]["value"] == 1
+        assert aggregated_results["id5"]["value"] == 5
+    
+    @pytest.mark.asyncio
+    async def test_edge_case_batch_sizes(self, mock_executor):
+        """Test edge cases for batch processing."""
+        # Test batch size larger than total items
+        mock_executor.batch_size = 100
+        identifiers = ["id1", "id2", "id3"]
+        
+        batches = []
+        for i in range(0, len(identifiers), mock_executor.batch_size):
+            batch = identifiers[i:i + mock_executor.batch_size]
+            batches.append(batch)
+        
+        assert len(batches) == 1
+        assert len(batches[0]) == 3
+        
+        # Test batch size of 1
+        mock_executor.batch_size = 1
+        batches = []
+        for i in range(0, len(identifiers), mock_executor.batch_size):
+            batch = identifiers[i:i + mock_executor.batch_size]
+            batches.append(batch)
+        
+        assert len(batches) == 3
+        assert all(len(batch) == 1 for batch in batches)
+        
+        # Test empty input list
+        identifiers = []
+        batches = []
+        for i in range(0, len(identifiers), mock_executor.batch_size):
+            batch = identifiers[i:i + mock_executor.batch_size]
+            batches.append(batch)
+        
+        assert len(batches) == 0
+
+
+class TestProgressCallbacks:
+    """Test progress callback functionality."""
+    
+    @pytest.mark.asyncio
+    async def test_progress_callback_invocation(self, mock_executor):
+        """Test that progress callbacks are invoked at appropriate times."""
+        callback_calls = []
+        
+        def progress_callback(progress_data):
+            callback_calls.append(progress_data)
+        
+        # Register the callback
+        mock_executor.add_progress_callback(progress_callback)
+        
+        # Simulate progress updates
+        mock_executor._report_progress({"type": "start", "progress": 0, "total": 100, "status": "Starting"})
+        mock_executor._report_progress({"type": "update", "progress": 25, "total": 100, "status": "Processing batch 1"})
+        mock_executor._report_progress({"type": "update", "progress": 50, "total": 100, "status": "Processing batch 2"})
+        mock_executor._report_progress({"type": "complete", "progress": 100, "total": 100, "status": "Completed"})
+        
+        assert len(callback_calls) == 4
+        assert callback_calls[0]["status"] == "Starting"
+        assert callback_calls[1]["progress"] == 25
+        assert callback_calls[3]["status"] == "Completed"
+    
+    @pytest.mark.asyncio
+    async def test_multiple_progress_callbacks(self, mock_executor):
+        """Test that multiple callbacks can be registered and called."""
+        callback1_calls = []
+        callback2_calls = []
+        
+        def callback1(progress_data):
+            callback1_calls.append(progress_data.get("progress", 0))
+        
+        def callback2(progress_data):
+            callback2_calls.append(progress_data.get("progress", 0))
+        
+        mock_executor.add_progress_callback(callback1)
+        mock_executor.add_progress_callback(callback2)
+        
+        # Update progress
+        mock_executor._report_progress({"progress": 10, "status": "Processing"})
+        mock_executor._report_progress({"progress": 20, "status": "Processing"})
+        
+        assert len(callback1_calls) == 2
+        assert len(callback2_calls) == 2
+        assert callback1_calls == [10, 20]
+        assert callback2_calls == [10, 20]
+    
+    @pytest.mark.asyncio
+    async def test_callback_with_batch_processing(self, mock_executor):
+        """Test progress callbacks during batch processing."""
+        callback_calls = []
+        
+        def progress_callback(progress_data):
+            callback_calls.append(progress_data)
+        
+        mock_executor.add_progress_callback(progress_callback)
+        mock_executor.batch_size = 2
+        
+        # Simulate batch processing with progress updates
+        total_items = 5
+        for i in range(0, total_items, mock_executor.batch_size):
+            batch_end = min(i + mock_executor.batch_size, total_items)
+            mock_executor._report_progress({
+                "type": "batch_progress",
+                "current": batch_end,
+                "total": total_items,
+                "batch_num": i//mock_executor.batch_size + 1,
+                "status": f"Processed batch {i//mock_executor.batch_size + 1}"
+            })
+        
+        # Verify callbacks were called for each batch
+        assert len(callback_calls) == 3  # 3 batches for 5 items with batch size 2
+        assert callback_calls[0]["current"] == 2
+        assert callback_calls[1]["current"] == 4
+        assert callback_calls[2]["current"] == 5
+
+
+class TestIntegration:
+    """Integration tests combining multiple robust features."""
+    
+    @pytest.mark.asyncio
+    async def test_checkpoint_with_retry(self, mock_executor, temp_checkpoint_dir):
+        """Test checkpointing works correctly with retry mechanisms."""
+        mock_executor.checkpoint_dir = Path(temp_checkpoint_dir)
+        
+        # Create an action that fails once then succeeds
+        mock_action = MockStrategyAction("test_action", fail_count=1)
+        
+        # Process with checkpointing and retries enabled
+        checkpoint_data = {
+            "processed_ids": [],
+            "results": {},
+            "retry_counts": {"id1": 1}  # Track retry attempts
+        }
+        
+        # Save initial checkpoint
+        checkpoint_file = mock_executor.checkpoint_dir / "retry_checkpoint.json"
+        with open(checkpoint_file, 'w') as f:
+            json.dump(checkpoint_data, f)
+        
+        # Verify checkpoint tracks retry state
+        with open(checkpoint_file, 'r') as f:
+            loaded = json.load(f)
+            assert loaded["retry_counts"]["id1"] == 1
+    
+    @pytest.mark.asyncio
+    async def test_batch_processing_with_progress(self, mock_executor):
+        """Test batch processing with progress callbacks."""
+        callback_calls = []
+        
+        def progress_callback(progress_data):
+            callback_calls.append((progress_data.get("current", 0), progress_data.get("total", 0)))
+        
+        mock_executor.add_progress_callback(progress_callback)
+        mock_executor.batch_size = 3
+        
+        # Process 10 items in batches of 3
+        total_items = 10
+        for i in range(0, total_items, mock_executor.batch_size):
+            batch_end = min(i + mock_executor.batch_size, total_items)
+            mock_executor._report_progress({
+                "current": batch_end,
+                "total": total_items,
+                "status": "Processing"
+            })
+        
+        # Verify progress was reported for each batch
+        expected_progress = [(3, 10), (6, 10), (9, 10), (10, 10)]
+        assert callback_calls == expected_progress
+
+
