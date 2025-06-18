@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, Dict, List, Optional, TypedDict, Union
 import matplotlib.pyplot as plt
 import pandas as pd
 import venn  # type: ignore
@@ -51,7 +51,7 @@ class SetAnalyzer:
 
         self.id_columns = {}  # Initialize empty dict
         self.datasets: dict[str, pd.DataFrame] = {}
-        self.id_delimiters: dict[str, list[str]] = {}  # Change type to list[str]
+        self.id_delimiters: Dict[str, List[str]] = {}  # Change type to list[str]
         # Use property setter for validation
         for name, col in id_columns.items():
             self.set_id_column(name, col)
@@ -85,7 +85,7 @@ class SetAnalyzer:
         self._id_columns[key] = value
 
     def load_dataset(
-        self, name: str, path: Path | str, id_delimiters: list[str] | None = None
+        self, name: str, path: Union[Path, str], id_delimiters: Optional[List[str]] = None
     ) -> None:
         """Load a dataset from file.
 
@@ -131,7 +131,7 @@ class SetAnalyzer:
         if id_delimiters:
             self.id_delimiters[name] = id_delimiters
 
-    def _split_identifier(self, identifier: str, delimiters: list[str]) -> set[str]:
+    def _split_identifier(self, identifier: str, delimiters: List[str]) -> set:
         """Split an identifier using multiple delimiters.
 
         Args:
@@ -247,7 +247,7 @@ class SetAnalyzer:
 
         return results
 
-    def plot_venn(self, output_path: str | None = None) -> None:
+    def plot_venn(self, output_path: Optional[str] = None) -> None:
         """Generate a Venn diagram visualization.
 
         Args:
@@ -288,7 +288,7 @@ class SetAnalyzer:
         else:
             plt.show()
 
-    def generate_text_report(self, output_path: str | None = None) -> str:
+    def generate_text_report(self, output_path: Optional[str] = None) -> str:
         """Generate detailed text report of set analysis results.
 
         Args:
@@ -362,7 +362,7 @@ class SetAnalyzer:
         sets = self.get_sets()
 
         # Create merged data structure
-        merged_data: list[dict[str, str]] = []
+        merged_data: List[Dict[str, str]] = []
 
         # Process each unique identifier
         all_ids = set().union(*sets.values())
