@@ -14,7 +14,7 @@ import logging
 from typing import Any, Dict
 
 from ..exceptions import ClientInitializationError
-from ..db.models import MappingResource
+from biomapper.db.models import MappingResource
 
 
 class ClientManager:
