@@ -4,11 +4,14 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 
-from biomapper.embedder.storage.vector_store import FAISSVectorStore
+# Mock the config loading before importing
+with patch('os.makedirs'):
+    from biomapper.embedder.storage.vector_store import FAISSVectorStore
 
 
 class TestFAISSVectorStore:
@@ -239,8 +242,9 @@ class TestFAISSVectorStore:
         np.random.seed(42)
         embeddings = np.random.randn(100, 384).astype(np.float32)
         ids = [f"item_{i}" for i in range(100)]
+        metadata = [{"name": f"Item {i}"} for i in range(100)]
         
-        store.add_embeddings(embeddings, ids)
+        store.add_embeddings(embeddings, ids, metadata)
         assert store.get_size() == 100
         
         # Test search

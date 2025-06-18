@@ -2,10 +2,39 @@
 
 import pytest
 import numpy as np
-from unittest.mock import Mock, MagicMock, patch
-from typing import List, Dict, Any
+from unittest.mock import Mock, MagicMock, patch, AsyncMock
+from typing import List, Dict, Any, Optional
+import asyncio
+import os
 
-from biomapper.embedder.storage.qdrant_store import QdrantVectorStore
+# Mock the config loading before importing
+with patch('os.makedirs'):
+    from biomapper.embedder.storage.qdrant_store import QdrantVectorStore
+
+
+# Create a concrete implementation for testing
+class TestableQdrantVectorStore(QdrantVectorStore):
+    """Concrete implementation of QdrantVectorStore for testing."""
+    
+    async def add_documents(
+        self, documents: List[Any], embeddings: Optional[List[np.ndarray]] = None
+    ) -> None:
+        """Mock implementation of add_documents."""
+        pass
+    
+    async def get_similar(
+        self,
+        query: str,
+        k: int = 5,
+        threshold: float = 0.0,
+        filter_criteria: Optional[Dict[str, Any]] = None,
+    ) -> List[Any]:
+        """Mock implementation of get_similar."""
+        return []
+    
+    async def clear(self) -> None:
+        """Mock implementation of clear."""
+        pass
 
 
 class TestQdrantVectorStoreScores:
@@ -22,10 +51,11 @@ class TestQdrantVectorStoreScores:
     @pytest.fixture
     def qdrant_store(self, mock_qdrant_client):
         """Create a QdrantVectorStore instance with mocked client."""
-        # Mock the conditional import check
-        with patch('biomapper.embedder.storage.qdrant_store.HAS_QDRANT', True):
+        # Mock the conditional import check and permissions
+        with patch('biomapper.embedder.storage.qdrant_store.HAS_QDRANT', True), \
+             patch('os.makedirs'):
             # Create store instance
-            store = QdrantVectorStore(
+            store = TestableQdrantVectorStore(
                 collection_name="test_collection",
                 dimension=384,
                 url="http://localhost:6333"

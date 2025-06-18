@@ -12,6 +12,10 @@ from biomapper.core.exceptions import ConfigurationError
 class MockAction(StrategyAction):
     """Mock action class for testing."""
     
+    def __init__(self, db_session=None):
+        """Initialize with optional db_session."""
+        super().__init__(db_session)
+    
     async def execute(self, **kwargs):
         return {"output_identifiers": [], "output_ontology_type": "test"}
 

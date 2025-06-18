@@ -52,6 +52,9 @@ async def test_discover_node_types_spoke_style(
     """Test discovering node types in a SPOKE-style database."""
     # Setup mock responses
     analyzer = mock_spoke_graph_analyzer
+    # Connect the analyzer to the mock client
+    analyzer.db = mock_arango_client
+    
     mock_arango_client.collections.return_value = [
         {"name": "Nodes"},
         {"name": "Edges"},
@@ -127,6 +130,9 @@ async def test_discover_relationship_types(
     """Test discovering relationship types."""
     # Setup mock responses
     analyzer = mock_spoke_graph_analyzer
+    # Connect the analyzer to the mock client
+    analyzer.db = mock_arango_client
+    
     mock_arango_client.collections.return_value = [
         {"name": "Nodes"},
         {"name": "Edges"},

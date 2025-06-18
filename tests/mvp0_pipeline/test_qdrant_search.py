@@ -27,7 +27,7 @@ class TestQdrantSearch:
         )
         
         # Add mock results to metadata
-        mock_mapping_output.metadata["Aspirin"] = MappingResult(
+        mock_mapping_output.metadata["Aspirin"] = MappingResultItem(
             target_ids=["PUBCHEM:2244", "PUBCHEM:5353"],
             scores=[0.95, 0.89],
             metadata={}
@@ -65,7 +65,7 @@ class TestQdrantSearch:
             metadata={}
         )
         
-        mock_mapping_output.metadata["Compound"] = MappingResult(
+        mock_mapping_output.metadata["Compound"] = MappingResultItem(
             target_ids=[f"PUBCHEM:{i}" for i in range(1000, 1010)],
             scores=[0.9 - i*0.05 for i in range(10)],
             metadata={}
@@ -113,7 +113,7 @@ class TestQdrantSearch:
             metadata={}
         )
         
-        mock_mapping_output.metadata["UnknownCompound"] = MappingResult(
+        mock_mapping_output.metadata["UnknownCompound"] = MappingResultItem(
             target_ids=[],
             scores=[],
             metadata={}
@@ -141,7 +141,7 @@ class TestQdrantSearch:
         )
         
         # Mismatched lengths - should use best_score fallback
-        mock_mapping_output.metadata["Compound"] = MappingResult(
+        mock_mapping_output.metadata["Compound"] = MappingResultItem(
             target_ids=["PUBCHEM:123", "PUBCHEM:456"],
             scores=[0.85],  # Only one score for two results
             metadata={"best_score": 0.85}
@@ -187,7 +187,7 @@ class TestQdrantSearch:
         )
         
         # Mix of valid and invalid IDs
-        mock_mapping_output.metadata["Compound"] = MappingResult(
+        mock_mapping_output.metadata["Compound"] = MappingResultItem(
             target_ids=["PUBCHEM:123", "INVALID:456", "PUBCHEM:not_a_number", "PUBCHEM:789"],
             scores=[0.9, 0.85, 0.8, 0.75],
             metadata={}
@@ -223,7 +223,7 @@ class TestQdrantSearch:
             metadata={}
         )
         
-        mock_mapping_output.metadata["Test"] = MappingResult(
+        mock_mapping_output.metadata["Test"] = MappingResultItem(
             target_ids=["PUBCHEM:999"],
             scores=[0.87],
             metadata={}
