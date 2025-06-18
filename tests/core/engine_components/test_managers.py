@@ -1,12 +1,15 @@
 import pytest
 import pickle
 import asyncio
+import json
 from pathlib import Path
 from datetime import datetime
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch, AsyncMock, MagicMock
 
 from biomapper.core.engine_components.checkpoint_manager import CheckpointManager
-from biomapper.core.exceptions import BiomapperError
+from biomapper.core.engine_components.client_manager import ClientManager
+from biomapper.core.exceptions import BiomapperError, ClientInitializationError
+from biomapper.db.models import MappingResource
 
 
 class TestCheckpointManager:
@@ -328,3 +331,309 @@ class TestCheckpointManager:
         assert await checkpoint_manager.load_checkpoint("exec1") is not None
         assert await checkpoint_manager.load_checkpoint("exec2") is None
         assert await checkpoint_manager.load_checkpoint("exec3") is not None
+
+
+class TestClientManager:
+    """Test suite for ClientManager class."""
+    
+    @pytest.fixture
+    def client_manager(self):
+        """Create a ClientManager instance."""
+        return ClientManager()
+    
+    @pytest.fixture
+    def mock_logger(self):
+        """Create a mock logger."""
+        return Mock()
+    
+    @pytest.fixture
+    def client_manager_with_logger(self, mock_logger):
+        """Create a ClientManager instance with logger."""
+        return ClientManager(logger=mock_logger)
+    
+    @pytest.fixture
+    def sample_resource(self):
+        """Create a sample MappingResource for testing."""
+        resource = MappingResource()
+        resource.name = "test_resource"
+        resource.client_class_path = "test.module.TestClient"
+        resource.config_template = json.dumps({"api_key": "test123", "timeout": 30})
+        return resource
+    
+    @pytest.fixture
+    def sample_resource_no_config(self):
+        """Create a sample MappingResource without config."""
+        resource = MappingResource()
+        resource.name = "test_resource_no_config"
+        resource.client_class_path = "test.module.TestClient"
+        resource.config_template = None
+        return resource
+    
+    @pytest.mark.asyncio
+    async def test_client_instantiation(self, client_manager, sample_resource):
+        """Test that get_client_instance correctly instantiates a client."""
+        # Mock the client class
+        mock_client_class = Mock(return_value="mock_client_instance")
+        
+        with patch('importlib.import_module') as mock_import:
+            mock_module = Mock()
+            mock_module.TestClient = mock_client_class
+            mock_import.return_value = mock_module
+            
+            # Get client instance
+            client = await client_manager.get_client_instance(sample_resource)
+            
+            # Verify
+            assert client == "mock_client_instance"
+            mock_import.assert_called_once_with("test.module")
+            mock_client_class.assert_called_once_with(
+                config={"api_key": "test123", "timeout": 30}
+            )
+    
+    @pytest.mark.asyncio
+    async def test_client_caching(self, client_manager, sample_resource):
+        """Test that multiple calls return the same cached instance."""
+        # Mock the client class
+        mock_client_instance = Mock()
+        mock_client_class = Mock(return_value=mock_client_instance)
+        
+        with patch('importlib.import_module') as mock_import:
+            mock_module = Mock()
+            mock_module.TestClient = mock_client_class
+            mock_import.return_value = mock_module
+            
+            # Get client instance multiple times
+            client1 = await client_manager.get_client_instance(sample_resource)
+            client2 = await client_manager.get_client_instance(sample_resource)
+            client3 = await client_manager.get_client_instance(sample_resource)
+            
+            # Verify same instance returned
+            assert client1 is client2
+            assert client2 is client3
+            
+            # Verify client class only instantiated once
+            mock_client_class.assert_called_once()
+            mock_import.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_different_configurations(self, client_manager):
+        """Test that different configurations return different instances."""
+        # Create two resources with different configs
+        resource1 = MappingResource()
+        resource1.name = "resource1"
+        resource1.client_class_path = "test.module.TestClient"
+        resource1.config_template = json.dumps({"api_key": "key1"})
+        
+        resource2 = MappingResource()
+        resource2.name = "resource2"
+        resource2.client_class_path = "test.module.TestClient"
+        resource2.config_template = json.dumps({"api_key": "key2"})
+        
+        # Mock the client class
+        mock_client_class = Mock(side_effect=["client1", "client2"])
+        
+        with patch('importlib.import_module') as mock_import:
+            mock_module = Mock()
+            mock_module.TestClient = mock_client_class
+            mock_import.return_value = mock_module
+            
+            # Get client instances
+            client1 = await client_manager.get_client_instance(resource1)
+            client2 = await client_manager.get_client_instance(resource2)
+            
+            # Verify different instances
+            assert client1 != client2
+            assert client1 == "client1"
+            assert client2 == "client2"
+            
+            # Verify client class instantiated twice with different configs
+            assert mock_client_class.call_count == 2
+            mock_client_class.assert_any_call(config={"api_key": "key1"})
+            mock_client_class.assert_any_call(config={"api_key": "key2"})
+    
+    @pytest.mark.asyncio
+    async def test_invalid_class_path(self, client_manager_with_logger, sample_resource):
+        """Test that invalid client_class_path raises ClientInitializationError."""
+        sample_resource.client_class_path = "invalid.module.NonExistentClient"
+        
+        with patch('importlib.import_module', side_effect=ImportError("Module not found")):
+            with pytest.raises(ClientInitializationError) as exc_info:
+                await client_manager_with_logger.get_client_instance(sample_resource)
+            
+            assert "Could not load client class" in str(exc_info.value)
+            assert "NonExistentClient" in str(exc_info.value)
+            client_manager_with_logger.logger.error.assert_called()
+    
+    @pytest.mark.asyncio
+    async def test_missing_class_in_module(self, client_manager_with_logger, sample_resource):
+        """Test error when class doesn't exist in module."""
+        # Create a mock module without the TestClient attribute
+        mock_module = MagicMock(spec=[])  # Empty spec means no attributes
+        
+        with patch('importlib.import_module', return_value=mock_module):
+            with pytest.raises(ClientInitializationError) as exc_info:
+                await client_manager_with_logger.get_client_instance(sample_resource)
+            
+            assert "Could not load client class" in str(exc_info.value)
+            client_manager_with_logger.logger.error.assert_called()
+    
+    @pytest.mark.asyncio
+    async def test_missing_configuration(self, client_manager):
+        """Test graceful handling of missing configuration."""
+        resource = MappingResource()
+        resource.name = "test_resource"
+        # Missing client_class_path
+        resource.client_class_path = None
+        resource.config_template = None
+        
+        with pytest.raises(ClientInitializationError) as exc_info:
+            await client_manager.get_client_instance(resource)
+        
+        # The error should indicate the issue with None client_class_path
+        assert "Unexpected error initializing client" in str(exc_info.value)
+    
+    @pytest.mark.asyncio
+    async def test_invalid_json_config(self, client_manager_with_logger):
+        """Test error handling for invalid JSON in config_template."""
+        resource = MappingResource()
+        resource.name = "test_resource"
+        resource.client_class_path = "test.module.TestClient"
+        resource.config_template = "invalid json {"
+        
+        with patch('importlib.import_module') as mock_import:
+            mock_module = Mock()
+            mock_module.TestClient = Mock()
+            mock_import.return_value = mock_module
+            
+            with pytest.raises(ClientInitializationError) as exc_info:
+                await client_manager_with_logger.get_client_instance(resource)
+            
+            assert "Invalid configuration template JSON" in str(exc_info.value)
+    
+    @pytest.mark.asyncio
+    async def test_client_initialization_error(self, client_manager_with_logger, sample_resource):
+        """Test handling of errors during client initialization."""
+        with patch('importlib.import_module') as mock_import:
+            mock_module = Mock()
+            # Client class raises error on instantiation
+            mock_module.TestClient = Mock(side_effect=Exception("Client init failed"))
+            mock_import.return_value = mock_module
+            
+            with pytest.raises(ClientInitializationError) as exc_info:
+                await client_manager_with_logger.get_client_instance(sample_resource)
+            
+            assert "Unexpected error initializing client" in str(exc_info.value)
+            client_manager_with_logger.logger.error.assert_called()
+    
+    @pytest.mark.asyncio
+    async def test_client_without_config(self, client_manager, sample_resource_no_config):
+        """Test client instantiation without config template."""
+        mock_client_class = Mock(return_value="mock_client_instance")
+        
+        with patch('importlib.import_module') as mock_import:
+            mock_module = Mock()
+            mock_module.TestClient = mock_client_class
+            mock_import.return_value = mock_module
+            
+            # Get client instance
+            client = await client_manager.get_client_instance(sample_resource_no_config)
+            
+            # Verify client created with empty config
+            assert client == "mock_client_instance"
+            mock_client_class.assert_called_once_with(config={})
+    
+    def test_get_client_cache(self, client_manager):
+        """Test get_client_cache returns the cache dictionary."""
+        # Initially empty
+        cache = client_manager.get_client_cache()
+        assert cache == {}
+        assert cache is client_manager._client_cache
+        
+        # Add to cache and verify
+        client_manager._client_cache["test_key"] = "test_value"
+        cache = client_manager.get_client_cache()
+        assert cache == {"test_key": "test_value"}
+    
+    def test_clear_cache(self, client_manager_with_logger):
+        """Test clear_cache empties the cache."""
+        # Add some items to cache
+        client_manager_with_logger._client_cache = {
+            "client1": Mock(),
+            "client2": Mock(),
+            "client3": Mock()
+        }
+        
+        # Clear cache
+        client_manager_with_logger.clear_cache()
+        
+        # Verify cache is empty
+        assert client_manager_with_logger._client_cache == {}
+        client_manager_with_logger.logger.debug.assert_called_with("Client cache cleared")
+    
+    def test_get_cache_size(self, client_manager):
+        """Test get_cache_size returns correct count."""
+        # Initially zero
+        assert client_manager.get_cache_size() == 0
+        
+        # Add items and check size
+        client_manager._client_cache["client1"] = Mock()
+        assert client_manager.get_cache_size() == 1
+        
+        client_manager._client_cache["client2"] = Mock()
+        client_manager._client_cache["client3"] = Mock()
+        assert client_manager.get_cache_size() == 3
+    
+    @pytest.mark.asyncio
+    async def test_cache_key_generation(self, client_manager):
+        """Test that cache keys are properly generated for different resources."""
+        # Resource with config
+        resource1 = MappingResource()
+        resource1.name = "resource1"
+        resource1.client_class_path = "test.module.Client1"
+        resource1.config_template = json.dumps({"key": "value1"})
+        
+        # Same resource with different config
+        resource2 = MappingResource()
+        resource2.name = "resource1"  # Same name
+        resource2.client_class_path = "test.module.Client1"  # Same path
+        resource2.config_template = json.dumps({"key": "value2"})  # Different config
+        
+        mock_client_class = Mock(side_effect=["client1", "client2"])
+        
+        with patch('importlib.import_module') as mock_import:
+            mock_module = Mock()
+            mock_module.Client1 = mock_client_class
+            mock_import.return_value = mock_module
+            
+            # Get both clients
+            client1 = await client_manager.get_client_instance(resource1)
+            client2 = await client_manager.get_client_instance(resource2)
+            
+            # Should be different instances due to different configs
+            assert client1 != client2
+            assert mock_client_class.call_count == 2
+    
+    @pytest.mark.asyncio
+    async def test_logging_optimization_messages(self, client_manager_with_logger, sample_resource):
+        """Test that optimization debug messages are logged."""
+        mock_client_class = Mock(return_value="mock_client")
+        
+        with patch('importlib.import_module') as mock_import:
+            mock_module = Mock()
+            mock_module.TestClient = mock_client_class
+            mock_import.return_value = mock_module
+            
+            # First call - should create new instance
+            await client_manager_with_logger.get_client_instance(sample_resource)
+            client_manager_with_logger.logger.debug.assert_any_call(
+                "OPTIMIZATION: Creating new client instance for test_resource"
+            )
+            client_manager_with_logger.logger.debug.assert_any_call(
+                "OPTIMIZATION: Cached client for test_resource"
+            )
+            
+            # Second call - should use cache
+            await client_manager_with_logger.get_client_instance(sample_resource)
+            client_manager_with_logger.logger.debug.assert_any_call(
+                "OPTIMIZATION: Using cached client for test_resource"
+            )
