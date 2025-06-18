@@ -3,6 +3,10 @@
 ## Objective
 To ensure the progress reporting mechanism is reliable and robust, create unit tests for the `ProgressReporter` component.
 
+## Environment and Python Version
+- **Target Python Version:** Ensure all generated code is compatible with **Python 3.11**.
+- **Environment Management:** Assume the project uses **Poetry** for dependency management. All imports and practices should align with a standard Poetry project structure.
+
 ## Location for Tests
 Create a new test file: `tests/core/engine_components/test_progress_reporter.py`
 
