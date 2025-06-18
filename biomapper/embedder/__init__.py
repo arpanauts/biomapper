@@ -15,7 +15,7 @@ from .storage.vector_store import FAISSVectorStore
 try:
     from .storage.qdrant_store import QdrantVectorStore
 except ImportError:
-    pass
+    QdrantVectorStore = None
 
 __all__ = [
     "TextEmbedder",

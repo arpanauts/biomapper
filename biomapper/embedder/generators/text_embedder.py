@@ -7,7 +7,7 @@ import logging
 import numpy as np
 from typing import List, Dict, Any, Optional, Union
 
-from ..core.base import BaseEmbedder
+from ...core.base_rag import BaseEmbedder
 from ..core.config import default_config
 
 try:

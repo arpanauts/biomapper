@@ -8,7 +8,7 @@ from typing import List
 
 from biomapper.mvp0_pipeline.qdrant_search import search_qdrant_for_biochemical_name
 from biomapper.schemas.mvp0_schema import QdrantSearchResultItem
-from biomapper.schemas.rag_schema import MappingOutput, MappingResult
+from biomapper.schemas.rag_schema import MappingOutput, MappingResultItem
 
 
 class TestQdrantSearch:

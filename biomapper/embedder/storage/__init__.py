@@ -5,6 +5,6 @@ from .vector_store import FAISSVectorStore
 try:
     from .qdrant_store import QdrantVectorStore
 except ImportError:
-    pass
+    QdrantVectorStore = None
 
 __all__ = ["FAISSVectorStore", "QdrantVectorStore"]

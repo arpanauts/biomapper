@@ -8,7 +8,7 @@ from typing import Dict, List, Any, Optional, Union, Set, Tuple
 import numpy as np
 from pathlib import Path
 
-from ..core.base import BaseVectorStore
+from ...core.base_store import BaseVectorStore
 from ..core.config import default_config
 
 try:

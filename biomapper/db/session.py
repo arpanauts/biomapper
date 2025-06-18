@@ -56,9 +56,21 @@ class DatabaseManager:
         # Ensure the directory exists if it's a file-based DB
         if db_url.startswith("sqlite"):
             db_path_str = db_url.split("///")[1]
-            db_path = Path(db_path_str)
+            # If it's a relative path, resolve it relative to the current working directory
+            if not os.path.isabs(db_path_str):
+                db_path = Path.cwd() / db_path_str
+                logger.info(f"Resolved relative database path: {db_path_str} -> {db_path}")
+            else:
+                db_path = Path(db_path_str)
+            
+            # Check if the path exists and is a directory (common error case)
+            if db_path.exists() and db_path.is_dir():
+                logger.error(f"Database path {db_path} exists but is a directory, not a file!")
+                raise ValueError(f"Database path {db_path} is a directory, not a file. Please remove it.")
+            
+            # Ensure parent directory exists
             db_path.parent.mkdir(parents=True, exist_ok=True)
-            logger.debug(f"Ensured directory exists: {db_path.parent}")
+            logger.info(f"Ensured directory exists: {db_path.parent.absolute()}")
 
         # Create engine with specified URL
         # For sync SQLite, remove the async driver prefix if present

@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 from sqlalchemy import select
-from biomapper.core.mapping_executor_test import MappingExecutor, PydanticEncoder
+from biomapper.core.mapping_executor import MappingExecutor
+from biomapper.utils.formatters import PydanticEncoder
 from biomapper.db.models import (
     Endpoint,
     EndpointPropertyConfig,
