@@ -1,90 +1,82 @@
-# Suggested Next Prompt for Biomapper Development
+# Suggested Next Work Session Prompt
 
 ## Context Brief
-The biomapper project has successfully implemented a complete bidirectional mapping strategy with three new action types, fixing critical context persistence issues along the way. The optimized UKBB→HPA strategy eliminates unnecessary conversions and is ready for full dataset testing, though performance optimization is needed for large-scale UniProt resolution.
+The biomapper project now has robust execution capabilities integrated via EnhancedMappingExecutor with working checkpointing, retry logic, and batch processing. The UKBB-HPA bidirectional mapping successfully processes 2,923 proteins with 16.9% coverage (493 mapped). However, the checkpoint functionality is only fully implemented for batch processing, not for the main strategy execution flow.
 
 ## Initial Steps
-1. Begin by reviewing `/home/ubuntu/biomapper/CLAUDE.md` for overall project context and guidelines
-2. Check `/home/ubuntu/biomapper/roadmap/_status_updates/2025-06-13-comprehensive-action-types-implementation.md` for the full implementation details
-3. Review the new action implementations in `/home/ubuntu/biomapper/biomapper/core/strategy_actions/`
-4. Look at `/home/ubuntu/biomapper/scripts/main_pipelines/run_full_ukbb_hpa_mapping_bidirectional.py` for the optimized pipeline
+1. Begin by reviewing `/home/ubuntu/biomapper/CLAUDE.md` for overall project context and development guidelines
+2. Check `/home/ubuntu/biomapper/roadmap/_status_updates/2025-06-15-robust-executor-integration.md` for detailed status of robust executor implementation
+3. Review `/home/ubuntu/biomapper/biomapper/core/mapping_executor_robust.py` to understand current checkpoint implementation
 
 ## Work Priorities
 
-### Priority 1: Performance Optimization for Large-Scale Resolution
-The RESOLVE_AND_MATCH_REVERSE action times out with 2991 HPA identifiers. Critical optimizations needed:
-- Implement concurrent API calls within rate limits
-- Add comprehensive progress tracking
-- Optimize batch processing strategy
-- Consider more aggressive caching
+### Priority 1: Implement Full Strategy-Level Checkpointing
+- Enhance `execute_yaml_strategy_robust` method to save checkpoints after each strategy step
+- Design checkpoint format that captures:
+  - Current step index
+  - Context state after each step
+  - Partial results
+  - Step execution metadata
+- Implement resume logic that can start from any saved step
+- Test with a long-running strategy to verify checkpoint/resume functionality
 
-### Priority 2: Full Dataset Comparison
-Once performance is optimized:
-- Run original UKBB→HPA strategy and capture metrics
-- Run bidirectional strategy on same dataset
-- Compare: execution time, coverage, memory usage
-- Document findings and recommendations
+### Priority 2: Optimize Results Post-Processing 
+- Investigate why creating final DataFrames times out for large datasets
+- Consider implementing streaming CSV writer that doesn't require full DataFrame in memory
+- Profile the current implementation in `/home/ubuntu/biomapper/scripts/main_pipelines/run_full_ukbb_hpa_mapping_bidirectional.py` to identify bottlenecks
+- Test optimizations with full 2,923 identifier dataset
 
-### Priority 3: Strategy Comparison Framework
-Build tooling to systematically compare strategies:
-- Create comparison script that runs multiple strategies
-- Capture standardized metrics
-- Generate comparison reports
-- Help users select optimal strategies
+### Priority 3: Improve Export Format
+- Fix the current export format that separates UNMAPPED and NEW entries
+- Design a cleaner format with proper source-to-target mappings in single rows
+- Update the EXPORT_RESULTS action in `/home/ubuntu/biomapper/biomapper/core/strategy_actions/export_results.py`
+- Ensure backward compatibility or provide migration path
 
 ## References
-- **New action implementations**: `/home/ubuntu/biomapper/biomapper/core/strategy_actions/[bidirectional_match|resolve_and_match_forward|resolve_and_match_reverse].py`
-- **Test suites**: `/home/ubuntu/biomapper/tests/unit/core/strategy_actions/test_*.py`
-- **Bidirectional pipeline**: `/home/ubuntu/biomapper/scripts/main_pipelines/run_full_ukbb_hpa_mapping_bidirectional.py`
-- **Test script**: `/home/ubuntu/biomapper/scripts/main_pipelines/test_bidirectional_ukbb_hpa_mapping.py`
-- **Strategy config**: `/home/ubuntu/biomapper/configs/mapping_strategies_config.yaml`
+- Enhanced Executor Implementation: `/home/ubuntu/biomapper/biomapper/core/mapping_executor_enhanced.py`
+- Robust Execution Mixin: `/home/ubuntu/biomapper/biomapper/core/mapping_executor_robust.py`
+- Bidirectional Mapping Script: `/home/ubuntu/biomapper/scripts/main_pipelines/run_full_ukbb_hpa_mapping_bidirectional.py`
+- Working Batch Example: `/home/ubuntu/biomapper/run_full_mapping_with_batches.py`
+- Strategy Config: `/home/ubuntu/biomapper/configs/mapping_strategies_config.yaml`
 
 ## Workflow Integration
 
-Consider using Claude for specific tasks:
+### For Priority 1 (Strategy Checkpointing), consider using Claude to:
+1. **Design the checkpoint format**: 
+   ```
+   "I need to design a checkpoint format for the biomapper strategy execution that captures the state after each step. The strategy has multiple steps (S1, S2, etc.) and maintains a context dictionary. Please help me design a checkpoint structure that:
+   - Captures the current step index and context state
+   - Allows resumption from any step
+   - Handles both successful and failed step states
+   - Is serializable and efficient
+   Here's the current strategy execution flow: [provide relevant code]"
+   ```
 
-### 1. **Performance Optimization Task**
-Provide Claude with the timeout issue details and ask for optimization:
-```
-The RESOLVE_AND_MATCH_REVERSE action at /home/ubuntu/biomapper/biomapper/core/strategy_actions/resolve_and_match_reverse.py times out when processing 2991 identifiers through the UniProt API. Current implementation processes in batches of 100 sequentially.
+2. **Review the implementation approach**:
+   ```
+   "I'm implementing checkpointing for strategy execution in biomapper. Here's my planned approach: [describe approach]. Please review for:
+   - Potential edge cases I might have missed
+   - Performance implications
+   - Better design patterns for this use case
+   The current codebase uses pickle for checkpointing in batch processing: [show example]"
+   ```
 
-Please optimize this to:
-1. Use concurrent API calls while respecting rate limits
-2. Add progress tracking that works with the MappingExecutor's progress_callback
-3. Implement smarter batching based on API response times
-4. Add timeout handling and retry logic
-```
+### For Priority 2 (Performance Optimization), leverage Claude for:
+1. **Memory profiling analysis**:
+   ```
+   "I have a Python script that times out when creating a DataFrame with 2,923 rows. Here's the code that's timing out: [provide code]. Please help me:
+   - Identify why this might be slow
+   - Suggest memory-efficient alternatives
+   - Recommend profiling approaches to find the bottleneck"
+   ```
 
-### 2. **Strategy Comparison Framework**
-Ask Claude to design the comparison framework:
-```
-Please create a strategy comparison framework at /home/ubuntu/biomapper/scripts/analysis_and_reporting/compare_mapping_strategies.py that:
+2. **Streaming implementation**:
+   ```
+   "I need to implement a streaming CSV writer for biomapper results that doesn't build the full DataFrame in memory. Current implementation: [show code]. Requirements:
+   - Handle results as they're generated
+   - Maintain the same output format
+   - Support progress tracking
+   Please suggest an efficient implementation."
+   ```
 
-1. Accepts a list of strategy names and a common dataset
-2. Runs each strategy and captures: execution time, memory usage, coverage metrics, step-by-step timings
-3. Handles strategy failures gracefully
-4. Generates both JSON metrics and human-readable reports
-5. Includes visualization of results (coverage vs time trade-offs)
-
-The framework should work with the existing MappingExecutor and support progress tracking.
-```
-
-### 3. **Jupyter Notebook Updates**
-For async handling in notebooks:
-```
-The notebook at /home/ubuntu/biomapper/notebooks/2_use_cases/ukbb_to_hpa_protein.ipynb needs to work with async MappingExecutor methods. Please:
-
-1. Show the best pattern for handling async calls in Jupyter
-2. Demonstrate both original and bidirectional strategies
-3. Add progress bars for long operations
-4. Visualize the matching process showing context flow
-5. Create comparison visualizations
-
-Include proper error handling and make it educational for users learning the system.
-```
-
-## Next Session Recommendations
-
-Start with performance optimization as it blocks full dataset testing. The timeout issue with 2991 identifiers is the critical path. Once resolved, the strategy comparison can provide quantitative evidence for the improvements achieved with the bidirectional approach.
-
-The parallel development approach proved highly effective - consider using multiple Claude instances again for independent tasks like creating the comparison framework while optimizing performance.
+This approach allows you to tackle the highest priority items while leveraging Claude's expertise for complex design decisions and performance optimization strategies.
