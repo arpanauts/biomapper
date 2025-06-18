@@ -23,7 +23,7 @@ from biomapper.core.exceptions import (
 def mock_dependencies():
     """Create mock dependencies for StrategyOrchestrator."""
     mocks = {
-        'metamapper_session_factory': AsyncMock(),
+        'metamapper_session_factory': MagicMock(),
         'cache_manager': MagicMock(),
         'strategy_handler': AsyncMock(),
         'path_execution_manager': MagicMock(),
@@ -34,8 +34,12 @@ def mock_dependencies():
     
     # Configure session context manager
     mock_session = AsyncMock()
-    mocks['metamapper_session_factory'].return_value.__aenter__.return_value = mock_session
-    mocks['metamapper_session_factory'].return_value.__aexit__.return_value = None
+    # Create a proper async context manager mock
+    async_context_manager = AsyncMock()
+    async_context_manager.__aenter__.return_value = mock_session
+    async_context_manager.__aexit__.return_value = None
+    # Make the factory return the async context manager (not a coroutine)
+    mocks['metamapper_session_factory'].return_value = async_context_manager
     
     return mocks, mock_session
 
