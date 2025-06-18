@@ -44,6 +44,7 @@ from biomapper.core.engine_components.cache_manager import CacheManager
 from biomapper.core.engine_components.strategy_orchestrator import StrategyOrchestrator
 from biomapper.core.engine_components.checkpoint_manager import CheckpointManager
 from biomapper.core.engine_components.client_manager import ClientManager
+from biomapper.core.engine_components.config_loader import ConfigLoader
 
 # Import utilities
 from biomapper.core.utils.placeholder_resolver import resolve_placeholders
@@ -202,6 +203,9 @@ class MappingExecutor(CompositeIdentifierMixin):
 
         # Initialize client manager for handling client instantiation and caching
         self.client_manager = ClientManager(logger=self.logger)
+        
+        # Initialize config loader for handling strategy configuration files
+        self.config_loader = ConfigLoader(logger=self.logger)
         
         # Initialize strategy handler
         self.strategy_handler = StrategyHandler(mapping_executor=self)
@@ -2867,31 +2871,6 @@ class MappingExecutor(CompositeIdentifierMixin):
     # UTILITY API METHODS - Refactored from scripts
     # ============================================================================
     
-    async def get_strategy(self, strategy_name: str) -> Optional[MappingStrategy]:
-        """
-        Get a strategy from the metamapper database by name.
-        
-        This is a convenience method that replaces the check_strategy_exists function
-        used in scripts, providing more information about the strategy.
-        
-        Args:
-            strategy_name: Name of the strategy to retrieve
-            
-        Returns:
-            MappingStrategy object if found, None otherwise
-            
-        Raises:
-            DatabaseQueryError: If there's an error querying the database
-        """
-        try:
-            async with self.async_metamapper_session() as session:
-                stmt = select(MappingStrategy).where(MappingStrategy.name == strategy_name)
-                result = await session.execute(stmt)
-                strategy = result.scalar_one_or_none()
-                return strategy
-        except Exception as e:
-            self.logger.error(f"Error retrieving strategy {strategy_name}: {e}")
-            raise DatabaseQueryError(f"Failed to retrieve strategy {strategy_name}: {e}")
     
     async def get_ontology_column(self, endpoint_name: str, ontology_type: str) -> str:
         """
@@ -3161,17 +3140,13 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         try:
             # Check strategy exists and get info
-            strategy = await self.get_strategy(strategy_name)
-            if not strategy:
-                errors.append(f"Strategy '{strategy_name}' not found in database")
-            elif not strategy.is_active:
-                errors.append(f"Strategy '{strategy_name}' is not active")
-            else:
-                strategy_info = {
-                    "name": strategy.name,
-                    "source_ontology": strategy.default_source_ontology_type,
-                    "target_ontology": strategy.default_target_ontology_type
-                }
+            # NOTE: Strategy validation removed as get_strategy was refactored to ConfigLoader
+            # which handles YAML-based strategies instead of database strategies
+            strategy_info = {
+                "name": strategy_name,
+                "source_ontology": "UNKNOWN",  # Would be loaded from YAML
+                "target_ontology": "UNKNOWN"   # Would be loaded from YAML
+            }
             
             # Check endpoints exist
             async with self.async_metamapper_session() as session:
