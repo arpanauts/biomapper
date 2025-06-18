@@ -39,6 +39,7 @@ from biomapper.core.exceptions import (
 from biomapper.core.engine_components.strategy_handler import StrategyHandler
 from biomapper.core.engine_components.path_finder import PathFinder
 from biomapper.core.engine_components.reversible_path import ReversiblePath
+from biomapper.core.engine_components.path_execution_manager import PathExecutionManager
 from biomapper.core.engine_components.cache_manager import CacheManager
 from biomapper.core.engine_components.strategy_orchestrator import StrategyOrchestrator
 
@@ -340,6 +341,25 @@ class MappingExecutor(CompositeIdentifierMixin):
             cache_expiry_seconds=path_cache_expiry_seconds
         )
         
+        # Initialize path execution manager
+        self.path_execution_manager = PathExecutionManager(
+            metamapper_session_factory=None,  # Will be set after creating session factory
+            cache_manager=None,  # MappingExecutor handles caching directly
+            logger=self.logger,
+            semaphore=None,  # Will create semaphore as needed
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            batch_size=batch_size,
+            max_concurrent_batches=max_concurrent_batches,
+            enable_metrics=enable_metrics,
+            load_client_func=self._load_client,
+            execute_mapping_step_func=self._execute_mapping_step,
+            calculate_confidence_score_func=self._calculate_confidence_score,
+            create_mapping_path_details_func=self._create_mapping_path_details,
+            determine_mapping_source_func=self._determine_mapping_source,
+            track_mapping_metrics_func=self.track_mapping_metrics if enable_metrics else None
+        )
+        
         # Log database URLs being used
         self.logger.info(f"Using Metamapper DB URL: {self.metamapper_db_url}")
         self.logger.info(f"Using Mapping Cache DB URL: {self.mapping_cache_db_url}")
@@ -380,6 +400,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         )
         # Define an async session property for easier access
         self.async_cache_session = self.CacheSessionFactory
+        
+        # Update the path execution manager with the session factory
+        self.path_execution_manager.metamapper_session_factory = self.MetamapperSessionFactory
         
         # Initialize CacheManager
         self.cache_manager = CacheManager(
@@ -1660,6 +1683,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         """
         Execute a mapping path or its reverse, with optimized batched processing.
         
+        This method now delegates to PathExecutionManager for the actual execution logic.
+        
         Args:
             session: Database session
             path: The path to execute
@@ -1675,6 +1700,21 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Dictionary mapping input identifiers to their results
         """
+        # Delegate to PathExecutionManager
+        return await self.path_execution_manager.execute_path(
+            path=path,
+            input_identifiers=input_identifiers,
+            source_ontology=source_ontology,
+            target_ontology=target_ontology,
+            mapping_session_id=mapping_session_id,
+            execution_context=None,  # Can be enhanced later
+            resource_clients=self._client_cache,  # Pass the client cache
+            session=session,  # For backward compatibility
+            batch_size=batch_size,
+            max_hop_count=max_hop_count,
+            filter_confidence=filter_confidence,
+            max_concurrent_batches=max_concurrent_batches
+        )
         # Skip execution if max_hop_count is specified and this path exceeds it
         path_hop_count = len(path.steps) if hasattr(path, "steps") and path.steps else 1
         if max_hop_count is not None and path_hop_count > max_hop_count:
