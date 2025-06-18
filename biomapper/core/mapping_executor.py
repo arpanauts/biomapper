@@ -42,6 +42,7 @@ from biomapper.core.engine_components.reversible_path import ReversiblePath
 from biomapper.core.engine_components.path_execution_manager import PathExecutionManager
 from biomapper.core.engine_components.cache_manager import CacheManager
 from biomapper.core.engine_components.strategy_orchestrator import StrategyOrchestrator
+from biomapper.core.engine_components.client_manager import ClientManager
 
 # Import models for metamapper DB
 from ..db.models import (
@@ -329,8 +330,8 @@ class MappingExecutor(CompositeIdentifierMixin):
             except (ImportError, Exception) as e:
                 self.logger.warning(f"Langfuse metrics tracking not available: {e}")
 
-        # Client instance cache to avoid re-initializing expensive clients
-        self._client_cache: Dict[str, Any] = {}
+        # Initialize client manager for handling client instantiation and caching
+        self.client_manager = ClientManager(logger=self.logger)
         
         # Initialize strategy handler
         self.strategy_handler = StrategyHandler(mapping_executor=self)
@@ -754,90 +755,6 @@ class MappingExecutor(CompositeIdentifierMixin):
                 details={"endpoint": endpoint_name, "property": property_name, "error": str(e)}
             ) from e
 
-    async def _load_client_class(self, client_class_path: str) -> type:
-        """Dynamically load the client class."""
-        try:
-            module_path, class_name = client_class_path.rsplit(".", 1)
-            module = importlib.import_module(module_path)
-            ClientClass = getattr(module, class_name)
-            return ClientClass
-        except (ImportError, AttributeError) as e:
-            self.logger.error(
-                f"Error loading client class '{client_class_path}': {e}", exc_info=True
-            )
-            raise ClientInitializationError(
-                f"Could not load client class {client_class_path}",
-                client_name=client_class_path.split(".")[-1] if "." in client_class_path else client_class_path,
-                details={"error": str(e)}
-            ) from e
-
-    async def _load_client(self, resource: MappingResource) -> Any:
-        """Loads and initializes a client instance, using cache for expensive clients."""
-        # Create a cache key based on resource name and config
-        cache_key = f"{resource.name}_{resource.client_class_path}"
-        if resource.config_template:
-            # Include config in cache key to handle different configurations
-            cache_key += f"_{hash(resource.config_template)}"
-        
-        # Check if client is already cached
-        if cache_key in self._client_cache:
-            self.logger.debug(f"OPTIMIZATION: Using cached client for {resource.name}")
-            return self._client_cache[cache_key]
-        
-        try:
-            client_class = await self._load_client_class(resource.client_class_path)
-            # Parse the config template
-            config_for_init = {}
-            if resource.config_template:
-                try:
-                    config_for_init = json.loads(resource.config_template)
-                except json.JSONDecodeError as json_err:
-                    raise ClientInitializationError(
-                        f"Invalid configuration template JSON for {resource.name}",
-                        client_name=resource.name,
-                        details=str(json_err),
-                    )
-
-            # Initialize the client with the config, passing it as 'config'
-            self.logger.debug(f"OPTIMIZATION: Creating new client instance for {resource.name}")
-            client_instance = client_class(config=config_for_init)
-            
-            # Cache the client instance for future use
-            self._client_cache[cache_key] = client_instance
-            self.logger.debug(f"OPTIMIZATION: Cached client for {resource.name}")
-            
-            return client_instance
-        except ImportError as e:
-            self.logger.error(
-                f"ImportError during client initialization for resource {resource.name}: {e}",
-                exc_info=True,
-            )
-            raise ClientInitializationError(
-                f"Import error initializing client",
-                client_name=resource.name if resource else "Unknown",
-                details=str(e),
-            ) from e
-        except AttributeError as e:
-            self.logger.error(
-                f"AttributeError during client initialization for resource {resource.name}: {e}",
-                exc_info=True,
-            )
-            raise ClientInitializationError(
-                f"Attribute error initializing client",
-                client_name=resource.name if resource else "Unknown",
-                details=str(e),
-            ) from e
-        except Exception as e:
-            # Catch any other initialization errors
-            self.logger.error(
-                f"Unexpected error initializing client for resource {resource.name}: {e}",
-                exc_info=True,
-            )
-            raise ClientInitializationError(
-                f"Unexpected error initializing client",
-                client_name=resource.name if resource else "Unknown",
-                details=str(e),
-            )
 
     async def _execute_mapping_step(
         self, step: MappingPathStep, input_values: List[str], is_reverse: bool = False
@@ -858,8 +775,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         try:
             client_load_start = time.time()
-            client_instance = await self._load_client(step.mapping_resource)
-            self.logger.debug(f"TIMING: _load_client took {time.time() - client_load_start:.3f}s")
+            client_instance = await self.client_manager.get_client_instance(step.mapping_resource)
+            self.logger.debug(f"TIMING: get_client_instance took {time.time() - client_load_start:.3f}s")
         except ClientInitializationError:
             # Propagate initialization errors directly
             raise
@@ -1708,7 +1625,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             target_ontology=target_ontology,
             mapping_session_id=mapping_session_id,
             execution_context=None,  # Can be enhanced later
-            resource_clients=self._client_cache,  # Pass the client cache
+            resource_clients=self.client_manager.get_client_cache(),  # Pass the client cache
             session=session,  # For backward compatibility
             batch_size=batch_size,
             max_hop_count=max_hop_count,
@@ -2550,8 +2467,8 @@ class MappingExecutor(CompositeIdentifierMixin):
             self.logger.info("Cache engine disposed.")
             
         # Clear client cache
-        if hasattr(self, '_client_cache'):
-            self._client_cache.clear()
+        if hasattr(self, 'client_manager'):
+            self.client_manager.clear_cache()
             
         self.logger.info("MappingExecutor engines disposed.")
 
