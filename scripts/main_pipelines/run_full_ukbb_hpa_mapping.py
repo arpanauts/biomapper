@@ -137,13 +137,14 @@ async def run_full_mapping(checkpoint_enabled: bool = True, batch_size: int = 25
     
     logger.info(f"Starting ENHANCED BIDIRECTIONAL UKBB to HPA protein mapping at {start_time}")
     logger.info("=" * 80)
-    logger.info("Using enhanced bidirectional strategy with:")
-    logger.info("- Direct UniProt matching (no conversion needed)")
-    logger.info("- Composite identifier handling")
-    logger.info("- Bidirectional resolution for maximum coverage")
-    logger.info("- Context-based tracking throughout")
+    logger.info(f"Executing strategy: {STRATEGY_NAME}")
+    logger.info("This script orchestrates a strategy that handles all logic internally:")
+    logger.info("- Loading initial identifiers")
+    logger.info("- Executing forward and reverse mapping paths")
+    logger.info("- Reconciling bidirectional results")
+    logger.info("- Saving results to CSV and a JSON summary")
     logger.info("")
-    logger.info("Enhanced features:")
+    logger.info("Script features:")
     logger.info(f"- Checkpointing: {'Enabled' if checkpoint_enabled else 'Disabled'}")
     logger.info(f"- Batch size: {batch_size}")
     logger.info(f"- Max retries: {max_retries}")
@@ -153,189 +154,89 @@ async def run_full_mapping(checkpoint_enabled: bool = True, batch_size: int = 25
     
     # Ensure output directory exists
     os.makedirs(OUTPUT_RESULTS_DIR, exist_ok=True)
-    logger.info(f"Output results will be saved to: {OUTPUT_RESULTS_FILE_PATH}")
+    logger.info(f"Output will be saved in: {OUTPUT_RESULTS_DIR}")
     
-    # Set DATA_DIR environment variable if not already set
-    if 'DATA_DIR' not in os.environ:
-        os.environ['DATA_DIR'] = DEFAULT_DATA_DIR
-        logger.info(f"Set DATA_DIR environment variable to: {DEFAULT_DATA_DIR}")
-    
-    # Set OUTPUT_DIR environment variable for the strategy
-    if 'OUTPUT_DIR' not in os.environ:
-        os.environ['OUTPUT_DIR'] = OUTPUT_RESULTS_DIR
-        logger.info(f"Set OUTPUT_DIR environment variable to: {OUTPUT_RESULTS_DIR}")
-    
-    # Initialize variables
-    executor = None
+    # Set environment variables for the strategy actions to use
+    os.environ['STRATEGY_OUTPUT_DIRECTORY'] = OUTPUT_RESULTS_DIR
+    os.environ['EXECUTION_ID'] = execution_id
+    os.environ['STRATEGY_NAME'] = STRATEGY_NAME
+    os.environ['START_TIME'] = start_time.isoformat()
+    logger.info(f"Set STRATEGY_OUTPUT_DIRECTORY for actions: {OUTPUT_RESULTS_DIR}")
 
+    executor = None
     try:
         # Initialize MappingExecutor with robust features
-        logger.info("Initializing MappingExecutor with robust features...")
-        logger.info(f"Attempting to connect to Metamapper DB at: {settings.metamapper_db_url}")
-
+        logger.info("Initializing MappingExecutor...")
         executor = await MappingExecutor.create(
             metamapper_db_url=settings.metamapper_db_url,
             mapping_cache_db_url=settings.cache_db_url,
             echo_sql=False,
             enable_metrics=True,
-            # Enhanced features
             checkpoint_enabled=checkpoint_enabled,
             checkpoint_dir=CHECKPOINT_DIR,
             batch_size=batch_size,
             max_retries=max_retries,
-            retry_delay=2  # 2 second delay between retries
+            retry_delay=2
         )
-        logger.info("MappingExecutor created successfully with robust features")
+        logger.info("MappingExecutor created successfully.")
         
         # Add progress tracking if enabled
         if enable_progress:
             def progress_callback(progress_data: Dict[str, Any]):
                 """Handle progress updates from the executor."""
-                if progress_data['type'] == 'batch_complete':
+                if progress_data.get('type') == 'batch_complete':
                     logger.info(
-                        f"Progress: {progress_data['total_processed']}/{progress_data['total_count']} "
-                        f"({progress_data['progress_percent']:.1f}%) - "
-                        f"{progress_data['processor']}"
-                    )
-                elif progress_data['type'] == 'checkpoint_saved':
-                    logger.info(f"Checkpoint saved: {progress_data['state_summary']}")
-                elif progress_data['type'] == 'retry_attempt':
-                    logger.warning(
-                        f"Retry {progress_data['attempt']}/{progress_data['max_attempts']} "
-                        f"for {progress_data['operation']}"
+                        f"Progress: {progress_data.get('total_processed', 0)}/"
+                        f"{progress_data.get('total_count', 0)} "
+                        f"({progress_data.get('progress_percent', 0):.1f}%) - "
+                        f"{progress_data.get('processor', 'N/A')}"
                     )
             
             executor.add_progress_callback(progress_callback)
-            logger.info("Progress tracking enabled")
+            logger.info("Progress tracking enabled.")
         
-        # Check if strategy exists using new API
-        logger.info(f"Checking if strategy '{STRATEGY_NAME}' exists in database...")
-        strategy = await executor.get_strategy(STRATEGY_NAME)
-        
-        if not strategy:
-            raise ValueError(
-                f"Strategy '{STRATEGY_NAME}' not found in database.\n"
-                f"Please run: python scripts/populate_metamapper_db.py"
-            )
-        
-        logger.info(f"Strategy '{STRATEGY_NAME}' found in database")
-        
-        # Get the source ontology type from the strategy
-        source_ontology_type = strategy.default_source_ontology_type
-        logger.info(f"Strategy uses source ontology type: {source_ontology_type}")
-        logger.info(f"Note: This is UniProt directly - no conversion needed!")
-        
-        # Loading of identifiers is now handled by the strategy's first step (LoadEndpointIdentifiersAction)
-        logger.info(f"Source endpoint '{SOURCE_ENDPOINT_NAME}' will be loaded by the strategy")
-        
-        # Check for existing checkpoint
-        checkpoint_state = await executor.load_checkpoint(execution_id)
-        if checkpoint_state:
-            logger.info("Found existing checkpoint - attempting to resume execution...")
-        
-        # Execute mapping strategy with robust features
-        logger.info(f"Executing enhanced bidirectional mapping strategy...")
-        logger.info("Using robust execution with checkpointing and retry logic...")
+        # Execute mapping strategy
+        logger.info(f"Executing strategy '{STRATEGY_NAME}'...")
         logger.info("This may take some time for large datasets...")
         
-        # Set additional environment variables for the actions to use
-        os.environ['EXECUTION_ID'] = execution_id
-        os.environ['STRATEGY_NAME'] = STRATEGY_NAME
-        os.environ['START_TIME'] = start_time.isoformat()
-        
-        # Set strategy output directory as environment variable for actions to use
-        os.environ['STRATEGY_OUTPUT_DIRECTORY'] = OUTPUT_RESULTS_DIR
-
         result = await executor.execute_yaml_strategy_robust(
             strategy_name=STRATEGY_NAME,
-            input_identifiers=[],  # Empty because strategy loads identifiers itself
+            input_identifiers=[],  # Strategy loads its own identifiers
             source_endpoint_name=SOURCE_ENDPOINT_NAME,
             target_endpoint_name=TARGET_ENDPOINT_NAME,
             execution_id=execution_id,
             resume_from_checkpoint=checkpoint_enabled,
-            use_cache=True  # Enable caching for full runs
+            use_cache=True
         )
         
-        logger.info("Mapping execution completed")
+        logger.info("Strategy execution completed.")
         
-        # The FormatAndSaveResultsAction now handles all result processing and saving
-        # Just extract some basic info for logging
+        # The SaveBidirectionalResultsAction handles all result saving and summary logging.
+        # We just confirm that the output files were created.
         context = result.get('context', {})
+        csv_path = context.get('saved_csv_path')
+        json_path = context.get('saved_json_path')
         
-        # Check if the action saved the files
-        saved_csv_path = context.get('saved_csv_path')
-        saved_json_path = context.get('saved_json_summary_path')
-        formatted_summary = context.get('formatted_summary', {})
-        
-        if saved_csv_path:
-            logger.info(f"Results saved to CSV: {saved_csv_path}")
+        if csv_path and json_path:
+            logger.info(f"Successfully saved results to:")
+            logger.info(f"  - CSV: {csv_path}")
+            logger.info(f"  - JSON: {json_path}")
         else:
-            logger.warning("CSV output path not found in context")
-            
-        if saved_json_path:
-            logger.info(f"Summary saved to JSON: {saved_json_path}")
-        else:
-            logger.warning("JSON summary path not found in context")
-        
-        # Log summary from the formatted results if available
-        if formatted_summary:
-            logger.info("=" * 80)
-            logger.info("MAPPING SUMMARY (from FormatAndSaveResultsAction):")
-            
-            input_analysis = formatted_summary.get('input_analysis', {})
-            mapping_results = formatted_summary.get('mapping_results', {})
-            
-            logger.info(f"Total input identifiers: {input_analysis.get('total_input', 'N/A')}")
-            logger.info(f"Composite identifiers: {input_analysis.get('composite_identifiers', 'N/A')}")
-            logger.info(f"Direct matches: {mapping_results.get('direct_matches', 'N/A')}")
-            logger.info(f"Resolved matches: {mapping_results.get('resolved_matches', 'N/A')}")
-            logger.info(f"Total successfully mapped: {mapping_results.get('total_mapped', 'N/A')}")
-            logger.info(f"Total unmapped: {mapping_results.get('total_unmapped', 'N/A')}")
-            
-            # Mapping method breakdown
-            mapping_methods = formatted_summary.get('mapping_methods', {})
-            if mapping_methods:
-                logger.info("\nMapping method breakdown:")
-                for method, count in mapping_methods.items():
-                    logger.info(f"  {method}: {count}")
-            
-            # Execution time
-            execution_info = formatted_summary.get('execution_info', {})
-            duration = execution_info.get('duration_seconds', 0)
-            logger.info(f"\nTotal execution time: {duration:.2f} seconds")
-            
-            # Robust execution features
-            robust_features = execution_info.get('robust_features', {})
-            logger.info(f"\nRobust execution features:")
-            logger.info(f"  Checkpointing: {'Used' if robust_features.get('checkpoint_used') else 'Available' if robust_features.get('checkpoint_enabled') else 'Disabled'}")
-            logger.info(f"  Batch processing: {robust_features.get('batch_size', 'N/A')} identifiers per batch")
-            logger.info(f"  Retry logic: {robust_features.get('max_retries', 'N/A')} max attempts")
-            logger.info(f"  Progress tracking: {'Enabled' if robust_features.get('progress_tracking') else 'Disabled'}")
-            
-            logger.info("=" * 80)
-        
-        # Compare with original approach
-        logger.info("\nRefactored approach benefits:")
-        logger.info("- Strategy now loads identifiers directly (LoadEndpointIdentifiersAction)")
-        logger.info("- Results formatting and saving handled by strategy (FormatAndSaveResultsAction)")
-        logger.info("- Script simplified to just orchestration and logging")
-        logger.info("- All logic now modular and reusable in strategy actions")
-        
-    except ValueError as e:
-        logger.error(f"Configuration error: {e}")
-        raise
-    except KeyError as e:
-        logger.error(f"Column not found error: {e}")
-        raise
+            logger.warning("Could not confirm that output files were saved. Check logs for details.")
+
+        logger.info("=" * 80)
+        logger.info("Refactored script finished successfully.")
+        logger.info("All logic is now encapsulated within modular strategy actions.")
+        logger.info("=" * 80)
+
     except Exception as e:
-        logger.error(f"Unexpected error during mapping: {e}", exc_info=True)
+        logger.error(f"An error occurred during the mapping process: {e}", exc_info=True)
         raise
     finally:
-        # Clean up resources
         if executor:
             logger.info("Disposing MappingExecutor...")
             await executor.async_dispose()
-            logger.info("MappingExecutor disposed")
+            logger.info("MappingExecutor disposed.")
 
 
 # ============================================================================
