@@ -11,6 +11,12 @@ from .execute_mapping_path import ExecuteMappingPathAction
 from .filter_by_target_presence import FilterByTargetPresenceAction
 from .resolve_and_match_forward import ResolveAndMatchForwardAction
 from .resolve_and_match_reverse import ResolveAndMatchReverse
+from .generate_mapping_summary import GenerateMappingSummaryAction
+from .generate_detailed_report import GenerateDetailedReportAction
+from .export_results import ExportResultsAction
+from .visualize_mapping_flow import VisualizeMappingFlowAction
+from .populate_context import PopulateContextAction
+from .collect_matched_targets import CollectMatchedTargetsAction
 
 __all__ = [
     "BidirectionalMatchAction",
@@ -18,5 +24,11 @@ __all__ = [
     "ExecuteMappingPathAction", 
     "FilterByTargetPresenceAction",
     "ResolveAndMatchForwardAction",
-    "ResolveAndMatchReverse"
+    "ResolveAndMatchReverse",
+    "GenerateMappingSummaryAction",
+    "GenerateDetailedReportAction",
+    "ExportResultsAction",
+    "VisualizeMappingFlowAction",
+    "PopulateContextAction",
+    "CollectMatchedTargetsAction"
 ]

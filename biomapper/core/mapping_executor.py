@@ -3213,7 +3213,12 @@ class MappingExecutor(CompositeIdentifierMixin):
         overall_provenance = []
         
         # Initialize strategy-level context that persists across steps
-        strategy_context = {}
+        strategy_context = {
+            'initial_identifiers': input_identifiers.copy(),
+            'step_results': [],
+            'all_provenance': [],
+            'mapping_results': {}
+        }
         
         # Execute each step in sequence
         for step_idx, step in enumerate(steps):
@@ -3242,18 +3247,21 @@ class MappingExecutor(CompositeIdentifierMixin):
                 current_ontology_type = step_result.get('output_ontology_type', current_ontology_type)
                 
                 # Track results
-                step_results.append({
+                step_info = {
                     'step_id': step.step_id,
                     'action_type': step.action_type,
                     'input_count': len(step_result.get('input_identifiers', [])),
                     'output_count': len(step_result.get('output_identifiers', [])),
                     'success': True,
                     'details': step_result.get('details', {})
-                })
+                }
+                step_results.append(step_info)
+                strategy_context['step_results'].append(step_info)
                 
                 # Accumulate provenance
                 if 'provenance' in step_result:
                     overall_provenance.extend(step_result['provenance'])
+                    strategy_context['all_provenance'].extend(step_result['provenance'])
                     
             except Exception as e:
                 self.logger.error(f"Error executing step {step.step_id}: {str(e)}")
@@ -3369,6 +3377,9 @@ class MappingExecutor(CompositeIdentifierMixin):
                             'provenance': []
                         }
         
+        # Update context with final mapping results
+        strategy_context['mapping_results'] = mapping_results
+        
         return {
             'results': mapping_results,
             'metadata': {
@@ -3453,6 +3464,12 @@ class MappingExecutor(CompositeIdentifierMixin):
         from biomapper.core.strategy_actions.filter_by_target_presence import FilterByTargetPresenceAction
         from biomapper.core.strategy_actions.resolve_and_match_forward import ResolveAndMatchForwardAction
         from biomapper.core.strategy_actions.resolve_and_match_reverse import ResolveAndMatchReverse
+        from biomapper.core.strategy_actions.generate_mapping_summary import GenerateMappingSummaryAction
+        from biomapper.core.strategy_actions.generate_detailed_report import GenerateDetailedReportAction
+        from biomapper.core.strategy_actions.export_results import ExportResultsAction
+        from biomapper.core.strategy_actions.visualize_mapping_flow import VisualizeMappingFlowAction
+        from biomapper.core.strategy_actions.populate_context import PopulateContextAction
+        from biomapper.core.strategy_actions.collect_matched_targets import CollectMatchedTargetsAction
         
         action_type = step.action_type
         action_params = step.action_parameters or {}
@@ -3509,6 +3526,18 @@ class MappingExecutor(CompositeIdentifierMixin):
                 action = ResolveAndMatchReverse(session)
             elif action_type == "BIDIRECTIONAL_MATCH":
                 action = BidirectionalMatchAction(session)
+            elif action_type == "GENERATE_MAPPING_SUMMARY":
+                action = GenerateMappingSummaryAction(session)
+            elif action_type == "GENERATE_DETAILED_REPORT":
+                action = GenerateDetailedReportAction(session)
+            elif action_type == "EXPORT_RESULTS":
+                action = ExportResultsAction(session)
+            elif action_type == "VISUALIZE_MAPPING_FLOW":
+                action = VisualizeMappingFlowAction(session)
+            elif action_type == "POPULATE_CONTEXT":
+                action = PopulateContextAction(session)
+            elif action_type == "COLLECT_MATCHED_TARGETS":
+                action = CollectMatchedTargetsAction(session)
             else:
                 raise ConfigurationError(f"Unknown action type: {action_type}")
             
@@ -4300,3 +4329,463 @@ class MappingExecutor(CompositeIdentifierMixin):
                 "details": {"exception_type": type(e).__name__}
             }
 
+    
+    # ============================================================================
+    # UTILITY API METHODS - Refactored from scripts
+    # ============================================================================
+    
+    async def get_strategy(self, strategy_name: str) -> Optional[MappingStrategy]:
+        """
+        Get a strategy from the metamapper database by name.
+        
+        This is a convenience method that replaces the check_strategy_exists function
+        used in scripts, providing more information about the strategy.
+        
+        Args:
+            strategy_name: Name of the strategy to retrieve
+            
+        Returns:
+            MappingStrategy object if found, None otherwise
+            
+        Raises:
+            DatabaseQueryError: If there's an error querying the database
+        """
+        try:
+            async with self.async_metamapper_session() as session:
+                stmt = select(MappingStrategy).where(MappingStrategy.name == strategy_name)
+                result = await session.execute(stmt)
+                strategy = result.scalar_one_or_none()
+                return strategy
+        except Exception as e:
+            self.logger.error(f"Error retrieving strategy {strategy_name}: {e}")
+            raise DatabaseQueryError(f"Failed to retrieve strategy {strategy_name}: {e}")
+    
+    async def get_ontology_column(self, endpoint_name: str, ontology_type: str) -> str:
+        """
+        Get the column name for a given ontology type from an endpoint's property configuration.
+        
+        This method replaces the get_column_for_ontology_type function used in scripts.
+        
+        Args:
+            endpoint_name: Name of the endpoint
+            ontology_type: Ontology type to look up (e.g., 'UniProt', 'Gene')
+            
+        Returns:
+            Column name for the ontology type
+            
+        Raises:
+            ConfigurationError: If endpoint, property config, or extraction config not found
+            DatabaseQueryError: If there's an error querying the database
+        """
+        try:
+            async with self.async_metamapper_session() as session:
+                # Get the endpoint
+                stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
+                result = await session.execute(stmt)
+                endpoint = result.scalar_one_or_none()
+                
+                if not endpoint:
+                    raise ConfigurationError(f"Endpoint '{endpoint_name}' not found in database")
+                
+                # Get the property config for the ontology type
+                stmt = select(EndpointPropertyConfig).where(
+                    EndpointPropertyConfig.endpoint_id == endpoint.id,
+                    EndpointPropertyConfig.ontology_type == ontology_type
+                )
+                result = await session.execute(stmt)
+                property_config = result.scalar_one_or_none()
+                
+                if not property_config:
+                    raise ConfigurationError(
+                        f"No property configuration found for ontology type '{ontology_type}' "
+                        f"in endpoint '{endpoint_name}'"
+                    )
+                
+                # Get the extraction config to find the column name
+                stmt = select(PropertyExtractionConfig).where(
+                    PropertyExtractionConfig.id == property_config.property_extraction_config_id
+                )
+                result = await session.execute(stmt)
+                extraction_config = result.scalar_one_or_none()
+                
+                if not extraction_config:
+                    raise ConfigurationError(
+                        f"No extraction configuration found for property config ID "
+                        f"{property_config.property_extraction_config_id}"
+                    )
+                
+                # Parse the extraction pattern to get the column name
+                pattern_data = json.loads(extraction_config.extraction_pattern)
+                column_name = pattern_data.get('column')
+                if not column_name:
+                    raise ConfigurationError(
+                        f"No 'column' field found in extraction pattern: "
+                        f"{extraction_config.extraction_pattern}"
+                    )
+                return column_name
+                
+        except json.JSONDecodeError as e:
+            raise ConfigurationError(f"Invalid JSON in extraction pattern: {e}")
+        except ConfigurationError:
+            raise  # Re-raise configuration errors as-is
+        except Exception as e:
+            self.logger.error(f"Error getting ontology column: {e}")
+            raise DatabaseQueryError(f"Failed to get ontology column: {e}")
+    
+    async def load_endpoint_identifiers(
+        self, 
+        endpoint_name: str, 
+        ontology_type: str,
+        return_dataframe: bool = False
+    ) -> Union[List[str], 'pd.DataFrame']:
+        """
+        Load identifiers from an endpoint using its configuration in metamapper.db.
+        
+        This method replaces the load_identifiers_from_endpoint function used in scripts,
+        with additional options for returning the full dataframe.
+        
+        Args:
+            endpoint_name: Name of the endpoint to load from
+            ontology_type: Ontology type of the identifiers to load
+            return_dataframe: If True, return the full dataframe instead of just identifiers
+            
+        Returns:
+            List of unique identifiers (default) or full DataFrame if return_dataframe=True
+            
+        Raises:
+            ConfigurationError: If endpoint not found or file path issues
+            FileNotFoundError: If the data file doesn't exist
+            KeyError: If the specified column doesn't exist in the data
+            DatabaseQueryError: If there's an error querying the database
+        """
+        try:
+            # First get the column name for the ontology type
+            column_name = await self.get_ontology_column(endpoint_name, ontology_type)
+            self.logger.info(f"Ontology type '{ontology_type}' maps to column '{column_name}'")
+            
+            # Get endpoint configuration from metamapper.db
+            async with self.async_metamapper_session() as session:
+                stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
+                result = await session.execute(stmt)
+                endpoint = result.scalar_one_or_none()
+                
+                if not endpoint:
+                    raise ConfigurationError(f"Endpoint '{endpoint_name}' not found in database")
+                
+                # Parse connection details (it's a JSON string)
+                connection_details = json.loads(endpoint.connection_details)
+                file_path = connection_details.get('file_path', '')
+                delimiter = connection_details.get('delimiter', ',')
+                
+                # Handle environment variable substitution
+                if '${DATA_DIR}' in file_path:
+                    data_dir = os.environ.get('DATA_DIR', settings.data_dir)
+                    file_path = file_path.replace('${DATA_DIR}', data_dir)
+                
+                self.logger.info(f"Loading identifiers from endpoint '{endpoint_name}'")
+                self.logger.info(f"File path: {file_path}")
+                
+                # Check if file exists
+                if not os.path.exists(file_path):
+                    raise FileNotFoundError(f"Data file not found: {file_path}")
+                
+                # Lazy import pandas to avoid circular imports
+                import pandas as pd
+                
+                # Load the file
+                if endpoint.type == 'file_tsv':
+                    df = pd.read_csv(file_path, sep=delimiter)
+                elif endpoint.type == 'file_csv':
+                    df = pd.read_csv(file_path, sep=delimiter)
+                else:
+                    raise ConfigurationError(f"Unsupported endpoint type: {endpoint.type}")
+                
+                self.logger.info(f"Loaded dataframe with shape: {df.shape}")
+                
+                # Check if column exists
+                if column_name not in df.columns:
+                    raise KeyError(
+                        f"Column '{column_name}' not found in {endpoint_name} data. "
+                        f"Available columns: {list(df.columns)}"
+                    )
+                
+                if return_dataframe:
+                    return df
+                
+                # Extract unique identifiers
+                identifiers = df[column_name].dropna().unique().tolist()
+                self.logger.info(f"Found {len(identifiers)} unique identifiers in column '{column_name}'")
+                
+                # Log sample of identifiers including any composites
+                sample_ids = identifiers[:10]
+                composite_count = sum(1 for id in identifiers if '_' in str(id))
+                self.logger.info(f"Sample identifiers: {sample_ids}")
+                self.logger.info(f"Composite identifiers found: {composite_count} (with '_' delimiter)")
+                
+                return identifiers
+                
+        except (ConfigurationError, FileNotFoundError, KeyError):
+            raise  # Re-raise these specific errors as-is
+        except Exception as e:
+            self.logger.error(f"Error loading identifiers from endpoint {endpoint_name}: {e}")
+            raise DatabaseQueryError(f"Failed to load endpoint identifiers: {e}")
+    
+    async def get_strategy_info(self, strategy_name: str) -> Dict[str, Any]:
+        """
+        Get detailed information about a strategy including its steps and metadata.
+        
+        Args:
+            strategy_name: Name of the strategy
+            
+        Returns:
+            Dictionary containing strategy information including:
+            - name: Strategy name
+            - description: Strategy description
+            - is_active: Whether the strategy is active
+            - source_ontology_type: Default source ontology type
+            - target_ontology_type: Default target ontology type
+            - steps: List of step configurations
+            
+        Raises:
+            StrategyNotFoundError: If strategy doesn't exist
+            DatabaseQueryError: If there's an error querying the database
+        """
+        try:
+            async with self.async_metamapper_session() as session:
+                # Get strategy with its steps
+                stmt = (
+                    select(MappingStrategy)
+                    .where(MappingStrategy.name == strategy_name)
+                    .options(selectinload(MappingStrategy.steps))
+                )
+                result = await session.execute(stmt)
+                strategy = result.scalar_one_or_none()
+                
+                if not strategy:
+                    raise StrategyNotFoundError(f"Strategy '{strategy_name}' not found")
+                
+                # Build strategy info
+                strategy_info = {
+                    "name": strategy.name,
+                    "description": strategy.description,
+                    "is_active": strategy.is_active,
+                    "source_ontology_type": strategy.default_source_ontology_type,
+                    "target_ontology_type": strategy.default_target_ontology_type,
+                    "version": strategy.version,
+                    "steps": []
+                }
+                
+                # Add step information
+                for step in sorted(strategy.steps, key=lambda s: s.step_order):
+                    step_info = {
+                        "step_id": step.step_id,
+                        "step_order": step.step_order,
+                        "action_type": step.action_type,
+                        "description": step.description,
+                        "parameters": json.loads(step.parameters) if step.parameters else {}
+                    }
+                    strategy_info["steps"].append(step_info)
+                
+                return strategy_info
+                
+        except StrategyNotFoundError:
+            raise
+        except Exception as e:
+            self.logger.error(f"Error getting strategy info for {strategy_name}: {e}")
+            raise DatabaseQueryError(f"Failed to get strategy info: {e}")
+    
+    async def validate_strategy_prerequisites(
+        self, 
+        strategy_name: str, 
+        source_endpoint: str, 
+        target_endpoint: str
+    ) -> Dict[str, Any]:
+        """
+        Validate that all prerequisites are met for executing a strategy.
+        
+        This method performs pre-flight checks to ensure:
+        - Strategy exists and is active
+        - Source and target endpoints exist
+        - Required ontology types are configured
+        - Data files are accessible
+        
+        Args:
+            strategy_name: Name of the strategy to validate
+            source_endpoint: Name of the source endpoint
+            target_endpoint: Name of the target endpoint
+            
+        Returns:
+            Dictionary with validation results:
+            - valid: Boolean indicating if all checks passed
+            - errors: List of error messages if any
+            - warnings: List of warning messages if any
+            - strategy_info: Basic strategy information
+            
+        Raises:
+            DatabaseQueryError: If there's an error querying the database
+        """
+        errors = []
+        warnings = []
+        strategy_info = None
+        
+        try:
+            # Check strategy exists and get info
+            strategy = await self.get_strategy(strategy_name)
+            if not strategy:
+                errors.append(f"Strategy '{strategy_name}' not found in database")
+            elif not strategy.is_active:
+                errors.append(f"Strategy '{strategy_name}' is not active")
+            else:
+                strategy_info = {
+                    "name": strategy.name,
+                    "source_ontology": strategy.default_source_ontology_type,
+                    "target_ontology": strategy.default_target_ontology_type
+                }
+            
+            # Check endpoints exist
+            async with self.async_metamapper_session() as session:
+                # Check source endpoint
+                source = await self._get_endpoint_by_name(session, source_endpoint)
+                if not source:
+                    errors.append(f"Source endpoint '{source_endpoint}' not found")
+                else:
+                    # Check if source file exists (for file-based endpoints)
+                    if source.type in ['file_csv', 'file_tsv']:
+                        conn_details = json.loads(source.connection_details)
+                        file_path = conn_details.get('file_path', '')
+                        if '${DATA_DIR}' in file_path:
+                            file_path = file_path.replace('${DATA_DIR}', 
+                                                        os.environ.get('DATA_DIR', settings.data_dir))
+                        if not os.path.exists(file_path):
+                            errors.append(f"Source data file not found: {file_path}")
+                
+                # Check target endpoint
+                target = await self._get_endpoint_by_name(session, target_endpoint)
+                if not target:
+                    errors.append(f"Target endpoint '{target_endpoint}' not found")
+                else:
+                    # Check if target file exists (for file-based endpoints)
+                    if target.type in ['file_csv', 'file_tsv']:
+                        conn_details = json.loads(target.connection_details)
+                        file_path = conn_details.get('file_path', '')
+                        if '${DATA_DIR}' in file_path:
+                            file_path = file_path.replace('${DATA_DIR}', 
+                                                        os.environ.get('DATA_DIR', settings.data_dir))
+                        if not os.path.exists(file_path):
+                            errors.append(f"Target data file not found: {file_path}")
+                
+                # Check ontology configurations if we have strategy info
+                if strategy_info and source:
+                    try:
+                        await self.get_ontology_column(source_endpoint, 
+                                                     strategy_info['source_ontology'])
+                    except ConfigurationError as e:
+                        errors.append(f"Source ontology configuration error: {e}")
+                
+                if strategy_info and target:
+                    # Note: Target might use different ontology types, so we check if any exist
+                    stmt = select(EndpointPropertyConfig).where(
+                        EndpointPropertyConfig.endpoint_id == target.id
+                    )
+                    result = await session.execute(stmt)
+                    configs = result.scalars().all()
+                    if not configs:
+                        warnings.append(f"No property configurations found for target endpoint")
+            
+            return {
+                "valid": len(errors) == 0,
+                "errors": errors,
+                "warnings": warnings,
+                "strategy_info": strategy_info
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error validating strategy prerequisites: {e}")
+            raise DatabaseQueryError(f"Failed to validate prerequisites: {e}")
+    
+    async def execute_strategy_with_comprehensive_results(
+        self,
+        strategy_name: str,
+        source_endpoint: str,
+        target_endpoint: str,
+        input_identifiers: List[str],
+        use_cache: bool = True,
+        progress_callback: Optional[callable] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Execute a strategy with enhanced result processing and comprehensive output.
+        
+        This is a high-level convenience method that wraps execute_yaml_strategy
+        with additional result processing and formatting.
+        
+        Args:
+            strategy_name: Name of the strategy to execute
+            source_endpoint: Name of the source endpoint
+            target_endpoint: Name of the target endpoint
+            input_identifiers: List of input identifiers to map
+            use_cache: Whether to use cached mappings (default: True)
+            progress_callback: Optional callback for progress updates
+            **kwargs: Additional keyword arguments passed to execute_yaml_strategy
+            
+        Returns:
+            Dictionary with comprehensive results including:
+            - results: Mapping results by identifier
+            - final_identifiers: List of successfully mapped identifiers
+            - summary: Execution summary with statistics
+            - context: Any context data from bidirectional strategies
+            - metrics: Performance metrics
+            - provenance: Detailed provenance information
+            
+        Raises:
+            Various exceptions from execute_yaml_strategy
+        """
+        start_time = time.time()
+        
+        # Execute the strategy
+        result = await self.execute_yaml_strategy(
+            strategy_name=strategy_name,
+            source_endpoint_name=source_endpoint,
+            target_endpoint_name=target_endpoint,
+            input_identifiers=input_identifiers,
+            use_cache=use_cache,
+            progress_callback=progress_callback,
+            **kwargs
+        )
+        
+        # Add execution time to metrics
+        execution_time = time.time() - start_time
+        if 'metrics' not in result:
+            result['metrics'] = {}
+        result['metrics']['total_execution_time'] = execution_time
+        
+        # Enhance summary with additional statistics
+        if 'summary' in result:
+            summary = result['summary']
+            
+            # Calculate success rate
+            total_input = summary.get('total_input', 0)
+            successful = summary.get('successful_mappings', 0)
+            if total_input > 0:
+                summary['success_rate'] = (successful / total_input) * 100
+            else:
+                summary['success_rate'] = 0
+            
+            # Add timing information
+            summary['execution_time_seconds'] = execution_time
+            
+            # Categorize results by mapping status
+            if 'results' in result:
+                status_counts = {}
+                for identifier, mapping in result['results'].items():
+                    status = mapping.get('status', 'unknown')
+                    status_counts[status] = status_counts.get(status, 0) + 1
+                summary['status_breakdown'] = status_counts
+        
+        # Log comprehensive summary
+        self.logger.info(f"Strategy execution completed in {execution_time:.2f} seconds")
+        if 'summary' in result:
+            self.logger.info(f"Success rate: {result['summary']['success_rate']:.1f}%")
+            self.logger.info(f"Status breakdown: {result['summary'].get('status_breakdown', {})}")
+        
+        return result
