@@ -10,16 +10,15 @@ management, and result aggregation.
 import asyncio
 import time
 import os
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Union, Tuple, Any, Set
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from biomapper.core.cache_manager import CacheManager
-from biomapper.core.metamapper.entities import MappingPath, MappingPathStep
-from biomapper.exceptions import ClientInitializationError, PathExecutionError
-from biomapper.types import PathExecutionStatus
-from biomapper.utils.logging import get_logger
-from biomapper.utils.time_helpers import get_current_utc_time
+from .cache_manager import CacheManager
+from biomapper.db.models import MappingPath, MappingPathStep
+from biomapper.core.exceptions import ClientInitializationError, MappingExecutionError
+from biomapper.db.cache_models import PathExecutionStatus
 
 
 class PathExecutionManager:
@@ -76,7 +75,7 @@ class PathExecutionManager:
         """
         self.metamapper_session_factory = metamapper_session_factory
         self.cache_manager = cache_manager
-        self.logger = logger or get_logger(__name__)
+        self.logger = logger or logging.getLogger(__name__)
         self.semaphore = semaphore
         self.max_retries = max_retries
         self.retry_delay = retry_delay
@@ -196,7 +195,7 @@ class PathExecutionManager:
                 
                 try:
                     # Start timing the path execution
-                    path_execution_start = get_current_utc_time()
+                    path_execution_start = datetime.now(timezone.utc).isoformat()
                     
                     # Execute path steps directly for this batch
                     is_reverse_execution = getattr(path, 'is_reverse', False)
@@ -613,7 +612,7 @@ class PathExecutionManager:
             "hop_count": hop_count,
             "direction": mapping_direction,
             "log_id": log_id,
-            "execution_timestamp": datetime.utcnow().isoformat(),
+            "execution_timestamp": datetime.now(timezone.utc).isoformat(),
             "steps": {}
         }
         
