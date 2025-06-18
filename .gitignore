@@ -60,7 +60,7 @@ metamapper.db-*
 *_test.py
 *.py.new
 *_implementation.py
-*_metadata.py
+#*_metadata.py
 *_metadata_readme.md
 biomapper/settings.py  # Using biomapper/config.py instead per MEMORY[7741c86c]
 biomapper-ui/roadmap/  # Development UI files
