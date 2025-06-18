@@ -2,6 +2,7 @@ import csv
 import logging
 from typing import Dict, List, Optional, Any, Tuple
 import os
+import asyncio
 
 from biomapper.mapping.clients.base_client import BaseMappingClient, FileLookupClientMixin, CachedMappingClientMixin
 from biomapper.core.exceptions import ClientInitializationError
@@ -9,7 +10,7 @@ from biomapper.config import settings # For DATA_DIR resolution
 
 logger = logging.getLogger(__name__)
 
-class GenericFileLookupClient(CachedMappingClientMixin, FileLookupClientMixin, BaseMappingClient):
+class GenericFileLookupClient(BaseMappingClient, FileLookupClientMixin, CachedMappingClientMixin):
     """
     A generic mapping client that performs lookups in a delimited text file.
     It reads a file (e.g., TSV, CSV) into memory and maps identifiers
@@ -25,18 +26,41 @@ class GenericFileLookupClient(CachedMappingClientMixin, FileLookupClientMixin, B
     """
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
-        # Explicitly initialize mixins and base class in a controlled order.
+        # Initialize base class first
         BaseMappingClient.__init__(self, config)
-        FileLookupClientMixin.__init__(self) 
+        
+        # Set attributes needed by FileLookupClientMixin manually
+        self._file_path_key = "file_path"
+        self._key_column_key = "key_column"
+        self._value_column_key = "value_column"
+        
+        # Initialize cache
         cache_size = self.get_config_value('cache_size', 1024)
-        CachedMappingClientMixin.__init__(self, cache_size=cache_size)
+        self._cache: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
+        self._cache_size = cache_size
+        self._cache_hits = 0
+        self._cache_misses = 0
+        self._cache_initialized = False
+        self._cache_lock = asyncio.Lock()
         
         self._lookup_data: Dict[str, List[str]] = {}
         self._load_data() # Load data synchronously during initialization
+    
+    def _get_file_path(self) -> str:
+        """Get the file path from the configuration."""
+        return self._config.get(self._file_path_key, "")
+    
+    def _get_key_column(self) -> str:
+        """Get the key column name from the configuration."""
+        return self._config.get(self._key_column_key, "")
+    
+    def _get_value_column(self) -> str:
+        """Get the value column name from the configuration."""
+        return self._config.get(self._value_column_key, "")
 
     def get_required_config_keys(self) -> List[str]:
-        parent_keys = FileLookupClientMixin.get_required_config_keys(self)
-        return parent_keys + ['delimiter']
+        # Return static list of required keys
+        return ['file_path', 'key_column', 'value_column', 'delimiter']
 
     def _resolve_data_dir(self, file_path: str) -> str:
         """Resolves ${DATA_DIR} placeholder in the file path."""
@@ -160,3 +184,23 @@ class GenericFileLookupClient(CachedMappingClientMixin, FileLookupClientMixin, B
                 await self._add_to_cache(identifier, formatted_result)
 
         return results
+    
+    async def _get_from_cache(self, identifier: str) -> Optional[Tuple[Optional[List[str]], Optional[str]]]:
+        """Get a mapping result from the cache."""
+        async with self._cache_lock:
+            result = self._cache.get(identifier)
+            if result is not None:
+                self._cache_hits += 1
+            else:
+                self._cache_misses += 1
+            return result
+    
+    async def _add_to_cache(self, identifier: str, result: Tuple[Optional[List[str]], Optional[str]]) -> None:
+        """Add a mapping result to the cache."""
+        async with self._cache_lock:
+            # Simple LRU-like behavior: if cache is full, remove a random entry
+            if len(self._cache) >= self._cache_size:
+                # Remove an arbitrary key (first one)
+                self._cache.pop(next(iter(self._cache)))
+            
+            self._cache[identifier] = result

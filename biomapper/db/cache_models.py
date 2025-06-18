@@ -55,6 +55,8 @@ class EntityMapping(Base):
     hop_count = Column(Integer, nullable=True)  # Number of hops in the path
     mapping_direction = Column(String, nullable=True)  # 'forward', 'reverse', etc.
 
+    path_execution_log_id = Column(Integer, ForeignKey("path_execution_logs.id"), nullable=True)
+
     # Bidirectional uniqueness constraint
     # Note: Removed postgresql_using='btree' from idx_usage_count for SQLite compatibility
     __table_args__ = (
@@ -65,12 +67,14 @@ class EntityMapping(Base):
         Index("idx_target_lookup", "target_id", "target_type"),
         Index("idx_usage_count", "usage_count"),
         Index("idx_expiration", "expires_at"),
+        Index("idx_path_execution_log_id", "path_execution_log_id"),
     )
 
     # Relationships
     metadata_items = relationship(
         "MappingMetadata", back_populates="mapping", cascade="all, delete-orphan"
     )
+    execution_log = relationship("PathExecutionLog")
 
     def __repr__(self):
         """String representation of the mapping."""

@@ -661,7 +661,7 @@ async def populate_mapping_resources(session: AsyncSession, databases_data: Dict
                 name=client_name,
                 description=client_config.get('description', ''),
                 resource_type=client_config.get('type', 'client'),
-                client_class_path=client_config.get('class'),
+                client_class_path=client_config.get('client_class_path'),
                 input_ontology_term=client_config.get('input_ontology_type'),
                 output_ontology_term=client_config.get('output_ontology_type'),
                 config_template=json.dumps(resolve_environment_variables(

@@ -53,11 +53,40 @@ from biomapper.core import MappingExecutor
 from biomapper.config import settings
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+log_dir = BIOMAPPER_ROOT / "logs"
+log_dir.mkdir(exist_ok=True)
+log_file_name = f"ukbb_hpa_pipeline_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+log_file_path = log_dir / log_file_name
+
+# Get the root logger and configure it directly for more robustness
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO) # Ensure level is set on the root logger
+
+# Remove any existing handlers from the root logger
+for handler in root_logger.handlers[:]:
+    root_logger.removeHandler(handler)
+    handler.close() # Close the handler to release resources
+
+# Define a common formatter
+log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Add a StreamHandler for console output
+stream_handler = logging.StreamHandler(sys.stdout)
+stream_handler.setFormatter(log_formatter)
+root_logger.addHandler(stream_handler)
+
+# Add a FileHandler for file output
+try:
+    file_handler = logging.FileHandler(log_file_path)
+    file_handler.setFormatter(log_formatter)
+    root_logger.addHandler(file_handler)
+except Exception as e:
+    # If FileHandler fails, print to stderr and continue with StreamHandler only
+    print(f"Critical: Failed to initialize file logger at {log_file_path}: {e}", file=sys.stderr)
+
+
+logger = logging.getLogger(__name__) # Get a logger for this module (will use root config)
+logger.info(f"Logging initialized. Log file: {log_file_path}") # Test message
 
 # ============================================================================
 # CONFIGURATION VARIABLES

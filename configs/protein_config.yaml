@@ -145,7 +145,7 @@ databases:
       name: "UKBB_PROTEIN"
       type: "file_tsv"
       connection_details:
-        file_path: "/procedure/data/local_data/UKBB_Protein_Meta.tsv"
+        file_path: "/home/ubuntu/biomapper/data/UKBB_Protein_Meta.tsv"
         delimiter: "\t"
         
     properties:
@@ -167,7 +167,7 @@ databases:
         input_ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
         output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
         config:
-          file_path: "/procedure/data/local_data/UKBB_Protein_Meta.tsv"
+          file_path: "/home/ubuntu/biomapper/data/UKBB_Protein_Meta.tsv"
           key_column: "Assay"
           value_column: "UniProt"
           delimiter: "\t"
@@ -177,7 +177,7 @@ databases:
         input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
         output_ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
         config:
-          file_path: "/procedure/data/local_data/UKBB_Protein_Meta.tsv"
+          file_path: "/home/ubuntu/biomapper/data/UKBB_Protein_Meta.tsv"
           key_column: "UniProt"
           value_column: "Assay"
           delimiter: "\t"

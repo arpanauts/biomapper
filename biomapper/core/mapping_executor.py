@@ -39,6 +39,8 @@ from biomapper.core.exceptions import (
 from biomapper.core.engine_components.strategy_handler import StrategyHandler
 from biomapper.core.engine_components.path_finder import PathFinder
 from biomapper.core.engine_components.reversible_path import ReversiblePath
+from biomapper.core.engine_components.cache_manager import CacheManager
+from biomapper.core.engine_components.strategy_orchestrator import StrategyOrchestrator
 
 # Import models for metamapper DB
 from ..db.models import (
@@ -378,6 +380,21 @@ class MappingExecutor(CompositeIdentifierMixin):
         )
         # Define an async session property for easier access
         self.async_cache_session = self.CacheSessionFactory
+        
+        # Initialize CacheManager
+        self.cache_manager = CacheManager(
+            cache_sessionmaker=self.CacheSessionFactory,
+            logger=self.logger
+        )
+        
+        # Initialize StrategyOrchestrator
+        self.strategy_orchestrator = StrategyOrchestrator(
+            metamapper_session_factory=self.MetamapperSessionFactory,
+            cache_manager=self.cache_manager,
+            strategy_handler=self.strategy_handler,
+            mapping_executor=self,  # Pass self for backwards compatibility
+            logger=self.logger
+        )
 
     async def _init_db_tables(self, engine, base_metadata):
         """Initialize database tables if they don't exist.
@@ -538,211 +555,6 @@ class MappingExecutor(CompositeIdentifierMixin):
             # Catch other potential errors during detail retrieval
             self.logger.warning(f"Unexpected error getting path details for {path_id}: {str(e)}", exc_info=True)
             return {} # Return empty dict on error, don't block the main operation
-
-    async def _cache_results(
-        self,
-        results_to_cache: Dict[str, Dict[str, Any]],
-        path: Union[MappingPath, "ReversiblePath"],
-        source_ontology: str,
-        target_ontology: str,
-        mapping_session_id: Optional[int] = None
-    ):
-        """
-        Store successful mapping results in the cache.
-        
-        Calculates and populates metadata fields:
-        - confidence_score: Based on path length and direction.
-        - hop_count: Number of steps in the executed path.
-        - mapping_direction: Whether the path was executed in "forward" or "reverse" direction.
-        - mapping_path_details: Structured JSON information about the path execution.
-        
-        Args:
-            results_to_cache: Dictionary of source identifiers to mapping results.
-            path: MappingPath or ReversiblePath that was executed.
-            source_ontology: Source ontology type.
-            target_ontology: Target ontology type.
-            mapping_session_id: Optional ID of the mapping session.
-        
-        Returns:
-            The ID of the created path execution log entry, or None if no results cached.
-        
-        Raises:
-            CacheStorageError: If there is an error storing the results in the cache.
-            CacheTransactionError: If there is an error during the database transaction.
-            CacheError: For other unexpected caching errors.
-        """
-        # Skip if no results to cache
-        if not results_to_cache:
-            self.logger.debug("No results to cache")
-            return None # Return None explicitly
-
-        path_id = path.id
-        path_name = path.name
-        self.logger.debug(f"Caching results for path ID: {path_id}, Name: {path_name}")
-
-        # Retrieve detailed path information using the helper method
-        try:
-            path_step_details = await self._get_path_details(path_id)
-        except Exception as e:
-            # Log error but proceed with caching if possible, using empty details
-            self.logger.error(f"Failed to retrieve path details for {path_id} during caching: {e}", exc_info=True)
-            path_step_details = {}
-
-        # Determine if this is a reverse path
-        is_reversed = getattr(path, "is_reverse", False)
-        mapping_direction = "reverse" if is_reversed else "forward"
-
-        # Calculate hop count from path steps if available
-        hop_count = len(path.steps) if hasattr(path, "steps") and path.steps else None
-        self.logger.debug(f"Path {path_id} - Reversed: {is_reversed}, Hop Count: {hop_count}")
-
-        # Prepare the rich path details JSON structure
-        mapping_path_info = {
-            "path_id": path_id,
-            "path_name": path_name,
-            "is_reversed": is_reversed,
-            "hop_count": hop_count,
-            "steps": path_step_details # Use the retrieved step details
-        }
-        try:
-            # Serialize to JSON
-            path_details_json = json.dumps(mapping_path_info, cls=PydanticEncoder)
-        except Exception as e:
-            self.logger.error(f"Failed to serialize path details for {path_id} to JSON: {e}", exc_info=True)
-            path_details_json = json.dumps({"error": "Failed to serialize path details"}, cls=PydanticEncoder) # Fallback JSON
-
-        # Calculate match count accurately
-        input_count = len(results_to_cache)
-        match_count = sum(
-            1 for res in results_to_cache.values()
-            if res.get("target_identifiers") and any(res["target_identifiers"])
-        )
-        self.logger.debug(f"Input Count: {input_count}, Match Count: {match_count}")
-
-        # Create a mapping execution log entry (initially without ID)
-        log_entry = MappingPathExecutionLog(
-            path_id=path_id,
-            source_ontology_type=source_ontology,
-            target_ontology_type=target_ontology,
-            session_id=mapping_session_id,
-            execution_time=get_current_utc_time(), # Use helper method
-            status=PathExecutionStatus.SUCCESS,
-            input_count=input_count,
-            match_count=match_count,
-            path_details_json=path_details_json # Store the full JSON here now
-        )
-
-        entity_mappings = []
-        current_time = get_current_utc_time() # Get time once for consistency
-
-        for source_id, result in results_to_cache.items():
-            target_identifiers = result.get("target_identifiers", [])
-            # Ensure target_identifiers is always a list
-            if not isinstance(target_identifiers, list):
-                target_identifiers = [target_identifiers] if target_identifiers is not None else []
-            
-            # Filter out None values from target identifiers
-            valid_target_ids = [tid for tid in target_identifiers if tid is not None]
-
-            if not valid_target_ids:
-                self.logger.debug(f"No valid target identifiers found for source {source_id}")
-                continue
-
-            # Calculate confidence score based on mapping path characteristics
-            confidence_score = self._calculate_confidence_score(result, hop_count, is_reversed, path_step_details)
-            
-            self.logger.debug(f"Source: {source_id}, Hops: {hop_count}, Reversed: {is_reversed}, Confidence: {confidence_score}")
-
-            # Create mapping_path_details JSON with complete path information
-            mapping_path_details_dict = self._create_mapping_path_details(
-                path_id=path_id,
-                path_name=path_name,
-                hop_count=hop_count,
-                mapping_direction=mapping_direction,
-                path_step_details=path_step_details,
-                log_id=log_entry.id if log_entry and log_entry.id else None,
-                additional_metadata=result.get("additional_metadata")
-            )
-            try:
-                mapping_path_details = json.dumps(mapping_path_details_dict, cls=PydanticEncoder)
-            except Exception as e:
-                self.logger.error(f"Failed to serialize mapping_path_details for {source_id} to JSON: {e}", exc_info=True)
-                mapping_path_details = json.dumps({"error": "Failed to serialize details"}, cls=PydanticEncoder)
-
-            # Create entity mapping for each valid target identifier
-            for target_id in valid_target_ids:
-                # Determine mapping source based on path details
-                source_type = self._determine_mapping_source(path_step_details)
-                
-                entity_mapping = EntityMapping(
-                    source_id=str(source_id),  # Updated to match field names in cache_models.py
-                    source_type=source_ontology,
-                    target_id=str(target_id),
-                    target_type=target_ontology,
-                    mapping_source=source_type,  # Set mapping_source from our helper function
-                    last_updated=current_time,
-                    
-                    # Enhanced metadata fields:
-                    confidence_score=confidence_score,
-                    hop_count=hop_count,
-                    mapping_direction=mapping_direction,
-                    mapping_path_details=mapping_path_details
-                )
-                entity_mappings.append(entity_mapping)
-
-        if not entity_mappings:
-            self.logger.warning(f"No valid entity mappings generated for path {path_id}, despite having results to cache. Check input data.")
-            # Optionally, still log the execution attempt even if no mappings are created
-            try:
-                async with self.get_cache_session() as session:
-                    log_entry.status = PathExecutionStatus.SUCCESS_NO_MATCH # Indicate success but no mappings
-                    log_entry.match_count = 0 # Correct match count
-                    session.add(log_entry)
-                    await session.commit()
-                    self.logger.info(f"Logged execution for path {path_id} with no resulting mappings.")
-                    return log_entry.id
-            except Exception as e:
-                 self.logger.error(f"Failed to log no-match execution for path {path_id}: {e}", exc_info=True)
-                 # Decide how to handle this - maybe raise CacheError? For now, just log.
-                 return None # Indicate failure to log
-            # return None # Indicate nothing was cached
-
-        # Store the log entry and mappings in the cache database
-        log_entry_id = None
-        try:
-            async with self.get_cache_session() as session:
-                # Add the log entry first to get its ID
-                session.add(log_entry)
-                await session.flush() # Generate the ID for log_entry
-                log_entry_id = log_entry.id
-                self.logger.debug(f"Created MappingPathExecutionLog entry with ID: {log_entry_id}")
-
-                # Update entity mappings with the log entry ID
-                for mapping in entity_mappings:
-                    mapping.path_execution_log_id = log_entry_id
-                
-                # Add all entity mappings
-                session.add_all(entity_mappings)
-                await session.commit() # Commit the transaction
-
-                self.logger.info(f"Successfully cached {len(entity_mappings)} mappings and execution log (ID: {log_entry_id}) for path {path_id}.")
-                return log_entry_id # Return the ID of the log entry
-
-        except IntegrityError as e:
-            await session.rollback() # Rollback on integrity error (e.g., duplicate)
-            self.logger.error(f"IntegrityError during cache storage for path {path_id}: {str(e)}")
-            raise CacheStorageError(f"Error storing mapping results in cache: {str(e)}", original_exception=e)
-        except SQLAlchemyError as e:
-            await session.rollback() # Rollback on other DB errors
-            self.logger.error(f"SQLAlchemyError during cache transaction for path {path_id}: {str(e)}", exc_info=True)
-            raise CacheTransactionError(f"Error during cache transaction: {str(e)}", original_exception=e)
-        except Exception as e:
-            # Ensure rollback happens even for unexpected errors within the 'try' block
-            # Check if session is active before rolling back
-            if 'session' in locals() and session.is_active:
-                await session.rollback()
-            self.logger.error(f"Unexpected error during caching for path {path_id}: {str(e)}", exc_info=True)
-            raise CacheError(f"Unexpected error during caching: {str(e)}", original_exception=e)
 
     async def _find_paths_for_relationship(
         self, 
@@ -1183,233 +995,8 @@ class MappingExecutor(CompositeIdentifierMixin):
                 details=error_details,
             ) from e
 
-    async def _get_path_details_from_log(
-        self, cache_session: AsyncSession, path_log_id: int
-    ) -> Dict[str, Any]:
-        """
-        Get path details for a given path execution log.
 
-        Args:
-            cache_session: Database session for the cache database
-            path_log_id: ID of the PathExecutionLog
 
-        Returns:
-            Dict with path details (hop_count, resource types, etc.)
-        """
-        try:
-            path_log = await cache_session.get(MappingPathExecutionLog, path_log_id)
-        except SQLAlchemyError as e:
-            self.logger.error(
-                f"Cache retrieval error getting path log ID {path_log_id}: {e}",
-                exc_info=True,
-            )
-            raise CacheRetrievalError(
-                f"[{ErrorCode.CACHE_RETRIEVAL_ERROR}] Error during cache lookup query. (original_exception={type(e).__name__}: {e})",
-                details={"log_id": path_log_id},
-            ) from e
-
-        if not path_log:
-            self.logger.warning(f"PathExecutionLog with ID {path_log_id} not found")
-            return {
-                "hop_count": 1,
-                "resource_types": ["unknown"],
-                "client_identifiers": ["unknown"],
-            }
-
-        # Get the mapping path ID
-        path_id = path_log.relationship_mapping_path_id
-
-        # Create a session for metamapper DB to get full path details
-        async with self.async_metamapper_session() as meta_session:
-            # Use the helper method to get path details
-            return await self._get_path_details(meta_session, path_id)
-
-    async def _create_mapping_log(
-        self,
-        cache_session: AsyncSession,
-        path_id: int,
-        status: PathExecutionStatus,
-        representative_source_id: str,
-        source_entity_type: str,
-    ) -> MappingPathExecutionLog:
-        """
-        Create a new path execution log entry.
-
-        Args:
-            cache_session: The cache database session
-            path_id: The ID of the mapping path being executed
-            status: Initial status of the path execution
-            representative_source_id: A source ID to represent this execution batch
-            source_entity_type: The ontology type of the source entities
-
-        Returns:
-            The created PathExecutionLog instance
-        """
-        try:
-            now = datetime.now(timezone.utc)
-            log_entry = MappingPathExecutionLog(
-                relationship_mapping_path_id=path_id,
-                status=status,
-                start_time=now,
-                source_entity_id=representative_source_id,  # Updated field name
-                source_entity_type=source_entity_type,
-            )
-            cache_session.add(log_entry)
-            await cache_session.flush()  # Ensure ID is generated
-            await cache_session.commit() # Commit to make it visible to other sessions
-            return log_entry
-        except SQLAlchemyError as e:
-            self.logger.error(f"Cache storage error creating path log: {e}", exc_info=True)
-            raise CacheStorageError(
-                f"[{ErrorCode.CACHE_STORAGE_ERROR}] Failed to create path execution log entry. (original_exception={type(e).__name__}: {e})",
-                details={"path_id": path_id, "source_id": representative_source_id},
-            ) from e
-
-    async def _check_cache(
-        self,
-        input_identifiers: List[str],
-        source_ontology: str,
-        target_ontology: str,
-        mapping_path_id: Optional[int] = None,
-        expiry_time: Optional[datetime] = None,
-    ) -> Dict[str, Dict[str, Any]]:
-        """
-        Check cache for existing mapping results.
-
-        Args:
-            input_identifiers: List of identifiers to check for cached mappings
-            source_ontology: The ontology type of the source entities
-            target_ontology: The ontology type of the target entities
-            mapping_path_id: Optional ID of the mapping path to filter results by
-            expiry_time: Optional cutoff time for result freshness
-
-        Returns:
-            Dictionary mapping input identifiers to result dictionaries containing target IDs and metadata
-        """
-        if not input_identifiers:
-            return {}
-
-        results = {}
-
-        try:
-            async with self.async_cache_session() as cache_session:
-                # Construct base query
-                stmt = select(EntityMapping).where(
-                    EntityMapping.source_type == source_ontology,
-                    EntityMapping.target_type == target_ontology
-                )
-
-                # Add filter for source_id based on the number of identifiers
-                if len(input_identifiers) == 1:
-                    stmt = stmt.where(EntityMapping.source_id == input_identifiers[0])
-                elif len(input_identifiers) > 1:
-                    stmt = stmt.where(EntityMapping.source_id.in_(input_identifiers))
-                else: # len == 0
-                    return {} # No identifiers, return empty cache results
-
-                # Add timestamp filtering if expiry_time is provided
-                if expiry_time:
-                    stmt = stmt.where(EntityMapping.last_updated >= expiry_time)
-
-                try:
-                    # Execute query
-                    result = await cache_session.execute(stmt)
-                    mappings = result.scalars().all()
-                except SQLAlchemyError as e:
-                    self.logger.error(f"Cache query execution failed: {e}", exc_info=True)
-                    raise CacheRetrievalError(
-                        f"Error during cache lookup query",
-                        details={"source_type": source_ontology, "target_type": target_ontology, "count": len(input_identifiers), "error": str(e)}
-                    ) from e
-                except Exception as e:
-                    self.logger.error(f"Unexpected error during cache retrieval: {e}", exc_info=True)
-                    raise CacheError(
-                        f"Unexpected error during cache retrieval",
-                        error_code=ErrorCode.UNKNOWN_ERROR,
-                        details={"error": str(e)}
-                    ) from e
-
-                # Process the mappings
-                for mapping in mappings:
-                    # If mapping_path_id is specified, check if it matches
-                    should_include = True
-                    if mapping_path_id is not None and mapping.mapping_path_details:
-                        # Extract path_id from the JSON string
-                        try:
-                            if isinstance(mapping.mapping_path_details, str):
-                                path_details = json.loads(mapping.mapping_path_details)
-                            else:
-                                path_details = mapping.mapping_path_details
-                                
-                            stored_path_id = path_details.get('path_id')
-                            if stored_path_id != mapping_path_id:
-                                should_include = False
-                        except (json.JSONDecodeError, AttributeError, TypeError):
-                            # If we can't determine the path ID, don't include this result
-                            should_include = False
-                    
-                    if should_include:
-                        # Format the result with consistent structure
-                        target_identifiers = None
-                        if mapping.target_id:
-                            # Check if it's a JSON array
-                            try:
-                                if mapping.target_id.startswith('[') and mapping.target_id.endswith(']'):
-                                    # It's a JSON array of target IDs
-                                    target_identifiers = json.loads(mapping.target_id)
-                                else:
-                                    # Single target ID
-                                    target_identifiers = [mapping.target_id]
-                            except (json.JSONDecodeError, AttributeError):
-                                # Fallback to treating as a single ID
-                                target_identifiers = [mapping.target_id]
-                        
-                        # Get mapping path details
-                        path_details = None
-                        if mapping.mapping_path_details:
-                            try:
-                                if isinstance(mapping.mapping_path_details, str):
-                                    path_details = json.loads(mapping.mapping_path_details)
-                                else:
-                                    path_details = mapping.mapping_path_details
-                            except (json.JSONDecodeError, TypeError):
-                                # If invalid, leave as None
-                                pass
-                                
-                        # Create a result structure that matches what _execute_path returns
-                        results[mapping.source_id] = {
-                            "source_identifier": mapping.source_id,
-                            "target_identifiers": target_identifiers,
-                            "mapped_value": target_identifiers[0] if target_identifiers else None,  # First target ID is the primary mapped value
-                            "status": PathExecutionStatus.SUCCESS.value,
-                            "message": "Found in cache.",
-                            "confidence_score": mapping.confidence_score or 0.8,  # Default if not set
-                            "mapping_path_details": path_details,
-                            "hop_count": mapping.hop_count,
-                            "mapping_direction": mapping.mapping_direction,
-                            "cached": True,  # Flag indicating this was from cache
-                        }
-
-                return results
-
-        except SQLAlchemyError as e:
-            self.logger.error(f"Database error checking cache: {e}", exc_info=True)
-            raise CacheRetrievalError(
-                f"Error during cache lookup query",
-                details={
-                    "source_type": source_ontology,
-                    "target_type": target_ontology,
-                    "count": len(input_identifiers),
-                    "error": str(e)
-                }
-            ) from e
-        except Exception as e:
-            self.logger.error(f"Unexpected error checking cache: {e}", exc_info=True)
-            raise CacheError(
-                f"Unexpected error during cache retrieval",
-                error_code=ErrorCode.UNKNOWN_ERROR,
-                details={"error": str(e)}
-            ) from e
 
     async def execute_mapping(
         self,
@@ -1775,11 +1362,16 @@ class MappingExecutor(CompositeIdentifierMixin):
                                 cached_derived_mapping = None
                                 if use_cache:
                                     self.logger.debug(f"Checking cache for derived ID: {derived_primary_id} ({primary_source_ontology}) -> {primary_target_ontology}")
-                                    cache_results_for_derived = await self._get_cached_mappings(
-                                        primary_source_ontology,    # Ontology of derived_primary_id
-                                        primary_target_ontology,    # Target ontology
-                                        [derived_primary_id],       # The specific derived ID
-                                        max_age_days=max_cache_age_days
+                                    # Calculate expiry time if max_cache_age_days is specified
+                                    expiry_time = None
+                                    if max_cache_age_days is not None:
+                                        expiry_time = datetime.now(timezone.utc) - timedelta(days=max_cache_age_days)
+                                    
+                                    cache_results_for_derived, _ = await self.cache_manager.check_cache(
+                                        input_identifiers=[derived_primary_id],
+                                        source_ontology=primary_source_ontology,
+                                        target_ontology=primary_target_ontology,
+                                        expiry_time=expiry_time
                                     )
                                     if cache_results_for_derived and derived_primary_id in cache_results_for_derived:
                                         cached_derived_mapping = cache_results_for_derived[derived_primary_id]
@@ -2334,7 +1926,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                             }
                         
                         # Calculate confidence score
-                        confidence_score = self._calculate_confidence_score(
+                        confidence_score = self.cache_manager.calculate_confidence_score(
                             {}, 
                             hop_count, 
                             getattr(path, 'is_reverse', False),
@@ -2344,7 +1936,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                         self.logger.debug(f"Source: {original_id}, Hops: {hop_count}, Reversed: {getattr(path, 'is_reverse', False)}, Confidence: {confidence_score}")
                         
                         # Create mapping path details
-                        mapping_path_details = self._create_mapping_path_details(
+                        mapping_path_details = self.cache_manager.create_mapping_path_details(
                             path_id=path_id,
                             path_name=path_name,
                             hop_count=hop_count,
@@ -2369,7 +1961,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                             "mapping_path_details": mapping_path_details,
                             "hop_count": hop_count,
                             "mapping_direction": mapping_direction,
-                            "mapping_source": self._determine_mapping_source(path_step_details)
+                            "mapping_source": self.cache_manager.determine_mapping_source(path_step_details)
                         }
                     
                     return batch_results
@@ -2456,6 +2048,20 @@ class MappingExecutor(CompositeIdentifierMixin):
                 await self.track_mapping_metrics("path_execution", metrics)
             except Exception as e:
                 self.logger.warning(f"Failed to track metrics: {str(e)}")
+
+        # After processing all batches, store successful results in the cache
+        if combined_results:
+            try:
+                self.logger.info(f"Caching {len(combined_results)} results for path {path.id}")
+                await self.cache_manager.store_mapping_results(
+                    results_to_cache=combined_results,
+                    path=path,
+                    source_ontology=source_ontology,
+                    target_ontology=target_ontology,
+                    mapping_session_id=mapping_session_id
+                )
+            except Exception as e:
+                self.logger.error(f"Failed to cache results for path {path.id}: {e}", exc_info=True)
         
         return combined_results
 
@@ -2860,188 +2466,20 @@ class MappingExecutor(CompositeIdentifierMixin):
             >>> print(f"Final identifiers: {result['final_identifiers']}")
             >>> print(f"Step results: {len(result['step_results'])}")
         """
-        
-        # Use strategy handler for loading and execution
-        async with self.async_metamapper_session() as session:
-            # Load the strategy
-            strategy = await self.strategy_handler.load_strategy(session, strategy_name)
-            
-            # Load source and target endpoints
-            source_endpoint = await self.strategy_handler.get_endpoint_by_name(session, source_endpoint_name)
-            target_endpoint = await self.strategy_handler.get_endpoint_by_name(session, target_endpoint_name)
-            
-            if not source_endpoint:
-                raise ConfigurationError(f"Source endpoint '{source_endpoint_name}' not found")
-            if not target_endpoint:
-                raise ConfigurationError(f"Target endpoint '{target_endpoint_name}' not found")
-            
-            # Prepare initial context
-            initial_context = {
-                'initial_identifiers': input_identifiers.copy(),
-                'step_results': [],
-                'all_provenance': [],
-                'mapping_results': {},
-                'progress_callback': progress_callback
-            }
-            
-            # Execute strategy using the strategy handler
-            execution_result = await self.strategy_handler.execute_strategy(
-                session=session,
-                strategy=strategy,
-                input_identifiers=input_identifiers,
-                source_endpoint=source_endpoint,
-                target_endpoint=target_endpoint,
-                use_cache=use_cache,
-                max_cache_age_days=max_cache_age_days,
-                batch_size=batch_size,
-                min_confidence=min_confidence,
-                initial_context=initial_context
-            )
-            
-            # Extract data from execution result
-            step_results = execution_result['step_results']
-            strategy_context = execution_result['context']
-            current_identifiers = strategy_context.get('current_identifiers', [])
-            current_ontology_type = strategy_context.get('current_ontology_type', strategy.default_source_ontology_type)
-            overall_provenance = strategy_context.get('all_provenance', [])
-        
-        # Prepare final results
-        final_target_ontology = target_ontology_type or strategy.default_target_ontology_type
-        
-        # Create mapping dictionary from input to final output
-        mapping_results = {}
-        
-        # Build a mapping from input identifiers to their final mapped values using provenance
-        # Track which input IDs have been successfully mapped through the entire pipeline
-        input_to_final_mapping = {}
-        
-        # First, initialize all input identifiers as unmapped
-        for input_id in input_identifiers:
-            mapping_results[input_id] = {
-                'mapped_value': None,
-                'confidence': 0.0,
-                'error': 'No mapping found',
-                'source_ontology': source_ontology_type or strategy.default_source_ontology_type,
-                'target_ontology': final_target_ontology,
-                'strategy_name': strategy_name,
-                'provenance': []
-            }
-        
-        # Process provenance to build complete mapping chains
-        if overall_provenance:
-            # Helper function to trace through the complete mapping chain
-            def trace_mapping_chain(source_id, provenance_list, visited=None):
-                """Recursively trace through the mapping chain to find final target."""
-                # Initialize visited set on first call
-                if visited is None:
-                    visited = set()
-                
-                # Check if we've already visited this ID to prevent infinite recursion
-                if source_id in visited:
-                    return []
-                
-                # Mark this ID as visited
-                visited.add(source_id)
-                
-                # Find provenance entries where this ID is the source
-                mappings = [p for p in provenance_list if p.get('source_id') == source_id and p.get('target_id')]
-                
-                if not mappings:
-                    # No mapping found, check if it was filtered but passed
-                    filter_entries = [p for p in provenance_list if p.get('source_id') == source_id and p.get('action') == 'filter_passed']
-                    if filter_entries:
-                        # It passed the filter but has no further mapping, return the ID itself
-                        return [source_id]
-                    return []
-                
-                # For each mapping, trace to see if it maps further
-                final_targets = []
-                for mapping in mappings:
-                    target = mapping['target_id']
-                    # Check if this target maps to something else
-                    further_mappings = trace_mapping_chain(target, provenance_list, visited)
-                    if further_mappings:
-                        final_targets.extend(further_mappings)
-                    else:
-                        # This target doesn't map further, so it's a final target
-                        final_targets.append(target)
-                
-                return final_targets
-            
-            # For each original input identifier, trace through the provenance chain
-            for input_id in input_identifiers:
-                # Find all provenance entries related to this input
-                input_provenance = [p for p in overall_provenance if p.get('source_id') == input_id]
-                
-                # Trace through the chain to find final targets
-                final_targets = trace_mapping_chain(input_id, overall_provenance)
-                
-                if final_targets:
-                    # Calculate confidence based on the provenance chain
-                    confidence = 1.0
-                    for prov in input_provenance:
-                        if 'confidence' in prov:
-                            confidence = min(confidence, prov['confidence'])
-                    
-                    mapping_results[input_id] = {
-                        'mapped_value': final_targets[0],
-                        'all_mapped_values': final_targets,  # Include all mapped values
-                        'confidence': confidence,
-                        'source_ontology': source_ontology_type or strategy.default_source_ontology_type,
-                        'target_ontology': final_target_ontology,
-                        'strategy_name': strategy_name,
-                        'provenance': input_provenance
-                    }
-        else:
-            # Fallback: If no provenance but we have current_identifiers, 
-            # it means all steps preserved order (no filtering/expansion)
-            # This is unlikely with the current action implementations but kept for safety
-            if len(current_identifiers) == len(input_identifiers):
-                for i, input_id in enumerate(input_identifiers):
-                    if i < len(current_identifiers) and current_identifiers[i]:
-                        mapping_results[input_id] = {
-                            'mapped_value': current_identifiers[i],
-                            'confidence': 1.0,
-                            'source_ontology': source_ontology_type or strategy.default_source_ontology_type,
-                            'target_ontology': final_target_ontology,
-                            'strategy_name': strategy_name,
-                            'provenance': []
-                        }
-        
-        # Update context with final mapping results
-        strategy_context['mapping_results'] = mapping_results
-        
-        return {
-            'results': mapping_results,
-            'metadata': {
-                'strategy_name': strategy_name,
-                'source_endpoint': source_endpoint_name,
-                'target_endpoint': target_endpoint_name,
-                'source_ontology': source_ontology_type or strategy.default_source_ontology_type,
-                'target_ontology': final_target_ontology,
-                'steps_executed': len(step_results),
-                'provenance_entries': len(overall_provenance)
-            },
-            'step_results': step_results,
-            'statistics': {
-                'total_input': len(input_identifiers),
-                'total_mapped': len([r for r in mapping_results.values() if r.get('mapped_value')]),
-                'total_unmapped': len([r for r in mapping_results.values() if not r.get('mapped_value')]),
-                'success_rate': len([r for r in mapping_results.values() if r.get('mapped_value')]) / len(input_identifiers) * 100 if input_identifiers else 0
-            },
-            'final_identifiers': current_identifiers,
-            'final_ontology_type': current_ontology_type,
-            'summary': {
-                'strategy_name': strategy_name,
-                'total_input': len(input_identifiers),
-                'total_mapped': len([r for r in mapping_results.values() if r.get('mapped_value')]),
-                'total_unmapped': len([r for r in mapping_results.values() if not r.get('mapped_value')]),
-                'steps_executed': len(step_results),
-                'step_results': step_results
-            },
-            'context': strategy_context  # Include the final strategy context
-        }
-    
+        # Delegate to StrategyOrchestrator
+        return await self.strategy_orchestrator.execute_strategy(
+            strategy_name=strategy_name,
+            input_identifiers=input_identifiers,
+            source_endpoint_name=source_endpoint_name,
+            target_endpoint_name=target_endpoint_name,
+            source_ontology_type=source_ontology_type,
+            target_ontology_type=target_ontology_type,
+            use_cache=use_cache,
+            max_cache_age_days=max_cache_age_days,
+            progress_callback=progress_callback,
+            batch_size=batch_size,
+            min_confidence=min_confidence,
+        )
     async def _get_endpoint_by_name(self, session: AsyncSession, endpoint_name: str) -> Optional[Endpoint]:
         """
         Retrieve an endpoint configuration by name from the metamapper database.
@@ -3272,162 +2710,6 @@ class MappingExecutor(CompositeIdentifierMixin):
                 details={"session_id": session_id},
             ) from e
             
-    def _calculate_confidence_score(
-        self, 
-        result: Dict[str, Any], 
-        hop_count: Optional[int], 
-        is_reversed: bool, 
-        path_step_details: Dict[str, Any]
-    ) -> float:
-        """
-        Calculate confidence score based on mapping characteristics.
-        
-        The confidence score is determined by:
-        1. Existing score in the result (if provided)
-        2. Number of hops in the mapping path
-        3. Whether the path was executed in reverse
-        4. Type of mapping resources used (e.g., direct API vs RAG)
-        
-        Args:
-            result: The mapping result dictionary
-            hop_count: Number of steps in the mapping path
-            is_reversed: Whether the path was executed in reverse
-            path_step_details: Detailed information about the path steps
-            
-        Returns:
-            A confidence score between 0.0 and 1.0
-        """
-        # Check if result already has a confidence score
-        if result.get("confidence_score") is not None:
-            return result["confidence_score"]
-        
-        # Base confidence calculation from hop count
-        if hop_count is not None:
-            if hop_count <= 1:
-                base_confidence = 0.95  # Direct mapping (highest confidence)
-            elif hop_count == 2:
-                base_confidence = 0.85  # 2-hop mapping (high confidence)
-            else:
-                # Decrease confidence for longer paths: 0.95 → 0.85 → 0.75 → 0.65 → ...
-                base_confidence = max(0.15, 0.95 - ((hop_count - 1) * 0.1))
-        else:
-            base_confidence = 0.7  # Default if hop_count is unknown
-        
-        # Apply penalty for reverse paths
-        if is_reversed:
-            base_confidence = max(0.1, base_confidence - 0.1)
-        
-        # Apply additional adjustments based on resource types
-        resource_types = []
-        for step_key, step_info in path_step_details.items():
-            if not isinstance(step_info, dict):
-                continue
-                
-            # Check resource name for clues
-            resource_name = step_info.get("resource_name", "").lower()
-            client_path = step_info.get("resource_client", "").lower()
-            
-            # Determine source based on resource name or client path
-            if "spoke" in resource_name or "spoke" in client_path:
-                resource_types.append("spoke")
-            elif "rag" in resource_name or "rag" in client_path:
-                resource_types.append("rag")
-            elif "llm" in resource_name or "llm" in client_path:
-                resource_types.append("llm")
-            elif "ramp" in resource_name or "ramp" in client_path:
-                resource_types.append("ramp")
-                
-        # Apply adjustments for specific resources
-        if "rag" in resource_types:
-            base_confidence = max(0.1, base_confidence - 0.05)  # Small penalty for RAG-based mappings
-        if "llm" in resource_types:
-            base_confidence = max(0.1, base_confidence - 0.1)   # Larger penalty for LLM-based mappings
-        
-        return round(base_confidence, 2)  # Round to 2 decimal places for consistency
-    
-    def _create_mapping_path_details(
-        self,
-        path_id: int,
-        path_name: str,
-        hop_count: Optional[int],
-        mapping_direction: str,
-        path_step_details: Dict[str, Any],
-        log_id: Optional[int] = None,
-        additional_metadata: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Create a structured mapping_path_details JSON with complete path information.
-        
-        Args:
-            path_id: The ID of the mapping path
-            path_name: The name of the mapping path
-            hop_count: Number of steps in the path
-            mapping_direction: Direction of the mapping (forward, reverse, bidirectional)
-            path_step_details: Detailed information about the path steps
-            log_id: Optional ID of the execution log entry
-            additional_metadata: Optional additional metadata to include
-            
-        Returns:
-            A dictionary with structured path details ready to be serialized to JSON
-        """
-        # Initialize details with core information
-        details = {
-            "path_id": path_id,
-            "path_name": path_name,
-            "hop_count": hop_count,
-            "direction": mapping_direction,
-            "log_id": log_id,
-            "execution_timestamp": datetime.utcnow().isoformat(),
-            "steps": {}
-        }
-        
-        # Add step details if available
-        if path_step_details:
-            details["steps"] = path_step_details
-        
-        # Add any additional metadata
-        if additional_metadata:
-            details["additional_metadata"] = additional_metadata
-            
-        return details
-    
-    def _determine_mapping_source(self, path_step_details: Dict[str, Any]) -> str:
-        """
-        Determine the mapping source based on the path steps.
-        
-        Args:
-            path_step_details: Detailed information about the path steps
-            
-        Returns:
-            A string indicating the mapping source (api, spoke, rag, etc.)
-        """
-        # Default source if we can't determine
-        default_source = "api"
-        
-        # Check for empty details
-        if not path_step_details:
-            return default_source
-            
-        # Check each step for resource type clues
-        for step_key, step_info in path_step_details.items():
-            if not isinstance(step_info, dict):
-                continue
-                
-            # Check resource name for clues
-            resource_name = step_info.get("resource_name", "").lower()
-            client_path = step_info.get("resource_client", "").lower()
-            
-            # Determine source based on resource name or client path
-            if "spoke" in resource_name or "spoke" in client_path:
-                return "spoke"
-            elif "rag" in resource_name or "rag" in client_path:
-                return "rag"
-            elif "llm" in resource_name or "llm" in client_path:
-                return "llm"
-            elif "ramp" in resource_name or "ramp" in client_path:
-                return "ramp"
-                
-        return default_source
     
     # Legacy Handler Methods (Placeholder Implementations)
     # These methods are referenced by the legacy execute_strategy method but are not implemented.

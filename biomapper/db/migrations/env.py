@@ -40,6 +40,10 @@ def run_migrations_offline():
     """
     # Use the cache_db_url from settings
     url = settings.cache_db_url
+    
+    # Convert async SQLite URL to sync for Alembic
+    if url.startswith("sqlite+aiosqlite://"):
+        url = url.replace("sqlite+aiosqlite://", "sqlite:///")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -59,6 +63,10 @@ def run_migrations_online():
     """
     # Use the cache_db_url from settings
     database_url = settings.cache_db_url
+    
+    # Convert async SQLite URL to sync for Alembic
+    if database_url.startswith("sqlite+aiosqlite://"):
+        database_url = database_url.replace("sqlite+aiosqlite://", "sqlite:///")
 
     # Create the engine
     connectable = create_engine(database_url)
