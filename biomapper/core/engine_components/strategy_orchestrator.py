@@ -13,6 +13,7 @@ It handles:
 
 import logging
 from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -23,14 +24,20 @@ from biomapper.core.exceptions import (
     StrategyNotFoundError,
     InactiveStrategyError,
 )
+from biomapper.core.engine_components.action_executor import ActionExecutor
 
 if TYPE_CHECKING:
     from biomapper.core.mapping_executor import MappingExecutor
     from biomapper.core.engine_components.strategy_handler import StrategyHandler
     from biomapper.core.engine_components.cache_manager import CacheManager
-    from biomapper.db.models import Endpoint
+    from biomapper.db.models import Endpoint, MappingStrategy
 
 logger = logging.getLogger(__name__)
+
+
+def get_current_utc_time() -> datetime:
+    """Return the current time in UTC timezone."""
+    return datetime.now(timezone.utc)
 
 
 class StrategyOrchestrator:
@@ -65,6 +72,7 @@ class StrategyOrchestrator:
         self.resource_clients_provider = resource_clients_provider
         self.mapping_executor = mapping_executor
         self.logger = logger or logging.getLogger(__name__)
+        self.action_executor = ActionExecutor(mapping_executor)
     
     async def execute_strategy(
         self,
@@ -113,7 +121,8 @@ class StrategyOrchestrator:
                 - 'final_identifiers': List of identifiers after all steps
                 - 'final_ontology_type': Final ontology type after all conversions
         """
-        # Use strategy handler for loading and execution
+        start_time = get_current_utc_time()
+        
         async with self.metamapper_session_factory() as session:
             # Load the strategy
             strategy = await self.strategy_handler.load_strategy(session, strategy_name)
@@ -132,38 +141,116 @@ class StrategyOrchestrator:
                 if not target_endpoint:
                     raise ConfigurationError(f"Target endpoint '{target_endpoint_name}' not found")
             
-            # Prepare initial context
-            context = initial_context or {}
-            context.update({
+            # Initialize strategy context
+            strategy_context = initial_context or {}
+            strategy_context.update({
                 'initial_identifiers': input_identifiers.copy(),
                 'step_results': [],
                 'all_provenance': [],
                 'mapping_results': {},
                 'progress_callback': progress_callback,
                 'mapping_session_id': mapping_session_id,
+                'strategy_name': strategy.name,
+                'source_endpoint': source_endpoint.name if source_endpoint else None,
+                'target_endpoint': target_endpoint.name if target_endpoint else None,
+                'initial_count': len(input_identifiers)
             })
             
-            # Execute strategy using the strategy handler
-            execution_result = await self.strategy_handler.execute_strategy(
-                session=session,
-                strategy=strategy,
-                input_identifiers=input_identifiers,
-                source_endpoint=source_endpoint,
-                target_endpoint=target_endpoint,
-                use_cache=use_cache,
-                max_cache_age_days=max_cache_age_days,
-                batch_size=batch_size,
-                min_confidence=min_confidence,
-                initial_context=context
-            )
+            # Initialize tracking variables
+            current_identifiers = input_identifiers.copy()
+            current_ontology_type = source_ontology_type or strategy.default_source_ontology_type or "UNKNOWN"
+            step_results = []
             
-            # Extract data from execution result
-            step_results = execution_result['step_results']
-            strategy_context = execution_result['context']
-            current_identifiers = strategy_context.get('current_identifiers', [])
-            current_ontology_type = strategy_context.get('current_ontology_type', 
-                                                        strategy.default_source_ontology_type)
+            # Sort steps by order
+            sorted_steps = sorted(strategy.steps, key=lambda s: s.step_order)
+            
+            # Execute each step
+            for step_idx, step in enumerate(sorted_steps):
+                if not step.is_active:
+                    self.logger.info(f"Skipping inactive step: {step.step_id}")
+                    continue
+                
+                # Call progress callback if provided
+                if progress_callback:
+                    progress_callback(step_idx, len(sorted_steps), f"Executing {step.step_id}")
+                
+                step_start_time = get_current_utc_time()
+                
+                try:
+                    # Execute the action
+                    result = await self.action_executor.execute_action(
+                        step=step,
+                        current_identifiers=current_identifiers,
+                        current_ontology_type=current_ontology_type,
+                        source_endpoint=source_endpoint,
+                        target_endpoint=target_endpoint,
+                        use_cache=use_cache,
+                        max_cache_age_days=max_cache_age_days,
+                        batch_size=batch_size,
+                        min_confidence=min_confidence,
+                        strategy_context=strategy_context,
+                        db_session=session
+                    )
+                    
+                    # Track step result
+                    step_result = {
+                        "step_id": step.step_id,
+                        "description": step.description,
+                        "action_type": step.action_type,
+                        "status": "success",
+                        "input_count": len(current_identifiers),
+                        "output_count": len(result.get('output_identifiers', [])),
+                        "duration_seconds": (get_current_utc_time() - step_start_time).total_seconds(),
+                        "details": result.get('details', {})
+                    }
+                    
+                    # Update current state
+                    current_identifiers = result.get('output_identifiers', [])
+                    current_ontology_type = result.get('output_ontology_type', current_ontology_type)
+                    
+                    # Update context with current state
+                    strategy_context['current_identifiers'] = current_identifiers
+                    strategy_context['current_ontology_type'] = current_ontology_type
+                    
+                    # Accumulate provenance if present
+                    if 'provenance' in result:
+                        strategy_context['all_provenance'].extend(result['provenance'])
+                    
+                except Exception as e:
+                    self.logger.error(f"Step {step.step_id} failed: {str(e)}")
+                    
+                    step_result = {
+                        "step_id": step.step_id,
+                        "description": step.description,
+                        "action_type": step.action_type,
+                        "status": "failed",
+                        "error": str(e),
+                        "duration_seconds": (get_current_utc_time() - step_start_time).total_seconds()
+                    }
+                    
+                    # Check if step is required
+                    if step.is_required:
+                        raise MappingExecutionError(
+                            f"Required step '{step.step_id}' failed: {str(e)}"
+                        )
+                
+                step_results.append(step_result)
+                
+                # Stop if no identifiers remain and we have more steps
+                if not current_identifiers and step_idx < len(sorted_steps) - 1:
+                    self.logger.warning("No identifiers remaining, stopping strategy execution")
+                    break
+            
+            # Update context with results
+            strategy_context['step_results'] = step_results
+            strategy_context['current_identifiers'] = current_identifiers
+            strategy_context['current_ontology_type'] = current_ontology_type
+            
             overall_provenance = strategy_context.get('all_provenance', [])
+        
+        # Calculate final statistics
+        end_time = get_current_utc_time()
+        duration_seconds = (end_time - start_time).total_seconds()
         
         # Build final results using the provenance data
         final_results = self._build_final_results(
@@ -180,10 +267,10 @@ class StrategyOrchestrator:
             'results': final_results,
             'metadata': {
                 'strategy_name': strategy_name,
-                'execution_status': execution_result.get('execution_status', 'completed'),
-                'start_time': execution_result.get('start_time'),
-                'end_time': execution_result.get('end_time'),
-                'duration_seconds': execution_result.get('duration_seconds'),
+                'execution_status': 'completed',
+                'start_time': start_time.isoformat(),
+                'end_time': end_time.isoformat(),
+                'duration_seconds': duration_seconds,
             },
             'step_results': step_results,
             'statistics': {
