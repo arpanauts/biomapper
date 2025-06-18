@@ -5,11 +5,13 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from .base import BaseStrategyAction
+from .base import StrategyAction, ActionContext
+from .registry import register_action
 from biomapper.db.models import MappingPath, MappingPathStep, MappingResource, Endpoint
 
 
-class ExecuteMappingPathAction(BaseStrategyAction):
+@register_action("EXECUTE_MAPPING_PATH")
+class ExecuteMappingPathAction(StrategyAction):
     """
     Execute a predefined mapping path from the database.
     """

@@ -9,11 +9,13 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .base import BaseStrategyAction
+from .base import StrategyAction, ActionContext
+from .registry import register_action
 from biomapper.db.models import Endpoint
 
 
-class ExportResultsAction(BaseStrategyAction):
+@register_action("EXPORT_RESULTS")
+class ExportResultsAction(StrategyAction):
     """
     Export mapping results in various structured formats.
     

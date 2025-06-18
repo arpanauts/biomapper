@@ -5,11 +5,13 @@ from typing import Dict, Any, List
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .base import BaseStrategyAction
+from .base import StrategyAction, ActionContext
+from .registry import register_action
 from biomapper.db.models import Endpoint
 
 
-class PopulateContextAction(BaseStrategyAction):
+@register_action("POPULATE_CONTEXT")
+class PopulateContextAction(StrategyAction):
     """
     Populate context with execution metadata needed by reporting actions.
     

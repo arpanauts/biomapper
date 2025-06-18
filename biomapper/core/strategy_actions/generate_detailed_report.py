@@ -7,11 +7,13 @@ from datetime import datetime
 from collections import defaultdict, Counter
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .base import BaseStrategyAction
+from .base import StrategyAction, ActionContext
+from .registry import register_action
 from biomapper.db.models import Endpoint
 
 
-class GenerateDetailedReportAction(BaseStrategyAction):
+@register_action("GENERATE_DETAILED_REPORT")
+class GenerateDetailedReportAction(StrategyAction):
     """
     Generate a comprehensive mapping analysis report.
     

@@ -38,3 +38,10 @@ class BaseStrategyAction(ABC):
                 - details: Additional details about the execution
         """
         pass
+
+
+# Alias for backward compatibility
+StrategyAction = BaseStrategyAction
+
+# Type alias for action context (currently just a dictionary)
+ActionContext = Dict[str, Any]

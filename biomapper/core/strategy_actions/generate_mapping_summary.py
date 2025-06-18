@@ -6,11 +6,13 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .base import BaseStrategyAction
+from .base import StrategyAction, ActionContext
+from .registry import register_action
 from biomapper.db.models import Endpoint
 
 
-class GenerateMappingSummaryAction(BaseStrategyAction):
+@register_action("GENERATE_MAPPING_SUMMARY")
+class GenerateMappingSummaryAction(StrategyAction):
     """
     Generate a high-level summary of mapping results.
     

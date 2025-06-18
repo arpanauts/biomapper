@@ -6,11 +6,13 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from .base import BaseStrategyAction
+from .base import StrategyAction, ActionContext
+from .registry import register_action
 from biomapper.db.models import Endpoint, EndpointPropertyConfig, PropertyExtractionConfig
 
 
-class ConvertIdentifiersLocalAction(BaseStrategyAction):
+@register_action("CONVERT_IDENTIFIERS_LOCAL")
+class ConvertIdentifiersLocalAction(StrategyAction):
     """
     Convert identifiers from one ontology type to another using
     local data within a single endpoint.

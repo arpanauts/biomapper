@@ -5,11 +5,13 @@ from typing import Dict, Any, List
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .base import BaseStrategyAction
+from .base import StrategyAction, ActionContext
+from .registry import register_action
 from biomapper.db.models import Endpoint
 
 
-class CollectMatchedTargetsAction(BaseStrategyAction):
+@register_action("COLLECT_MATCHED_TARGETS")
+class CollectMatchedTargetsAction(StrategyAction):
     """
     Collect target identifiers from various match data structures in context.
     

@@ -17,6 +17,9 @@ from .export_results import ExportResultsAction
 from .visualize_mapping_flow import VisualizeMappingFlowAction
 from .populate_context import PopulateContextAction
 from .collect_matched_targets import CollectMatchedTargetsAction
+from .load_endpoint_identifiers_action import LoadEndpointIdentifiersAction
+from .reconcile_bidirectional_action import ReconcileBidirectionalAction
+from .save_bidirectional_results_action import SaveBidirectionalResultsAction
 
 __all__ = [
     "BidirectionalMatchAction",
@@ -30,5 +33,8 @@ __all__ = [
     "ExportResultsAction",
     "VisualizeMappingFlowAction",
     "PopulateContextAction",
-    "CollectMatchedTargetsAction"
+    "CollectMatchedTargetsAction",
+    "LoadEndpointIdentifiersAction",
+    "ReconcileBidirectionalAction",
+    "SaveBidirectionalResultsAction"
 ]

@@ -12,13 +12,15 @@ from typing import Dict, Any, List, Optional, Set, Tuple
 from collections import defaultdict
 from datetime import datetime
 
-from .base import BaseStrategyAction
+from .base import StrategyAction, ActionContext
+from .registry import register_action
 from biomapper.db.models import Endpoint
 
 logger = logging.getLogger(__name__)
 
 
-class BidirectionalMatchAction(BaseStrategyAction):
+@register_action("BIDIRECTIONAL_MATCH")
+class BidirectionalMatchAction(StrategyAction):
     """
     Performs intelligent bidirectional matching between source and target endpoints.
     

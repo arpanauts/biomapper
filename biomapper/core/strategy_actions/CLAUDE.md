@@ -26,31 +26,69 @@ Action types are the building blocks of mapping strategies. They:
 - Never assume 1:1 relationships
 - Handle empty inputs gracefully
 
-### 3. **Consistent Interface**
-All actions must implement:
+### 3. **Consistent Interface and Parameter Handling**
+All actions inherit from `BaseStrategyAction`. The `MappingExecutor` instantiates actions, passing YAML-defined parameters to `__init__`. These parameters are stored in `self.params` and are available during the `execute` phase.
+
+**Initialization (`__init__`)**:
+The `__init__` method receives the static configuration parameters for the action instance as defined in the YAML strategy.
+```python
+def __init__(self, params: Dict[str, Any], executor: 'MappingExecutor'):
+    super().__init__(params, executor)
+    # `self.params` now holds the YAML configuration for this action instance.
+    # `self.executor` provides access to executor functionalities (e.g., logging, db sessions).
+    # Perform any one-time setup or parameter validation based on `self.params`.
+    # Example:
+    # self.output_key = self.params.get('output_key', 'default_output')
+    # if not self.params.get('required_yaml_param'):
+    #     raise ValueError(f"Action {self.__class__.__name__}: Missing 'required_yaml_param' in configuration.")
+```
+
+**Execution (`execute`)**:
+The `execute` method performs the core logic of the action. It receives the current execution `context` (a dictionary, potentially wrapped in an `ExecutionContext` object in the future), modifies it, and returns the updated `context`.
 ```python
 async def execute(
     self,
-    current_identifiers: List[str],
-    current_ontology_type: str,
-    action_params: Dict[str, Any],
-    source_endpoint: Endpoint,
-    target_endpoint: Endpoint,
     context: Dict[str, Any]
-) -> Dict[str, Any]
+) -> Dict[str, Any]:
+    # Extract necessary data from context, e.g.:
+    # current_identifiers = context.get('current_identifiers', [])
+    # current_ontology_type = context.get('current_ontology_type')
+    # source_endpoint_name = context.get('source_endpoint_name')
+    # target_endpoint_name = context.get('target_endpoint_name')
+    # logger = self.executor.logger
+
+    # Access YAML parameters via self.params:
+    # my_yaml_param = self.params.get('my_yaml_param_key')
+    # logger.debug(f"Action {self.__class__.__name__} executing with param: {my_yaml_param}")
+
+    # --- Action's core logic begins ---
+    # 1. Operate on current_identifiers.
+    # 2. Generate output_identifiers and their output_ontology_type.
+    # 3. Create detailed provenance entries for the operations performed.
+    # 4. Store results and any intermediate data back into the context.
+    # --- Action's core logic ends ---
+
+    # Example updates to context:
+    # context['current_identifiers'] = new_identifier_list
+    # context['current_ontology_type'] = new_ontology_type
+    # context.setdefault('provenance', []).extend(action_specific_provenance_entries)
+    # context['my_action_output_key'] = some_result_data
+    
+    return context
 ```
 
-### 4. **Comprehensive Return Structure**
-Actions must return:
-```python
-{
-    'input_identifiers': List[str],      # What came in
-    'output_identifiers': List[str],     # What goes out
-    'output_ontology_type': str,         # May change from input
-    'provenance': List[Dict],            # Detailed tracking
-    'details': Dict[str, Any]            # Action-specific info
-}
-```
+### 4. **Modifying and Returning the Execution Context**
+Actions operate by modifying the `context` dictionary they receive and returning this modified dictionary. The `MappingExecutor` then passes this updated context to the next action in the strategy.
+
+Key items typically managed in the `context`:
+- **`current_identifiers` (List[str])**: The primary list of identifiers the current action should process. The action updates this to reflect its output.
+- **`current_ontology_type` (str)**: The ontology type of the `current_identifiers`. Updated if the action changes the identifier type.
+- **`provenance` (List[Dict])**: A list where each action appends its detailed provenance records. (See "Comprehensive Provenance" section for structure).
+- **`source_endpoint_name` (str)**, **`target_endpoint_name` (str)**: Names of the overall source and target endpoints. Usually read-only by actions.
+- **`source_endpoint` (Endpoint)**, **`target_endpoint` (Endpoint)**: Loaded `Endpoint` objects. Usually read-only.
+- **Custom Keys**: Actions can read data placed in the context by previous actions (e.g., `context.get('intermediate_results_from_action_X')`) and can write their own specific outputs to new keys (e.g., `context['my_action_specific_output'] = data`). These keys must be coordinated with other actions in the strategy that might consume them.
+
+**Important:** Actions should generally avoid removing standard keys from the context unless it's explicitly part of their function (e.g., a cleanup action). They primarily add to or update existing keys like `current_identifiers` and `provenance`.
 
 ## When Creating New Actions
 
@@ -108,11 +146,19 @@ Before creating a new action, check if an existing one can be enhanced with para
    ]
    ```
 
-2. In `mapping_executor.py` (around line 3470), add to dispatch logic:
-   ```python
-   elif action_type == "YOUR_NEW_ACTION":
-       action = YourNewAction(session)
-   ```
+2. **Ensure Action is Discoverable:**
+   The `MappingExecutor` typically discovers actions specified via `action_class_path` in the YAML strategy by dynamically importing them. For this to work:
+   - Ensure your new action class (e.g., `YourNewAction`) is in its own module (e.g., `your_new_action.py`) within the `biomapper.core.strategy_actions` package.
+   - Add your action class to the `__all__` list in `/home/ubuntu/Software-Engineer-AI-Agent-Atlas/biomapper/biomapper/core/strategy_actions/__init__.py`:
+     ```python
+     from .your_new_action import YourNewAction
+     
+     __all__ = [
+         # ... existing actions ...
+         "YourNewAction",
+     ]
+     ```
+   - For most new actions defined with `action_class_path` in YAML, direct modification of `MappingExecutor.py`'s dispatch logic is **no longer required**. The dynamic import mechanism handles instantiation. Manual additions to `MappingExecutor` might only be needed for very core, built-in action types not intended to be specified by class path.
 
 ## When Modifying Existing Actions
 
@@ -163,6 +209,36 @@ previous_results = context.get('previous_matches', [])
 if save_key := action_params.get('save_results_to'):
     context[save_key] = results
 ```
+
+
+### Handling Path Parameters with Variable Expansion
+Action parameters defined in YAML (accessible via `self.params`) might include file paths that contain variables needing expansion, such as `${OUTPUT_DIR}` or `${DATA_DIR}`. Actions are responsible for resolving these paths.
+
+**Example:**
+```python
+# In __init__ or execute method:
+# output_file_template = self.params.get('output_file') # e.g., "${OUTPUT_DIR}/my_results.csv"
+
+# Method 1: Using executor's utility (Preferred if available)
+# resolved_output_path = self.executor.resolve_path_parameter(output_file_template)
+
+# Method 2: Using os.path.expandvars (if variables are set as environment variables)
+# import os
+# resolved_output_path = os.path.expandvars(output_file_template)
+# Ensure the relevant environment variables (e.g., OUTPUT_DIR) are set when the pipeline runs.
+
+# Method 3: Using context variables (if OUTPUT_DIR is passed in context)
+# output_dir = context.get('OUTPUT_DIR_PATH') # Assuming it's placed in context
+# if output_dir and output_file_template:
+#    resolved_output_path = output_file_template.replace('${OUTPUT_DIR}', output_dir)
+# else:
+#    # Handle error or default path
+
+# Always ensure paths are absolute and validated before use.
+# resolved_output_path = os.path.abspath(resolved_output_path)
+# os.makedirs(os.path.dirname(resolved_output_path), exist_ok=True)
+```
+Consult with the `MappingExecutor`'s capabilities or project conventions for the standard way to resolve these path variables. The `executor` object itself might provide helper methods.
 
 ## Testing Requirements
 

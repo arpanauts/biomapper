@@ -208,100 +208,6 @@ entity_strategies:
             chart_type: "sankey"
             show_statistics: true
 
-    UKBB_TO_HPA_BIDIRECTIONAL_EFFICIENT:
-      description: "Efficient bidirectional mapping using direct UniProt matching with forward resolution only"
-      default_source_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
-      default_target_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
-      steps:
-        - step_id: "S1_BIDIRECTIONAL_UNIPROT_MATCH"
-          description: "Direct bidirectional UniProt matching with composite/M2M handling"
-          action:
-            type: "BIDIRECTIONAL_MATCH"
-            source_ontology: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
-            target_ontology: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
-            match_mode: "many_to_many"
-            composite_handling: "split_and_match"
-            track_unmatched: true
-            save_matched_to: "direct_matches"
-            save_unmatched_source_to: "unmatched_ukbb"
-        
-        - step_id: "S2_RESOLVE_UKBB_FORWARD"
-          description: "Resolve remaining UKBB UniProts via historical API and match to HPA"
-          action:
-            type: "RESOLVE_AND_MATCH_FORWARD"
-            input_from: "unmatched_ukbb"
-            match_against: "TARGET"
-            target_ontology: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
-            resolver: "UNIPROT_HISTORICAL_API"
-            append_matched_to: "all_matches"
-            update_unmatched: "unmatched_ukbb"
-            batch_size: 100
-        
-        - step_id: "S3_COLLECT_MATCHED_IDENTIFIERS"
-          description: "Collect all matched target identifiers"
-          action:
-            type: "COLLECT_MATCHED_TARGETS"
-            match_sources: ["direct_matches", "all_matches"]
-            output_key: "matched_targets"
-        
-        - step_id: "S4_CONVERT_TO_HPA_GENES"
-          description: "Convert matched UniProts to HPA gene names"
-          action:
-            type: "CONVERT_IDENTIFIERS_LOCAL"
-            input_from: "matched_targets"
-            endpoint_context: "TARGET"
-            input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
-            output_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
-        
-        - step_id: "S5_GENERATE_SUMMARY"
-          description: "Generate mapping summary with statistics"
-          action:
-            type: "GENERATE_MAPPING_SUMMARY"
-            output_format: "console"
-            include_statistics: true
-            save_to_context: "mapping_summary"
-        
-        - step_id: "S6_EXPORT_RESULTS"
-          description: "Export mapping results to CSV"
-          action:
-            type: "EXPORT_RESULTS"
-            output_format: "csv"
-            output_file: "/home/ubuntu/biomapper/data/results/ukbb_to_hpa_mapping_results_efficient.csv"
-            include_metadata: true
-            include_provenance: false
-        
-        - step_id: "S7_GENERATE_DETAILED_REPORT"
-          description: "Generate detailed report for analysis"
-          action:
-            type: "GENERATE_DETAILED_REPORT"
-            output_file: "/home/ubuntu/biomapper/data/results/ukbb_to_hpa_detailed_report_efficient.md"
-            format: "markdown"
-            include_unmatched: true
-            grouping_strategy: "by_step"
-        
-        - step_id: "S8_VISUALIZE_FLOW"
-          description: "Visualize mapping flow"
-          action:
-            type: "VISUALIZE_MAPPING_FLOW"
-            output_file: "/home/ubuntu/biomapper/data/results/ukbb_to_hpa_flow_efficient.json"
-            chart_type: "sankey"
-            show_statistics: true
-
-    UKBB_TO_HPA_DIRECT_GENE_MATCH:
-      description: "Simple direct gene name matching (less robust but fast)"
-      default_source_ontology_type: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
-      default_target_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
-      steps:
-        - step_id: "S1_DIRECT_GENE_MATCH"
-          description: "Direct match UKBB Assay (gene) to HPA gene"
-          action:
-            type: "BIDIRECTIONAL_MATCH"
-            source_ontology: "UKBB_PROTEIN_ASSAY_ID_ONTOLOGY"
-            target_ontology: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
-            match_mode: "many_to_many"
-            composite_handling: "none"  # Gene names shouldn't be composite
-            case_sensitive: false  # Gene names might have case differences
-
     HANDLE_COMPOSITE_UNIPROT:
       description: "Process composite UniProt IDs like Q14213_Q8NEV9"
       applicable_endpoints: ["any_with_composite_uniprot"]
@@ -320,6 +226,78 @@ entity_strategies:
             validation_type: "regex"
             validation_pattern: "^[A-Z][0-9][A-Z0-9]{3}[0-9](-[0-9]+)?$"
             on_invalid: "remove"
+
+    UKBB_TO_HPA_BIDIRECTIONAL_EFFICIENT:
+      description: "Efficiently maps UKBB and HPA protein data bidirectionally, resolving history and saving comprehensive results."
+      applicable_to: ["protein"]
+      parameters:
+        - name: "output_dir"
+          description: "Directory to save the output CSV and JSON summary files."
+          required: true
+        - name: "execution_id"
+          description: "A unique ID for this execution run, used in filenames."
+          required: true
+      steps:
+        - step_id: "S1_LOAD_UKBB_IDS"
+          description: "Load all identifiers from the UKBB endpoint."
+          is_required: true
+          action:
+            action_class_path: "biomapper.core.strategy_actions.load_endpoint_identifiers_action.LoadEndpointIdentifiersAction"
+            params:
+              endpoint_name: "UKBB_PROTEIN"
+              output_context_key: "ukbb_input_identifiers"
+
+        - step_id: "S2_LOAD_HPA_IDS"
+          description: "Load all identifiers from the HPA endpoint."
+          is_required: true
+          action:
+            action_class_path: "biomapper.core.strategy_actions.load_endpoint_identifiers_action.LoadEndpointIdentifiersAction"
+            params:
+              endpoint_name: "HPA_OSP_PROTEIN"
+              output_context_key: "hpa_input_identifiers"
+
+        - step_id: "S3_FORWARD_MAPPING"
+          description: "Map from UKBB to HPA (Source -> Target)"
+          is_required: true
+          action:
+            action_class_path: "biomapper.core.strategy_actions.execute_mapping_path.ExecuteMappingPathAction"
+            params:
+              path_name: "UKBB_ASSAY_TO_HPA_ID"
+              input_ids_context_key: "ukbb_input_identifiers"
+              output_context_key: "ukbb_to_hpa_mapping_results"
+              is_reverse: false
+
+        - step_id: "S4_REVERSE_MAPPING"
+          description: "Map from HPA to UKBB (Target -> Source)"
+          is_required: true
+          action:
+            action_class_path: "biomapper.core.strategy_actions.execute_mapping_path.ExecuteMappingPathAction"
+            params:
+              path_name: "HPA_ID_TO_UKBB_ASSAY"
+              input_ids_context_key: "hpa_input_identifiers"
+              output_context_key: "hpa_to_ukbb_mapping_results"
+              is_reverse: true
+
+        - step_id: "S5_RECONCILE_RESULTS"
+          description: "Reconcile forward and reverse mapping results."
+          is_required: true
+          action:
+            action_class_path: "biomapper.core.strategy_actions.reconcile_bidirectional_action.ReconcileBidirectionalAction"
+            params:
+              forward_mapping_key: "ukbb_to_hpa_mapping_results"
+              reverse_mapping_key: "hpa_to_ukbb_mapping_results"
+              output_reconciled_key: "reconciled_bidirectional_mappings"
+
+        - step_id: "S6_SAVE_RESULTS"
+          description: "Save the reconciled results to CSV and a JSON summary."
+          is_required: true
+          action:
+            action_class_path: "biomapper.core.strategy_actions.save_bidirectional_results_action.SaveBidirectionalResultsAction"
+            params:
+              reconciled_data_key: "reconciled_bidirectional_mappings"
+              output_dir_key: "strategy_output_directory"
+              csv_filename: "ukbb_hpa_bidirectional_reconciled.csv"
+              json_summary_filename: "ukbb_hpa_bidirectional_summary.json"
 
   metabolite:
     PUBCHEM_TO_HMDB_VIA_INCHIKEY:

@@ -11,14 +11,16 @@ from collections import defaultdict
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .base import BaseStrategyAction
+from .base import StrategyAction, ActionContext
+from .registry import register_action
 from biomapper.db.models import Endpoint
 from biomapper.mapping.clients.uniprot_historical_resolver_client import UniProtHistoricalResolverClient
 
 logger = logging.getLogger(__name__)
 
 
-class ResolveAndMatchForwardAction(BaseStrategyAction):
+@register_action("RESOLVE_AND_MATCH_FORWARD")
+class ResolveAndMatchForwardAction(StrategyAction):
     """
     Resolve historical/secondary identifiers and match against target.
     

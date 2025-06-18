@@ -5,11 +5,13 @@ import logging
 from typing import Dict, Any, List, Optional, Set
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .base import BaseStrategyAction
+from .base import StrategyAction, ActionContext
+from .registry import register_action
 from biomapper.db.models import Endpoint
 
 
-class FilterByTargetPresenceAction(BaseStrategyAction):
+@register_action("FILTER_IDENTIFIERS_BY_TARGET_PRESENCE")
+class FilterByTargetPresenceAction(StrategyAction):
     """
     Filter a list of identifiers, retaining only those that are
     present in the target endpoint's data.
