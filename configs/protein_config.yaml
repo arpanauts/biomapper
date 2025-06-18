@@ -192,7 +192,96 @@ databases:
 #          value_column: "UniProt"
 #          delimiter: "\t"
 
-  # 4. SPOKE Knowledge Graph Protein Data
+  # 3. Human Phenome Project (HPP) Protein Data
+  hpp:
+    endpoint:
+      name: "HPP_PROTEIN"
+      type: "file_tsv"
+      connection_details:
+        file_path: "${DATA_DIR}/HPP/hpp_protein_metadata.tsv"
+        delimiter: "\t"
+        
+    properties:
+      primary: "HPP_PROTEIN_ID_ONTOLOGY"
+      mappings:
+        HPP_PROTEIN_ID_ONTOLOGY:
+          column: "hpp_protein_id"
+          ontology_type: "HPP_PROTEIN_ID_ONTOLOGY"
+        PROTEIN_UNIPROTKB_AC_ONTOLOGY:
+          column: "uniprot_accession"
+          ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        PROTEIN_GENE_NAME_ONTOLOGY:
+          column: "gene_symbol"
+          ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+        PROTEIN_ENSEMBL_ONTOLOGY:
+          column: "ensembl_protein_id"
+          ontology_type: "PROTEIN_ENSEMBL_ONTOLOGY"
+          
+    mapping_clients:
+      - name: "hpp_protein_to_uniprot_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "HPP_PROTEIN_ID_ONTOLOGY"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/HPP/hpp_protein_metadata.tsv"
+          key_column: "hpp_protein_id"
+          value_column: "uniprot_accession"
+          delimiter: "\t"
+          
+      - name: "uniprot_to_hpp_protein_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_ontology_type: "HPP_PROTEIN_ID_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/HPP/hpp_protein_metadata.tsv"
+          key_column: "uniprot_accession"
+          value_column: "hpp_protein_id"
+          delimiter: "\t"
+
+  # 4. Function Health Protein Data
+  function_health:
+    endpoint:
+      name: "FUNCTION_HEALTH_PROTEIN"
+      type: "file_csv"
+      connection_details:
+        file_path: "${DATA_DIR}/FunctionHealth/fh_protein_panels.csv"
+        delimiter: ","
+        
+    properties:
+      primary: "FUNCTION_HEALTH_PROTEIN_ID_ONTOLOGY"
+      mappings:
+        FUNCTION_HEALTH_PROTEIN_ID_ONTOLOGY:
+          column: "fh_panel_id"
+          ontology_type: "FUNCTION_HEALTH_PROTEIN_ID_ONTOLOGY"
+        PROTEIN_UNIPROTKB_AC_ONTOLOGY:
+          column: "uniprot_id"
+          ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        PROTEIN_GENE_NAME_ONTOLOGY:
+          column: "gene_name"
+          ontology_type: "PROTEIN_GENE_NAME_ONTOLOGY"
+          
+    mapping_clients:
+      - name: "fh_protein_to_uniprot_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "FUNCTION_HEALTH_PROTEIN_ID_ONTOLOGY"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/FunctionHealth/fh_protein_panels.csv"
+          key_column: "fh_panel_id"
+          value_column: "uniprot_id"
+          delimiter: ","
+          
+      - name: "uniprot_to_fh_protein_lookup"
+        client_class_path: "biomapper.mapping.clients.generic_file_client.GenericFileLookupClient"
+        input_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_ontology_type: "FUNCTION_HEALTH_PROTEIN_ID_ONTOLOGY"
+        config:
+          file_path: "${DATA_DIR}/FunctionHealth/fh_protein_panels.csv"
+          key_column: "uniprot_id"
+          value_column: "fh_panel_id"
+          delimiter: ","
+
+  # 5. SPOKE Knowledge Graph Protein Data
   spoke:
     endpoint:
       name: "SPOKE_PROTEIN"
@@ -228,7 +317,7 @@ databases:
           value_column: "uniprot_id" # Corrected to match property definition
           delimiter: ","
 
-  # 5. Knowledge Graph 2 (KG2) Protein Data
+  # 6. Knowledge Graph 2 (KG2) Protein Data
   kg2:
     endpoint:
       name: "KG2_PROTEIN"

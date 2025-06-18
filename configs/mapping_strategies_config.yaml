@@ -244,7 +244,7 @@ entity_strategies:
           action:
             action_class_path: "biomapper.core.strategy_actions.load_endpoint_identifiers_action.LoadEndpointIdentifiersAction"
             params:
-              endpoint_name: "UKBB_PROTEIN"
+              source_endpoint_name: "UKBB_PROTEIN"
               output_context_key: "ukbb_input_identifiers"
 
         - step_id: "S2_LOAD_HPA_IDS"
@@ -253,7 +253,7 @@ entity_strategies:
           action:
             action_class_path: "biomapper.core.strategy_actions.load_endpoint_identifiers_action.LoadEndpointIdentifiersAction"
             params:
-              endpoint_name: "HPA_OSP_PROTEIN"
+              target_endpoint_name: "HPA_OSP_PROTEIN"
               output_context_key: "hpa_input_identifiers"
 
         - step_id: "S3_FORWARD_MAPPING"
