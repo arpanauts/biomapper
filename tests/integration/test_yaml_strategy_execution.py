@@ -101,7 +101,7 @@ async def setup_optional_test_environment():
 
 async def populate_test_data(session: AsyncSession, config: Dict[str, Any]):
     """Helper to populate test data using the actual populate functions."""
-    from scripts.populate_metamapper_db import (
+    from scripts.setup_and_configuration.populate_metamapper_db import (
         populate_ontologies,
         populate_endpoints_and_properties,
         populate_mapping_resources,
