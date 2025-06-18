@@ -11,6 +11,7 @@ import pandas as pd
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from biomapper.core.strategy_actions.base import BaseStrategyAction
+from biomapper.core.utils.placeholder_resolver import resolve_file_path
 
 
 class FormatAndSaveResultsAction(BaseStrategyAction):
@@ -57,20 +58,6 @@ class FormatAndSaveResultsAction(BaseStrategyAction):
         self.mapping_type_column_name = params.get('mapping_type_column_name', 'mapping_type')
         self.execution_id_context_key = params.get('execution_id_context_key', 'execution_id')
     
-    def _resolve_path(self, path: str, context: Dict[str, Any]) -> str:
-        """Resolve path variables like ${OUTPUT_DIR}."""
-        # Method 1: Try environment variables
-        resolved = os.path.expandvars(path)
-        
-        # Method 2: Try context variables
-        if '${OUTPUT_DIR}' in path and 'OUTPUT_DIR' in context:
-            resolved = path.replace('${OUTPUT_DIR}', context['OUTPUT_DIR'])
-        
-        # Make absolute and create directory if needed
-        resolved = os.path.abspath(resolved)
-        os.makedirs(os.path.dirname(resolved), exist_ok=True)
-        
-        return resolved
     
     async def execute(self, context: Dict[str, Any], executor: 'MappingExecutor') -> Dict[str, Any]:
         """
@@ -163,7 +150,7 @@ class FormatAndSaveResultsAction(BaseStrategyAction):
             
             # Create DataFrame and save to CSV
             output_df = pd.DataFrame(output_rows)
-            csv_path = self._resolve_path(self.output_csv_path, context)
+            csv_path = resolve_file_path(self.output_csv_path, context, create_dirs=True)
             output_df.to_csv(csv_path, index=False)
             self.log_info(f"Results saved to CSV: {csv_path}")
             
@@ -216,7 +203,7 @@ class FormatAndSaveResultsAction(BaseStrategyAction):
                 })
             
             # Save enhanced summary
-            json_path = self._resolve_path(self.output_json_summary_path, context)
+            json_path = resolve_file_path(self.output_json_summary_path, context, create_dirs=True)
             with open(json_path, 'w') as f:
                 json.dump(enhanced_summary, f, indent=2)
             self.log_info(f"Enhanced summary saved to JSON: {json_path}")

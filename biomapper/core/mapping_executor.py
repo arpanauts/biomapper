@@ -44,6 +44,9 @@ from biomapper.core.engine_components.cache_manager import CacheManager
 from biomapper.core.engine_components.strategy_orchestrator import StrategyOrchestrator
 from biomapper.core.engine_components.client_manager import ClientManager
 
+# Import utilities
+from biomapper.core.utils.placeholder_resolver import resolve_placeholders
+
 # Import models for metamapper DB
 from ..db.models import (
     Endpoint,
@@ -3195,9 +3198,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                 delimiter = connection_details.get('delimiter', ',')
                 
                 # Handle environment variable substitution
-                if '${DATA_DIR}' in file_path:
-                    data_dir = os.environ.get('DATA_DIR', settings.data_dir)
-                    file_path = file_path.replace('${DATA_DIR}', data_dir)
+                file_path = resolve_placeholders(file_path, {})
                 
                 self.logger.info(f"Loading identifiers from endpoint '{endpoint_name}'")
                 self.logger.info(f"File path: {file_path}")
@@ -3370,9 +3371,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                     if source.type in ['file_csv', 'file_tsv']:
                         conn_details = json.loads(source.connection_details)
                         file_path = conn_details.get('file_path', '')
-                        if '${DATA_DIR}' in file_path:
-                            file_path = file_path.replace('${DATA_DIR}', 
-                                                        os.environ.get('DATA_DIR', settings.data_dir))
+                        file_path = resolve_placeholders(file_path, {})
                         if not os.path.exists(file_path):
                             errors.append(f"Source data file not found: {file_path}")
                 
@@ -3385,9 +3384,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                     if target.type in ['file_csv', 'file_tsv']:
                         conn_details = json.loads(target.connection_details)
                         file_path = conn_details.get('file_path', '')
-                        if '${DATA_DIR}' in file_path:
-                            file_path = file_path.replace('${DATA_DIR}', 
-                                                        os.environ.get('DATA_DIR', settings.data_dir))
+                        file_path = resolve_placeholders(file_path, {})
                         if not os.path.exists(file_path):
                             errors.append(f"Target data file not found: {file_path}")
                 
