@@ -193,6 +193,19 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Initialize all components using the MappingExecutorInitializer
         self._initializer = MappingExecutorInitializer(
+            metamapper_db_url=metamapper_db_url,
+            mapping_cache_db_url=mapping_cache_db_url,
+            echo_sql=echo_sql,
+            path_cache_size=path_cache_size,
+            path_cache_expiry_seconds=path_cache_expiry_seconds,
+            max_concurrent_batches=max_concurrent_batches,
+            enable_metrics=enable_metrics,
+            checkpoint_enabled=checkpoint_enabled,
+            checkpoint_dir=checkpoint_dir,
+            batch_size=batch_size,
+            max_retries=max_retries,
+            retry_delay=retry_delay
+        )
         self._langfuse_tracker = None
         
         # Initialize metrics tracking if enabled and langfuse is available
@@ -539,10 +552,6 @@ class MappingExecutor(CompositeIdentifierMixin):
         """Retrieves the primary ontology type for a given endpoint and property name."""
         return await self.metadata_query_service.get_ontology_type(session, endpoint_name, property_name)
 
-
-    async def _load_client(self, mapping_resource):
-        """Load and return a client instance for the given mapping resource."""
-        return await self.client_manager.get_client_instance(mapping_resource)
 
     async def _execute_mapping_step(
         self, step: MappingPathStep, input_values: List[str], is_reverse: bool = False
