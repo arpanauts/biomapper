@@ -44,6 +44,7 @@ from biomapper.core.engine_components.cache_manager import CacheManager
 from biomapper.core.engine_components.strategy_orchestrator import StrategyOrchestrator
 from biomapper.core.engine_components.checkpoint_manager import CheckpointManager
 from biomapper.core.engine_components.client_manager import ClientManager
+from biomapper.core.engine_components.identifier_loader import IdentifierLoader
 
 # Import utilities
 from biomapper.core.utils.placeholder_resolver import resolve_placeholders
@@ -279,6 +280,11 @@ class MappingExecutor(CompositeIdentifierMixin):
         self.cache_manager = CacheManager(
             cache_sessionmaker=self.CacheSessionFactory,
             logger=self.logger
+        )
+        
+        # Initialize IdentifierLoader
+        self.identifier_loader = IdentifierLoader(
+            metamapper_session_factory=self.MetamapperSessionFactory
         )
 
         # Initialize StrategyOrchestrator
@@ -2897,7 +2903,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         """
         Get the column name for a given ontology type from an endpoint's property configuration.
         
-        This method replaces the get_column_for_ontology_type function used in scripts.
+        This method delegates to the IdentifierLoader for backward compatibility.
         
         Args:
             endpoint_name: Name of the endpoint
@@ -2910,60 +2916,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             ConfigurationError: If endpoint, property config, or extraction config not found
             DatabaseQueryError: If there's an error querying the database
         """
-        try:
-            async with self.async_metamapper_session() as session:
-                # Get the endpoint
-                stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
-                result = await session.execute(stmt)
-                endpoint = result.scalar_one_or_none()
-                
-                if not endpoint:
-                    raise ConfigurationError(f"Endpoint '{endpoint_name}' not found in database")
-                
-                # Get the property config for the ontology type
-                stmt = select(EndpointPropertyConfig).where(
-                    EndpointPropertyConfig.endpoint_id == endpoint.id,
-                    EndpointPropertyConfig.ontology_type == ontology_type
-                )
-                result = await session.execute(stmt)
-                property_config = result.scalar_one_or_none()
-                
-                if not property_config:
-                    raise ConfigurationError(
-                        f"No property configuration found for ontology type '{ontology_type}' "
-                        f"in endpoint '{endpoint_name}'"
-                    )
-                
-                # Get the extraction config to find the column name
-                stmt = select(PropertyExtractionConfig).where(
-                    PropertyExtractionConfig.id == property_config.property_extraction_config_id
-                )
-                result = await session.execute(stmt)
-                extraction_config = result.scalar_one_or_none()
-                
-                if not extraction_config:
-                    raise ConfigurationError(
-                        f"No extraction configuration found for property config ID "
-                        f"{property_config.property_extraction_config_id}"
-                    )
-                
-                # Parse the extraction pattern to get the column name
-                pattern_data = json.loads(extraction_config.extraction_pattern)
-                column_name = pattern_data.get('column')
-                if not column_name:
-                    raise ConfigurationError(
-                        f"No 'column' field found in extraction pattern: "
-                        f"{extraction_config.extraction_pattern}"
-                    )
-                return column_name
-                
-        except json.JSONDecodeError as e:
-            raise ConfigurationError(f"Invalid JSON in extraction pattern: {e}")
-        except ConfigurationError:
-            raise  # Re-raise configuration errors as-is
-        except Exception as e:
-            self.logger.error(f"Error getting ontology column: {e}")
-            raise DatabaseQueryError(f"Failed to get ontology column: {e}")
+        return await self.identifier_loader.get_ontology_column(endpoint_name, ontology_type)
     
     async def load_endpoint_identifiers(
         self, 
@@ -2974,8 +2927,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         """
         Load identifiers from an endpoint using its configuration in metamapper.db.
         
-        This method replaces the load_identifiers_from_endpoint function used in scripts,
-        with additional options for returning the full dataframe.
+        This method delegates to the IdentifierLoader to maintain separation of concerns.
         
         Args:
             endpoint_name: Name of the endpoint to load from
@@ -2991,75 +2943,11 @@ class MappingExecutor(CompositeIdentifierMixin):
             KeyError: If the specified column doesn't exist in the data
             DatabaseQueryError: If there's an error querying the database
         """
-        try:
-            # First get the column name for the ontology type
-            column_name = await self.get_ontology_column(endpoint_name, ontology_type)
-            self.logger.info(f"Ontology type '{ontology_type}' maps to column '{column_name}'")
-            
-            # Get endpoint configuration from metamapper.db
-            async with self.async_metamapper_session() as session:
-                stmt = select(Endpoint).where(Endpoint.name == endpoint_name)
-                result = await session.execute(stmt)
-                endpoint = result.scalar_one_or_none()
-                
-                if not endpoint:
-                    raise ConfigurationError(f"Endpoint '{endpoint_name}' not found in database")
-                
-                # Parse connection details (it's a JSON string)
-                connection_details = json.loads(endpoint.connection_details)
-                file_path = connection_details.get('file_path', '')
-                delimiter = connection_details.get('delimiter', ',')
-                
-                # Handle environment variable substitution
-                file_path = resolve_placeholders(file_path, {})
-                
-                self.logger.info(f"Loading identifiers from endpoint '{endpoint_name}'")
-                self.logger.info(f"File path: {file_path}")
-                
-                # Check if file exists
-                if not os.path.exists(file_path):
-                    raise FileNotFoundError(f"Data file not found: {file_path}")
-                
-                # Lazy import pandas to avoid circular imports
-                import pandas as pd
-                
-                # Load the file
-                if endpoint.type == 'file_tsv':
-                    df = pd.read_csv(file_path, sep=delimiter)
-                elif endpoint.type == 'file_csv':
-                    df = pd.read_csv(file_path, sep=delimiter)
-                else:
-                    raise ConfigurationError(f"Unsupported endpoint type: {endpoint.type}")
-                
-                self.logger.info(f"Loaded dataframe with shape: {df.shape}")
-                
-                # Check if column exists
-                if column_name not in df.columns:
-                    raise KeyError(
-                        f"Column '{column_name}' not found in {endpoint_name} data. "
-                        f"Available columns: {list(df.columns)}"
-                    )
-                
-                if return_dataframe:
-                    return df
-                
-                # Extract unique identifiers
-                identifiers = df[column_name].dropna().unique().tolist()
-                self.logger.info(f"Found {len(identifiers)} unique identifiers in column '{column_name}'")
-                
-                # Log sample of identifiers including any composites
-                sample_ids = identifiers[:10]
-                composite_count = sum(1 for id in identifiers if '_' in str(id))
-                self.logger.info(f"Sample identifiers: {sample_ids}")
-                self.logger.info(f"Composite identifiers found: {composite_count} (with '_' delimiter)")
-                
-                return identifiers
-                
-        except (ConfigurationError, FileNotFoundError, KeyError):
-            raise  # Re-raise these specific errors as-is
-        except Exception as e:
-            self.logger.error(f"Error loading identifiers from endpoint {endpoint_name}: {e}")
-            raise DatabaseQueryError(f"Failed to load endpoint identifiers: {e}")
+        return await self.identifier_loader.load_endpoint_identifiers(
+            endpoint_name=endpoint_name,
+            ontology_type=ontology_type,
+            return_dataframe=return_dataframe
+        )
     
     async def get_strategy_info(self, strategy_name: str) -> Dict[str, Any]:
         """
