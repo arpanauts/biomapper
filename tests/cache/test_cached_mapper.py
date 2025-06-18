@@ -10,6 +10,7 @@ from biomapper.cache.manager import CacheManager
 from biomapper.cache.mapper import CachedMapper
 from biomapper.core.base_mapper import BaseMapper, MappingResult
 from biomapper.db.session import DatabaseManager
+from tests.utils.test_db_manager import TestDatabaseManager
 from biomapper.schemas.domain_schema import DomainDocument
 
 
@@ -100,8 +101,8 @@ class CachedMapperTest(unittest.TestCase):
         self.db_path = os.path.join(self.temp_dir.name, "test_mapper_cache.db")
         self.db_url = f"sqlite:///{self.db_path}"
 
-        # Initialize database
-        self.db_manager = DatabaseManager(db_url=self.db_url, echo=False)
+        # Initialize database with test manager that creates cache tables
+        self.db_manager = TestDatabaseManager(db_url=self.db_url, echo=False)
         self.db_manager.init_db(drop_all=True)
 
         # Create cache manager
