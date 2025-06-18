@@ -835,7 +835,7 @@ async def test_load_client_import_error(mapping_executor):
 
     # Call _load_client and verify it raises ClientInitializationError
     with pytest.raises(ClientInitializationError) as exc_info:
-        await mapping_executor._load_client_class(mock_resource.client_class_path)
+        await mapping_executor.client_manager._load_client_class(mock_resource.client_class_path)
 
     # Verify the error details
     assert "Could not load client class" in str(exc_info.value)
@@ -846,7 +846,7 @@ async def test_load_client_import_error(mapping_executor):
 async def test_load_client_json_decode_error(mapping_executor):
     """Test that _load_client handles JSONDecodeError in config template."""
     # Mock the _load_client_class method to return a simple class
-    with patch.object(mapping_executor, "_load_client_class", return_value=MockClient):
+    with patch.object(mapping_executor.client_manager, "_load_client_class", return_value=MockClient):
         # Create a mock resource with invalid JSON in config_template
         mock_resource = MagicMock(spec=MappingResource)
         mock_resource.client_class_path = "valid.path.MockClient"
@@ -879,7 +879,7 @@ async def test_load_client_initialization_exception(mapping_executor):
 
     # Mock the _load_client_class method to return our problematic class
     with patch.object(
-        mapping_executor, "_load_client_class", return_value=ExceptionClient
+        mapping_executor.client_manager, "_load_client_class", return_value=ExceptionClient
     ):
         # Call _load_client and verify it raises ClientInitializationError
         with pytest.raises(ClientInitializationError) as exc_info:
