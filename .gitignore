@@ -55,6 +55,7 @@ metamapper.db-*
 .vscode/
 *.swp
 *.swo
+gwr.sh
 
 # Development and temporary files
 *_test.py
