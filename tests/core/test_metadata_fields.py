@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
     async_sessionmaker,
 )
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.future import select
 
 # Import from cache_models directly for EntityMapping
@@ -301,7 +301,7 @@ async def test_cache_results_populates_metadata_fields(async_cache_session_facto
         assert "steps" in path_details
     
     # Clear the database
-    await async_cache_session.execute(f"DELETE FROM {EntityMapping.__tablename__}")
+    await async_cache_session.execute(text(f"DELETE FROM {EntityMapping.__tablename__}"))
     await async_cache_session.commit()
     
     # Now test with reverse path to ensure direction is properly recorded
@@ -360,7 +360,7 @@ async def test_confidence_score_calculation(async_cache_session_factory, async_c
     # Run each scenario
     for i, scenario in enumerate(test_scenarios):
         # Clear previous results
-        await async_cache_session.execute(f"DELETE FROM {EntityMapping.__tablename__}")
+        await async_cache_session.execute(text(f"DELETE FROM {EntityMapping.__tablename__}"))
         await async_cache_session.commit()
         
         path_id = 1000 + i

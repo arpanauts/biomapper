@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
     async_sessionmaker,
 )
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.future import select
 
 # Import from cache_models directly for EntityMapping
@@ -387,7 +387,7 @@ async def test_confidence_score_calculation(async_cache_engine):
     for i, scenario in enumerate(test_scenarios):
         # Clear previous results
         async with factory() as session:
-            await session.execute(f"DELETE FROM {EntityMapping.__tablename__}")
+            await session.execute(text(f"DELETE FROM {EntityMapping.__tablename__}"))
             await session.commit()
         
         path_id = 1000 + i
