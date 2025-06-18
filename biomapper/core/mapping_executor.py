@@ -48,6 +48,7 @@ from biomapper.core.engine_components.session_manager import SessionManager
 from biomapper.core.engine_components.progress_reporter import ProgressReporter
 from biomapper.core.engine_components.identifier_loader import IdentifierLoader
 from biomapper.core.engine_components.config_loader import ConfigLoader
+from biomapper.core.engine_components.robust_execution_coordinator import RobustExecutionCoordinator
 
 # Import utilities
 from biomapper.core.utils.placeholder_resolver import resolve_placeholders
@@ -173,6 +174,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         self.batch_size = batch_size
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self.checkpoint_enabled = checkpoint_enabled
         
         # Initialize checkpoint manager
         self.checkpoint_manager = CheckpointManager(
@@ -278,6 +280,18 @@ class MappingExecutor(CompositeIdentifierMixin):
             cache_manager=self.cache_manager,
             strategy_handler=self.strategy_handler,
             mapping_executor=self,  # Pass self for backwards compatibility
+            logger=self.logger
+        )
+        
+        # Initialize RobustExecutionCoordinator
+        self.robust_execution_coordinator = RobustExecutionCoordinator(
+            strategy_orchestrator=self.strategy_orchestrator,
+            checkpoint_manager=self.checkpoint_manager,
+            progress_reporter=self.progress_reporter,
+            batch_size=self.batch_size,
+            max_retries=self.max_retries,
+            retry_delay=self.retry_delay,
+            checkpoint_enabled=self.checkpoint_enabled,
             logger=self.logger
         )
 
@@ -562,6 +576,10 @@ class MappingExecutor(CompositeIdentifierMixin):
                 details={"endpoint": endpoint_name, "property": property_name, "error": str(e)}
             ) from e
 
+
+    async def _load_client(self, mapping_resource):
+        """Load and return a client instance for the given mapping resource."""
+        return await self.client_manager.get_client_instance(mapping_resource)
 
     async def _execute_mapping_step(
         self, step: MappingPathStep, input_values: List[str], is_reverse: bool = False
@@ -3383,7 +3401,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         Execute a YAML strategy with robust error handling and checkpointing.
         
         This wraps the standard execute_yaml_strategy method with additional
-        robustness features.
+        robustness features via the RobustExecutionCoordinator.
         
         Args:
             strategy_name: Name of the strategy to execute
@@ -3397,72 +3415,13 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Strategy execution results with additional robustness metadata
         """
-        # Generate execution ID if not provided
-        if not execution_id:
-            execution_id = f"{strategy_name}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
-            
-        # Try to load checkpoint
-        checkpoint_state = None
-        if resume_from_checkpoint:
-            checkpoint_state = await self.checkpoint_manager.load_checkpoint(execution_id)
-            
-        start_time = datetime.utcnow()
-        
-        try:
-            # If we have a checkpoint, extract the current state
-            if checkpoint_state:
-                # This would need to be implemented based on how strategies track state
-                # For now, we'll just pass through to the standard method
-                self.logger.info(f"Checkpoint found but strategy resumption not yet implemented")
-            
-            # Build arguments for the strategy execution
-            strategy_args = {
-                'strategy_name': strategy_name,
-                'input_identifiers': input_identifiers,
-                **kwargs
-            }
-            
-            # Add endpoint names if provided
-            if source_endpoint_name:
-                strategy_args['source_endpoint_name'] = source_endpoint_name
-            if target_endpoint_name:
-                strategy_args['target_endpoint_name'] = target_endpoint_name
-            
-            # Execute the strategy
-            # This assumes the parent class has execute_yaml_strategy method
-            result = await self.execute_yaml_strategy(**strategy_args)
-            
-            # Add robustness metadata
-            result['robust_execution'] = {
-                'execution_id': execution_id,
-                'checkpointing_enabled': self.checkpoint_enabled,
-                'checkpoint_used': checkpoint_state is not None,
-                'execution_time': (datetime.utcnow() - start_time).total_seconds(),
-                'retries_configured': self.max_retries,
-                'batch_size': self.batch_size
-            }
-            
-            # Clear checkpoint on success
-            await self.checkpoint_manager.clear_checkpoint(execution_id)
-                
-            return result
-            
-        except Exception as e:
-            # Report execution failure
-            self.progress_reporter.report({
-                'type': 'execution_failed',
-                'execution_id': execution_id,
-                'strategy': strategy_name,
-                'error': str(e),
-                'checkpoint_available': self.checkpoint_manager.current_checkpoint_file is not None
-            })
-            
-            # Re-raise with additional context
-            raise MappingExecutionError(
-                f"Strategy execution failed: {strategy_name}",
-                details={
-                    'execution_id': execution_id,
-                    'checkpoint_available': self.checkpoint_manager.current_checkpoint_file is not None,
-                    'error': str(e)
-                }
-            )
+        # Delegate to the RobustExecutionCoordinator
+        return await self.robust_execution_coordinator.execute_strategy_robustly(
+            strategy_name=strategy_name,
+            input_identifiers=input_identifiers,
+            source_endpoint_name=source_endpoint_name,
+            target_endpoint_name=target_endpoint_name,
+            execution_id=execution_id,
+            resume_from_checkpoint=resume_from_checkpoint,
+            **kwargs
+        )
