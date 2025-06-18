@@ -3,8 +3,9 @@ import enum
 import importlib
 import json
 import os
+import pickle
 import time # Add import time
-from typing import List, Dict, Any, Optional, Tuple, Set, Union, Type
+from typing import List, Dict, Any, Optional, Tuple, Set, Union, Type, Callable
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, selectinload, joinedload
@@ -33,6 +34,11 @@ from biomapper.core.exceptions import (
     StrategyNotFoundError,
     InactiveStrategyError,
 )
+
+# Import new strategy handling modules
+from biomapper.core.engine_components.strategy_handler import StrategyHandler
+from biomapper.core.engine_components.path_finder import PathFinder
+from biomapper.core.engine_components.reversible_path import ReversiblePath
 
 # Import models for metamapper DB
 from ..db.models import (
@@ -75,43 +81,6 @@ from biomapper.utils.formatters import PydanticEncoder
 def get_current_utc_time() -> datetime:
     """Return the current time in UTC timezone."""
     return datetime.now(timezone.utc)
-
-class ReversiblePath:
-    """Wrapper to allow executing a path in reverse direction."""
-
-    def __init__(self, original_path: MappingPath, is_reverse: bool = False):
-        self.original_path = original_path
-        self.is_reverse = is_reverse
-
-    @property
-    def id(self) -> Optional[int]:
-        return self.original_path.id
-
-    @property
-    def name(self) -> Optional[str]:
-        return (
-            f"{self.original_path.name} (Reverse)"
-            if self.is_reverse
-            else self.original_path.name
-        )
-
-    @property
-    def priority(self) -> Optional[int]:
-        # Reverse paths have slightly lower priority
-        original_priority = self.original_path.priority if self.original_path.priority is not None else 100 # Default priority if None
-        return original_priority + (5 if self.is_reverse else 0)
-
-    @property
-    def steps(self) -> List[MappingPathStep]:
-        if not self.is_reverse:
-            return self.original_path.steps
-        else:
-            # Return steps in reverse order
-            return sorted(self.original_path.steps, key=lambda s: -(s.step_order or 0))
-
-    def __getattr__(self, name: str) -> Any:
-        # Delegate other attributes to the original path
-        return getattr(self.original_path, name)
 
 
 class MappingResultBundle:
@@ -272,6 +241,12 @@ class MappingExecutor(CompositeIdentifierMixin):
         path_cache_expiry_seconds: int = 300, # Cache expiry time in seconds (5 minutes)
         max_concurrent_batches: int = 5, # Maximum number of batches to process concurrently
         enable_metrics: bool = True, # Whether to enable metrics tracking
+        # Robust execution parameters with backward-compatible defaults
+        checkpoint_enabled: bool = False,
+        checkpoint_dir: Optional[str] = None,
+        batch_size: int = 100,
+        max_retries: int = 3,
+        retry_delay: int = 5,
     ):
         """
         Initializes the MappingExecutor.
@@ -284,6 +259,11 @@ class MappingExecutor(CompositeIdentifierMixin):
             path_cache_expiry_seconds: Cache expiry time in seconds
             max_concurrent_batches: Maximum number of batches to process concurrently
             enable_metrics: Whether to enable metrics tracking
+            checkpoint_enabled: Enable checkpointing for resumable execution
+            checkpoint_dir: Directory for checkpoint files
+            batch_size: Number of items to process per batch
+            max_retries: Maximum retry attempts for failed operations
+            retry_delay: Delay in seconds between retry attempts
             
         Returns:
             An initialized MappingExecutor instance with database tables created
@@ -305,12 +285,27 @@ class MappingExecutor(CompositeIdentifierMixin):
         )
         self.echo_sql = echo_sql
         
-        # Path caching and concurrency settings
-        self._path_cache = {}
-        self._path_cache_timestamps = {}
-        self._path_cache_lock = asyncio.Lock()  # Thread safety for cache access
-        self._path_cache_max_size = path_cache_size
-        self._path_cache_expiry_seconds = path_cache_expiry_seconds
+        # Robust execution parameters
+        self.checkpoint_enabled = checkpoint_enabled
+        self.checkpoint_dir = checkpoint_dir
+        self.batch_size = batch_size
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        
+        # Set up checkpoint directory
+        if self.checkpoint_enabled and self.checkpoint_dir:
+            self.checkpoint_dir = Path(self.checkpoint_dir)
+            self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        elif self.checkpoint_enabled:
+            # Default checkpoint directory
+            self.checkpoint_dir = Path.home() / '.biomapper' / 'checkpoints'
+            self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+            
+        # Progress tracking
+        self._progress_callbacks: List[Callable] = []
+        self._current_checkpoint_file: Optional[Path] = None
+        
+        # Concurrency settings
         self.max_concurrent_batches = max_concurrent_batches
         
         # Performance monitoring
@@ -333,6 +328,15 @@ class MappingExecutor(CompositeIdentifierMixin):
 
         # Client instance cache to avoid re-initializing expensive clients
         self._client_cache: Dict[str, Any] = {}
+        
+        # Initialize strategy handler
+        self.strategy_handler = StrategyHandler(mapping_executor=self)
+        
+        # Initialize path finder with cache settings
+        self.path_finder = PathFinder(
+            cache_size=path_cache_size,
+            cache_expiry_seconds=path_cache_expiry_seconds
+        )
         
         # Log database URLs being used
         self.logger.info(f"Using Metamapper DB URL: {self.metamapper_db_url}")
@@ -421,6 +425,12 @@ class MappingExecutor(CompositeIdentifierMixin):
         path_cache_expiry_seconds: int = 300,
         max_concurrent_batches: int = 5,
         enable_metrics: bool = True,
+        # Robust execution parameters
+        checkpoint_enabled: bool = False,
+        checkpoint_dir: Optional[str] = None,
+        batch_size: int = 100,
+        max_retries: int = 3,
+        retry_delay: int = 5,
     ):
         """Asynchronously create and initialize a MappingExecutor instance.
         
@@ -435,6 +445,11 @@ class MappingExecutor(CompositeIdentifierMixin):
             path_cache_expiry_seconds: Cache expiry time in seconds
             max_concurrent_batches: Maximum number of batches to process concurrently
             enable_metrics: Whether to enable metrics tracking
+            checkpoint_enabled: Enable checkpointing for resumable execution
+            checkpoint_dir: Directory for checkpoint files
+            batch_size: Number of items to process per batch
+            max_retries: Maximum retry attempts for failed operations
+            retry_delay: Delay in seconds between retry attempts
             
         Returns:
             An initialized MappingExecutor instance with database tables created
@@ -448,6 +463,11 @@ class MappingExecutor(CompositeIdentifierMixin):
             path_cache_expiry_seconds=path_cache_expiry_seconds,
             max_concurrent_batches=max_concurrent_batches,
             enable_metrics=enable_metrics,
+            checkpoint_enabled=checkpoint_enabled,
+            checkpoint_dir=checkpoint_dir,
+            batch_size=batch_size,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
         )
         
         # Initialize cache database tables
@@ -733,198 +753,31 @@ class MappingExecutor(CompositeIdentifierMixin):
         target_ontology: str
     ) -> List[MappingPath]:
         """
-        Find mapping paths for a specific endpoint relationship based on RelationshipMappingPath.
+        Find mapping paths for a specific endpoint relationship.
         
-        This method looks for paths that are explicitly associated with the relationship
-        between two endpoints through the RelationshipMappingPath table.
-        
-        Args:
-            session: Database session
-            source_endpoint_id: ID of the source endpoint
-            target_endpoint_id: ID of the target endpoint
-            source_ontology: Source ontology type
-            target_ontology: Target ontology type
-            
-        Returns:
-            List of MappingPath objects associated with the relationship, ordered by priority
+        Delegates to PathFinder service.
         """
-        self.logger.debug(
-            f"Searching for relationship-specific paths from endpoint {source_endpoint_id} to {target_endpoint_id} "
-            f"with ontologies '{source_ontology}' -> '{target_ontology}'"
+        return await self.path_finder._find_paths_for_relationship(
+            session,
+            source_endpoint_id,
+            target_endpoint_id,
+            source_ontology,
+            target_ontology
         )
-        
-        # First, find the EndpointRelationship between these endpoints
-        relationship_stmt = (
-            select(EndpointRelationship)
-            .where(EndpointRelationship.source_endpoint_id == source_endpoint_id)
-            .where(EndpointRelationship.target_endpoint_id == target_endpoint_id)
-        )
-        
-        relationship_result = await session.execute(relationship_stmt)
-        relationship = relationship_result.scalar_one_or_none()
-        
-        if not relationship:
-            self.logger.debug(
-                f"No EndpointRelationship found between endpoints {source_endpoint_id} and {target_endpoint_id}"
-            )
-            return []
-        
-        self.logger.debug(f"Found EndpointRelationship ID: {relationship.id}")
-        
-        # Now find RelationshipMappingPaths for this relationship with matching ontologies
-        mapping_paths_stmt = (
-            select(MappingPath)
-            .join(
-                RelationshipMappingPath,
-                RelationshipMappingPath.ontology_path_id == MappingPath.id
-            )
-            .where(RelationshipMappingPath.relationship_id == relationship.id)
-            .where(RelationshipMappingPath.source_ontology == source_ontology)
-            .where(RelationshipMappingPath.target_ontology == target_ontology)
-            .where(MappingPath.is_active == True)  # Only active paths
-            .options(
-                selectinload(MappingPath.steps).joinedload(
-                    MappingPathStep.mapping_resource
-                )
-            )
-            .order_by(MappingPath.priority.asc())  # Lower number = higher priority
-        )
-        
-        try:
-            result = await session.execute(mapping_paths_stmt)
-            paths = result.scalars().unique().all()
-            
-            if paths:
-                self.logger.info(
-                    f"Found {len(paths)} relationship-specific mapping path(s) for "
-                    f"relationship {relationship.id} ({source_ontology} -> {target_ontology})"
-                )
-                for path in paths:
-                    self.logger.debug(
-                        f" - Path ID: {path.id}, Name: '{path.name}', Priority: {path.priority}"
-                    )
-            else:
-                self.logger.debug(
-                    f"No relationship-specific mapping paths found for relationship {relationship.id} "
-                    f"with ontologies {source_ontology} -> {target_ontology}"
-                )
-                
-            return paths
-            
-        except SQLAlchemyError as e:
-            self.logger.error(
-                f"Database query error finding relationship paths: {e}", exc_info=True
-            )
-            raise BiomapperError(
-                f"Database error finding relationship paths between endpoints "
-                f"{source_endpoint_id} and {target_endpoint_id}",
-                error_code=ErrorCode.DATABASE_QUERY_ERROR,
-                details={
-                    "source_endpoint_id": source_endpoint_id,
-                    "target_endpoint_id": target_endpoint_id,
-                    "source_ontology": source_ontology,
-                    "target_ontology": target_ontology
-                },
-            ) from e
 
     async def _find_direct_paths(
         self, session: AsyncSession, source_ontology: str, target_ontology: str
     ) -> List[MappingPath]:
-        """Find direct mapping paths from source to target ontology without direction reversal."""
-        self.logger.debug(
-            f"Searching for direct mapping paths from '{source_ontology}' to '{target_ontology}'"
+        """
+        Find direct mapping paths from source to target ontology.
+        
+        Delegates to PathFinder service.
+        """
+        return await self.path_finder._find_direct_paths(
+            session,
+            source_ontology,
+            target_ontology
         )
-
-        # We need to join MappingPath -> MappingPathStep -> MappingResource
-        # for both the first step (to check source_ontology)
-        # and the last step (to check target_ontology).
-
-        # Subquery to find the first step's input ontology for each path
-        first_step_sq = (
-            select(MappingPathStep.mapping_path_id, MappingResource.input_ontology_term)
-            .join(
-                MappingResource,
-                MappingPathStep.mapping_resource_id == MappingResource.id,
-            )
-            .where(MappingPathStep.step_order == 1)
-            .distinct()
-            .subquery("first_step_sq")
-        )
-
-        # Subquery to find the maximum step order for each path
-        max_step_sq = (
-            select(
-                MappingPathStep.mapping_path_id,
-                func.max(MappingPathStep.step_order).label("max_order"),
-            )
-            .group_by(MappingPathStep.mapping_path_id)
-            .subquery("max_step_sq")
-        )
-
-        # Subquery to find the last step's output ontology for each path
-        last_step_sq = (
-            select(
-                MappingPathStep.mapping_path_id, MappingResource.output_ontology_term
-            )
-            .join(
-                MappingResource,
-                MappingPathStep.mapping_resource_id == MappingResource.id,
-            )
-            .join(
-                max_step_sq,
-                (MappingPathStep.mapping_path_id == max_step_sq.c.mapping_path_id)
-                & (MappingPathStep.step_order == max_step_sq.c.max_order),
-            )
-            .distinct()
-            .subquery("last_step_sq")
-        )
-
-        # Main query to select MappingPaths matching source and target
-        stmt = (
-            select(MappingPath)
-            # Use selectinload for eager loading related steps and resources
-            .options(
-                selectinload(MappingPath.steps).joinedload(
-                    MappingPathStep.mapping_resource
-                )
-            )
-            .join(first_step_sq, MappingPath.id == first_step_sq.c.mapping_path_id)
-            .join(last_step_sq, MappingPath.id == last_step_sq.c.mapping_path_id)
-            .where(first_step_sq.c.input_ontology_term == source_ontology)
-            .where(last_step_sq.c.output_ontology_term == target_ontology)
-            .order_by(MappingPath.priority.asc())  # Lower number means higher priority
-        )
-
-        try:
-            result = await session.execute(stmt)
-        except SQLAlchemyError as e:
-            self.logger.error(
-                f"Database query error finding direct paths: {e}", exc_info=True
-            )
-            raise BiomapperError(
-                f"Database error finding paths from {source_ontology} to {target_ontology}",
-                error_code=ErrorCode.DATABASE_QUERY_ERROR,
-                details={"source": source_ontology, "target": target_ontology},
-            ) from e
-
-        # Use unique() to handle potential duplicates if joins create multiple rows for the same path
-        paths = result.scalars().unique().all()
-
-        if paths:
-            self.logger.debug(
-                f"Found {len(paths)} direct mapping path(s) from '{source_ontology}' to '{target_ontology}'"
-            )
-            # Log the found paths for clarity
-            for path in paths:
-                self.logger.debug(
-                    f" - Path ID: {path.id}, Name: '{path.name}', Priority: {path.priority}"
-                )
-        else:
-            self.logger.debug(
-                f"No direct mapping paths found from '{source_ontology}' to '{target_ontology}'"
-            )
-
-        return paths
 
     async def _find_mapping_paths(
         self,
@@ -935,168 +788,21 @@ class MappingExecutor(CompositeIdentifierMixin):
         preferred_direction: str = "forward",
         source_endpoint: Optional[Endpoint] = None,
         target_endpoint: Optional[Endpoint] = None,
-    ) -> List[Union[MappingPath, "ReversiblePath"]]:
+    ) -> List[Union[MappingPath, ReversiblePath]]:
         """
-        Find mapping paths between ontologies, optionally searching in both directions concurrently.
-
-        Args:
-            session: The database session
-            source_ontology: Source ontology term
-            target_ontology: Target ontology term
-            bidirectional: If True, search for both forward and reverse paths in parallel
-            preferred_direction: Preferred direction for path ordering ("forward" or "reverse")
-            source_endpoint: Optional source endpoint for relationship-specific path selection
-            target_endpoint: Optional target endpoint for relationship-specific path selection
-
-        Returns:
-            List of paths (may be wrapped in ReversiblePath if reverse paths were found)
-            Paths are sorted by direction preference and then by priority
+        Find mapping paths between ontologies.
+        
+        Delegates to PathFinder service.
         """
-        # Use caching to avoid redundant database calls
-        cache_key = f"{source_ontology}_{target_ontology}_{bidirectional}_{preferred_direction}"
-        
-        # Initialize path cache if needed with time-based expiration
-        if not hasattr(self, "_path_cache"):
-            self._path_cache = {}
-            self._path_cache_timestamps = {}
-            self._path_cache_lock = asyncio.Lock()  # Thread safety for cache access
-            self._path_cache_max_size = 100  # Maximum number of paths to cache
-            self._path_cache_expiry_seconds = 300  # Cache expiry time in seconds (5 minutes)
-            
-        # Check if cache entry exists and is not expired
-        current_time = time.time()
-        cache_hit = False
-        
-        async with self._path_cache_lock:
-            if cache_key in self._path_cache:
-                # Check if cache entry is expired
-                timestamp = self._path_cache_timestamps.get(cache_key, 0)
-                if current_time - timestamp < self._path_cache_expiry_seconds:
-                    cache_hit = True
-                    self.logger.debug(f"Using cached paths for {cache_key}")
-                    return self._path_cache[cache_key]
-                else:
-                    # Remove expired cache entry
-                    self.logger.debug(f"Cache entry for {cache_key} expired, removing")
-                    del self._path_cache[cache_key]
-                    if cache_key in self._path_cache_timestamps:
-                        del self._path_cache_timestamps[cache_key]
-            
-        self.logger.debug(
-            f"Searching for mapping paths from '{source_ontology}' to '{target_ontology}' (bidirectional={bidirectional}, preferred={preferred_direction})"
+        return await self.path_finder.find_mapping_paths(
+            session,
+            source_ontology,
+            target_ontology,
+            bidirectional=bidirectional,
+            preferred_direction=preferred_direction,
+            source_endpoint=source_endpoint,
+            target_endpoint=target_endpoint
         )
-
-        # First, try to find relationship-specific paths if endpoints are provided
-        relationship_paths = []
-        if source_endpoint and target_endpoint:
-            self.logger.debug(f"Checking for relationship-specific paths between endpoints {source_endpoint.id} and {target_endpoint.id}")
-            relationship_paths = await self._find_paths_for_relationship(
-                session,
-                source_endpoint.id,
-                target_endpoint.id,
-                source_ontology,
-                target_ontology
-            )
-            
-            if relationship_paths:
-                self.logger.info(f"Using {len(relationship_paths)} relationship-specific path(s)")
-                # If we found relationship-specific paths, use only those
-                paths = [ReversiblePath(path, is_reverse=False) for path in relationship_paths]
-                
-                # If bidirectional, also check for reverse relationship paths
-                if bidirectional:
-                    reverse_relationship_paths = await self._find_paths_for_relationship(
-                        session,
-                        target_endpoint.id,
-                        source_endpoint.id,
-                        target_ontology,
-                        source_ontology
-                    )
-                    if reverse_relationship_paths:
-                        reverse_path_objects = [ReversiblePath(path, is_reverse=True) for path in reverse_relationship_paths]
-                        if preferred_direction == "reverse":
-                            paths = reverse_path_objects + paths
-                        else:
-                            paths = paths + reverse_path_objects
-            else:
-                self.logger.debug("No relationship-specific paths found, falling back to general path search")
-
-        # If no relationship-specific paths found (or no endpoints provided), use general path finding
-        if not relationship_paths:
-            # Create tasks for both forward and reverse path finding
-            forward_task = self._find_direct_paths(session, source_ontology, target_ontology)
-            
-            if bidirectional:
-                # Only create the reverse task if bidirectional=True
-                reverse_task = self._find_direct_paths(session, target_ontology, source_ontology)
-                # Run both tasks concurrently
-                forward_paths, reverse_paths = await asyncio.gather(forward_task, reverse_task)
-                
-                # Process forward paths
-                paths = [ReversiblePath(path, is_reverse=False) for path in forward_paths]
-                # Process reverse paths
-                reverse_path_objects = [ReversiblePath(path, is_reverse=True) for path in reverse_paths]
-                
-                # Combine paths based on preferred direction
-                if preferred_direction == "reverse":
-                    # If reverse is preferred, put reverse paths first
-                    paths = reverse_path_objects + paths
-                else:
-                    # Otherwise, forward paths first (default)
-                    paths = paths + reverse_path_objects
-            else:
-                # If not bidirectional, just get the forward paths
-                forward_paths = await forward_task
-                paths = [ReversiblePath(path, is_reverse=False) for path in forward_paths]
-
-        # Sort paths by priority after respecting direction preference
-        paths = sorted(paths, key=lambda p: (-1 if p.is_reverse != (preferred_direction == "reverse") else 1, p.priority))
-
-        # Log found paths
-        if paths:
-            direction = "bidirectional" if bidirectional else "forward"
-            self.logger.info(
-                f"Found {len(paths)} potential mapping path(s) using {direction} search"
-            )
-            for path in paths:
-                reverse_text = "(REVERSE)" if path.is_reverse else ""
-                self.logger.info(
-                    f" - Path ID: {path.id}, Name: '{path.name}' {reverse_text}, Priority: {path.priority}"
-                )
-        
-        # Cache the results to avoid redundant database calls with thread safety and size limits
-        async with self._path_cache_lock:
-            # Implement LRU-like behavior by removing oldest entries if cache is too large
-            if len(self._path_cache) >= self._path_cache_max_size:
-                # Find oldest entry
-                oldest_key = None
-                oldest_time = float('inf')
-                for key, timestamp in self._path_cache_timestamps.items():
-                    if timestamp < oldest_time:
-                        oldest_time = timestamp
-                        oldest_key = key
-                        
-                if oldest_key:
-                    self.logger.debug(f"Cache full, removing oldest entry: {oldest_key}")
-                    del self._path_cache[oldest_key]
-                    del self._path_cache_timestamps[oldest_key]
-            
-            # Store new cache entry with timestamp
-            self._path_cache[cache_key] = paths
-            self._path_cache_timestamps[cache_key] = time.time()
-            
-            # Add telemetry
-            cache_size = len(self._path_cache)
-            if cache_size % 10 == 0:  # Log every 10 entries
-                self.logger.info(f"Path cache contains {cache_size} entries")
-        
-        # Log warning if no paths were found
-        if not paths:
-            self.logger.warning(
-                f"No mapping paths found from '{source_ontology}' to '{target_ontology}' (bidirectional={bidirectional})"
-            )
-            
-        return paths
 
     async def _find_best_path(
         self,
@@ -1110,37 +816,22 @@ class MappingExecutor(CompositeIdentifierMixin):
         target_endpoint: Optional[Endpoint] = None,
     ) -> Optional[Union[MappingPath, ReversiblePath]]:
         """
-        Find the highest priority mapping path, optionally considering reverse paths concurrently.
-
-        Args:
-            session: Database session
-            source_type: Source ontology type
-            target_type: Target ontology type
-            bidirectional: If True, also search for reverse paths concurrently with forward paths
-            preferred_direction: Preferred direction ("forward" or "reverse") for path selection
-            allow_reverse: Legacy parameter to maintain compatibility, same as bidirectional=True
-            source_endpoint: Optional source endpoint for relationship-specific path selection
-            target_endpoint: Optional target endpoint for relationship-specific path selection
-
-        Returns:
-            The highest priority path, sorted by direction preference and then by priority
+        Find the highest priority mapping path.
+        
+        Delegates to PathFinder service.
         """
         # For compatibility: if allow_reverse is True, make sure bidirectional is too
         if allow_reverse and not bidirectional:
             bidirectional = True
             
-        # Find all paths with the given parameters
-        paths = await self._find_mapping_paths(
-            session, 
-            source_type, 
-            target_type, 
+        return await self.path_finder.find_best_path(
+            session,
+            source_type,
+            target_type,
             bidirectional=bidirectional,
-            preferred_direction=preferred_direction,
             source_endpoint=source_endpoint,
             target_endpoint=target_endpoint
         )
-        
-        return paths[0] if paths else None
 
     async def _get_endpoint_properties(self, session: AsyncSession, endpoint_name: str) -> List[EndpointPropertyConfig]:
         """Get all property configurations for an endpoint."""
@@ -3170,109 +2861,49 @@ class MappingExecutor(CompositeIdentifierMixin):
             >>> print(f"Step results: {len(result['step_results'])}")
         """
         
-        # Load the strategy from database
+        # Use strategy handler for loading and execution
         async with self.async_metamapper_session() as session:
-            # Query for the strategy
-            stmt = select(MappingStrategy).where(MappingStrategy.name == strategy_name)
-            result = await session.execute(stmt)
-            strategy = result.scalar_one_or_none()
-            
-            if not strategy:
-                raise ConfigurationError(f"Mapping strategy '{strategy_name}' not found in database")
-            
-            if not strategy.is_active:
-                raise ConfigurationError(f"Mapping strategy '{strategy_name}' is not active")
-            
-            # Load strategy steps with eager loading
-            stmt = (
-                select(MappingStrategyStep)
-                .where(MappingStrategyStep.strategy_id == strategy.id)
-                .order_by(MappingStrategyStep.step_order)
-            )
-            result = await session.execute(stmt)
-            steps = result.scalars().all()
-            
-            if not steps:
-                raise ConfigurationError(f"Mapping strategy '{strategy_name}' has no steps defined")
+            # Load the strategy
+            strategy = await self.strategy_handler.load_strategy(session, strategy_name)
             
             # Load source and target endpoints
-            source_endpoint = await self._get_endpoint_by_name(session, source_endpoint_name)
-            target_endpoint = await self._get_endpoint_by_name(session, target_endpoint_name)
+            source_endpoint = await self.strategy_handler.get_endpoint_by_name(session, source_endpoint_name)
+            target_endpoint = await self.strategy_handler.get_endpoint_by_name(session, target_endpoint_name)
             
             if not source_endpoint:
                 raise ConfigurationError(f"Source endpoint '{source_endpoint_name}' not found")
             if not target_endpoint:
                 raise ConfigurationError(f"Target endpoint '{target_endpoint_name}' not found")
-        
-        # Initialize working data
-        current_identifiers = input_identifiers.copy()
-        current_ontology_type = source_ontology_type or strategy.default_source_ontology_type
-        
-        # Track results for each step
-        step_results = []
-        overall_provenance = []
-        
-        # Initialize strategy-level context that persists across steps
-        strategy_context = {
-            'initial_identifiers': input_identifiers.copy(),
-            'step_results': [],
-            'all_provenance': [],
-            'mapping_results': {}
-        }
-        
-        # Execute each step in sequence
-        for step_idx, step in enumerate(steps):
-            self.logger.info(f"Executing step {step.step_id}: {step.description}")
             
-            if progress_callback:
-                progress_callback(step_idx, len(steps), f"Executing {step.step_id}")
+            # Prepare initial context
+            initial_context = {
+                'initial_identifiers': input_identifiers.copy(),
+                'step_results': [],
+                'all_provenance': [],
+                'mapping_results': {},
+                'progress_callback': progress_callback
+            }
             
-            # Dispatch to appropriate action handler
-            try:
-                step_result = await self._execute_strategy_action(
-                    step=step,
-                    current_identifiers=current_identifiers,
-                    current_ontology_type=current_ontology_type,
-                    source_endpoint=source_endpoint,
-                    target_endpoint=target_endpoint,
-                    use_cache=use_cache,
-                    max_cache_age_days=max_cache_age_days,
-                    batch_size=batch_size,
-                    min_confidence=min_confidence,
-                    strategy_context=strategy_context,  # Pass strategy context
-                )
-                
-                # Update working data for next step
-                current_identifiers = step_result['output_identifiers']
-                current_ontology_type = step_result.get('output_ontology_type', current_ontology_type)
-                
-                # Track results
-                step_info = {
-                    'step_id': step.step_id,
-                    'action_type': step.action_type,
-                    'input_count': len(step_result.get('input_identifiers', [])),
-                    'output_count': len(step_result.get('output_identifiers', [])),
-                    'success': True,
-                    'details': step_result.get('details', {})
-                }
-                step_results.append(step_info)
-                strategy_context['step_results'].append(step_info)
-                
-                # Accumulate provenance
-                if 'provenance' in step_result:
-                    overall_provenance.extend(step_result['provenance'])
-                    strategy_context['all_provenance'].extend(step_result['provenance'])
-                    
-            except Exception as e:
-                self.logger.error(f"Error executing step {step.step_id}: {str(e)}")
-                step_results.append({
-                    'step_id': step.step_id,
-                    'action_type': step.action_type,
-                    'success': False,
-                    'error': str(e)
-                })
-                # Depending on strategy, might want to continue or fail
-                raise MappingExecutionError(f"Strategy execution failed at step {step.step_id}: {str(e)}")
+            # Execute strategy using the strategy handler
+            execution_result = await self.strategy_handler.execute_strategy(
+                session=session,
+                strategy=strategy,
+                input_identifiers=input_identifiers,
+                source_endpoint=source_endpoint,
+                target_endpoint=target_endpoint,
+                use_cache=use_cache,
+                max_cache_age_days=max_cache_age_days,
+                batch_size=batch_size,
+                min_confidence=min_confidence,
+                initial_context=initial_context
+            )
+            
+            # Extract data from execution result
+            step_results = execution_result['step_results']
+            strategy_context = execution_result['context']
+            current_identifiers = strategy_context.get('current_identifiers', [])
+            current_ontology_type = strategy_context.get('current_ontology_type', strategy.default_source_ontology_type)
+            overall_provenance = strategy_context.get('all_provenance', [])
         
         # Prepare final results
         final_target_ontology = target_ontology_type or strategy.default_target_ontology_type
@@ -3410,159 +3041,6 @@ class MappingExecutor(CompositeIdentifierMixin):
             },
             'context': strategy_context  # Include the final strategy context
         }
-    
-    async def _execute_strategy_action(
-        self,
-        step: MappingStrategyStep,
-        current_identifiers: List[str],
-        current_ontology_type: str,
-        source_endpoint: Endpoint,
-        target_endpoint: Endpoint,
-        use_cache: bool,
-        max_cache_age_days: Optional[int],
-        batch_size: int,
-        min_confidence: float,
-        strategy_context: Dict[str, Any] = None,
-    ) -> Dict[str, Any]:
-        """
-        Execute a single strategy action step using dedicated action classes.
-        
-        This internal method dispatches to the appropriate strategy action class based on 
-        the step's action_type. It instantiates and calls one of the dedicated action classes:
-        - ConvertIdentifiersLocalAction: For CONVERT_IDENTIFIERS_LOCAL actions
-        - ExecuteMappingPathAction: For EXECUTE_MAPPING_PATH actions  
-        - FilterByTargetPresenceAction: For FILTER_IDENTIFIERS_BY_TARGET_PRESENCE actions
-        
-        Each action class receives an ActionContext object containing database session,
-        cache settings, mapping executor reference, and processing parameters.
-        
-        Args:
-            step: The MappingStrategyStep containing action type and parameters
-            current_identifiers: List of identifiers to process
-            current_ontology_type: Current ontology type of the identifiers
-            source_endpoint: Source endpoint configuration
-            target_endpoint: Target endpoint configuration
-            use_cache: Whether to use caching for this action
-            max_cache_age_days: Maximum age for cached results
-            batch_size: Size of batches for processing
-            min_confidence: Minimum confidence threshold for results
-            
-        Returns:
-            Dict[str, Any]: Action result containing:
-                - output_identifiers: List of identifiers after processing
-                - output_ontology_type: Ontology type after processing
-                - Additional action-specific metadata and statistics
-                
-        Raises:
-            ConfigurationError: If the action_type is unknown/unsupported
-            MappingExecutionError: If the action execution fails
-        """
-        # Import strategy actions
-        from biomapper.core.strategy_actions.bidirectional_match import BidirectionalMatchAction
-        from biomapper.core.strategy_actions.convert_identifiers_local import ConvertIdentifiersLocalAction
-        from biomapper.core.strategy_actions.execute_mapping_path import ExecuteMappingPathAction
-        from biomapper.core.strategy_actions.filter_by_target_presence import FilterByTargetPresenceAction
-        from biomapper.core.strategy_actions.resolve_and_match_forward import ResolveAndMatchForwardAction
-        from biomapper.core.strategy_actions.resolve_and_match_reverse import ResolveAndMatchReverse
-        from biomapper.core.strategy_actions.generate_mapping_summary import GenerateMappingSummaryAction
-        from biomapper.core.strategy_actions.generate_detailed_report import GenerateDetailedReportAction
-        from biomapper.core.strategy_actions.export_results import ExportResultsAction
-        from biomapper.core.strategy_actions.visualize_mapping_flow import VisualizeMappingFlowAction
-        from biomapper.core.strategy_actions.populate_context import PopulateContextAction
-        from biomapper.core.strategy_actions.collect_matched_targets import CollectMatchedTargetsAction
-        
-        action_type = step.action_type
-        action_params = step.action_parameters or {}
-        
-        # Process action parameters to handle context references
-        processed_params = {}
-        for key, value in action_params.items():
-            if isinstance(value, str) and value.startswith("context."):
-                # This is a reference to context, strip the prefix
-                context_key = value[8:]  # Remove "context." prefix
-                processed_params[key] = context_key
-            else:
-                processed_params[key] = value
-        
-        self.logger.info(f"Executing action type: {action_type} with params: {processed_params}")
-        
-        # Initialize strategy context if not provided
-        if strategy_context is None:
-            strategy_context = {}
-            
-        # Use strategy context directly, adding execution parameters
-        # This ensures modifications persist between steps
-        context = strategy_context
-        
-        # Add/update execution parameters
-        context.update({
-            "db_session": self.async_metamapper_session,  # Pass the session factory
-            "cache_settings": {
-                "use_cache": use_cache,
-                "max_cache_age_days": max_cache_age_days
-            },
-            "mapping_executor": self,  # For ExecuteMappingPathAction
-            "batch_size": batch_size,
-            "min_confidence": min_confidence
-        })
-        
-        self.logger.debug(f"Context before action: {list(context.keys())}")
-        
-        # Execute within a database session
-        async with self.async_metamapper_session() as session:
-            # Update context with actual session
-            context["db_session"] = session
-            
-            # Route to appropriate action handler
-            if action_type == "CONVERT_IDENTIFIERS_LOCAL":
-                action = ConvertIdentifiersLocalAction(session)
-            elif action_type == "EXECUTE_MAPPING_PATH":
-                action = ExecuteMappingPathAction(session)
-            elif action_type == "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE":
-                action = FilterByTargetPresenceAction(session)
-            elif action_type == "RESOLVE_AND_MATCH_FORWARD":
-                action = ResolveAndMatchForwardAction(session)
-            elif action_type == "RESOLVE_AND_MATCH_REVERSE":
-                action = ResolveAndMatchReverse(session)
-            elif action_type == "BIDIRECTIONAL_MATCH":
-                action = BidirectionalMatchAction(session)
-            elif action_type == "GENERATE_MAPPING_SUMMARY":
-                action = GenerateMappingSummaryAction(session)
-            elif action_type == "GENERATE_DETAILED_REPORT":
-                action = GenerateDetailedReportAction(session)
-            elif action_type == "EXPORT_RESULTS":
-                action = ExportResultsAction(session)
-            elif action_type == "VISUALIZE_MAPPING_FLOW":
-                action = VisualizeMappingFlowAction(session)
-            elif action_type == "POPULATE_CONTEXT":
-                action = PopulateContextAction(session)
-            elif action_type == "COLLECT_MATCHED_TARGETS":
-                action = CollectMatchedTargetsAction(session)
-            else:
-                raise ConfigurationError(f"Unknown action type: {action_type}")
-            
-            # Execute the action
-            try:
-                result = await action.execute(
-                    current_identifiers=current_identifiers,
-                    current_ontology_type=current_ontology_type,
-                    action_params=processed_params,
-                    source_endpoint=source_endpoint,
-                    target_endpoint=target_endpoint,
-                    context=context
-                )
-                
-                # Ensure result has required fields
-                if 'output_identifiers' not in result:
-                    result['output_identifiers'] = result.get('input_identifiers', current_identifiers)
-                if 'output_ontology_type' not in result:
-                    result['output_ontology_type'] = current_ontology_type
-                    
-                return result
-                
-            except Exception as e:
-                self.logger.error(f"Error executing strategy action {action_type}: {str(e)}")
-                raise MappingExecutionError(f"Strategy action {action_type} failed: {str(e)}")
     
     async def _get_endpoint_by_name(self, session: AsyncSession, endpoint_name: str) -> Optional[Endpoint]:
         """
@@ -4789,3 +4267,438 @@ class MappingExecutor(CompositeIdentifierMixin):
             self.logger.info(f"Status breakdown: {result['summary'].get('status_breakdown', {})}")
         
         return result
+
+    # Robust execution methods (integrated from RobustExecutionMixin)
+    
+    def add_progress_callback(self, callback: Callable[[Dict[str, Any]], None]):
+        """
+        Add a callback function to be called on progress updates.
+        
+        Args:
+            callback: Function that takes a progress dict as argument
+        """
+        self._progress_callbacks.append(callback)
+    
+    def _report_progress(self, progress_data: Dict[str, Any]):
+        """
+        Report progress to all registered callbacks.
+        
+        Args:
+            progress_data: Dictionary containing progress information
+        """
+        for callback in self._progress_callbacks:
+            try:
+                callback(progress_data)
+            except Exception as e:
+                self.logger.warning(f"Progress callback failed: {e}")
+    
+    def _get_checkpoint_file(self, execution_id: str) -> Path:
+        """
+        Get the checkpoint file path for a given execution.
+        
+        Args:
+            execution_id: Unique identifier for the execution
+            
+        Returns:
+            Path to the checkpoint file
+        """
+        return self.checkpoint_dir / f"{execution_id}.checkpoint"
+    
+    async def save_checkpoint(self, execution_id: str, state: Dict[str, Any]):
+        """
+        Save execution state to a checkpoint file.
+        
+        Args:
+            execution_id: Unique identifier for the execution
+            state: State dictionary to save
+        """
+        if not self.checkpoint_enabled:
+            return
+            
+        checkpoint_file = self._get_checkpoint_file(execution_id)
+        self._current_checkpoint_file = checkpoint_file
+        
+        try:
+            # Add timestamp to state
+            state['checkpoint_time'] = datetime.utcnow().isoformat()
+            
+            # Save to temporary file first
+            temp_file = checkpoint_file.with_suffix('.tmp')
+            with open(temp_file, 'wb') as f:
+                pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
+            
+            # Atomic rename
+            temp_file.replace(checkpoint_file)
+            
+            self.logger.info(f"Checkpoint saved: {checkpoint_file}")
+            
+            # Report progress
+            self._report_progress({
+                'type': 'checkpoint_saved',
+                'execution_id': execution_id,
+                'checkpoint_file': str(checkpoint_file),
+                'state_summary': {
+                    'processed_count': state.get('processed_count', 0),
+                    'total_count': state.get('total_count', 0)
+                }
+            })
+            
+        except Exception as e:
+            self.logger.error(f"Failed to save checkpoint: {e}")
+            raise BiomapperError(f"Checkpoint save failed: {e}")
+    
+    async def load_checkpoint(self, execution_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Load execution state from a checkpoint file.
+        
+        Args:
+            execution_id: Unique identifier for the execution
+            
+        Returns:
+            State dictionary if checkpoint exists, None otherwise
+        """
+        if not self.checkpoint_enabled:
+            return None
+            
+        checkpoint_file = self._get_checkpoint_file(execution_id)
+        
+        if not checkpoint_file.exists():
+            return None
+            
+        try:
+            with open(checkpoint_file, 'rb') as f:
+                state = pickle.load(f)
+            
+            self.logger.info(f"Checkpoint loaded: {checkpoint_file}")
+            self._current_checkpoint_file = checkpoint_file
+            
+            # Report progress
+            self._report_progress({
+                'type': 'checkpoint_loaded',
+                'execution_id': execution_id,
+                'checkpoint_file': str(checkpoint_file),
+                'checkpoint_time': state.get('checkpoint_time'),
+                'state_summary': {
+                    'processed_count': state.get('processed_count', 0),
+                    'total_count': state.get('total_count', 0)
+                }
+            })
+            
+            return state
+            
+        except Exception as e:
+            self.logger.error(f"Failed to load checkpoint: {e}")
+            return None
+    
+    async def clear_checkpoint(self, execution_id: str):
+        """
+        Remove checkpoint file after successful completion.
+        
+        Args:
+            execution_id: Unique identifier for the execution
+        """
+        if not self.checkpoint_enabled:
+            return
+            
+        checkpoint_file = self._get_checkpoint_file(execution_id)
+        
+        if checkpoint_file.exists():
+            try:
+                checkpoint_file.unlink()
+                self.logger.info(f"Checkpoint cleared: {checkpoint_file}")
+            except Exception as e:
+                self.logger.warning(f"Failed to clear checkpoint: {e}")
+    
+    async def execute_with_retry(
+        self,
+        operation: Callable,
+        operation_args: Dict[str, Any],
+        operation_name: str,
+        retry_exceptions: Tuple[type, ...] = (Exception,)
+    ) -> Any:
+        """
+        Execute an operation with retry logic.
+        
+        Args:
+            operation: Async callable to execute
+            operation_args: Arguments to pass to the operation
+            operation_name: Name for logging purposes
+            retry_exceptions: Tuple of exception types to retry on
+            
+        Returns:
+            Result of the operation
+        """
+        last_error = None
+        
+        for attempt in range(self.max_retries):
+            try:
+                # Report attempt
+                self._report_progress({
+                    'type': 'retry_attempt',
+                    'operation': operation_name,
+                    'attempt': attempt + 1,
+                    'max_attempts': self.max_retries
+                })
+                
+                # Execute operation
+                result = await operation(**operation_args)
+                
+                # Success - report and return
+                if attempt > 0:
+                    self.logger.info(f"{operation_name} succeeded on attempt {attempt + 1}")
+                    
+                return result
+                
+            except retry_exceptions as e:
+                last_error = e
+                self.logger.warning(
+                    f"{operation_name} failed on attempt {attempt + 1}/{self.max_retries}: {e}"
+                )
+                
+                if attempt < self.max_retries - 1:
+                    # Wait before retry
+                    await asyncio.sleep(self.retry_delay)
+                    
+        # All retries exhausted
+        error_msg = f"{operation_name} failed after {self.max_retries} attempts"
+        self.logger.error(f"{error_msg}: {last_error}")
+        
+        # Report failure
+        self._report_progress({
+            'type': 'retry_exhausted',
+            'operation': operation_name,
+            'attempts': self.max_retries,
+            'last_error': str(last_error)
+        })
+        
+        raise MappingExecutionError(
+            error_msg,
+            details={
+                'operation': operation_name,
+                'attempts': self.max_retries,
+                'last_error': str(last_error)
+            }
+        )
+    
+    async def process_in_batches(
+        self,
+        items: List[Any],
+        processor: Callable,
+        processor_name: str,
+        checkpoint_key: str,
+        execution_id: str,
+        checkpoint_state: Optional[Dict[str, Any]] = None
+    ) -> List[Any]:
+        """
+        Process items in batches with checkpointing.
+        
+        Args:
+            items: List of items to process
+            processor: Async callable that processes a batch
+            processor_name: Name for logging purposes
+            checkpoint_key: Key to store results in checkpoint
+            execution_id: Unique identifier for checkpointing
+            checkpoint_state: Existing checkpoint state to resume from
+            
+        Returns:
+            List of all results
+        """
+        # Initialize or restore state
+        if checkpoint_state and checkpoint_key in checkpoint_state:
+            results = checkpoint_state[checkpoint_key]
+            processed_count = checkpoint_state.get('processed_count', 0)
+            remaining_items = items[processed_count:]
+            self.logger.info(
+                f"Resuming {processor_name} from checkpoint: "
+                f"{processed_count}/{len(items)} already processed"
+            )
+        else:
+            results = []
+            processed_count = 0
+            remaining_items = items
+            
+        total_count = len(items)
+        
+        # Process in batches
+        for i in range(0, len(remaining_items), self.batch_size):
+            batch = remaining_items[i:i + self.batch_size]
+            batch_num = (processed_count + i) // self.batch_size + 1
+            total_batches = (total_count + self.batch_size - 1) // self.batch_size
+            
+            self.logger.info(
+                f"Processing batch {batch_num}/{total_batches} "
+                f"({len(batch)} items) for {processor_name}"
+            )
+            
+            # Report batch start
+            self._report_progress({
+                'type': 'batch_start',
+                'processor': processor_name,
+                'batch_num': batch_num,
+                'total_batches': total_batches,
+                'batch_size': len(batch),
+                'total_processed': processed_count + i,
+                'total_count': total_count
+            })
+            
+            try:
+                # Process batch with retry
+                batch_results = await self.execute_with_retry(
+                    operation=processor,
+                    operation_args={'batch': batch},
+                    operation_name=f"{processor_name}_batch_{batch_num}",
+                    retry_exceptions=(asyncio.TimeoutError, Exception)
+                )
+                
+                # Append results
+                results.extend(batch_results)
+                
+                # Update processed count
+                current_processed = processed_count + i + len(batch)
+                
+                # Save checkpoint
+                if self.checkpoint_enabled:
+                    checkpoint_data = {
+                        checkpoint_key: results,
+                        'processed_count': current_processed,
+                        'total_count': total_count,
+                        'processor': processor_name
+                    }
+                    
+                    # Preserve other checkpoint data
+                    if checkpoint_state:
+                        for key, value in checkpoint_state.items():
+                            if key not in checkpoint_data:
+                                checkpoint_data[key] = value
+                                
+                    await self.save_checkpoint(execution_id, checkpoint_data)
+                
+                # Report batch completion
+                self._report_progress({
+                    'type': 'batch_complete',
+                    'processor': processor_name,
+                    'batch_num': batch_num,
+                    'total_batches': total_batches,
+                    'batch_results': len(batch_results),
+                    'total_processed': current_processed,
+                    'total_count': total_count,
+                    'progress_percent': (current_processed / total_count * 100)
+                })
+                
+            except Exception as e:
+                self.logger.error(
+                    f"Batch {batch_num} failed for {processor_name}: {e}"
+                )
+                
+                # Report batch failure
+                self._report_progress({
+                    'type': 'batch_failed',
+                    'processor': processor_name,
+                    'batch_num': batch_num,
+                    'total_batches': total_batches,
+                    'error': str(e)
+                })
+                
+                # Re-raise to trigger retry or abort
+                raise
+                
+        return results
+    
+    async def execute_yaml_strategy_robust(
+        self,
+        strategy_name: str,
+        input_identifiers: List[str],
+        source_endpoint_name: Optional[str] = None,
+        target_endpoint_name: Optional[str] = None,
+        execution_id: Optional[str] = None,
+        resume_from_checkpoint: bool = True,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Execute a YAML strategy with robust error handling and checkpointing.
+        
+        This wraps the standard execute_yaml_strategy method with additional
+        robustness features.
+        
+        Args:
+            strategy_name: Name of the strategy to execute
+            input_identifiers: List of input identifiers
+            source_endpoint_name: Source endpoint name (optional, can be auto-detected)
+            target_endpoint_name: Target endpoint name (optional, can be auto-detected)
+            execution_id: Unique ID for this execution (for checkpointing)
+            resume_from_checkpoint: Whether to resume from checkpoint if available
+            **kwargs: Additional arguments to pass to execute_yaml_strategy
+            
+        Returns:
+            Strategy execution results with additional robustness metadata
+        """
+        # Generate execution ID if not provided
+        if not execution_id:
+            execution_id = f"{strategy_name}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+            
+        # Try to load checkpoint
+        checkpoint_state = None
+        if resume_from_checkpoint:
+            checkpoint_state = await self.load_checkpoint(execution_id)
+            
+        start_time = datetime.utcnow()
+        
+        try:
+            # If we have a checkpoint, extract the current state
+            if checkpoint_state:
+                # This would need to be implemented based on how strategies track state
+                # For now, we'll just pass through to the standard method
+                self.logger.info(f"Checkpoint found but strategy resumption not yet implemented")
+            
+            # Build arguments for the strategy execution
+            strategy_args = {
+                'strategy_name': strategy_name,
+                'input_identifiers': input_identifiers,
+                **kwargs
+            }
+            
+            # Add endpoint names if provided
+            if source_endpoint_name:
+                strategy_args['source_endpoint_name'] = source_endpoint_name
+            if target_endpoint_name:
+                strategy_args['target_endpoint_name'] = target_endpoint_name
+            
+            # Execute the strategy
+            # This assumes the parent class has execute_yaml_strategy method
+            result = await self.execute_yaml_strategy(**strategy_args)
+            
+            # Add robustness metadata
+            result['robust_execution'] = {
+                'execution_id': execution_id,
+                'checkpointing_enabled': self.checkpoint_enabled,
+                'checkpoint_used': checkpoint_state is not None,
+                'execution_time': (datetime.utcnow() - start_time).total_seconds(),
+                'retries_configured': self.max_retries,
+                'batch_size': self.batch_size
+            }
+            
+            # Clear checkpoint on success
+            if self.checkpoint_enabled:
+                await self.clear_checkpoint(execution_id)
+                
+            return result
+            
+        except Exception as e:
+            # Report execution failure
+            self._report_progress({
+                'type': 'execution_failed',
+                'execution_id': execution_id,
+                'strategy': strategy_name,
+                'error': str(e),
+                'checkpoint_available': self._current_checkpoint_file is not None
+            })
+            
+            # Re-raise with additional context
+            raise MappingExecutionError(
+                f"Strategy execution failed: {strategy_name}",
+                details={
+                    'execution_id': execution_id,
+                    'checkpoint_available': self._current_checkpoint_file is not None,
+                    'error': str(e)
+                }
+            )
