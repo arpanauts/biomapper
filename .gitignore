@@ -270,3 +270,10 @@ metamapper.db*
 # Log files
 *_log.txt
 qdrant_indexing_log.txt
+
+# Ignore Git worktree directories
+.worktrees/
+
+# Ignore temporary scripts
+temp_merge_script.sh
+
