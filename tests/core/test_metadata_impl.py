@@ -310,7 +310,7 @@ async def test_cache_results_populates_metadata_fields(async_cache_engine):
             assert "steps" in path_details
     
         # Clear the database
-        await session.execute(f"DELETE FROM {EntityMapping.__tablename__}")
+        await session.execute(text(f"DELETE FROM {EntityMapping.__tablename__}"))
         await session.commit()
     
     # Now test with reverse path to ensure direction is properly recorded

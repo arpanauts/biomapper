@@ -256,8 +256,15 @@ class PathFinder:
             .where(EndpointRelationship.target_endpoint_id == target_endpoint_id)
         )
         
-        relationship_result = await session.execute(relationship_stmt)
-        relationship = relationship_result.scalar_one_or_none()
+        try:
+            relationship_result = await session.execute(relationship_stmt)
+            relationship = relationship_result.scalar_one_or_none()
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error while finding endpoint relationship: {e}")
+            raise BiomapperError(
+                f"Database error in path finder: {e}",
+                error_code=ErrorCode.DATABASE_QUERY_ERROR
+            )
         
         if not relationship:
             self.logger.debug(

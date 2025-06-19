@@ -208,11 +208,25 @@ class FAISSVectorStore:
         # Search for more than k results if filtering is needed
         search_k = min(k * 10 if filter_func else k, self.index.ntotal)
         
+        # For IVF indexes, set nprobe to search more clusters for better recall
+        original_nprobe = None
+        if self.index_type == "IVFFlat" and hasattr(self.index.index, 'nprobe'):
+            original_nprobe = self.index.index.nprobe
+            # Set nprobe to search more clusters, but not more than available
+            self.index.index.nprobe = min(
+                max(10, search_k // 5),  # At least 10, or roughly 1/5 of search_k
+                self.index.index.nlist   # But no more than total clusters
+            )
+        
         try:
             distances, indices = self.index.search(query_embedding, search_k)
         except Exception as e:
             logger.error(f"FAISS search failed: {e}")
             raise
+        finally:
+            # Restore original nprobe value if we changed it
+            if original_nprobe is not None:
+                self.index.index.nprobe = original_nprobe
         
         # Process results
         results = []
