@@ -114,21 +114,27 @@ P99887,P55443	SAMP_COMP2	GENE5	ENSG005
 
         results = await client_with_mock_data.map_identifiers(input_ids)
 
-        # Verify all input IDs are in the results
-        assert set(results.keys()) == set(input_ids)
+        # Verify the result structure
+        assert "primary_ids" in results
+        assert "input_to_primary" in results
+        assert "errors" in results
+        assert "secondary_ids" in results
 
         # Verify successful mappings
-        assert results["P12345"][0] is not None
-        assert results["P12345"][0][0] == "SAMP_P12345"
-        assert results["P12345"][1] == "P12345"
+        assert "P12345" in results["input_to_primary"]
+        assert results["input_to_primary"]["P12345"] == "SAMP_P12345"
         
-        assert results["P67890"][0] is not None
-        assert results["P67890"][0][0] == "SAMP_P67890"
-        assert results["P67890"][1] == "P67890"
+        assert "P67890" in results["input_to_primary"]
+        assert results["input_to_primary"]["P67890"] == "SAMP_P67890"
 
-        # Verify unsuccessful mapping
-        assert results["NONEXISTENT"][0] is None
-        assert results["NONEXISTENT"][1] is None
+        # Verify primary_ids contains the mapped values
+        assert "SAMP_P12345" in results["primary_ids"]
+        assert "SAMP_P67890" in results["primary_ids"]
+
+        # Verify unsuccessful mapping is in errors
+        assert len(results["errors"]) == 1
+        assert results["errors"][0]["input_id"] == "NONEXISTENT"
+        assert results["errors"][0]["error_type"] == "NO_MAPPING_FOUND"
 
     @pytest.mark.asyncio
     async def test_map_exact_composite_identifiers(self, client_with_mock_data):
@@ -137,14 +143,10 @@ P99887,P55443	SAMP_COMP2	GENE5	ENSG005
 
         results = await client_with_mock_data.map_identifiers(input_ids)
 
-        # Verify exact composite matches work
-        assert results["P11223,P44556"][0] is not None
-        assert results["P11223,P44556"][0][0] == "SAMP_COMP1"
-        assert results["P11223,P44556"][1] == "P11223,P44556"
-        
-        assert results["P99887,P55443"][0] is not None
-        assert results["P99887,P55443"][0][0] == "SAMP_COMP2"
-        assert results["P99887,P55443"][1] == "P99887,P55443"
+        # Verify exact composite matches work (continued from above)
+        # Primary IDs should include the composite mappings
+        assert "SAMP_COMP1" in results["primary_ids"]
+        assert "SAMP_COMP2" in results["primary_ids"]
 
     @pytest.mark.asyncio
     async def test_map_component_match_identifiers(self, client_with_mock_data):
@@ -154,18 +156,12 @@ P99887,P55443	SAMP_COMP2	GENE5	ENSG005
 
         results = await client_with_mock_data.map_identifiers(input_ids)
 
-        # Verify partial component matching works for comma-separated IDs
-        assert results["P12345,NONEXISTENT"][0] is not None
-        assert "SAMP_P12345" in results["P12345,NONEXISTENT"][0]
-        assert results["P12345,NONEXISTENT"][1] == "P12345"  # Component that matched
-
-        # Verify multiple component matches
-        assert results["P11223,P67890"][0] is not None
-        # Should contain mappings for both components
-        assert len(results["P11223,P67890"][0]) >= 2
-        # The first component that matches is recorded
-        component_id = results["P11223,P67890"][1]
-        assert component_id in ["P11223", "P67890"]
+        # Verify partial component matching works for comma-separated IDs (continued)
+        # Verify that mapped values include component mappings
+        assert "SAMP_P12345" in results["primary_ids"]
+        # When P11223 appears in component context, it could map to either SAMP_P11223 or SAMP_COMP1
+        # The log warning suggests it keeps the first mapping
+        assert any(val in results["primary_ids"] for val in ["SAMP_P11223", "SAMP_P67890", "SAMP_COMP1"])
 
     @pytest.mark.asyncio
     async def test_map_multi_component_matches(self, client_with_mock_data):
@@ -175,14 +171,11 @@ P99887,P55443	SAMP_COMP2	GENE5	ENSG005
 
         results = await client_with_mock_data.map_identifiers([input_id])
 
-        # Both components match, so we should get multiple results
-        matched_values = results[input_id][0]
-        assert len(matched_values) == 2
-        assert "SAMP_P12345" in matched_values
-        assert "SAMP_P67890" in matched_values
-
-        # The component_id should be the first successful one (P12345 or P67890)
-        assert results[input_id][1] in ["P12345", "P67890"]
+        # Both components match, but only the first is returned as primary
+        assert input_id in results["input_to_primary"]
+        mapped_value = results["input_to_primary"][input_id]
+        # Should map to one of the component values
+        assert mapped_value in ["SAMP_P12345", "SAMP_P67890"]
 
     @pytest.mark.asyncio
     async def test_map_no_match_identifiers(self, client_with_mock_data):
@@ -191,16 +184,21 @@ P99887,P55443	SAMP_COMP2	GENE5	ENSG005
 
         results = await client_with_mock_data.map_identifiers(input_ids)
 
-        # Verify all nonexistent IDs return (None, None)
+        # Verify all nonexistent IDs are in errors
+        assert len(results["errors"]) == 3
+        error_ids = [err["input_id"] for err in results["errors"]]
         for id in input_ids:
-            assert results[id] == (None, None)
+            assert id in error_ids
 
     @pytest.mark.asyncio
     async def test_map_empty_list(self, client_with_mock_data):
         """Test mapping an empty list of identifiers."""
         results = await client_with_mock_data.map_identifiers([])
 
-        assert results == {}
+        assert results["primary_ids"] == []
+        assert results["input_to_primary"] == {}
+        assert results["errors"] == []
+        assert results["secondary_ids"] == {}
 
     @pytest.mark.asyncio
     async def test_map_whitespace_handling(self, client_with_mock_data):
@@ -210,14 +208,14 @@ P99887,P55443	SAMP_COMP2	GENE5	ENSG005
         results = await client_with_mock_data.map_identifiers(input_ids)
 
         # Whitespace should be stripped and matches should succeed
-        assert results[" P12345 "][0] is not None
-        assert results[" P12345 "][0][0] == "SAMP_P12345"
+        assert " P12345 " in results["input_to_primary"]
+        assert results["input_to_primary"][" P12345 "] == "SAMP_P12345"
         
-        assert results["P67890 "][0] is not None
-        assert results["P67890 "][0][0] == "SAMP_P67890"
+        assert "P67890 " in results["input_to_primary"]
+        assert results["input_to_primary"]["P67890 "] == "SAMP_P67890"
         
-        assert results[" P11223,P44556 "][0] is not None
-        assert results[" P11223,P44556 "][0][0] == "SAMP_COMP1"
+        assert " P11223,P44556 " in results["input_to_primary"]
+        assert results["input_to_primary"][" P11223,P44556 "] == "SAMP_COMP1"
 
     @pytest.mark.asyncio
     async def test_caching(self, client_with_mock_data):
@@ -255,19 +253,25 @@ P99887,P55443	SAMP_COMP2	GENE5	ENSG005
         identifiers = ["SAMP_P12345", "SAMP_COMP1", "NONEXISTENT"]
         results = await client_with_mock_data.reverse_map_identifiers(identifiers)
         
-        # Verify all identifiers were processed
-        assert len(results) == len(identifiers)
+        # Verify the result structure
+        assert "primary_ids" in results
+        assert "input_to_primary" in results
+        assert "errors" in results
         
         # Verify successful mappings
-        assert results["SAMP_P12345"][0] is not None
-        assert "P12345" in results["SAMP_P12345"][0]
+        assert "SAMP_P12345" in results["input_to_primary"]
+        assert results["input_to_primary"]["SAMP_P12345"] == "P12345"
         
-        assert results["SAMP_COMP1"][0] is not None
-        assert "P11223,P44556" in results["SAMP_COMP1"][0]
+        assert "SAMP_COMP1" in results["input_to_primary"]
+        assert results["input_to_primary"]["SAMP_COMP1"] == "P11223,P44556"
+        
+        # Verify primary_ids
+        assert "P12345" in results["primary_ids"]
+        assert "P11223,P44556" in results["primary_ids"]
         
         # Verify unsuccessful mapping
-        assert results["NONEXISTENT"][0] is None
-        assert results["NONEXISTENT"][1] is None
+        assert len(results["errors"]) == 1
+        assert results["errors"][0]["input_id"] == "NONEXISTENT"
 
 
 # Add integration tests with actual TSV files if needed

@@ -246,6 +246,7 @@ class TestCSVAdapter:
         mock_endpoint = Mock()
         mock_endpoint.file_path = None
         mock_endpoint.url = None
+        mock_endpoint.connection_details = None
         
         adapter = CSVAdapter(endpoint=mock_endpoint)
         

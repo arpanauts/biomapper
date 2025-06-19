@@ -185,34 +185,31 @@ async def test_context_manager():
 @pytest.mark.asyncio
 async def test_get_node(mock_arango: MockArango):
     """Test getting nodes by ID."""
-    arango = await mock_arango
-    node = await arango.get_node("compound1")
+    node = await mock_arango.get_node("compound1")
     assert node is not None
     assert node.name == "Glucose"
     assert node.type == "Compound"
 
-    node = await arango.get_node("nonexistent")
+    node = await mock_arango.get_node("nonexistent")
     assert node is None
 
 
 @pytest.mark.asyncio
 async def test_get_node_by_property(mock_arango: MockArango):
     """Test getting nodes by property."""
-    arango = await mock_arango
-    node = await arango.get_node_by_property("Compound", "hmdb_id", "HMDB0000122")
+    node = await mock_arango.get_node_by_property("Compound", "hmdb_id", "HMDB0000122")
     assert node is not None
     assert node.name == "Glucose"
 
-    node = await arango.get_node_by_property("Compound", "hmdb_id", "nonexistent")
+    node = await mock_arango.get_node_by_property("Compound", "hmdb_id", "nonexistent")
     assert node is None
 
 
 @pytest.mark.asyncio
 async def test_get_neighbors(mock_arango: MockArango):
     """Test getting node neighbors."""
-    arango = await mock_arango
     # Get all neighbors
-    neighbors = await arango.get_neighbors("compound1")
+    neighbors = await mock_arango.get_neighbors("compound1")
     assert len(neighbors) == 1
     edge, node = neighbors[0]
     assert edge.type == "INTERACTS_WITH"
@@ -220,22 +217,21 @@ async def test_get_neighbors(mock_arango: MockArango):
     assert node.name == "Hexokinase"
 
     # Filter by edge type
-    neighbors = await arango.get_neighbors("compound1", edge_types=["WRONG_TYPE"])
+    neighbors = await mock_arango.get_neighbors("compound1", edge_types=["WRONG_TYPE"])
     assert len(neighbors) == 0
 
     # Filter by node type
-    neighbors = await arango.get_neighbors("compound1", node_types=["Protein"])
+    neighbors = await mock_arango.get_neighbors("compound1", node_types=["Protein"])
     assert len(neighbors) == 1
 
 
 @pytest.mark.asyncio
 async def test_find_paths(mock_arango: MockArango):
     """Test finding paths between nodes."""
-    arango = await mock_arango
     query = ArangoQuery(
         start_node_type="Compound", end_node_type="Protein", max_path_length=1
     )
-    result = await arango.find_paths(query)
+    result = await mock_arango.find_paths(query)
 
     assert len(result.paths) == 2  # Two compounds connect to protein
     assert len(result.nodes) == 4  # Two compounds and one protein
@@ -245,9 +241,8 @@ async def test_find_paths(mock_arango: MockArango):
 @pytest.mark.asyncio
 async def test_get_types(mock_arango: MockArango):
     """Test getting available node and edge types."""
-    arango = await mock_arango
-    node_types = await arango.get_node_types()
+    node_types = await mock_arango.get_node_types()
     assert node_types == {"Compound", "Protein"}
 
-    edge_types = await arango.get_edge_types()
+    edge_types = await mock_arango.get_edge_types()
     assert edge_types == {"INTERACTS_WITH"}
