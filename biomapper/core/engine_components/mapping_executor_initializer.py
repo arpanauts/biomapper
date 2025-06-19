@@ -315,8 +315,8 @@ class MappingExecutorInitializer:
             mapping_executor: The fully initialized MappingExecutor instance
         """
         if self.path_execution_manager:
-            # Set function references if they exist on the mapping executor
-            self.path_execution_manager._load_client = getattr(mapping_executor, '_load_client', None)
+            # Set function references - use client_manager.get_client_instance instead of _load_client
+            self.path_execution_manager._load_client = mapping_executor.client_manager.get_client_instance
             self.path_execution_manager._execute_mapping_step = getattr(mapping_executor, '_execute_mapping_step', None)
             self.path_execution_manager._calculate_confidence_score = getattr(mapping_executor, '_calculate_confidence_score', self.path_execution_manager._calculate_confidence_score)
             self.path_execution_manager._create_mapping_path_details = getattr(mapping_executor, '_create_mapping_path_details', self.path_execution_manager._create_mapping_path_details)
