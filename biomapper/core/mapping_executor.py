@@ -49,6 +49,7 @@ from biomapper.core.engine_components.progress_reporter import ProgressReporter
 from biomapper.core.engine_components.identifier_loader import IdentifierLoader
 from biomapper.core.engine_components.config_loader import ConfigLoader
 from biomapper.core.services.metadata_query_service import MetadataQueryService
+from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
 from biomapper.core.engine_components.robust_execution_coordinator import RobustExecutionCoordinator
 
@@ -239,6 +240,15 @@ class MappingExecutor(CompositeIdentifierMixin):
         # Initialize MetadataQueryService
         self.metadata_query_service = MetadataQueryService(self.session_manager)
         
+        # Initialize MappingPathExecutionService
+        self.path_execution_service = MappingPathExecutionService(
+            logger=self.logger,
+            client_manager=self.client_manager,
+            cache_manager=self.cache_manager
+        )
+        # Set executor reference for delegation
+        self.path_execution_service.set_executor(self)
+        
         # Initialize RobustExecutionCoordinator
         self.robust_execution_coordinator = RobustExecutionCoordinator(
             strategy_orchestrator=self.strategy_orchestrator,
@@ -256,7 +266,6 @@ class MappingExecutor(CompositeIdentifierMixin):
             try:
                 from biomapper.monitoring.metrics import MetricsTracker
                 self._metrics_tracker = MetricsTracker(
-                    enable_metrics=enable_metrics,
                     langfuse_tracker=self._langfuse_tracker,
                     logger=self.logger
                 )
