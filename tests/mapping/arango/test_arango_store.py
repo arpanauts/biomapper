@@ -1,13 +1,14 @@
 """Integration tests for ArangoStore."""
 
 import pytest
+from unittest.mock import Mock, MagicMock, patch
 from biomapper.mapping.arango.arango_store import ArangoStore
-from biomapper.mapping.arango.base_arango import ArangoQuery
+from biomapper.mapping.arango.base_arango import ArangoQuery, ArangoNode, ArangoEdge
 
 
 @pytest.fixture
 async def arango():
-    """Fixture for ArangoStore instance."""
+    """Fixture for ArangoStore instance with mocked connection."""
     store = ArangoStore(
         username="root",
         password="ph",
@@ -15,9 +16,34 @@ async def arango():
         host="localhost",
         port=8529,
     )
-    await store.connect()
-    yield store
-    await store.close()
+    
+    # Mock the connection and database
+    with patch('biomapper.mapping.arango.arango_store.Connection') as mock_conn:
+        mock_db = MagicMock()
+        mock_conn.return_value.__getitem__.return_value = mock_db
+        mock_conn.return_value.hasDatabase.return_value = True
+        mock_db.hasCollection.return_value = True
+        
+        # Set up mock documents
+        mock_doc = MagicMock()
+        mock_doc.__getitem__.side_effect = lambda k: {
+            "_key": "test_node_id",
+            "type": "Compound",
+            "name": "Test Compound",
+            "hmdb_id": "HMDB0000122"
+        }.get(k)
+        mock_doc.items.return_value = [
+            ("_key", "test_node_id"),
+            ("type", "Compound"),
+            ("name", "Test Compound"),
+            ("hmdb_id", "HMDB0000122")
+        ]
+        
+        mock_db.__getitem__.return_value.__getitem__.return_value = mock_doc
+        
+        await store.connect()
+        yield store
+        await store.close()
 
 
 @pytest.mark.asyncio
@@ -48,13 +74,33 @@ async def test_context_manager():
 @pytest.mark.asyncio
 async def test_get_node(arango: ArangoStore):
     """Test getting nodes by ID."""
-    # Test with a known node ID
-    node = await arango.get_node("your_test_node_id")
+    # Mock the database's node collection
+    mock_nodes = MagicMock()
+    arango.db.__getitem__.return_value = mock_nodes
+    
+    # Test with existing node
+    mock_doc = MagicMock()
+    mock_doc.__getitem__.side_effect = lambda k: {
+        "_key": "test_node_id",
+        "type": "Compound",
+        "name": "Test Compound"
+    }.get(k)
+    mock_doc.items.return_value = [
+        ("_key", "test_node_id"),
+        ("type", "Compound"),
+        ("name", "Test Compound")
+    ]
+    mock_nodes.__getitem__.return_value = mock_doc
+    
+    node = await arango.get_node("test_node_id")
     assert node is not None
-    assert node.type == "expected_type"
-    assert node.name == "expected_name"
-
-    # Test with nonexistent node
+    assert node.type == "Compound"
+    assert node.name == "Test Compound"
+    
+    # Test with nonexistent node - simulate DocumentNotFoundError
+    from pyArango.theExceptions import DocumentNotFoundError
+    mock_nodes.__getitem__.side_effect = DocumentNotFoundError
+    
     node = await arango.get_node("nonexistent_id")
     assert node is None
 
@@ -62,13 +108,33 @@ async def test_get_node(arango: ArangoStore):
 @pytest.mark.asyncio
 async def test_get_node_by_property(arango: ArangoStore):
     """Test getting nodes by property."""
-    # Test with a known property
-    node = await arango.get_node_by_property("Compound", "hmdb_id", "your_test_hmdb_id")
+    # Mock the AQL query execution
+    mock_cursor = MagicMock()
+    
+    # Test with existing property
+    mock_doc = MagicMock()
+    mock_doc.__getitem__.side_effect = lambda k: {
+        "_key": "compound_1",
+        "type": "Compound",
+        "name": "Test Compound",
+        "hmdb_id": "HMDB0000122"
+    }.get(k)
+    mock_doc.items.return_value = [
+        ("_key", "compound_1"),
+        ("type", "Compound"),
+        ("name", "Test Compound"),
+        ("hmdb_id", "HMDB0000122")
+    ]
+    mock_cursor.__iter__.return_value = iter([mock_doc])
+    arango.db.AQLQuery.return_value = mock_cursor
+    
+    node = await arango.get_node_by_property("Compound", "hmdb_id", "HMDB0000122")
     assert node is not None
     assert node.type == "Compound"
-    assert node.name == "expected_name"
-
-    # Test with nonexistent property
+    assert node.name == "Test Compound"
+    
+    # Test with nonexistent property - empty result
+    mock_cursor.__iter__.return_value = iter([])
     node = await arango.get_node_by_property("Compound", "hmdb_id", "nonexistent")
     assert node is None
 

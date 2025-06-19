@@ -60,22 +60,24 @@ P99887,P55443	SAMP_COMP2	GENE5	ENSG005
         identifiers = ["SAMP_P12345", "SAMP_P67890", "SAMP_COMP1", "NONEXISTENT"]
         results = await client_with_mock_data.map_identifiers(identifiers)
         
-        # Verify all identifiers were processed
-        assert len(results) == len(identifiers)
+        # Verify the result structure
+        assert "primary_ids" in results
+        assert "input_to_primary" in results
+        assert "errors" in results
         
         # Verify successful mappings
-        assert results["SAMP_P12345"][0] is not None
-        assert "P12345" in results["SAMP_P12345"][0]
+        assert "SAMP_P12345" in results["input_to_primary"]
+        assert results["input_to_primary"]["SAMP_P12345"] == "P12345"
         
-        assert results["SAMP_P67890"][0] is not None
-        assert "P67890" in results["SAMP_P67890"][0]
+        assert "SAMP_P67890" in results["input_to_primary"]
+        assert results["input_to_primary"]["SAMP_P67890"] == "P67890"
         
-        assert results["SAMP_COMP1"][0] is not None
-        assert "P11223,P44556" in results["SAMP_COMP1"][0]
+        assert "SAMP_COMP1" in results["input_to_primary"]
+        assert results["input_to_primary"]["SAMP_COMP1"] == "P11223,P44556"
         
         # Verify unsuccessful mapping
-        assert results["NONEXISTENT"][0] is None
-        assert results["NONEXISTENT"][1] is None
+        assert len(results["errors"]) == 1
+        assert results["errors"][0]["input_id"] == "NONEXISTENT"
 
     @pytest.mark.asyncio
     async def test_reverse_map_identifiers(self, client_with_mock_data):
@@ -84,19 +86,21 @@ P99887,P55443	SAMP_COMP2	GENE5	ENSG005
         identifiers = ["P12345", "P67890", "P11223,P44556", "NONEXISTENT"]
         results = await client_with_mock_data.reverse_map_identifiers(identifiers)
         
-        # Verify all identifiers were processed
-        assert len(results) == len(identifiers)
+        # Verify the result structure
+        assert "primary_ids" in results
+        assert "input_to_primary" in results
+        assert "errors" in results
         
         # Verify successful mappings
-        assert results["P12345"][0] is not None
-        assert "SAMP_P12345" in results["P12345"][0]
+        assert "P12345" in results["input_to_primary"]
+        assert results["input_to_primary"]["P12345"] == "SAMP_P12345"
         
-        assert results["P67890"][0] is not None
-        assert "SAMP_P67890" in results["P67890"][0]
+        assert "P67890" in results["input_to_primary"]
+        assert results["input_to_primary"]["P67890"] == "SAMP_P67890"
         
-        assert results["P11223,P44556"][0] is not None
-        assert "SAMP_COMP1" in results["P11223,P44556"][0]
+        assert "P11223,P44556" in results["input_to_primary"]
+        assert results["input_to_primary"]["P11223,P44556"] == "SAMP_COMP1"
         
         # Verify unsuccessful mapping
-        assert results["NONEXISTENT"][0] is None
-        assert results["NONEXISTENT"][1] is None
+        assert len(results["errors"]) == 1
+        assert results["errors"][0]["input_id"] == "NONEXISTENT"

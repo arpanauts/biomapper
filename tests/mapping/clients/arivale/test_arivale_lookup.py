@@ -39,9 +39,16 @@ async def test_arivale_lookup_client():
     
     # Display results
     print("\nMapping Results:")
-    for uniprot_id, mapping_result in results.items():
-        arivale_ids = mapping_result[0]  # First element is list of mapped IDs
-        print(f"  {uniprot_id}: {arivale_ids}")
+    if "primary_ids" in results:
+        print(f"  primary_ids: {', '.join(results['primary_ids'])}")
+    
+    if "input_to_primary" in results:
+        for uniprot_id, arivale_id in results["input_to_primary"].items():
+            print(f"  {uniprot_id} -> {arivale_id}")
+    
+    if "errors" in results:
+        for error in results["errors"]:
+            print(f"  {error['input_id']} -> No mapping found")
     
     return results
 
