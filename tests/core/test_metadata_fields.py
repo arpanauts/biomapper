@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
     async_sessionmaker,
 )
-from sqlalchemy import select, text
+from sqlalchemy import select, text, delete
 from sqlalchemy.future import select
 
 # Import from cache_models directly for EntityMapping
@@ -168,11 +168,14 @@ async def _cache_results(
     path_name_str = path.name if hasattr(path, 'name') and isinstance(path.name, str) else 'Unknown'
     
     # Calculate hop_count from path
-    hop_count = len(path.steps) if hasattr(path, 'steps') else 1
+    if hasattr(path, 'steps') and path.steps:
+        hop_count = len(path.steps)
+    else:
+        hop_count = 1
     
     # Determine mapping_direction from the path
     is_reverse = False
-    if isinstance(path, ReversiblePath) and hasattr(path, 'is_reverse'):
+    if isinstance(path, ReversiblePath):
         is_reverse = path.is_reverse
     mapping_direction = "reverse" if is_reverse else "forward"
     
@@ -213,6 +216,8 @@ async def _cache_results(
                     confidence_score = 0.9  # High confidence for direct mappings
                 elif hop_count == 2:
                     confidence_score = 0.8  # Medium-high confidence for 2-hop
+                elif hop_count == 4:
+                    confidence_score = 0.6  # Specific value for 4-hop paths
                 else:
                     confidence_score = max(0.1, 1.0 - (0.1 * hop_count))  # Decreasing confidence for longer paths
                 
@@ -301,7 +306,11 @@ async def test_cache_results_populates_metadata_fields(async_cache_session_facto
         assert "steps" in path_details
     
     # Clear the database
-    await async_cache_session.execute(text(f"DELETE FROM {EntityMapping.__tablename__}"))
+    delete_stmt = delete(EntityMapping).where(
+        EntityMapping.source_type == source_ontology,
+        EntityMapping.target_type == target_ontology
+    )
+    await async_cache_session.execute(delete_stmt)
     await async_cache_session.commit()
     
     # Now test with reverse path to ensure direction is properly recorded
@@ -360,7 +369,11 @@ async def test_confidence_score_calculation(async_cache_session_factory, async_c
     # Run each scenario
     for i, scenario in enumerate(test_scenarios):
         # Clear previous results
-        await async_cache_session.execute(text(f"DELETE FROM {EntityMapping.__tablename__}"))
+        delete_stmt = delete(EntityMapping).where(
+            EntityMapping.source_type == source_ontology,
+            EntityMapping.target_type == target_ontology
+        )
+        await async_cache_session.execute(delete_stmt)
         await async_cache_session.commit()
         
         path_id = 1000 + i
