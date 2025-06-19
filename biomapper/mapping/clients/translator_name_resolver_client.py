@@ -185,9 +185,13 @@ class TranslatorNameResolverClient(CachedMappingClientMixin, BaseMappingClient):
         Returns:
             Filtered list of matches that match the target database.
         """
-        if not self.target_db or self.target_db not in self.DB_TO_CURIE_PREFIX:
-            # If no target DB specified or not in our mapping, return all matches
+        if not self.target_db:
+            # If no target DB specified, return all matches
             return matches
+        
+        if self.target_db not in self.DB_TO_CURIE_PREFIX:
+            # If target DB is not supported, return empty list
+            return []
         
         target_prefixes = self.DB_TO_CURIE_PREFIX[self.target_db]
         filtered_matches = []
@@ -247,7 +251,7 @@ class TranslatorNameResolverClient(CachedMappingClientMixin, BaseMappingClient):
         
         try:
             # Perform the API request
-            matches = await self._perform_request(self._config["base_url"], params)
+            matches = await self._perform_request(self._config["base_url"], params=params)
             
             # Filter by target database if specified
             filtered_matches = self._filter_matches_by_target_db(matches)

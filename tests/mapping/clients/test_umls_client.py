@@ -7,7 +7,7 @@ import time
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from biomapper.mapping.clients.umls_client import UMLSClient
-from biomapper.core.exceptions import ClientExecutionError
+from biomapper.core.exceptions import ClientExecutionError, ClientInitializationError
 
 
 @pytest.fixture
@@ -479,8 +479,9 @@ async def test_reverse_map_identifiers(umls_client):
 async def test_close(umls_client):
     """Test close method."""
     # Create a mock session
-    umls_client._session = MagicMock()
-    umls_client._session.close = AsyncMock()
+    mock_session = MagicMock()
+    mock_session.close = AsyncMock()
+    umls_client._session = mock_session
     umls_client._initialized = True
     umls_client._tgt = "TGT-12345-67890-abcde"
     umls_client._tgt_timestamp = time.time()
@@ -489,7 +490,7 @@ async def test_close(umls_client):
     await umls_client.close()
     
     # Verify session.close was called
-    umls_client._session.close.assert_called_once()
+    mock_session.close.assert_called_once()
     assert umls_client._session is None
     assert umls_client._initialized is False
     assert umls_client._tgt is None

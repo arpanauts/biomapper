@@ -143,6 +143,9 @@ class KEGGClient:
         except requests.RequestException as e:
             logger.error(f"KEGG API request failed: {str(e)}")
             raise KEGGError(f"API request failed: {str(e)}") from e
+        except Exception as e:
+            logger.error(f"Unexpected error in KEGG API request: {str(e)}")
+            raise KEGGError(f"API request failed: {str(e)}") from e
 
     def _parse_compound_entry(self, text: str) -> Dict[str, Any]:
         """Parse a KEGG compound entry text into a structured dictionary.

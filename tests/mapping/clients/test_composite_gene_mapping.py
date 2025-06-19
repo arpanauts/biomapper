@@ -44,7 +44,8 @@ async def test_composite_gene_symbols():
     client = UniProtNameClient()
 
     # Test composite gene identifiers
-    results = await client.find_uniprot_ids_by_names(COMPOSITE_GENES)
+    result_dict = await client.map_identifiers(COMPOSITE_GENES)
+    results = result_dict['input_to_primary']
 
     # Log results for analysis
     print("\n--- Composite Gene Symbol Mapping Results ---")
@@ -69,7 +70,8 @@ async def test_regular_gene_symbols():
     client = UniProtNameClient()
 
     # Test regular gene symbols
-    results = await client.find_uniprot_ids_by_names(REGULAR_GENES)
+    result_dict = await client.map_identifiers(REGULAR_GENES)
+    results = result_dict['input_to_primary']
 
     # Log results for verification
     print("\n--- Regular Gene Symbol Mapping Results ---")
@@ -86,7 +88,8 @@ async def test_special_cases():
     client = UniProtNameClient()
 
     # Test special cases
-    results = await client.find_uniprot_ids_by_names(SPECIAL_CASES)
+    result_dict = await client.map_identifiers(SPECIAL_CASES)
+    results = result_dict['input_to_primary']
 
     # Log results for analysis
     print("\n--- Special Cases Mapping Results ---")
