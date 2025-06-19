@@ -39,13 +39,7 @@ class MappingPathExecutionService:
     def __init__(
         self,
         session_manager,
-        session_manager,
         client_manager: ClientManager,
-        cache_manager: CacheManager,
-        path_finder,
-        path_execution_manager,
-        composite_handler,
-        logger: Optional[logging.Logger] = None
         cache_manager: CacheManager,
         path_finder,
         path_execution_manager,
