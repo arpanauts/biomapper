@@ -38,9 +38,21 @@ class CacheManagerTest(unittest.TestCase):
         # This is a bit of a hack since we're accessing a protected member
         self.original_session_scope = self.cache_manager._session_scope
 
+        from contextlib import contextmanager
+        from sqlalchemy.exc import SQLAlchemyError
+
+        @contextmanager
         def test_session_scope():
             """Create test session context manager."""
-            return self.db_manager.create_session()
+            session = self.db_manager.create_session()
+            try:
+                yield session
+                session.commit()
+            except SQLAlchemyError as e:
+                session.rollback()
+                raise
+            finally:
+                session.close()
 
         self.cache_manager._session_scope = test_session_scope
 
