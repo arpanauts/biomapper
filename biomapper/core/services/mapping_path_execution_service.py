@@ -38,21 +38,33 @@ class MappingPathExecutionService:
     
     def __init__(
         self,
-        logger: logging.Logger,
+        session_manager,
         client_manager: ClientManager,
-        cache_manager: CacheManager
+        cache_manager: CacheManager,
+        path_finder,
+        path_execution_manager,
+        composite_handler,
+        logger: Optional[logging.Logger] = None
     ):
         """
         Initialize the MappingPathExecutionService.
         
         Args:
-            logger: Logger instance for this service
+            session_manager: Database session manager
             client_manager: ClientManager instance for getting client instances
             cache_manager: CacheManager instance for caching results
+            path_finder: Path finding service
+            path_execution_manager: Path execution service
+            composite_handler: Composite identifier handler
+            logger: Optional logger instance
         """
-        self.logger = logger
+        self.session_manager = session_manager
         self.client_manager = client_manager
         self.cache_manager = cache_manager
+        self.path_finder = path_finder
+        self.path_execution_manager = path_execution_manager
+        self.composite_handler = composite_handler
+        self.logger = logger or logging.getLogger(__name__)
         # Store reference to executor for _execute_mapping_step delegation
         self._executor = None
     
@@ -675,7 +687,7 @@ from biomapper.core.exceptions import ConfigurationError
 from biomapper.core.models.result_bundle import MappingResultBundle
 
 
-class MappingPathExecutionService:
+class DirectMappingExecutionService:
     """
     Service responsible for executing direct mapping paths between endpoints.
     

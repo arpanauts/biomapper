@@ -43,7 +43,7 @@ class MockStrategyAction:
 @pytest.fixture
 def mock_executor():
     """Create a MappingExecutor instance with mocked database connections."""
-    with patch('biomapper.core.mapping_executor.create_async_engine'):
+    with patch('biomapper.core.engine_components.session_manager.create_async_engine'):
         executor = MappingExecutor(
             metamapper_db_url="sqlite+aiosqlite:///:memory:",
             mapping_cache_db_url="sqlite+aiosqlite:///:memory:",
@@ -81,7 +81,7 @@ class TestCheckpointing:
         """Test that checkpoint directory is created properly."""
         checkpoint_path = Path(temp_checkpoint_dir) / "test_checkpoints"
         
-        with patch('biomapper.core.mapping_executor.create_async_engine'):
+        with patch('biomapper.core.engine_components.session_manager.create_async_engine'):
             executor = MappingExecutor(
                 metamapper_db_url="sqlite+aiosqlite:///:memory:",
                 mapping_cache_db_url="sqlite+aiosqlite:///:memory:",

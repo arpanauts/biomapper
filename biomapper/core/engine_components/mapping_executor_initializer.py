@@ -318,8 +318,8 @@ class MappingExecutorInitializer:
             mapping_executor: The fully initialized MappingExecutor instance
         """
         if self.path_execution_manager:
-            # Set function references - use client_manager.get_client_instance instead of _load_client
-            self.path_execution_manager._load_client = mapping_executor.client_manager.get_client_instance
+            # Set function references
+            self.path_execution_manager._load_client = getattr(mapping_executor, '_load_client', None)
             self.path_execution_manager._execute_mapping_step = getattr(mapping_executor, '_execute_mapping_step', None)
             self.path_execution_manager._calculate_confidence_score = getattr(mapping_executor, '_calculate_confidence_score', self.path_execution_manager._calculate_confidence_score)
             self.path_execution_manager._create_mapping_path_details = getattr(mapping_executor, '_create_mapping_path_details', self.path_execution_manager._create_mapping_path_details)
@@ -357,9 +357,8 @@ class MappingExecutorInitializer:
                 retry_delay=self.retry_delay,
             )
             
-            # Initialize cache database tables using DatabaseSetupService
-            db_setup_service = DatabaseSetupService(logger=self.logger)
-            await db_setup_service.initialize_tables(executor.async_cache_engine, CacheBase.metadata)
+            # Initialize cache database tables using the _init_db_tables method
+            await self._init_db_tables(executor.async_cache_engine, CacheBase.metadata)
             
             # Note: We don't initialize metamapper tables here because they're assumed to be
             # already set up and populated. The issue is specifically with cache tables.
@@ -378,3 +377,20 @@ class MappingExecutorInitializer:
                     "error": str(e)
                 }
             ) from e
+    
+    async def _init_db_tables(self, engine, metadata):
+        """Initialize database tables using the provided engine and metadata.
+        
+        This method exists for backward compatibility with tests.
+        The actual implementation delegates to DatabaseSetupService.
+        
+        Args:
+            engine: The SQLAlchemy async engine
+            metadata: The SQLAlchemy metadata object containing table definitions
+        """
+        # Import DatabaseSetupService
+        from ..services.database_setup_service import DatabaseSetupService
+        
+        # Use DatabaseSetupService to initialize tables
+        db_setup_service = DatabaseSetupService(logger=self.logger)
+        await db_setup_service.initialize_tables(engine, metadata)

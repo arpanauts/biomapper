@@ -33,7 +33,6 @@ from biomapper.core.engine_components.progress_reporter import ProgressReporter
 from biomapper.core.services.metadata_query_service import MetadataQueryService
 from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
 from biomapper.core.services.strategy_execution_service import StrategyExecutionService
-from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
 from biomapper.core.engine_components.robust_execution_coordinator import RobustExecutionCoordinator
 
@@ -219,21 +218,17 @@ class MappingExecutor(CompositeIdentifierMixin):
         # Initialize MetadataQueryService
         self.metadata_query_service = MetadataQueryService(self.session_manager)
         
-        # Initialize MappingPathExecutionService
+        # Initialize MappingPathExecutionService with all required arguments
         self.path_execution_service = MappingPathExecutionService(
-            logger=self.logger,
+            session_manager=self.session_manager,
             client_manager=self.client_manager,
-            cache_manager=self.cache_manager
+            cache_manager=self.cache_manager,
+            path_finder=self.path_finder,
+            path_execution_manager=self.path_execution_manager,
+            composite_handler=self,  # Pass self as composite handler
+            logger=self.logger
         )
-        # Set executor reference for delegation
-        self.path_execution_service.set_executor(self)
         
-        # Initialize MappingPathExecutionService
-        self.path_execution_service = MappingPathExecutionService(
-            logger=self.logger,
-            client_manager=self.client_manager,
-            cache_manager=self.cache_manager
-        )
         # Set executor reference for delegation
         self.path_execution_service.set_executor(self)
         
@@ -254,9 +249,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             try:
                 from biomapper.monitoring.metrics import MetricsTracker
                 self._metrics_tracker = MetricsTracker(
-                    langfuse=self._langfuse_tracker,
-                    langfuse_tracker=self._langfuse_tracker,
-                    logger=self.logger
+                    langfuse=self._langfuse_tracker
                 )
             except ImportError:
                 self.logger.warning("MetricsTracker not available - langfuse module not installed")
@@ -269,12 +262,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Initialize StrategyExecutionService
         self.strategy_execution_service = StrategyExecutionService(
-            logger=self.logger,
-            config_loader=self.config_loader,
+            strategy_orchestrator=self.strategy_orchestrator,
             robust_execution_coordinator=self.robust_execution_coordinator,
-            session_manager=self.session_manager,
-            identifier_loader=self.identifier_loader,
-            progress_reporter=self.progress_reporter,
+            logger=self.logger
         )
         
         self.logger.info("MappingExecutor initialization complete")
@@ -2699,3 +2689,60 @@ class MappingExecutor(CompositeIdentifierMixin):
             resume_from_checkpoint=resume_from_checkpoint,
             **kwargs
         )
+    
+    # Checkpoint-related delegate methods for backward compatibility
+    
+    async def save_checkpoint(self, execution_id: str, checkpoint_data: Dict[str, Any]):
+        """
+        Save checkpoint data for the given execution ID.
+        
+        Args:
+            execution_id: Unique identifier for the execution
+            checkpoint_data: Data to save in the checkpoint
+        """
+        await self.checkpoint_manager.save_checkpoint(execution_id, checkpoint_data)
+    
+    async def load_checkpoint(self, execution_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Load checkpoint data for the given execution ID.
+        
+        Args:
+            execution_id: Unique identifier for the execution
+            
+        Returns:
+            Checkpoint data if found, None otherwise
+        """
+        return await self.checkpoint_manager.load_checkpoint(execution_id)
+    
+    def _report_progress(self, progress_data: Dict[str, Any]):
+        """
+        Report progress to registered callbacks.
+        
+        Args:
+            progress_data: Progress information to report
+        """
+        self.progress_reporter.report(progress_data)
+    
+    # Client delegate methods
+    
+    def _load_client(self, client_path: str, **kwargs):
+        """Load a client instance (delegates to client manager)."""
+        return self.client_manager.get_client_instance(client_path, **kwargs)
+    
+    @property
+    def checkpoint_dir(self):
+        """Get the checkpoint directory path."""
+        return self.checkpoint_manager.checkpoint_dir
+    
+    @checkpoint_dir.setter
+    def checkpoint_dir(self, value):
+        """Set the checkpoint directory path."""
+        if hasattr(self.checkpoint_manager, 'checkpoint_dir'):
+            from pathlib import Path
+            if value is not None:
+                self.checkpoint_manager.checkpoint_dir = Path(value)
+                self.checkpoint_manager.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+                self.checkpoint_manager.checkpoint_enabled = True
+            else:
+                self.checkpoint_manager.checkpoint_dir = None
+                self.checkpoint_manager.checkpoint_enabled = False
