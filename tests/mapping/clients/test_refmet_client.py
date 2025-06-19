@@ -13,7 +13,8 @@ from biomapper.mapping.clients.refmet_client import RefMetClient, RefMetConfig
 @pytest.fixture
 def refmet_client() -> RefMetClient:
     """Create a RefMetClient instance for testing."""
-    return RefMetClient()
+    config = RefMetConfig(use_local_cache=False)
+    return RefMetClient(config=config)
 
 
 @pytest.fixture
@@ -48,14 +49,18 @@ def test_client_custom_config() -> None:
 
 def test_successful_search(refmet_client: RefMetClient, mock_response: Mock) -> None:
     """Test successful metabolite name search."""
+    mock_response.status_code = 200
+    mock_response.content = True
     mock_response.text = (
         "Input name\tRefMet_ID\tStandardized name\tFormula\tExact mass\tINCHI_KEY\t"
         "PubChem_CID\tChEBI_ID\tHMDB_ID\tKEGG_ID\n"
         "glucose\tRM0135901\tGlucose\tC6H12O6\t180.0634\tTEST123\t5793\t4167\t"
         "HMDB0000122\tC00031\n"
     )
+    mock_response.raise_for_status.return_value = None
 
-    with patch.object(refmet_client.session, "post", return_value=mock_response):
+    with patch.object(refmet_client.session, "post", return_value=mock_response), \
+         patch.object(refmet_client.session, "get", side_effect=requests.exceptions.RequestException("Mock GET failure")):
         result = refmet_client.search_by_name("glucose")
         assert result is not None
         assert result["refmet_id"] == "RM0135901"  # Raw ID without prefix
@@ -70,9 +75,12 @@ def test_successful_search(refmet_client: RefMetClient, mock_response: Mock) -> 
 def test_empty_response(refmet_client: RefMetClient) -> None:
     """Test handling of empty response."""
     mock_response = Mock()
+    mock_response.status_code = 200
     mock_response.content = False
+    mock_response.raise_for_status.return_value = None
 
-    with patch.object(refmet_client.session, "post", return_value=mock_response):
+    with patch.object(refmet_client.session, "post", return_value=mock_response), \
+         patch.object(refmet_client.session, "get", side_effect=requests.exceptions.RequestException("Mock GET failure")):
         result = refmet_client.search_by_name("nonexistent")
         assert result is None
 
@@ -80,19 +88,25 @@ def test_empty_response(refmet_client: RefMetClient) -> None:
 def test_malformed_response(refmet_client: RefMetClient) -> None:
     """Test handling of malformed response."""
     mock_response = Mock()
+    mock_response.status_code = 200
     mock_response.content = True
     mock_response.text = "invalid\tdata"
+    mock_response.raise_for_status.return_value = None
 
-    with patch.object(refmet_client.session, "post", return_value=mock_response):
+    with patch.object(refmet_client.session, "post", return_value=mock_response), \
+         patch.object(refmet_client.session, "get", side_effect=requests.exceptions.RequestException("Mock GET failure")):
         result = refmet_client.search_by_name("glucose")
         assert result is None
 
 
 def test_name_cleaning(refmet_client: RefMetClient, mock_response: Mock) -> None:
     """Test cleaning of metabolite names."""
-    with patch.object(
-        refmet_client.session, "post", return_value=mock_response
-    ) as mock_post:
+    mock_response.status_code = 200
+    mock_response.content = True
+    mock_response.raise_for_status.return_value = None
+    
+    with patch.object(refmet_client.session, "post", return_value=mock_response) as mock_post, \
+         patch.object(refmet_client.session, "get", side_effect=requests.exceptions.RequestException("Mock GET failure")):
         result = refmet_client.search_by_name("Glucose (alpha)")
         assert result is not None
 
@@ -105,23 +119,23 @@ def test_name_cleaning(refmet_client: RefMetClient, mock_response: Mock) -> None
 def test_pandas_error_handling(refmet_client: RefMetClient) -> None:
     """Test handling of pandas DataFrame errors."""
     mock_response = Mock()
+    mock_response.status_code = 200
     mock_response.content = True
     mock_response.text = (
         "header1\theader2\nvalue1"  # Malformed TSV - missing required columns
     )
+    mock_response.raise_for_status.return_value = None
 
-    with patch.object(refmet_client.session, "post", return_value=mock_response):
+    with patch.object(refmet_client.session, "post", return_value=mock_response), \
+         patch.object(refmet_client.session, "get", side_effect=requests.exceptions.RequestException("Mock GET failure")):
         result = refmet_client.search_by_name("glucose")
         assert result is None
 
 
 def test_request_exception(refmet_client: RefMetClient) -> None:
     """Test handling of request exception."""
-    with patch.object(
-        refmet_client.session,
-        "post",
-        side_effect=requests.exceptions.RequestException("Test error"),
-    ):
+    with patch.object(refmet_client.session, "post", side_effect=requests.exceptions.RequestException("Test error")), \
+         patch.object(refmet_client.session, "get", side_effect=requests.exceptions.RequestException("Mock GET failure")):
         result = refmet_client.search_by_name("glucose")
         assert result is None
 
@@ -129,21 +143,31 @@ def test_request_exception(refmet_client: RefMetClient) -> None:
 def test_empty_dataframe(refmet_client: RefMetClient) -> None:
     """Test handling of empty DataFrame result."""
     mock_response = Mock()
+    mock_response.status_code = 200
     mock_response.content = True
     mock_response.text = "refmet_id\tname\tformula\texact_mass\tinchikey\tpubchem_id\n"
+    mock_response.raise_for_status.return_value = None
 
-    with patch.object(refmet_client.session, "post", return_value=mock_response):
+    with patch.object(refmet_client.session, "post", return_value=mock_response), \
+         patch.object(refmet_client.session, "get", side_effect=requests.exceptions.RequestException("Mock GET failure")):
         result = refmet_client.search_by_name("glucose")
         assert result is None
 
 
 def test_retry_mechanism(refmet_client: RefMetClient) -> None:
     """Test retry mechanism for failed requests."""
-    with patch.object(refmet_client.session, "post") as mock_post:
+    with patch.object(refmet_client.session, "post") as mock_post, \
+         patch.object(refmet_client.session, "get", side_effect=requests.exceptions.RequestException("Mock GET failure")):
         # Configure mock to fail twice then succeed
+        success_mock = Mock()
+        success_mock.status_code = 200
+        success_mock.content = True
+        success_mock.text = "No results found"
+        success_mock.raise_for_status.return_value = None
+        
         mock_post.side_effect = [
             requests.exceptions.RequestException("Timeout"),
-            Mock(status_code=200, content=True, text="No results found"),
+            success_mock,
         ]
 
         result = refmet_client.search_by_name("glucose")
@@ -159,7 +183,8 @@ def test_http_error(refmet_client: RefMetClient) -> None:
         "500 Error"
     )
 
-    with patch.object(refmet_client.session, "post", return_value=mock_response):
+    with patch.object(refmet_client.session, "post", return_value=mock_response), \
+         patch.object(refmet_client.session, "get", side_effect=requests.exceptions.RequestException("Mock GET failure")):
         result = refmet_client.search_by_name("glucose")
         assert result is None
 
@@ -169,7 +194,8 @@ def test_search_compounds_error(refmet_client: RefMetClient) -> None:
     mock_post = MagicMock(spec=requests.Session.post)
     mock_post.side_effect = requests.exceptions.RequestException("Test error")
 
-    with patch.object(refmet_client.session, "post", mock_post):
+    with patch.object(refmet_client.session, "post", mock_post), \
+         patch.object(refmet_client.session, "get", side_effect=requests.exceptions.RequestException("Mock GET failure")):
         result = refmet_client.search_by_name("glucose")
         assert result is None
         assert mock_post.call_args == call(
@@ -225,6 +251,17 @@ def test_search_by_name(
     expected_result: Optional[dict[str, str]],
 ) -> None:
     """Test RefMet name search with actual response format."""
+    # Mock GET requests to REST API to fail, forcing fallback to POST endpoint
+    requests_mock.get(
+        f"{refmet_client.config.rest_url}/refmet/match/{input_name.lower()}",
+        status_code=404
+    )
+    requests_mock.get(
+        f"{refmet_client.config.rest_url}/refmet/name/{input_name.lower()}/all",
+        status_code=404
+    )
+    
+    # Mock the POST endpoint that should be used as fallback
     requests_mock.post(
         f"{refmet_client.config.base_url}/name_to_refmet_new_minID.php",
         text=mock_response,
@@ -239,6 +276,16 @@ def test_search_by_name_request_error(
     requests_mock: Mocker,
 ) -> None:
     """Test handling of request errors."""
+    # Mock GET requests to REST API to fail, forcing fallback to POST endpoint
+    requests_mock.get(
+        f"{refmet_client.config.rest_url}/refmet/match/glucose",
+        status_code=404
+    )
+    requests_mock.get(
+        f"{refmet_client.config.rest_url}/refmet/name/glucose/all",
+        status_code=404
+    )
+    
     requests_mock.post(
         f"{refmet_client.config.base_url}/name_to_refmet_new_minID.php",
         status_code=500,
@@ -252,6 +299,25 @@ def test_search_by_name_complex_terms(
     refmet_client: RefMetClient, requests_mock: Mocker
 ) -> None:
     """Test searching with complex terms."""
+    # Clean name for the search
+    clean_name = "total hdl cholesterol concentration"
+    
+    # Mock GET requests to REST API to fail, forcing fallback to POST endpoint
+    requests_mock.get(
+        f"{refmet_client.config.rest_url}/refmet/match/{clean_name}",
+        status_code=404
+    )
+    requests_mock.get(
+        f"{refmet_client.config.rest_url}/refmet/name/{clean_name}/all",
+        status_code=404
+    )
+    
+    # Also need to mock the preprocessed terms
+    requests_mock.get(
+        f"{refmet_client.config.rest_url}/refmet/name/hdl cholesterol/all",
+        status_code=404
+    )
+    
     requests_mock.post(
         f"{refmet_client.config.base_url}/name_to_refmet_new_minID.php",
         text=(
