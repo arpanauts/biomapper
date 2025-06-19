@@ -4,7 +4,7 @@ import os
 import time # Add import time
 from typing import List, Dict, Any, Optional, Tuple, Union, Callable
 from datetime import datetime, timezone, timedelta
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
 from sqlalchemy import select
@@ -221,21 +221,25 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Initialize MappingPathExecutionService
         self.path_execution_service = MappingPathExecutionService(
-            logger=self.logger,
+            session_manager=self.session_manager,
             client_manager=self.client_manager,
-            cache_manager=self.cache_manager
+            cache_manager=self.cache_manager,
+            path_finder=self.path_finder,
+            path_execution_manager=self.path_execution_manager,
+            composite_handler=self,  # MappingExecutor implements composite handling
+            logger=self.logger
         )
-        # Set executor reference for delegation
-        self.path_execution_service.set_executor(self)
         
         # Initialize MappingPathExecutionService
         self.path_execution_service = MappingPathExecutionService(
-            logger=self.logger,
+            session_manager=self.session_manager,
             client_manager=self.client_manager,
-            cache_manager=self.cache_manager
+            cache_manager=self.cache_manager,
+            path_finder=self.path_finder,
+            path_execution_manager=self.path_execution_manager,
+            composite_handler=self,  # MappingExecutor implements composite handling
+            logger=self.logger
         )
-        # Set executor reference for delegation
-        self.path_execution_service.set_executor(self)
         
         # Initialize RobustExecutionCoordinator
         self.robust_execution_coordinator = RobustExecutionCoordinator(
@@ -269,12 +273,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Initialize StrategyExecutionService
         self.strategy_execution_service = StrategyExecutionService(
-            logger=self.logger,
-            config_loader=self.config_loader,
+            strategy_orchestrator=self.strategy_orchestrator,
             robust_execution_coordinator=self.robust_execution_coordinator,
-            session_manager=self.session_manager,
-            identifier_loader=self.identifier_loader,
-            progress_reporter=self.progress_reporter,
+            logger=self.logger
         )
         
         self.logger.info("MappingExecutor initialization complete")
@@ -2699,3 +2700,53 @@ class MappingExecutor(CompositeIdentifierMixin):
             resume_from_checkpoint=resume_from_checkpoint,
             **kwargs
         )
+
+    async def get_strategy(self, strategy_name: str) -> Optional[MappingStrategy]:
+        """
+        Get a strategy by name from the database.
+        
+        Args:
+            strategy_name: Name of the strategy to retrieve
+            
+        Returns:
+            MappingStrategy object if found, None otherwise
+        """
+        try:
+            async with self.async_metamapper_session() as session:
+                query = select(MappingStrategy).where(MappingStrategy.name == strategy_name)
+                result = await session.execute(query)
+                return result.scalar_one_or_none()
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error getting strategy {strategy_name}: {e}")
+            return None
+
+    def save_checkpoint(self, execution_id: str, checkpoint_data: Dict[str, Any]):
+        """
+        Save checkpoint data for an execution.
+        
+        Args:
+            execution_id: Unique identifier for the execution
+            checkpoint_data: Data to save in the checkpoint
+        """
+        return self.checkpoint_manager.save_checkpoint(execution_id, checkpoint_data)
+
+    def load_checkpoint(self, execution_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Load checkpoint data for an execution.
+        
+        Args:
+            execution_id: Unique identifier for the execution
+            
+        Returns:
+            Checkpoint data if found, None otherwise
+        """
+        return self.checkpoint_manager.load_checkpoint(execution_id)
+
+    def _report_progress(self, progress_data: Dict[str, Any]):
+        """
+        Report progress to registered callbacks.
+        
+        Args:
+            progress_data: Progress information to report
+        """
+        return self.progress_reporter.report(progress_data)
