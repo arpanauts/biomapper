@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, TypedDict, Union
 import matplotlib.pyplot as plt
 import pandas as pd
 import venn  # type: ignore
@@ -85,7 +85,7 @@ class SetAnalyzer:
         self._id_columns[key] = value
 
     def load_dataset(
-        self, name: str, path: Path | str, id_delimiters: list[str] | None = None
+        self, name: str, path: Union[Path, str], id_delimiters: Union[list[str], None] = None
     ) -> None:
         """Load a dataset from file.
 
