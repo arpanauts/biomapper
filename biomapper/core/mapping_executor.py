@@ -87,6 +87,12 @@ from ..db.cache_models import (
     ExecutionMetric # Added ExecutionMetric
 )
 
+# Import models for metamapper DB
+from ..db.models import Base as MetamapperBase
+
+# Import database setup service
+from .services.database_setup_service import DatabaseSetupService
+
 # Import our centralized configuration settings
 from biomapper.config import settings
 
@@ -281,41 +287,6 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         self.logger.info("MappingExecutor initialization complete")
 
-    async def _init_db_tables(self, engine, base_metadata):
-        """Initialize database tables if they don't exist.
-        
-        Args:
-            engine: SQLAlchemy async engine to use
-            base_metadata: The metadata object containing table definitions
-        """
-        try:
-            # Check if the tables already exist
-            async with engine.connect() as conn:
-                # Check if mapping_sessions table exists
-                has_tables = await conn.run_sync(
-                    lambda sync_conn: sync_conn.dialect.has_table(
-                        sync_conn, "mapping_sessions"
-                    )
-                )
-                
-                if has_tables:
-                    self.logger.info(f"Tables already exist in database {engine.url}, skipping initialization.")
-                    return
-                
-                # Tables don't exist, create them
-                self.logger.info(f"Tables don't exist in database {engine.url}, creating them...")
-            
-            # Create tables
-            async with engine.begin() as conn:
-                await conn.run_sync(base_metadata.create_all)
-            self.logger.info(f"Database tables for {engine.url} initialized successfully.")
-        except Exception as e:
-            self.logger.error(f"Error initializing database tables for {engine.url}: {str(e)}", exc_info=True)
-            raise BiomapperError(
-                f"Failed to initialize database tables: {str(e)}",
-                error_code=ErrorCode.DATABASE_INITIALIZATION_ERROR,
-                details={"engine_url": str(engine.url)}
-            ) from e
     
     @classmethod
     async def create(
@@ -372,7 +343,11 @@ class MappingExecutor(CompositeIdentifierMixin):
             retry_delay=retry_delay,
         )
         
-        # Executor is already fully initialized by __init__
+        # Initialize database tables using DatabaseSetupService
+        db_setup_service = DatabaseSetupService(logger=executor.logger)
+        await db_setup_service.initialize_tables(executor.async_metamapper_engine, MetamapperBase.metadata)
+        await db_setup_service.initialize_tables(executor.async_cache_engine, CacheBase.metadata)
+        
         return executor
 
     def get_cache_session(self):
