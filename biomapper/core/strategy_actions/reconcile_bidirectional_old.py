@@ -7,12 +7,11 @@ that includes matches found in both directions.
 """
 
 import logging
-from typing import Dict, Any, List, Set, Tuple
+from typing import Dict, Any, List
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from biomapper.core.strategy_actions.base import StrategyAction
-from biomapper.core.exceptions import MappingExecutionError
 
 logger = logging.getLogger(__name__)
 

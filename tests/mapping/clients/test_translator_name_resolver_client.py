@@ -1,8 +1,6 @@
 """Unit tests for the TranslatorNameResolverClient."""
 
 import pytest
-import aiohttp
-import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from biomapper.mapping.clients.translator_name_resolver_client import TranslatorNameResolverClient

@@ -4,21 +4,17 @@ import argparse
 import asyncio
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 import yaml
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import inspect
 
-import biomapper.db.models
 from biomapper.config import settings
 from biomapper.db.models import (
     Ontology, MappingResource, MappingPath, MappingPathStep,
-    OntologyPreference, EndpointRelationship, PropertyExtractionConfig,
+    PropertyExtractionConfig,
     EndpointPropertyConfig, OntologyCoverage, Property, Endpoint,
-    MappingSessionLog, RelationshipMappingPath, Base,
     MappingStrategy, MappingStrategyStep
 )
 from biomapper.db.session import get_db_manager

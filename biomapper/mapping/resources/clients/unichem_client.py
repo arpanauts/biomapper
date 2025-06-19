@@ -103,7 +103,7 @@ async def map_with_unichem(
                 elif isinstance(results, dict):
                     # If it's a dictionary, extract data from 'searchedCompound'
                     logger.debug(
-                        f"UniChem Client (Connectivity): API returned a dictionary. Attempting to extract from 'searchedCompound' key."
+                        "UniChem Client (Connectivity): API returned a dictionary. Attempting to extract from 'searchedCompound' key."
                     )
                     compound_data = results.get("searchedCompound")
                     if not isinstance(compound_data, dict):
@@ -183,7 +183,7 @@ async def map_with_unichem(
                 f"UniChem Client (Connectivity): Connection or other client error for URL {request_url}: {e}"
             )
             return None, 0.0
-        except Exception as e:
+        except Exception:
             logger.exception(
                 f"UniChem Client (Connectivity): An unexpected error occurred during mapping for {input_ontology}:{input_entity} -> {target_ontology}"
             )
@@ -262,7 +262,7 @@ async def map_with_unichem(
                 f"UniChem Client (Direct): Connection or other client error for URL {request_url}: {e}"
             )
             return None, 0.0
-        except Exception as e:
+        except Exception:
             logger.exception(
                 f"UniChem Client (Direct): An unexpected error occurred during mapping for {input_ontology}:{input_entity} -> {target_ontology}"
             )

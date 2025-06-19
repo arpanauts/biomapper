@@ -12,7 +12,6 @@ Run this script directly to test the resolver against the live UniProt API.
 """
 import asyncio
 import logging
-from typing import Dict, List, Optional, Tuple
 from biomapper.mapping.clients.uniprot_historical_resolver_client import UniProtHistoricalResolverClient
 
 # Configure logging

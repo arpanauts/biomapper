@@ -6,7 +6,6 @@ Parse Function Health HTML page to extract medical tests and their categories.
 import csv
 from bs4 import BeautifulSoup
 import re
-import sys
 
 
 def clean_text(text):

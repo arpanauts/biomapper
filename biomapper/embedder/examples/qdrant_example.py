@@ -1,8 +1,6 @@
 """Example of using the Qdrant vector store for embeddings."""
 
-import os
 import logging
-import numpy as np
 from typing import List, Dict, Any
 
 from biomapper.embedder.generators.text_embedder import TextEmbedder

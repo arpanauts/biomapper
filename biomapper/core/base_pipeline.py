@@ -3,14 +3,13 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any, TypeVar, Generic, Union, cast, Sequence
+from typing import List, Optional, Dict, Any, TypeVar, Generic, cast, Sequence
 
 from ..monitoring.langfuse_tracker import LangfuseTracker
 from ..monitoring.metrics import MetricsTracker
 from .base_rag import BaseRAGMapper, Document
-from .base_mapper import BaseMapper, MappingResult
 from ..schemas.domain_schema import DomainDocument, DomainType
-from ..schemas.rag_schema import LLMMapperResult, Match
+from ..schemas.rag_schema import LLMMapperResult
 
 logger = logging.getLogger(__name__)
 

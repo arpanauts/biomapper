@@ -2,10 +2,10 @@
 
 import json
 import logging
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Set
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .base import StrategyAction, ActionContext
+from .base import StrategyAction
 from .registry import register_action
 from biomapper.db.models import Endpoint
 

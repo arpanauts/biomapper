@@ -1,8 +1,7 @@
 """Tests for ResolveAndMatchForwardAction."""
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import Mock, AsyncMock, patch
 import pandas as pd
 
 from biomapper.core.strategy_actions.resolve_and_match_forward import ResolveAndMatchForwardAction

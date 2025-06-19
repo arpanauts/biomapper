@@ -144,7 +144,6 @@ class UniProtEnsemblProteinMappingClient(UniProtIDMappingClient):
 # Example Usage (for testing)
 async def run_example() -> None:
     """Run a simple example to test the client."""
-    import asyncio
 
     logging.basicConfig(level=logging.INFO)
 

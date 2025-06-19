@@ -1,10 +1,9 @@
 """
 API routes for mapping operations.
 """
-from typing import List, Dict, Any
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status, BackgroundTasks
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_mapper_service, get_session
 from app.core.session import Session
@@ -16,7 +15,6 @@ from app.models.mapping import (
     MappingResultSummary,
     RelationshipMappingRequest,
     RelationshipMappingResponse,
-    MappingResult,
 )
 from app.services.mapper_service import MapperService
 

@@ -1,7 +1,7 @@
 """Data schemas for the Biomapper Embedder module."""
 
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 
 
 class EmbedderItem(BaseModel):

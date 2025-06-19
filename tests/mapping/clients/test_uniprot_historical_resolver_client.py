@@ -1,12 +1,10 @@
 """Tests for the UniProtHistoricalResolverClient."""
 
 import os
-import asyncio
 import pytest
 from unittest.mock import patch, AsyncMock
-from typing import Dict, List, Optional, Tuple
 
-from biomapper.core.exceptions import ClientInitializationError, ClientExecutionError
+from biomapper.core.exceptions import ClientExecutionError
 from biomapper.mapping.clients.uniprot_historical_resolver_client import UniProtHistoricalResolverClient
 
 

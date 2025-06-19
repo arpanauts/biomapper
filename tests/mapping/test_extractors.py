@@ -9,7 +9,6 @@ from biomapper.mapping.extractors import (
     extract_uniprot_id,
     extract_all_ids,
 )
-from biomapper.mapping.adapters.csv_adapter import CSVAdapter
 
 
 @pytest.mark.parametrize(

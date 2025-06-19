@@ -5,7 +5,6 @@ This script focuses specifically on querying for P0CG05 (a known demerged ID)
 """
 import asyncio
 import aiohttp
-import json
 import logging
 
 # Configure logging

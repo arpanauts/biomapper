@@ -2,10 +2,8 @@
 
 import logging
 from typing import List, Optional, Dict, Any, Tuple
-import asyncio
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
 from sentence_transformers import SentenceTransformer
 
 from biomapper.mapping.clients.base_client import BaseMappingClient

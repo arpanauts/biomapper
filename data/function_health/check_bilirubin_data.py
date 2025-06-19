@@ -139,7 +139,7 @@ chemistry_df = pd.read_csv('/procedure/data/local_data/ARIVALE_SNAPSHOTS/chemist
 # Check BILIRUBIN, DIRECT values
 if 'BILIRUBIN, DIRECT' in chemistry_df.columns:
     bili_values = chemistry_df['BILIRUBIN, DIRECT'].dropna()
-    print(f"\nBILIRUBIN, DIRECT statistics:")
+    print("\nBILIRUBIN, DIRECT statistics:")
     print(f"  Count: {len(bili_values)}")
     print(f"  Mean: {bili_values.mean():.3f}")
     print(f"  Std: {bili_values.std():.3f}")

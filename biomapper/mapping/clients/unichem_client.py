@@ -8,11 +8,10 @@ interface for use with MappingExecutor.
 import logging
 import aiohttp
 import asyncio
-from typing import Dict, List, Optional, Any, Tuple, Set, Union
-import json
+from typing import Dict, List, Optional, Any, Tuple, Union
 
 from biomapper.mapping.clients.base_client import BaseMappingClient, CachedMappingClientMixin
-from biomapper.core.exceptions import ClientExecutionError, ClientInitializationError
+from biomapper.core.exceptions import ClientExecutionError
 
 logger = logging.getLogger(__name__)
 

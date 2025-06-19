@@ -4,15 +4,13 @@ import datetime
 import logging
 import os
 import shutil
-import time
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 import sqlalchemy as sa
-from sqlalchemy.orm import Session
 
-from biomapper.db.models import Base, EntityMapping, CacheStats, TransitiveJobLog
-from biomapper.db.session import get_db_manager, DatabaseManager
+from biomapper.db.models import EntityMapping, CacheStats, TransitiveJobLog
+from biomapper.db.session import get_db_manager
 
 
 logger = logging.getLogger(__name__)

@@ -56,7 +56,7 @@ async def test_various_db_combinations():
             alt_ids = ["P05067", "P04637", "P38398"]  # APP, TP53, BRCA1
             alt_results = await client.map_identifiers(alt_ids)
 
-            print(f"\nResults with alternate IDs:")
+            print("\nResults with alternate IDs:")
             alt_found = 0
             for k, v in alt_results.items():
                 print(f"  {k}: {v}")

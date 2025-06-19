@@ -4,7 +4,6 @@ This client loads data from a TSV file and provides mapping between different
 identifier types (e.g., UniProt IDs to Arivale Protein IDs).
 """
 
-import asyncio
 import logging
 import pandas as pd
 import csv

@@ -1,8 +1,6 @@
 """Unit tests for the UniChemClient."""
 
 import pytest
-import aiohttp
-import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from biomapper.mapping.clients.unichem_client import UniChemClient

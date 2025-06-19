@@ -5,13 +5,11 @@ to leverage the CompositeIdentifierHandler and CompositeMiddleware.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple, Any, Set
-import asyncio
+from typing import Dict, List, Optional, Tuple, Any
 
 from sqlalchemy.orm import Session
 
 from biomapper.core.composite_handler import CompositeIdentifierHandler, CompositeMiddleware
-from biomapper.core.exceptions import ConfigurationError, MappingExecutionError
 
 logger = logging.getLogger(__name__)
 

@@ -115,7 +115,7 @@ class MappingExecutorInitializer:
         self.progress_reporter = None
         self._langfuse_tracker = None
         
-        self.logger.info(f"MappingExecutorInitializer configured with:")
+        self.logger.info("MappingExecutorInitializer configured with:")
         self.logger.info(f"  Metamapper DB URL: {self.metamapper_db_url}")
         self.logger.info(f"  Mapping Cache DB URL: {self.mapping_cache_db_url}")
         self.logger.info(f"  Path cache size: {path_cache_size}, concurrent batches: {max_concurrent_batches}")

@@ -98,7 +98,7 @@ class ClientManager:
                 exc_info=True,
             )
             raise ClientInitializationError(
-                f"Import error initializing client",
+                "Import error initializing client",
                 client_name=resource.name if resource else "Unknown",
                 details=str(e),
             ) from e
@@ -108,7 +108,7 @@ class ClientManager:
                 exc_info=True,
             )
             raise ClientInitializationError(
-                f"Attribute error initializing client",
+                "Attribute error initializing client",
                 client_name=resource.name if resource else "Unknown",
                 details=str(e),
             ) from e
@@ -119,7 +119,7 @@ class ClientManager:
                 exc_info=True,
             )
             raise ClientInitializationError(
-                f"Unexpected error initializing client",
+                "Unexpected error initializing client",
                 client_name=resource.name if resource else "Unknown",
                 details=str(e),
             )

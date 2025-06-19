@@ -10,7 +10,6 @@ from typing import Dict, Any, List
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload
 
 from biomapper.core.strategy_actions.base import StrategyAction
 from biomapper.core.exceptions import MappingExecutionError

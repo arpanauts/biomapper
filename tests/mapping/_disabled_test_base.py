@@ -11,8 +11,6 @@ from biomapper.mapping.base import (
     MetricsContext,
     MappingError,
     ValidationError,
-    ConnectionError,
-    RateLimitError,
 )
 
 

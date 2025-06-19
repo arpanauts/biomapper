@@ -6,9 +6,8 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional
 
-from biomapper.db.session import get_db_manager
 
 
 logger = logging.getLogger(__name__)

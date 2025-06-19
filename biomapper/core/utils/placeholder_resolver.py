@@ -7,7 +7,7 @@ in strings and other values used throughout the biomapper application.
 
 import os
 import re
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict
 
 
 def resolve_placeholders(value: Any, context: Dict[str, Any]) -> Any:

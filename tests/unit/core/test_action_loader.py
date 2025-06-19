@@ -2,7 +2,6 @@
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-import sys
 
 from biomapper.core.engine_components.action_loader import ActionLoader
 from biomapper.core.strategy_actions.base import StrategyAction

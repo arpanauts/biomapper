@@ -3,8 +3,7 @@
 import pytest
 import json
 import pandas as pd
-from unittest.mock import Mock, AsyncMock, patch, mock_open
-from datetime import datetime
+from unittest.mock import Mock, patch, mock_open
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from biomapper.core.strategy_actions.export_results import ExportResultsAction

@@ -1,7 +1,7 @@
 """Pipeline for compound name standardization."""
 
 import logging
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 from ...core.base_mapper import MappingResult
 

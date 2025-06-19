@@ -7,9 +7,8 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
-from ..db.session import DatabaseManager, get_db_manager
+from ..db.session import get_db_manager
 from .manager import CacheManager
 from ..transitivity.builder import TransitivityBuilder
 

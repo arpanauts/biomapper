@@ -6,7 +6,7 @@ bidirectional mapping between source and target identifiers.
 """
 
 import logging
-from typing import Dict, Any, List, Set, Tuple, TYPE_CHECKING
+from typing import Dict, Any, TYPE_CHECKING
 from collections import defaultdict
 from datetime import datetime
 

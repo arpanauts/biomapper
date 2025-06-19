@@ -1,12 +1,7 @@
 """Tests for the ArivaleReverseLookupClient."""
 
-import os
-import asyncio
 import pytest
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
-from biomapper.core.exceptions import ClientInitializationError, ClientExecutionError
 from biomapper.mapping.clients.arivale_reverse_lookup_client import ArivaleReverseLookupClient
 
 

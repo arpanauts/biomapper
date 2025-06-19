@@ -11,10 +11,10 @@ import asyncio
 import os
 import time
 import re
-from typing import Dict, List, Optional, Any, Tuple, Set, Union
+from typing import Dict, List, Optional, Any, Tuple
 
 from biomapper.mapping.clients.base_client import BaseMappingClient, CachedMappingClientMixin
-from biomapper.core.exceptions import ClientExecutionError, ClientInitializationError
+from biomapper.core.exceptions import ClientExecutionError
 
 logger = logging.getLogger(__name__)
 
@@ -846,8 +846,8 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
             return {identifier: (None, None) for identifier in identifiers}
         
         logger.warning(
-            f"Reverse mapping with UMLS is not optimal and may be slow. "
-            f"Consider using a database-specific client for reverse mapping."
+            "Reverse mapping with UMLS is not optimal and may be slow. "
+            "Consider using a database-specific client for reverse mapping."
         )
         
         logger.info(f"Reverse mapping {len(identifiers)} identifiers from {source_db}")

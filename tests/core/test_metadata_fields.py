@@ -4,7 +4,7 @@ import json
 import pytest
 import logging
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, AsyncMock, patch, ANY
+from unittest.mock import MagicMock
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -18,7 +18,6 @@ from sqlalchemy.future import select
 from biomapper.db.cache_models import (
     Base as CacheBase,
     EntityMapping,
-    PathExecutionStatus,
 )
 
 logger = logging.getLogger(__name__)

@@ -350,7 +350,7 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
                     pass
             
             # Log final results
-            logger.info(f"UniProtClient DEBUG: _resolve_batch final results summary:")
+            logger.info("UniProtClient DEBUG: _resolve_batch final results summary:")
             for acc_id, info in results.items():
                 if info["found"]:
                     logger.info(f"  {acc_id}: Found=True, Primary={info['is_primary']}, PrimaryIDs={info['primary_ids']}")

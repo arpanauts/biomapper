@@ -5,21 +5,17 @@ This module provides commands for discovering, testing, and executing
 mapping paths between endpoints.
 """
 
-import os
-import json
 import click
 import asyncio
 import logging
-import time
-from typing import Dict, List, Any, Optional
+from typing import Optional
 
 from biomapper.db.session import get_session
 from biomapper.mapping.metadata.pathfinder import RelationshipPathFinder
 from biomapper.mapping.metadata.mapper import RelationshipMappingExecutor
-from biomapper.mapping.health import PropertyHealthTracker
 from sqlalchemy import text
 from biomapper.config import settings
-from biomapper.db.session import get_db_manager, DatabaseManager # Import session utilities
+from biomapper.db.session import DatabaseManager # Import session utilities
 
 # Configure logging
 logging.basicConfig(

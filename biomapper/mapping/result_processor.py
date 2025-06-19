@@ -6,7 +6,6 @@ from enum import Enum
 
 from ..monitoring.langfuse_tracker import LangfuseTracker
 from ..monitoring.metrics import MetricsTracker
-from ..schemas.metabolite_schema import MetaboliteDocument
 from ..mapping.metabolite.name import MetaboliteMapping, MetaboliteClass
 
 

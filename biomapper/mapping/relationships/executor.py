@@ -10,14 +10,12 @@ mapping operations between endpoints using discovered relationship paths.
 # Import needed modules
 import datetime
 import json
-import os
 import aiohttp
 import logging
 from typing import Any, Dict, List, Optional, Tuple
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import update, and_, func, or_
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import update, or_
 from biomapper.db.cache_models import (
     EntityMapping,
 )
@@ -27,7 +25,6 @@ from biomapper.db.models import (
     EndpointRelationship,
     OntologyPreference,
     MappingPath,
-    Base,
 )
 from biomapper.mapping.resources.clients.unichem_client import map_with_unichem
 from biomapper.mapping.clients.uniprot_name_client import UniProtNameClient
@@ -133,7 +130,7 @@ class RelationshipMappingExecutor:
                             f"Path {mapping_path.id}, Step {step_num}: Mapping returned None. Stopping execution."
                         )
                         return None, 0.0  # If any step fails, the whole path fails
-                except Exception as e:
+                except Exception:
                     logger.error(
                         f"Path {mapping_path.id}, Step {step_num}: Error executing mapping step",
                         exc_info=True,
@@ -223,7 +220,7 @@ class RelationshipMappingExecutor:
                 )
             except AttributeError:
                 logger.error(
-                    f"UMLSClient does not have the 'find_cui' method implemented yet.",
+                    "UMLSClient does not have the 'find_cui' method implemented yet.",
                     exc_info=True,
                 )
                 return None, 0.0

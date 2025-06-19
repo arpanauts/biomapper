@@ -7,11 +7,10 @@ following the ResourceAdapter protocol.
 
 import sqlite3
 import time
-import json
 import logging
 import os.path
 import asyncio
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 
 from biomapper.mapping.metadata.interfaces import BaseResourceAdapter
 

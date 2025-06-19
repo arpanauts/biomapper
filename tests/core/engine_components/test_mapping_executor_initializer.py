@@ -1,9 +1,7 @@
 """Unit tests for MappingExecutorInitializer module."""
 
-import asyncio
-import logging
 import os
-from unittest.mock import Mock, patch, MagicMock, AsyncMock, call
+from unittest.mock import Mock, patch, AsyncMock
 import pytest
 
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer

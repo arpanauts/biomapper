@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from typing import Any, Dict, List, Optional, Protocol, Type, Union
+from typing import Any, Optional, Protocol
 
 from biomapper.cache.manager import CacheManager
 from biomapper.metadata.manager import ResourceMetadataManager

@@ -6,13 +6,10 @@ for managing knowledge graph resources, including their capabilities and schemas
 
 import logging
 import time
-from typing import Dict, List, Optional, Set, Any, Union, ClassVar
+from typing import Dict, List, Optional, ClassVar
 
 from biomapper.metadata.models import (
     ResourceRegistration,
-    ResourceCapability,
-    ResourcePerformanceMetrics,
-    ResourceType,
 )
 
 

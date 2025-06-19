@@ -8,16 +8,13 @@ transitivity to speed up biological entity mapping and discover new relationship
 import asyncio
 import logging
 import os
-import sys
-from pprint import pprint
-from typing import Dict, List, Optional
 
 from biomapper.cache.manager import CacheManager
 from biomapper.cache.mapper import CachedMapper
 from biomapper.db.session import get_db_manager
 from biomapper.mapping.clients.chebi_client import ChEBIClient
 from biomapper.mapping.clients.unichem_client import UniChemClient
-from biomapper.standardization.ramp_client import RaMPClient, RaMPConfig
+from biomapper.standardization.ramp_client import RaMPClient
 from biomapper.transitivity.builder import TransitivityBuilder
 
 

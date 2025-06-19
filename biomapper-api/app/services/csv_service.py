@@ -5,7 +5,7 @@ import os
 import logging
 from pathlib import Path
 import glob
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Tuple
 
 import pandas as pd
 from fastapi import UploadFile, HTTPException, status

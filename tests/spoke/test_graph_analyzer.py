@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from biomapper.core.graph_analyzer import IdentifierConfidence, NodeTypeMetadata
-from biomapper.spoke.graph_analyzer import ArangoDBGraphAnalyzer, SPOKEGraphAnalyzer
+from biomapper.spoke.graph_analyzer import SPOKEGraphAnalyzer
 from biomapper.spoke.client import SPOKEConfig
 
 
@@ -53,7 +53,7 @@ async def test_discover_node_types_spoke_style(
     # Setup mock responses
     analyzer = mock_spoke_graph_analyzer
     # Connect the analyzer to the mock client
-    analyzer.db = mock_arango_client
+    analyzer._db = mock_arango_client
     
     mock_arango_client.collections.return_value = [
         {"name": "Nodes"},
@@ -131,7 +131,7 @@ async def test_discover_relationship_types(
     # Setup mock responses
     analyzer = mock_spoke_graph_analyzer
     # Connect the analyzer to the mock client
-    analyzer.db = mock_arango_client
+    analyzer._db = mock_arango_client
     
     mock_arango_client.collections.return_value = [
         {"name": "Nodes"},
@@ -139,30 +139,36 @@ async def test_discover_relationship_types(
     ]
 
     # Mock AQL execution for relationship types
-    mock_arango_client.aql.execute.return_value.__iter__.side_effect = [
-        # First call returns relationship types
-        [
-            {"label": "INTERACTS_WITH", "count": 150},
-            {"label": "PARTICIPATES_IN", "count": 250},
-        ],
-        # Second call returns sample relationships for INTERACTS_WITH
-        [
-            {
-                "_from": "Nodes/123",
-                "_to": "Nodes/456",
-                "label": "INTERACTS_WITH",
-                "properties": {"score": 0.9},
-            },
-        ],
-        # Third call returns sample relationships for PARTICIPATES_IN
-        [
-            {
-                "_from": "Nodes/789",
-                "_to": "Nodes/012",
-                "label": "PARTICIPATES_IN",
-                "properties": {"evidence": "experimental"},
-            },
-        ],
+    # Create different cursors for different calls
+    mock_cursor_1 = MagicMock()
+    mock_cursor_1.__iter__.return_value = iter([
+        {"label": "INTERACTS_WITH", "count": 150},
+        {"label": "PARTICIPATES_IN", "count": 250},
+    ])
+    
+    mock_cursor_2 = MagicMock()
+    mock_cursor_2.__iter__.return_value = iter([
+        {
+            "_from": "Nodes/123",
+            "_to": "Nodes/456",
+            "label": "INTERACTS_WITH",
+            "properties": {"score": 0.9},
+        },
+    ])
+    
+    mock_cursor_3 = MagicMock()
+    mock_cursor_3.__iter__.return_value = iter([
+        {
+            "_from": "Nodes/789",
+            "_to": "Nodes/012",
+            "label": "PARTICIPATES_IN",
+            "properties": {"evidence": "experimental"},
+        },
+    ])
+    
+    # Set up side_effect for multiple calls
+    mock_arango_client.aql.execute.side_effect = [
+        mock_cursor_1, mock_cursor_2, mock_cursor_3
     ]
 
     # Mock the _get_node_type_for_id method

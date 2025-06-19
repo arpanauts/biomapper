@@ -13,7 +13,6 @@ import asyncio
 import logging
 import sqlite3
 from datetime import datetime
-from typing import Dict, List, Any, Optional
 
 # Configure logging
 logging.basicConfig(
@@ -57,7 +56,7 @@ class UniChemAdapter:
             logger.info(f"Connecting to UniChem API at {self.base_url}")
             response = requests.get(f"{self.base_url}/src_ids")
             if response.status_code == 200:
-                logger.info(f"Successfully connected to UniChem API")
+                logger.info("Successfully connected to UniChem API")
                 # Print some data from the response to verify connectivity
                 data = response.json()
                 if data:
@@ -128,7 +127,7 @@ class UniChemAdapter:
 
             # If no direct mappings, try the "connectivity" endpoint for compound info
             if not results:
-                logger.info(f"No direct mapping found, trying connectivity endpoint")
+                logger.info("No direct mapping found, trying connectivity endpoint")
                 conn_url = (
                     f"{self.base_url}/connectivity/{clean_source_id}/{source_ucm_id}"
                 )
@@ -295,8 +294,6 @@ class SimpleDispatcher:
         logger.info("Initializing connection to UniChem API")
 
 
-from collections import deque
-import time
 
 
 class SimpleMetamappingEngine:

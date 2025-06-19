@@ -8,8 +8,7 @@ ensuring correct identification of routes between different ontologies.
 import pytest
 import asyncio
 import time
-from unittest.mock import Mock, AsyncMock, patch, MagicMock, call
-from typing import List, Dict, Any
+from unittest.mock import Mock, AsyncMock
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
@@ -22,7 +21,6 @@ from biomapper.db.models import (
     MappingPathStep,
     MappingResource,
     EndpointRelationship,
-    RelationshipMappingPath,
     Endpoint
 )
 

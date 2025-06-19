@@ -5,7 +5,6 @@ Tests cover all public methods and properties to ensure
 reliable progress reporting functionality.
 """
 
-import pytest
 import sys
 from pathlib import Path
 from unittest.mock import Mock, patch

@@ -7,11 +7,9 @@ import time
 import logging
 
 import numpy as np
-from pydantic import BaseModel
 
 from ...monitoring.langfuse_tracker import LangfuseTracker
 from ...monitoring.metrics import MetricsTracker
-from ...monitoring.traces import TraceManager
 from ...schemas.rag_schema import LLMMapperResult, Match, RAGMetrics
 from ...schemas.store_schema import VectorStoreConfig
 

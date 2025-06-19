@@ -7,19 +7,15 @@ from parsing configurations to executing strategies via MappingExecutor.
 import os
 import tempfile
 import shutil
-import asyncio
 from pathlib import Path
-from typing import Dict, Any, List, AsyncGenerator
+from typing import Dict, Any
 import pytest
 import pytest_asyncio
 import yaml
-from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
 
 from biomapper.core.mapping_executor import MappingExecutor
 from biomapper.db.models import Base
-from biomapper.db.session import get_db_manager
 from biomapper.core.exceptions import BiomapperError, StrategyNotFoundError, MappingExecutionError
 
 
@@ -102,11 +98,6 @@ async def setup_optional_test_environment():
 async def populate_test_data(session: AsyncSession, config: Dict[str, Any]):
     """Helper to populate test data using the actual populate functions."""
     from scripts.setup_and_configuration.populate_metamapper_db import (
-        populate_ontologies,
-        populate_endpoints_and_properties,
-        populate_mapping_resources,
-        populate_mapping_paths,
-        populate_mapping_strategies,
         populate_entity_type
     )
     

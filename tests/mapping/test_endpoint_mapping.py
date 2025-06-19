@@ -463,8 +463,6 @@ class MockMappingExecutor:
 
 
 # Now use our implementation classes
-from biomapper.mapping.relationships.path_finder import RelationshipPathFinder
-from biomapper.mapping.relationships.executor import RelationshipMappingExecutor
 
 
 import pytest

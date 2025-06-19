@@ -5,7 +5,7 @@ This action loads identifiers from an endpoint and stores them in the execution 
 for use by subsequent actions in a mapping strategy.
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any
 from biomapper.core.strategy_actions.base import BaseStrategyAction
 
 

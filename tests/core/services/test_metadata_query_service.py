@@ -9,7 +9,6 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.future import select
 
 from biomapper.core.services.metadata_query_service import MetadataQueryService
 from biomapper.core.engine_components.session_manager import SessionManager

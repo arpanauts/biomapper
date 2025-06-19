@@ -2,7 +2,7 @@
 
 import pytest
 import json
-from unittest.mock import Mock, AsyncMock, patch, mock_open
+from unittest.mock import Mock, patch, mock_open
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 

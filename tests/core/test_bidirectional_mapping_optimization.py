@@ -2,15 +2,11 @@
 
 import asyncio
 import time
-from datetime import datetime
-from typing import Dict, List, Any, Optional, Set, Union
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from biomapper.core.mapping_executor import MappingExecutor
-from biomapper.db.models import MappingPath, MappingPathStep, MappingResource
-from biomapper.db.cache_models import MappingSession, ExecutionMetric
 
 
 # Test fixture for mock path results

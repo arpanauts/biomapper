@@ -9,14 +9,12 @@ This script tests the complete integration between:
 It simulates a real-world scenario where UKBB protein IDs are mapped to Arivale IDs,
 with historical resolution as a fallback when direct mapping fails.
 """
-import os
 import sys
 import asyncio
 import logging
 import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Set, Tuple
-from datetime import datetime
+from typing import Dict, Any
 
 # Add project root to Python path if needed
 project_root = Path(__file__).parent

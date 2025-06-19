@@ -3,11 +3,9 @@ Unit tests for the Qdrant search component in the MVP0 pipeline.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
-from typing import List
+from unittest.mock import AsyncMock, patch
 
 from biomapper.mvp0_pipeline.qdrant_search import search_qdrant_for_biochemical_name
-from biomapper.schemas.mvp0_schema import QdrantSearchResultItem
 from biomapper.schemas.rag_schema import MappingOutput, MappingResultItem
 
 

@@ -40,16 +40,13 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
-import json
 
 # Add project root to sys.path for module resolution
 BIOMAPPER_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(BIOMAPPER_ROOT))
 
-import pandas as pd
-from biomapper.core import MappingExecutor
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
 from biomapper.config import settings
 
@@ -220,7 +217,7 @@ async def run_full_mapping(checkpoint_enabled: bool = True, batch_size: int = 25
         json_path = context.get('saved_json_path')
         
         if csv_path and json_path:
-            logger.info(f"Successfully saved results to:")
+            logger.info("Successfully saved results to:")
             logger.info(f"  - CSV: {csv_path}")
             logger.info(f"  - JSON: {json_path}")
         else:

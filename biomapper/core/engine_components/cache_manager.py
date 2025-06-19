@@ -7,15 +7,12 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.future import select
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError, DBAPIError
-from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 from biomapper.db.cache_models import (
     EntityMapping,
-    EntityMappingProvenance,
     PathExecutionLog as MappingPathExecutionLog,
     PathExecutionStatus,
-    PathLogMappingAssociation,
 )
 from biomapper.db.models import MappingPath
 from biomapper.core.exceptions import (
@@ -23,7 +20,6 @@ from biomapper.core.exceptions import (
     CacheTransactionError,
     CacheRetrievalError,
     CacheStorageError,
-    ErrorCode,
 )
 from biomapper.utils.formatters import PydanticEncoder
 

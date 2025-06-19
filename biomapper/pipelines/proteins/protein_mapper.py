@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 
 from ...core.base_mapper import APIMapper, MappingResult
 from ...core.base_client import BaseAPIClient, APIResponse

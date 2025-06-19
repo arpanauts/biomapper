@@ -6,7 +6,6 @@ Investigate the V-shaped pattern in volcano plots
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 from scipy import stats
 
 # Load the raw data to investigate
@@ -115,9 +114,9 @@ for protein in sample_proteins[:3]:
         if x.std() == 0 or y.std() == 0:
             print("  WARNING: Zero variance detected!")
             if x.std() == 0:
-                print(f"    Glucose has no variation")
+                print("    Glucose has no variation")
             if y.std() == 0:
-                print(f"    Protein has no variation")
+                print("    Protein has no variation")
         else:
             r, p = stats.pearsonr(x, y)
             print(f"  Correlation: r={r:.4f}, p={p:.4f}")

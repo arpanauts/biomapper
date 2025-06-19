@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional
 from biomapper.cache.manager import CacheManager
 from biomapper.cache.mapper import CachedMapper
 from biomapper.core.base_mapper import BaseMapper, MappingResult
-from biomapper.db.session import DatabaseManager
 from tests.utils.test_db_manager import TestDatabaseManager
 from biomapper.schemas.domain_schema import DomainDocument
 

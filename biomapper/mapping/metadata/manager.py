@@ -7,10 +7,8 @@ for managing resource metadata, including registration, queries, and updates.
 
 import sqlite3
 import json
-import time
 import logging
-from datetime import datetime
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 
 from biomapper.mapping.metadata.initialize import get_metadata_db_path
 

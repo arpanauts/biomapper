@@ -7,7 +7,7 @@ the cache database.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, timezone
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -16,11 +16,7 @@ from biomapper.core.services.execution_trace_logger import ExecutionTraceLogger
 
 # Import database models
 from biomapper.db.cache_models import (
-    EntityMapping,
-    PathExecutionLog,
     MappingSession,
-    ExecutionMetric,
-    EntityMappingProvenance,
     PathExecutionStatus
 )
 

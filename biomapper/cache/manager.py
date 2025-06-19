@@ -3,11 +3,10 @@
 import datetime
 import logging
 from contextlib import contextmanager
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func
 
 # Import metamapper configuration models needed by cache manager
 from ..db.models import EntityTypeConfig, CacheStats

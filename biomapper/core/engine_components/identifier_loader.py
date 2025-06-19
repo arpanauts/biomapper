@@ -10,7 +10,6 @@ import logging
 import os
 from typing import List, Union, TYPE_CHECKING
 from sqlalchemy.future import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from biomapper.db.models import Endpoint, EndpointPropertyConfig, PropertyExtractionConfig
 from biomapper.core.exceptions import ConfigurationError, DatabaseQueryError

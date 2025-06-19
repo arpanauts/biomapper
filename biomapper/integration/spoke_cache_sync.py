@@ -1,13 +1,12 @@
 """Integration module for synchronizing between SPOKE graph and SQLite mapping cache."""
 
-import asyncio
 import datetime
 import json
 import logging
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional
 
 from biomapper.cache.manager import CacheManager
 from biomapper.cache.monitoring import track_cache_operation, CacheEventType

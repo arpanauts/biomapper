@@ -1,7 +1,6 @@
 """Test database manager that handles both metamapper and cache tables."""
 
 import logging
-from typing import Optional
 
 from biomapper.db.session import DatabaseManager
 from biomapper.db.models import Base as MetamapperBase

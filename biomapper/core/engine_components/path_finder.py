@@ -8,11 +8,11 @@ between different ontology types or endpoints in the biomapper system.
 import asyncio
 import logging
 import time
-from typing import List, Optional, Union, Dict, Tuple, Any
+from typing import List, Optional, Union, Dict, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload, joinedload
+from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
 

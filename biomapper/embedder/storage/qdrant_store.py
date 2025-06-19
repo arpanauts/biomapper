@@ -1,12 +1,10 @@
 """Qdrant vector storage implementation."""
 
 import os
-import json
 import logging
 import threading
-from typing import Dict, List, Any, Optional, Union, Set, Tuple
+from typing import Dict, List, Any, Optional
 import numpy as np
-from pathlib import Path
 
 from ...core.base_store import BaseVectorStore
 from ..core.config import default_config

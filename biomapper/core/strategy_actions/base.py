@@ -1,7 +1,7 @@
 """Base class for strategy actions."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from biomapper.db.models import Endpoint
 
 

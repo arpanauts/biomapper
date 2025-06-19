@@ -1,33 +1,24 @@
 import asyncio
-import enum
-import importlib
 import json
 import os
-import pickle
 import time # Add import time
-from typing import List, Dict, Any, Optional, Tuple, Set, Union, Type, Callable
+from typing import List, Dict, Any, Optional, Tuple, Union, Callable
 from datetime import datetime, timezone, timedelta
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, selectinload, joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
-from sqlalchemy import func, update
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError, DBAPIError
+from sqlalchemy.exc import SQLAlchemyError
 
 # Import composite identifier handling
-from biomapper.core.composite_handler import CompositeIdentifierHandler, CompositeMiddleware
 from biomapper.core.mapping_executor_composite import CompositeIdentifierMixin
 from biomapper.core.exceptions import (
     BiomapperError,
-    NoPathFoundError,
     ClientError,
     ConfigurationError, # Import ConfigurationError
-    CacheError,
     MappingExecutionError,
     ClientExecutionError,
     ClientInitializationError,
-    CacheTransactionError,
-    CacheRetrievalError,
     CacheStorageError,
     ErrorCode, # Import ErrorCode
     DatabaseQueryError, # Import DatabaseQueryError
@@ -36,18 +27,9 @@ from biomapper.core.exceptions import (
 )
 
 # Import new strategy handling modules
-from biomapper.core.engine_components.strategy_handler import StrategyHandler
-from biomapper.core.engine_components.path_finder import PathFinder
 from biomapper.core.engine_components.reversible_path import ReversiblePath
-from biomapper.core.engine_components.path_execution_manager import PathExecutionManager
-from biomapper.core.engine_components.cache_manager import CacheManager
-from biomapper.core.engine_components.strategy_orchestrator import StrategyOrchestrator
 from biomapper.core.engine_components.checkpoint_manager import CheckpointManager
-from biomapper.core.engine_components.client_manager import ClientManager
-from biomapper.core.engine_components.session_manager import SessionManager
 from biomapper.core.engine_components.progress_reporter import ProgressReporter
-from biomapper.core.engine_components.identifier_loader import IdentifierLoader
-from biomapper.core.engine_components.config_loader import ConfigLoader
 from biomapper.core.services.metadata_query_service import MetadataQueryService
 from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
@@ -64,25 +46,16 @@ from biomapper.core.models.result_bundle import MappingResultBundle
 from ..db.models import (
     Endpoint,
     EndpointPropertyConfig,
-    PropertyExtractionConfig,
     MappingPath,
     MappingPathStep,
-    MappingResource,
     OntologyPreference,
-    EndpointRelationship,
-    RelationshipMappingPath,
     MappingStrategy,
     MappingStrategyStep,
 )
 
 # Import models for cache DB
 from ..db.cache_models import (
-    Base as CacheBase,  # Import the Base for cache tables
-    EntityMapping,
-    EntityMappingProvenance,
-    PathExecutionLog as MappingPathExecutionLog,
     PathExecutionStatus,
-    PathLogMappingAssociation,
     MappingSession,  # Add this for session logging
     ExecutionMetric # Added ExecutionMetric
 )
@@ -96,12 +69,10 @@ from .services.database_setup_service import DatabaseSetupService
 # Import our centralized configuration settings
 from biomapper.config import settings
 
-from pathlib import Path # Added import
 
 import logging # Re-added import
 import os # Add import os
 
-from biomapper.utils.formatters import PydanticEncoder
 
 
 
@@ -644,7 +615,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                 exc_info=True,
             )
             raise ClientExecutionError(
-                f"Unexpected error during step execution",
+                "Unexpected error during step execution",
                 client_name=step.mapping_resource.name,
                 details=error_details,
             ) from e
@@ -1140,7 +1111,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                             self.logger.info(f"Step 2: Found reverse path: {reverse_path.name} (id={reverse_path.id})")
                             
                             # Execute reverse mapping
-                            self.logger.info(f"Step 3: Reverse mapping from target to source...")
+                            self.logger.info("Step 3: Reverse mapping from target to source...")
                             reverse_results = await self._execute_path(
                                 meta_session,
                                 reverse_path,
@@ -1154,7 +1125,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                             )
                             
                             # Now enrich successful_mappings with validation status
-                            self.logger.info(f"Step 4: Reconciling bidirectional mappings...")
+                            self.logger.info("Step 4: Reconciling bidirectional mappings...")
                             successful_mappings = await self._reconcile_bidirectional_mappings(
                                 successful_mappings,
                                 reverse_results
@@ -2966,7 +2937,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                     result = await session.execute(stmt)
                     configs = result.scalars().all()
                     if not configs:
-                        warnings.append(f"No property configurations found for target endpoint")
+                        warnings.append("No property configurations found for target endpoint")
             
             return {
                 "valid": len(errors) == 0,

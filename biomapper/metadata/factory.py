@@ -1,10 +1,9 @@
 """Factory for creating and configuring the resource metadata system."""
 
 import logging
-from typing import Dict, List, Optional, Type, Union, Any
+from typing import Dict, List, Optional, Type, Any
 
 from biomapper.cache.manager import CacheManager
-from biomapper.metadata.models import ResourceType
 from biomapper.metadata.adapters import CacheResourceAdapter, SpokeResourceAdapter
 from biomapper.metadata.dispatcher import MappingDispatcher
 from biomapper.metadata.init import initialize_metadata_system

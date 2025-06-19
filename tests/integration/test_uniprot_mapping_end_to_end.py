@@ -12,14 +12,11 @@ Test cases include:
 - Demerged IDs that map to multiple primaries
 - Invalid IDs for error handling
 """
-import os
 import sys
 import asyncio
 import logging
 import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Set, Tuple
-from datetime import datetime
 
 # Add project root to Python path if needed
 project_root = Path(__file__).parent
@@ -257,7 +254,7 @@ class TestMapping:
         historical_df.to_csv(OUTPUT_HISTORICAL, sep="\t", index=False)
         combined_df.to_csv(OUTPUT_COMBINED, sep="\t", index=False)
         
-        logger.info(f"Results saved to data directory")
+        logger.info("Results saved to data directory")
     
     def print_summary(self):
         """Print a summary of the test results."""

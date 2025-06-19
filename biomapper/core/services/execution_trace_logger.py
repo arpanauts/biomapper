@@ -7,7 +7,7 @@ ExecutionMetric records to the cache database.
 """
 
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from sqlalchemy.exc import SQLAlchemyError
 
 from biomapper.core.engine_components.session_manager import SessionManager

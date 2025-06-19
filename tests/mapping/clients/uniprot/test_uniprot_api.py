@@ -6,7 +6,6 @@ and prints the results in a structured format to understand the response structu
 """
 import asyncio
 import aiohttp
-import json
 import logging
 
 # Configure logging

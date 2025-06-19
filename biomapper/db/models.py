@@ -1,8 +1,6 @@
 """SQLAlchemy models for the metamapper configuration database (metamapper.db)."""
 
 import datetime
-import json
-from typing import Optional
 
 from sqlalchemy import (
     Column,
@@ -16,7 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
     JSON,
 )
-from sqlalchemy.orm import relationship, backref
+from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 

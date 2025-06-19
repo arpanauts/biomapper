@@ -1,6 +1,5 @@
 """Session management module for handling database connections and sessions."""
 import logging
-from typing import Optional
 from pathlib import Path
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker

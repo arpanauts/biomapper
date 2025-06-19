@@ -2,7 +2,6 @@
 
 import unittest
 from unittest.mock import patch, MagicMock
-import json
 
 from biomapper.mapping.clients.pubchem_client import PubChemClient, PubChemError
 

@@ -1,7 +1,6 @@
 """Compound mapping implementation."""
 
 import logging
-from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Dict, Any
 

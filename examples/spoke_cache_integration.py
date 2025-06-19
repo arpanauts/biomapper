@@ -13,17 +13,15 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime, timedelta
-from pathlib import Path
 
 # Add the parent directory to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from biomapper.cache.config import CacheConfig, get_default_config
+from biomapper.cache.config import get_default_config
 from biomapper.cache.manager import CacheManager
 from biomapper.cache.monitoring import get_cache_stats
 from biomapper.db.session import get_db_manager
-from biomapper.integration.spoke_cache_sync import SpokeCacheSync, SyncDirection
+from biomapper.integration.spoke_cache_sync import SpokeCacheSync
 from biomapper.spoke.client import SpokeClient
 from biomapper.transitivity.builder import TransitivityBuilder
 

@@ -1,8 +1,5 @@
 """Unit tests for SessionManager module."""
-import logging
-from unittest.mock import Mock, patch, MagicMock, call
-from pathlib import Path
-import pytest
+from unittest.mock import Mock, patch, call
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from biomapper.core.engine_components.session_manager import SessionManager

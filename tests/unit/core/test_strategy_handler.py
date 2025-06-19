@@ -1,8 +1,7 @@
 """Unit tests for the StrategyHandler module."""
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime, timezone
+from unittest.mock import Mock, AsyncMock
 
 from biomapper.core.engine_components.strategy_handler import StrategyHandler
 from biomapper.core.exceptions import (

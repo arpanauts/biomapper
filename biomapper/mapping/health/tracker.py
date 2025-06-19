@@ -5,12 +5,10 @@ This module provides components for tracking the health of property extraction
 configurations, including success/failure rates, timing, and error categorization.
 """
 
-import time
-import json
 import logging
 import datetime
 from enum import Enum
-from typing import Dict, List, Any, Optional, Union, Tuple
+from typing import Dict, List, Any, Optional, Tuple
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError

@@ -9,14 +9,12 @@ This script tests:
 Unlike the previous test, this one simulates actual mapping failures 
 for certain IDs to test the fallback mechanism properly.
 """
-import os
 import sys
 import asyncio
 import logging
 import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Set, Tuple
-from datetime import datetime
+from typing import List, Optional, Tuple
 
 # Add project root to Python path if needed
 project_root = Path(__file__).parent

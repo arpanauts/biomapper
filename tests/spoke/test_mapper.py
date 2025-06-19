@@ -2,8 +2,8 @@
 
 import pytest
 import pytest_asyncio
-from unittest.mock import AsyncMock, Mock
-from typing import Any, Dict, List, Optional
+from unittest.mock import AsyncMock
+from typing import Any, Dict, List
 
 from biomapper.spoke.client import SPOKEDBClient
 from biomapper.spoke.mapper import SPOKEMapper, SPOKEMappingResult, SPOKENodeType

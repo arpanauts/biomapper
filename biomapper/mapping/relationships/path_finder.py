@@ -5,7 +5,6 @@ This module implements the RelationshipPathFinder class for discovering and
 managing mapping paths between endpoints within relationships.
 """
 
-import asyncio
 
 # Import metamapping engine
 # Import needed modules
