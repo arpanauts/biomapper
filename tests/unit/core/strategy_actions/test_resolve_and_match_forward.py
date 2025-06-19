@@ -53,9 +53,9 @@ class TestResolveAndMatchForwardAction:
         source_endpoint, target_endpoint = mock_endpoints
         
         # Mock the database query for property config
-        mock_result = AsyncMock()
-        mock_result.scalar_one_or_none.return_value = mock_property_config
-        mock_session.execute.return_value = mock_result
+        mock_result = Mock()
+        mock_result.scalar_one_or_none = Mock(return_value=mock_property_config)
+        mock_session.execute = AsyncMock(return_value=mock_result)
         
         # Mock UniProt resolver responses
         mock_resolver = AsyncMock()
@@ -75,7 +75,7 @@ class TestResolveAndMatchForwardAction:
         }
         
         with patch('biomapper.core.strategy_actions.resolve_and_match_forward.UniProtHistoricalResolverClient') as mock_client_class, \
-             patch('biomapper.core.strategy_actions.resolve_and_match_forward.CSVAdapter') as mock_adapter_class:
+             patch('biomapper.mapping.adapters.csv_adapter.CSVAdapter') as mock_adapter_class:
             
             # Setup mocks
             mock_client_class.return_value = mock_resolver
@@ -130,9 +130,9 @@ class TestResolveAndMatchForwardAction:
         source_endpoint, target_endpoint = mock_endpoints
         
         # Mock the database query
-        mock_result = AsyncMock()
-        mock_result.scalar_one_or_none.return_value = mock_property_config
-        mock_session.execute.return_value = mock_result
+        mock_result = Mock()
+        mock_result.scalar_one_or_none = Mock(return_value=mock_property_config)
+        mock_session.execute = AsyncMock(return_value=mock_result)
         
         # Mock UniProt resolver responses for components
         mock_resolver = AsyncMock()
@@ -152,7 +152,7 @@ class TestResolveAndMatchForwardAction:
         }
         
         with patch('biomapper.core.strategy_actions.resolve_and_match_forward.UniProtHistoricalResolverClient') as mock_client_class, \
-             patch('biomapper.core.strategy_actions.resolve_and_match_forward.CSVAdapter') as mock_adapter_class:
+             patch('biomapper.mapping.adapters.csv_adapter.CSVAdapter') as mock_adapter_class:
             
             mock_client_class.return_value = mock_resolver
             mock_adapter_instance = AsyncMock()
@@ -237,9 +237,9 @@ class TestResolveAndMatchForwardAction:
         source_endpoint, target_endpoint = mock_endpoints
         
         # Mock the database query
-        mock_result = AsyncMock()
-        mock_result.scalar_one_or_none.return_value = mock_property_config
-        mock_session.execute.return_value = mock_result
+        mock_result = Mock()
+        mock_result.scalar_one_or_none = Mock(return_value=mock_property_config)
+        mock_session.execute = AsyncMock(return_value=mock_result)
         
         # Create a large list of IDs
         large_id_list = [f'P{i:05d}' for i in range(250)]  # 250 IDs
@@ -266,7 +266,7 @@ class TestResolveAndMatchForwardAction:
         }
         
         with patch('biomapper.core.strategy_actions.resolve_and_match_forward.UniProtHistoricalResolverClient') as mock_client_class, \
-             patch('biomapper.core.strategy_actions.resolve_and_match_forward.CSVAdapter') as mock_adapter_class:
+             patch('biomapper.mapping.adapters.csv_adapter.CSVAdapter') as mock_adapter_class:
             
             mock_client_class.return_value = mock_resolver
             mock_adapter_instance = AsyncMock()
@@ -299,9 +299,9 @@ class TestResolveAndMatchForwardAction:
         source_endpoint, target_endpoint = mock_endpoints
         
         # Mock the database query
-        mock_result = AsyncMock()
-        mock_result.scalar_one_or_none.return_value = mock_property_config
-        mock_session.execute.return_value = mock_result
+        mock_result = Mock()
+        mock_result.scalar_one_or_none = Mock(return_value=mock_property_config)
+        mock_session.execute = AsyncMock(return_value=mock_result)
         
         # Mock resolver - demerged ID maps to multiple
         mock_resolver = AsyncMock()
@@ -318,7 +318,7 @@ class TestResolveAndMatchForwardAction:
         context_m2m = {'unmatched_source': ['P0CG05']}
         
         with patch('biomapper.core.strategy_actions.resolve_and_match_forward.UniProtHistoricalResolverClient') as mock_client_class, \
-             patch('biomapper.core.strategy_actions.resolve_and_match_forward.CSVAdapter') as mock_adapter_class:
+             patch('biomapper.mapping.adapters.csv_adapter.CSVAdapter') as mock_adapter_class:
             
             mock_client_class.return_value = mock_resolver
             mock_adapter_instance = AsyncMock()
@@ -367,9 +367,9 @@ class TestResolveAndMatchForwardAction:
         source_endpoint, target_endpoint = mock_endpoints
         
         # Mock the database query
-        mock_result = AsyncMock()
-        mock_result.scalar_one_or_none.return_value = mock_property_config
-        mock_session.execute.return_value = mock_result
+        mock_result = Mock()
+        mock_result.scalar_one_or_none = Mock(return_value=mock_property_config)
+        mock_session.execute = AsyncMock(return_value=mock_result)
         
         # Mock resolver
         mock_resolver = AsyncMock()
@@ -388,7 +388,7 @@ class TestResolveAndMatchForwardAction:
         }
         
         with patch('biomapper.core.strategy_actions.resolve_and_match_forward.UniProtHistoricalResolverClient') as mock_client_class, \
-             patch('biomapper.core.strategy_actions.resolve_and_match_forward.CSVAdapter') as mock_adapter_class:
+             patch('biomapper.mapping.adapters.csv_adapter.CSVAdapter') as mock_adapter_class:
             
             mock_client_class.return_value = mock_resolver
             mock_adapter_instance = AsyncMock()
@@ -428,9 +428,9 @@ class TestResolveAndMatchForwardAction:
         source_endpoint, target_endpoint = mock_endpoints
         
         # Mock the database query
-        mock_result = AsyncMock()
-        mock_result.scalar_one_or_none.return_value = mock_property_config
-        mock_session.execute.return_value = mock_result
+        mock_result = Mock()
+        mock_result.scalar_one_or_none = Mock(return_value=mock_property_config)
+        mock_session.execute = AsyncMock(return_value=mock_result)
         
         # Mock resolver to fail
         mock_resolver = AsyncMock()
@@ -446,7 +446,7 @@ class TestResolveAndMatchForwardAction:
         }
         
         with patch('biomapper.core.strategy_actions.resolve_and_match_forward.UniProtHistoricalResolverClient') as mock_client_class, \
-             patch('biomapper.core.strategy_actions.resolve_and_match_forward.CSVAdapter') as mock_adapter_class:
+             patch('biomapper.mapping.adapters.csv_adapter.CSVAdapter') as mock_adapter_class:
             
             mock_client_class.return_value = mock_resolver
             mock_adapter_instance = AsyncMock()

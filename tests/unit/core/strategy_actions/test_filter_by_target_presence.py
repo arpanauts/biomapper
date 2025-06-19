@@ -37,6 +37,8 @@ class TestFilterByTargetPresenceAction:
         """Create mock property configuration for target."""
         extraction = Mock(spec=PropertyExtractionConfig)
         extraction.column_name = "identifier_column"
+        extraction.extraction_pattern = '{"column": "identifier_column"}'
+        extraction.extraction_method = "column"
         
         config = Mock(spec=EndpointPropertyConfig)
         config.ontology_type = "PROTEIN_UNIPROT"
@@ -109,6 +111,7 @@ class TestFilterByTargetPresenceAction:
         
         # Mock target CSV data (contains ENSEMBL IDs)
         mock_property_config.property_extraction_config.column_name = "ensembl_column"
+        mock_property_config.property_extraction_config.extraction_pattern = '{"column": "ensembl_column"}'
         mock_df = pd.DataFrame({
             'ensembl_column': ['ENSP001', 'ENSP002', 'ENSP999']
         })

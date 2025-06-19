@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+from typing import Any, TypedDict, Union, Optional, List, Dict
 from typing import Any, TypedDict, Union
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -15,23 +16,23 @@ class DatasetInfo(TypedDict):
     """Type definition for dataset information."""
 
     size: int
-    sample_ids: list[str]
+    sample_ids: List[str]
 
 
 class IntersectionInfo(TypedDict):
     """Type definition for intersection information."""
 
-    sets: list[str]
+    sets: List[str]
     size: int
-    sample_ids: list[str]
+    sample_ids: List[str]
 
 
 class AnalysisResults(TypedDict):
     """Type definition for analysis results."""
 
-    datasets: dict[str, DatasetInfo]
-    intersections: list[IntersectionInfo]
-    unique: dict[str, DatasetInfo]
+    datasets: Dict[str, DatasetInfo]
+    intersections: List[IntersectionInfo]
+    unique: Dict[str, DatasetInfo]
 
 
 class SetAnalyzer:
@@ -50,8 +51,8 @@ class SetAnalyzer:
             raise ValueError("id_columns mapping cannot be empty")
 
         self.id_columns = {}  # Initialize empty dict
-        self.datasets: dict[str, pd.DataFrame] = {}
-        self.id_delimiters: dict[str, list[str]] = {}
+        self.datasets: Dict[str, pd.DataFrame] = {}
+        self.id_delimiters: Dict[str, List[str]] = {}
         # Use property setter for validation
         for name, col in id_columns.items():
             self.set_id_column(name, col)
@@ -67,11 +68,11 @@ class SetAnalyzer:
         self.id_columns[dataset] = column
 
     @property
-    def id_columns(self) -> dict[str, str]:
+    def id_columns(self) -> Dict[str, str]:
         return self._id_columns
 
     @id_columns.setter
-    def id_columns(self, value: dict[str, str]) -> None:
+    def id_columns(self, value: Dict[str, str]) -> None:
         self._id_columns = value
 
     def __setitem__(self, key: str, value: str) -> None:
@@ -85,6 +86,7 @@ class SetAnalyzer:
         self._id_columns[key] = value
 
     def load_dataset(
+        self, name: str, path: Union[Path, str], id_delimiters: Union[List[str], None] = None
         self, name: str, path: Union[Path, str], id_delimiters: Union[list[str], None] = None
     ) -> None:
         """Load a dataset from file.
@@ -131,7 +133,7 @@ class SetAnalyzer:
         if id_delimiters:
             self.id_delimiters[name] = id_delimiters
 
-    def _split_identifier(self, identifier: str, delimiters: list[str]) -> set[str]:
+    def _split_identifier(self, identifier: str, delimiters: List[str]) -> set[str]:
         """Split an identifier using multiple delimiters.
 
         Args:
@@ -159,7 +161,7 @@ class SetAnalyzer:
 
         return result
 
-    def get_sets(self) -> dict[str, set[str]]:
+    def get_sets(self) -> Dict[str, set[str]]:
         """Get sets of IDs from each dataset.
 
         Returns:
@@ -171,7 +173,7 @@ class SetAnalyzer:
         if not self.datasets:
             raise ValueError("No datasets have been loaded")
 
-        sets: dict[str, set[str]] = {}
+        sets: Dict[str, set[str]] = {}
 
         for name, df in self.datasets.items():
             id_col = self.id_columns[name]
@@ -191,7 +193,7 @@ class SetAnalyzer:
 
         return sets
 
-    def analyze(self) -> dict[str, Any]:
+    def analyze(self) -> Dict[str, Any]:
         """Perform set analysis across all datasets."""
         sets = self.get_sets()
 
@@ -201,7 +203,7 @@ class SetAnalyzer:
         set_names = list(sets.keys())
         n_sets = len(set_names)
 
-        results: dict[str, Any] = {
+        results: Dict[str, Any] = {
             "datasets": {
                 name: {"size": len(s), "sample_ids": list(sorted(s))[:5]}
                 for name, s in sets.items()
@@ -247,7 +249,7 @@ class SetAnalyzer:
 
         return results
 
-    def plot_venn(self, output_path: str | None = None) -> None:
+    def plot_venn(self, output_path: Optional[str] = None) -> None:
         """Generate a Venn diagram visualization.
 
         Args:
@@ -273,7 +275,7 @@ class SetAnalyzer:
             plt.savefig(output_path)
             plt.close()
 
-    def plot_upset(self, output_path: str | None = None) -> None:
+    def plot_upset(self, output_path: Optional[str] = None) -> None:
         """Generate UpSet plot visualization."""
         from upsetplot import from_contents
 
@@ -288,7 +290,7 @@ class SetAnalyzer:
         else:
             plt.show()
 
-    def generate_text_report(self, output_path: str | None = None) -> str:
+    def generate_text_report(self, output_path: Optional[str] = None) -> str:
         """Generate detailed text report of set analysis results.
 
         Args:
@@ -362,7 +364,7 @@ class SetAnalyzer:
         sets = self.get_sets()
 
         # Create merged data structure
-        merged_data: list[dict[str, str]] = []
+        merged_data: List[Dict[str, str]] = []
 
         # Process each unique identifier
         all_ids = set().union(*sets.values())
