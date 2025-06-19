@@ -776,8 +776,13 @@ class UMLSClient(CachedMappingClientMixin, BaseMappingClient):
                             if score > best_score:
                                 best_score = score
                     
-                    # Remove duplicates
-                    unique_target_ids = list(set(all_target_ids))
+                    # Remove duplicates while preserving order
+                    seen = set()
+                    unique_target_ids = []
+                    for id in all_target_ids:
+                        if id not in seen:
+                            seen.add(id)
+                            unique_target_ids.append(id)
                     
                     if unique_target_ids:
                         logger.debug(f"Mapped {term} to {len(unique_target_ids)} identifiers: {unique_target_ids}")

@@ -14,8 +14,7 @@ class TestPubChemClient(unittest.TestCase):
         """Set up test resources."""
         self.client = PubChemClient()
 
-    @patch("biomapper.mapping.clients.pubchem_client.requests.Session")
-    def test_get_entity_by_id_success(self, mock_session):
+    def test_get_entity_by_id_success(self):
         """Test successful entity retrieval by ID."""
         # Mock the property response
         mock_property_response = MagicMock()
@@ -51,14 +50,18 @@ class TestPubChemClient(unittest.TestCase):
         }
 
         # Configure mock session to return our mock responses
-        mock_session_instance = mock_session.return_value
-        mock_session_instance.get.side_effect = [
-            mock_property_response,
-            mock_xref_response,
-        ]
+        with patch.object(self.client.session, 'get') as mock_get:
+            mock_get.side_effect = [
+                mock_property_response,
+                mock_xref_response,
+            ]
+            
+            # Add raise_for_status mock
+            mock_property_response.raise_for_status = MagicMock()
+            mock_xref_response.raise_for_status = MagicMock()
 
-        # Call the method to test
-        result = self.client.get_entity_by_id("2244")
+            # Call the method to test
+            result = self.client.get_entity_by_id("2244")
 
         # Verify the result
         self.assertEqual(result.pubchem_cid, "CID:2244")
@@ -75,8 +78,7 @@ class TestPubChemClient(unittest.TestCase):
         self.assertEqual(result.xrefs["chebi"], "CHEBI:27732")
         self.assertEqual(result.xrefs["kegg"], "C07481")
 
-    @patch("biomapper.mapping.clients.pubchem_client.requests.Session")
-    def test_search_by_name_success(self, mock_session):
+    def test_search_by_name_success(self):
         """Test successful compound search by name."""
         # Mock the search response
         mock_search_response = MagicMock()
@@ -144,51 +146,57 @@ class TestPubChemClient(unittest.TestCase):
         }
 
         # Configure mock session to return our mock responses
-        mock_session_instance = mock_session.return_value
-        mock_session_instance.get.side_effect = [
-            mock_search_response,
-            mock_property_response1,
-            mock_xref_response1,
-            mock_property_response2,
-            mock_xref_response2,
-        ]
+        with patch.object(self.client.session, 'get') as mock_get:
+            # Add raise_for_status mocks
+            mock_search_response.raise_for_status = MagicMock()
+            mock_property_response1.raise_for_status = MagicMock()
+            mock_xref_response1.raise_for_status = MagicMock()
+            mock_property_response2.raise_for_status = MagicMock()
+            mock_xref_response2.raise_for_status = MagicMock()
+            
+            mock_get.side_effect = [
+                mock_search_response,
+                mock_property_response1,
+                mock_xref_response1,
+                mock_property_response2,
+                mock_xref_response2,
+            ]
 
-        # Call the method to test
-        results = self.client.search_by_name("caffeine")
+            # Call the method to test
+            results = self.client.search_by_name("caffeine")
 
-        # Verify the results
-        self.assertEqual(len(results), 2)
-        self.assertEqual(results[0].pubchem_cid, "CID:2244")
-        self.assertEqual(results[0].name, "Caffeine")
-        self.assertEqual(results[1].pubchem_cid, "CID:66095")
-        self.assertEqual(results[1].name, "Caffeine Anhydrous")
+            # Verify the results
+            self.assertEqual(len(results), 2)
+            self.assertEqual(results[0].pubchem_cid, "CID:2244")
+            self.assertEqual(results[0].name, "Caffeine")
+            self.assertEqual(results[1].pubchem_cid, "CID:66095")
+            self.assertEqual(results[1].name, "Caffeine Anhydrous")
 
-    @patch("biomapper.mapping.clients.pubchem_client.requests.Session")
-    def test_get_entity_by_id_error(self, mock_session):
+    def test_get_entity_by_id_error(self):
         """Test entity retrieval with error handling."""
         # Configure mock to raise an exception
-        mock_session_instance = mock_session.return_value
-        mock_session_instance.get.side_effect = Exception("API error")
+        with patch.object(self.client.session, 'get') as mock_get:
+            mock_get.side_effect = Exception("API error")
 
-        # Verify that the method raises PubChemError
-        with self.assertRaises(PubChemError):
-            self.client.get_entity_by_id("2244")
+            # Verify that the method raises PubChemError
+            with self.assertRaises(PubChemError):
+                self.client.get_entity_by_id("2244")
 
-    @patch("biomapper.mapping.clients.pubchem_client.requests.Session")
-    def test_search_by_name_no_results(self, mock_session):
+    def test_search_by_name_no_results(self):
         """Test search with no results."""
         # Mock a response with no results
         mock_response = MagicMock()
         mock_response.json.return_value = {"IdentifierList": {"CID": []}}
+        mock_response.raise_for_status = MagicMock()  # Don't raise any errors
 
-        mock_session_instance = mock_session.return_value
-        mock_session_instance.get.return_value = mock_response
+        with patch.object(self.client.session, 'get') as mock_get:
+            mock_get.return_value = mock_response
 
-        # Call the method
-        results = self.client.search_by_name("nonexistent compound")
+            # Call the method
+            results = self.client.search_by_name("nonexistent compound")
 
-        # Verify an empty list is returned
-        self.assertEqual(len(results), 0)
+            # Verify an empty list is returned
+            self.assertEqual(len(results), 0)
 
 
 if __name__ == "__main__":

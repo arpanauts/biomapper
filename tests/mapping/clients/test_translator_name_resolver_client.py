@@ -329,14 +329,15 @@ async def test_caching(name_resolver_client):
 async def test_close(name_resolver_client):
     """Test close method."""
     # Create a mock session
-    name_resolver_client._session = MagicMock()
-    name_resolver_client._session.close = AsyncMock()
+    mock_session = MagicMock()
+    mock_session.close = AsyncMock()
+    name_resolver_client._session = mock_session
     name_resolver_client._initialized = True
     
     # Call close method
     await name_resolver_client.close()
     
     # Verify session.close was called
-    name_resolver_client._session.close.assert_called_once()
+    mock_session.close.assert_called_once()
     assert name_resolver_client._session is None
     assert name_resolver_client._initialized is False

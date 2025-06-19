@@ -137,13 +137,14 @@ async def test_reverse_map_identifiers(unichem_client, mock_response):
 async def test_close(unichem_client):
     """Test close method."""
     # Create a mock session
-    unichem_client._session = MagicMock()
-    unichem_client._session.close = AsyncMock()
+    mock_session = MagicMock()
+    mock_session.close = AsyncMock()
+    unichem_client._session = mock_session
     
     # Call close method
     await unichem_client.close()
     
     # Verify session.close was called
-    unichem_client._session.close.assert_called_once()
+    mock_session.close.assert_called_once()
     assert unichem_client._session is None
     assert unichem_client._initialized is False

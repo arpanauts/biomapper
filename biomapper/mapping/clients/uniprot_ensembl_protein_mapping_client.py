@@ -39,12 +39,22 @@ class UniProtEnsemblProteinMappingClient(UniProtIDMappingClient):
         if "to_db" not in merged_config:
             merged_config["to_db"] = "UniProtKB"  # Correct db name based on API testing
 
-        # Initialize the parent class with our configuration
-        super().__init__(
-            from_db=merged_config.pop("from_db"),
-            to_db=merged_config.pop("to_db"),
-            config=merged_config,
-        )
+        # Extract parent class parameters from config
+        parent_kwargs = {
+            "from_db": merged_config.pop("from_db"),
+            "to_db": merged_config.pop("to_db"),
+        }
+        
+        # Add optional parameters if present in config
+        if "base_url" in merged_config:
+            parent_kwargs["base_url"] = merged_config.pop("base_url")
+        if "timeout" in merged_config:
+            parent_kwargs["timeout"] = merged_config.pop("timeout")
+        if "session" in merged_config:
+            parent_kwargs["session"] = merged_config.pop("session")
+
+        # Initialize the parent class with valid parameters
+        super().__init__(**parent_kwargs)
 
         logger.info(
             f"Initialized {self.__class__.__name__} for mapping {self.from_db} to {self.to_db}"
