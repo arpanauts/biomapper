@@ -341,11 +341,12 @@ class TestPipelineOrchestrator:
     
     def test_create_orchestrator_from_env(self, mock_qdrant_client):
         """Test factory function creating config from environment."""
-        with patch('biomapper.mvp0_pipeline.pipeline_orchestrator.create_pipeline_config') as mock_create_config:
+        with patch('biomapper.mvp0_pipeline.pipeline_config.create_pipeline_config') as mock_create_config:
             mock_config = Mock(spec=PipelineConfig)
             mock_config.anthropic_api_key = "test-key"
             mock_config.qdrant_url = "http://localhost:6333"
             mock_config.qdrant_collection_name = "test"
+            mock_config.qdrant_api_key = None
             mock_create_config.return_value = mock_config
             
             orchestrator = create_orchestrator()
@@ -389,12 +390,12 @@ class TestPipelineIntegration:
             mock_pubchem.return_value = mock_annotations
             
             # Verify that LLM receives correctly formatted data
-            def verify_llm_input(name, candidates, api_key):
-                assert name == "glucose"
-                assert len(candidates) == 2
+            def verify_llm_input(original_biochemical_name, candidates_info, anthropic_api_key):
+                assert original_biochemical_name == "glucose"
+                assert len(candidates_info) == 2
                 assert all(hasattr(c, 'cid') and hasattr(c, 'qdrant_score') 
-                          and hasattr(c, 'annotations') for c in candidates)
-                assert api_key == "test-key"
+                          and hasattr(c, 'annotations') for c in candidates_info)
+                assert anthropic_api_key == "test-key"
                 return LLMChoice(selected_cid=5793, llm_confidence=0.95)
             
             mock_llm.side_effect = verify_llm_input

@@ -185,7 +185,16 @@ class PipelineOrchestrator:
         
         # Calculate summary statistics
         successful_mappings = sum(1 for r in results if r.has_mapping())
-        failed_mappings = sum(1 for r in results if not r.is_successful())
+        # Count only actual errors as failures, not "no match found" states
+        error_statuses = {
+            PipelineStatus.COMPONENT_ERROR_QDRANT,
+            PipelineStatus.COMPONENT_ERROR_PUBCHEM, 
+            PipelineStatus.COMPONENT_ERROR_LLM,
+            PipelineStatus.CONFIG_ERROR,
+            PipelineStatus.VALIDATION_ERROR,
+            PipelineStatus.UNKNOWN_ERROR
+        }
+        failed_mappings = sum(1 for r in results if r.status in error_statuses)
         
         # Create batch result
         batch_result = BatchMappingResult(
@@ -251,6 +260,7 @@ class PipelineOrchestrator:
                 if not qdrant_results:
                     logger.info(f"No Qdrant hits for '{biochemical_name}'")
                     result.status = PipelineStatus.NO_QDRANT_HITS
+                    result.qdrant_results = []  # Set empty list instead of None
                     result.error_message = "No similar compounds found in Qdrant vector database"
                     return result
                 

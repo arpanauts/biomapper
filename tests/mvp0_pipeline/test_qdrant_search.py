@@ -3,7 +3,7 @@ Unit tests for the Qdrant search component in the MVP0 pipeline.
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import Mock, AsyncMock, patch
 
 from biomapper.mvp0_pipeline.qdrant_search import search_qdrant_for_biochemical_name
 from biomapper.schemas.rag_schema import MappingOutput, MappingResultItem
@@ -17,22 +17,24 @@ class TestQdrantSearch:
         """Test successful search with individual scores."""
         # Mock client and results
         mock_client = AsyncMock()
+        mock_client.top_k = 10  # Default value
+        mock_client.top_k = 10  # Default value
         
         # Create mock mapping results
         mock_mapping_output = MappingOutput(
-            qdrant_points=[],  # Not used in our implementation
-            metadata={}
-        )
-        
-        # Add mock results to metadata
-        mock_mapping_output.metadata["Aspirin"] = MappingResultItem(
-            target_ids=["PUBCHEM:2244", "PUBCHEM:5353"],
-            scores=[0.95, 0.89],
+            results=[
+                MappingResultItem(
+                    identifier="Aspirin",
+                    target_ids=["PUBCHEM:2244", "PUBCHEM:5353"],
+                    qdrant_similarity_score=0.95,
+                    metadata={"all_scores": [0.95, 0.89]}
+                )
+            ],
             metadata={}
         )
         
         mock_client.map_identifiers = AsyncMock(return_value=None)
-        mock_client.get_last_mapping_output = AsyncMock(return_value=mock_mapping_output)
+        mock_client.get_last_mapping_output = Mock(return_value=mock_mapping_output)
         
         # Perform search
         results = await search_qdrant_for_biochemical_name(
@@ -44,33 +46,35 @@ class TestQdrantSearch:
         # Verify results
         assert len(results) == 2
         assert results[0].cid == 2244
-        assert results[0].qdrant_score == pytest.approx(0.95)
+        assert results[0].score == pytest.approx(0.95)
         assert results[1].cid == 5353
-        assert results[1].qdrant_score == pytest.approx(0.89)
+        assert results[1].score == pytest.approx(0.89)
         
         # Verify client was called correctly
-        mock_client.map_identifiers.assert_called_once_with(ids_to_map=["Aspirin"], top_k=5)
+        mock_client.map_identifiers.assert_called_once_with(["Aspirin"])
         mock_client.get_last_mapping_output.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_search_with_top_k_limit(self):
         """Test that top_k limit is respected."""
         mock_client = AsyncMock()
+        mock_client.top_k = 10  # Default value
         
         # Create more results than top_k
         mock_mapping_output = MappingOutput(
-            qdrant_points=[],
-            metadata={}
-        )
-        
-        mock_mapping_output.metadata["Compound"] = MappingResultItem(
-            target_ids=[f"PUBCHEM:{i}" for i in range(1000, 1010)],
-            scores=[0.9 - i*0.05 for i in range(10)],
+            results=[
+                MappingResultItem(
+                    identifier="Compound",
+                    target_ids=[f"PUBCHEM:{i}" for i in range(1000, 1010)],
+                    qdrant_similarity_score=0.9,
+                    metadata={"all_scores": [0.9 - i*0.05 for i in range(10)]}
+                )
+            ],
             metadata={}
         )
         
         mock_client.map_identifiers = AsyncMock(return_value=None)
-        mock_client.get_last_mapping_output = AsyncMock(return_value=mock_mapping_output)
+        mock_client.get_last_mapping_output = Mock(return_value=mock_mapping_output)
         
         # Search with top_k=3
         results = await search_qdrant_for_biochemical_name(
@@ -89,6 +93,7 @@ class TestQdrantSearch:
     async def test_search_empty_input(self):
         """Test handling of empty input."""
         mock_client = AsyncMock()
+        mock_client.top_k = 10  # Default value
         
         # Test empty string
         results = await search_qdrant_for_biochemical_name(
@@ -104,21 +109,23 @@ class TestQdrantSearch:
     async def test_search_no_results(self):
         """Test handling when no results are found."""
         mock_client = AsyncMock()
+        mock_client.top_k = 10  # Default value
         
         # Mock empty results
         mock_mapping_output = MappingOutput(
-            qdrant_points=[],
-            metadata={}
-        )
-        
-        mock_mapping_output.metadata["UnknownCompound"] = MappingResultItem(
-            target_ids=[],
-            scores=[],
+            results=[
+                MappingResultItem(
+                    identifier="UnknownCompound",
+                    target_ids=[],
+                    qdrant_similarity_score=None,
+                    metadata={}
+                )
+            ],
             metadata={}
         )
         
         mock_client.map_identifiers = AsyncMock(return_value=None)
-        mock_client.get_last_mapping_output = AsyncMock(return_value=mock_mapping_output)
+        mock_client.get_last_mapping_output = Mock(return_value=mock_mapping_output)
         
         results = await search_qdrant_for_biochemical_name(
             biochemical_name="UnknownCompound",
@@ -132,21 +139,22 @@ class TestQdrantSearch:
     async def test_search_with_scores_mismatch(self):
         """Test fallback when scores list doesn't match target_ids length."""
         mock_client = AsyncMock()
+        mock_client.top_k = 10  # Default value
         
         mock_mapping_output = MappingOutput(
-            qdrant_points=[],
+            results=[
+                MappingResultItem(
+                    identifier="Compound",
+                    target_ids=["PUBCHEM:123", "PUBCHEM:456"],
+                    qdrant_similarity_score=0.85,
+                    metadata={"best_score": 0.85}
+                )
+            ],
             metadata={}
         )
         
-        # Mismatched lengths - should use best_score fallback
-        mock_mapping_output.metadata["Compound"] = MappingResultItem(
-            target_ids=["PUBCHEM:123", "PUBCHEM:456"],
-            scores=[0.85],  # Only one score for two results
-            metadata={"best_score": 0.85}
-        )
-        
         mock_client.map_identifiers = AsyncMock(return_value=None)
-        mock_client.get_last_mapping_output = AsyncMock(return_value=mock_mapping_output)
+        mock_client.get_last_mapping_output = Mock(return_value=mock_mapping_output)
         
         results = await search_qdrant_for_biochemical_name(
             biochemical_name="Compound",
@@ -156,13 +164,14 @@ class TestQdrantSearch:
         
         # Both results should have the same score
         assert len(results) == 2
-        assert results[0].qdrant_score == pytest.approx(0.85)
-        assert results[1].qdrant_score == pytest.approx(0.85)
+        assert results[0].score == pytest.approx(0.85)
+        assert results[1].score == pytest.approx(0.85)
 
     @pytest.mark.asyncio
     async def test_search_client_error(self):
         """Test error handling when client raises exception."""
         mock_client = AsyncMock()
+        mock_client.top_k = 10  # Default value
         mock_client.map_identifiers = AsyncMock(side_effect=Exception("Connection error"))
         
         results = await search_qdrant_for_biochemical_name(
@@ -178,21 +187,22 @@ class TestQdrantSearch:
     async def test_search_invalid_pubchem_id(self):
         """Test handling of invalid PubChem IDs."""
         mock_client = AsyncMock()
+        mock_client.top_k = 10  # Default value
         
         mock_mapping_output = MappingOutput(
-            qdrant_points=[],
-            metadata={}
-        )
-        
-        # Mix of valid and invalid IDs
-        mock_mapping_output.metadata["Compound"] = MappingResultItem(
-            target_ids=["PUBCHEM:123", "INVALID:456", "PUBCHEM:not_a_number", "PUBCHEM:789"],
-            scores=[0.9, 0.85, 0.8, 0.75],
+            results=[
+                MappingResultItem(
+                    identifier="Compound",
+                    target_ids=["PUBCHEM:123", "INVALID:456", "PUBCHEM:not_a_number", "PUBCHEM:789"],
+                    qdrant_similarity_score=0.9,
+                    metadata={"all_scores": [0.9, 0.85, 0.8, 0.75]}
+                )
+            ],
             metadata={}
         )
         
         mock_client.map_identifiers = AsyncMock(return_value=None)
-        mock_client.get_last_mapping_output = AsyncMock(return_value=mock_mapping_output)
+        mock_client.get_last_mapping_output = Mock(return_value=mock_mapping_output)
         
         results = await search_qdrant_for_biochemical_name(
             biochemical_name="Compound",
@@ -203,9 +213,9 @@ class TestQdrantSearch:
         # Should only include valid PubChem IDs
         assert len(results) == 2
         assert results[0].cid == 123
-        assert results[0].qdrant_score == pytest.approx(0.9)
+        assert results[0].score == pytest.approx(0.9)
         assert results[1].cid == 789
-        assert results[1].qdrant_score == pytest.approx(0.75)
+        assert results[1].score == pytest.approx(0.75)
 
     @pytest.mark.asyncio
     @patch('biomapper.mvp0_pipeline.qdrant_search.get_default_client')
@@ -213,22 +223,24 @@ class TestQdrantSearch:
         """Test using the default client when none is provided."""
         # Create a mock client
         mock_client = AsyncMock()
+        mock_client.top_k = 10  # Default value
         mock_get_default_client.return_value = mock_client
         
         # Setup mock response
         mock_mapping_output = MappingOutput(
-            qdrant_points=[],
-            metadata={}
-        )
-        
-        mock_mapping_output.metadata["Test"] = MappingResultItem(
-            target_ids=["PUBCHEM:999"],
-            scores=[0.87],
+            results=[
+                MappingResultItem(
+                    identifier="Test",
+                    target_ids=["PUBCHEM:999"],
+                    qdrant_similarity_score=0.87,
+                    metadata={}
+                )
+            ],
             metadata={}
         )
         
         mock_client.map_identifiers = AsyncMock(return_value=None)
-        mock_client.get_last_mapping_output = AsyncMock(return_value=mock_mapping_output)
+        mock_client.get_last_mapping_output = Mock(return_value=mock_mapping_output)
         
         # Call without providing client
         results = await search_qdrant_for_biochemical_name(

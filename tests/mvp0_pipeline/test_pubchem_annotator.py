@@ -179,7 +179,7 @@ class TestPubChemAnnotator:
                 mock_client_class.return_value.__aenter__.return_value = mock_client
                 
                 # Test the function
-                result = await fetch_pubchem_annotations(test_cids)
+                await fetch_pubchem_annotations(test_cids)
         
         # Verify batching occurred (should be called 20 times for 20 CIDs)
         assert mock_fetch.call_count == 20

@@ -28,6 +28,10 @@ def _get_client() -> PubChemRAGMappingClient:
         logger.info("Initialized PubChemRAGMappingClient with default configuration")
     return _client_instance
 
+def get_default_client() -> PubChemRAGMappingClient:
+    """Get the default client instance (public interface)."""
+    return _get_client()
+
 async def search_qdrant_for_biochemical_name(
     biochemical_name: str,
     top_k: int,
@@ -59,9 +63,14 @@ async def search_qdrant_for_biochemical_name(
     """
     # Use provided client or get default instance
     if client is None:
-        client = _get_client()
+        client = get_default_client()
     
     logger.info(f"Searching Qdrant for biochemical name: '{biochemical_name}' with top_k={top_k}")
+    
+    # Handle empty input
+    if not biochemical_name or not biochemical_name.strip():
+        logger.info("Empty biochemical name provided, returning empty results")
+        return []
     
     try:
         # Override client's top_k for this search
