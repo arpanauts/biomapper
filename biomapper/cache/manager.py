@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_, func, text
 
 # Import metamapper configuration models needed by cache manager
 from ..db.models import EntityTypeConfig, CacheStats
@@ -86,24 +87,38 @@ class CacheManager:
             return
 
         today = datetime.date.today()
-        stats = session.query(CacheStats).filter(CacheStats.stats_date == today).first()
-
-        if not stats:
-            stats = CacheStats(stats_date=today)
-            session.add(stats)
-
+        
+        # Use raw SQL to handle both insert and update atomically
+        # First ensure the record exists for today
+        session.execute(
+            text("""
+            INSERT OR IGNORE INTO cache_stats 
+            (stats_date, hits, misses, direct_lookups, derived_lookups, api_calls, transitive_derivations)
+            VALUES (:today, 0, 0, 0, 0, 0, 0)
+            """),
+            {"today": today}
+        )
+        
+        # Now update the stats using atomic SQL operations
+        updates = []
+        params = {"today": today}
+        
         if hit:
-            stats.hits += 1
+            updates.append("hits = hits + 1")
         if miss:
-            stats.misses += 1
+            updates.append("misses = misses + 1")
         if direct:
-            stats.direct_lookups += 1
+            updates.append("direct_lookups = direct_lookups + 1")
         if derived:
-            stats.derived_lookups += 1
+            updates.append("derived_lookups = derived_lookups + 1")
         if api_call:
-            stats.api_calls += 1
+            updates.append("api_calls = api_calls + 1")
         if transitive_derivation:
-            stats.transitive_derivations += 1
+            updates.append("transitive_derivations = transitive_derivations + 1")
+        
+        if updates:
+            update_sql = f"UPDATE cache_stats SET {', '.join(updates)} WHERE stats_date = :today"
+            session.execute(text(update_sql), params)
 
     def _get_ttl(self, session: Session, source_type: str, target_type: str) -> int:
         """Get TTL days for a specific entity type pair.

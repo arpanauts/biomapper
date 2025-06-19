@@ -10,17 +10,20 @@ from biomapper.cache.manager import CacheManager
 from biomapper.cache.mapper import CachedMapper
 from biomapper.core.base_mapper import BaseMapper, MappingResult
 from tests.utils.test_db_manager import TestDatabaseManager
-from biomapper.schemas.domain_schema import DomainDocument
+from biomapper.schemas.domain_schema import DomainDocument, DomainType
 
 
 class TestDocument(DomainDocument):
     """Test document implementation."""
-
-    def __init__(self, id: str = "", type: str = "test") -> None:
-        """Initialize test document."""
-        self.id = id
-        self.type = type
-        self.name = ""
+    
+    id: str = ""
+    type: str = "test"
+    name: str = ""
+    domain_type: DomainType = DomainType.COMPOUND  # Required by DomainDocument
+    
+    def to_search_text(self) -> str:
+        """Convert document to searchable text."""
+        return f"{self.name} {self.id} {self.type}"
 
 
 class MockMapper(BaseMapper[TestDocument]):
@@ -57,8 +60,11 @@ class MockMapper(BaseMapper[TestDocument]):
             await asyncio.sleep(self.delay)
 
         # Create entity with ID based on input
-        entity = TestDocument(id=f"TEST:{text}", type="test")
-        entity.name = f"Test {text}"
+        entity = TestDocument(
+            id=f"TEST:{text}", 
+            type="test",
+            name=f"Test {text}"
+        )
 
         return MappingResult(
             input_text=text,
