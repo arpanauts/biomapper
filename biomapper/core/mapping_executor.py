@@ -221,18 +221,13 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Initialize MappingPathExecutionService
         self.path_execution_service = MappingPathExecutionService(
-            logger=self.logger,
+            session_manager=self.session_manager,
             client_manager=self.client_manager,
-            cache_manager=self.cache_manager
-        )
-        # Set executor reference for delegation
-        self.path_execution_service.set_executor(self)
-        
-        # Initialize MappingPathExecutionService
-        self.path_execution_service = MappingPathExecutionService(
-            logger=self.logger,
-            client_manager=self.client_manager,
-            cache_manager=self.cache_manager
+            cache_manager=self.cache_manager,
+            path_finder=self.path_finder,
+            path_execution_manager=self.path_execution_manager,
+            composite_handler=self,  # MappingExecutor implements composite handling
+            logger=self.logger
         )
         # Set executor reference for delegation
         self.path_execution_service.set_executor(self)
@@ -269,12 +264,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Initialize StrategyExecutionService
         self.strategy_execution_service = StrategyExecutionService(
-            logger=self.logger,
-            config_loader=self.config_loader,
+            strategy_orchestrator=self.strategy_orchestrator,
             robust_execution_coordinator=self.robust_execution_coordinator,
-            session_manager=self.session_manager,
-            identifier_loader=self.identifier_loader,
-            progress_reporter=self.progress_reporter,
+            logger=self.logger
         )
         
         self.logger.info("MappingExecutor initialization complete")
