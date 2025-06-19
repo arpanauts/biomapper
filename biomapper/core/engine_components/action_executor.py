@@ -13,7 +13,6 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from biomapper.core.exceptions import MappingExecutionError
-from biomapper.core.strategy_actions.base import StrategyAction
 from biomapper.core.engine_components.action_loader import ActionLoader
 from biomapper.db.models import MappingStrategyStep, Endpoint
 

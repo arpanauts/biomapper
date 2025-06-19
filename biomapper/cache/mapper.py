@@ -1,6 +1,5 @@
 """Cache-aware entity mapper with bidirectional transitivity support."""
 
-import datetime
 import logging
 from typing import Any, Dict, List, Optional, Type, TypeVar
 

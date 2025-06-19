@@ -9,16 +9,14 @@ and test execution against sample data.
 import time
 import json
 import logging
-import asyncio
 import datetime
-from typing import Dict, List, Any, Optional, Union, Tuple, Set
+from typing import Dict, List, Any, Optional
 
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
 
-from biomapper.db.models_health import EndpointPropertyHealth, HealthCheckLog
+from biomapper.db.models_health import HealthCheckLog
 from biomapper.db.session import get_session
-from biomapper.mapping.health.tracker import PropertyHealthTracker, ErrorCategorizer
+from biomapper.mapping.health.tracker import PropertyHealthTracker
 
 logger = logging.getLogger(__name__)
 

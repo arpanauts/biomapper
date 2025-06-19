@@ -8,7 +8,6 @@ import logging
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from biomapper.core.mapping_executor import MappingExecutor
 from biomapper.db.cache_models import EntityMapping
 
 # Set up logging

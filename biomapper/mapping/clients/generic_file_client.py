@@ -1,7 +1,6 @@
 import csv
 import logging
 from typing import Dict, List, Optional, Any, Tuple
-import os
 import asyncio
 
 from biomapper.mapping.clients.base_client import BaseMappingClient, FileLookupClientMixin, CachedMappingClientMixin

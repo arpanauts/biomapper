@@ -5,7 +5,7 @@ import gc
 import time
 import logging
 import numpy as np
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Optional
 
 from ...core.base_rag import BaseEmbedder
 from ..core.config import default_config
@@ -90,7 +90,7 @@ class TextEmbedder(BaseEmbedder):
                 kwargs["device"] = self.device
 
             self.model = SentenceTransformer(self.model_name, **kwargs)
-            logging.info(f"Model loaded successfully")
+            logging.info("Model loaded successfully")
 
             self.initialized = True
             return True

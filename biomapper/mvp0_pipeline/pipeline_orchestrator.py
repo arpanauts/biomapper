@@ -11,7 +11,7 @@ and result aggregation across all pipeline components.
 """
 
 import logging
-from typing import List, Dict, Optional, Any
+from typing import List, Optional
 import asyncio
 import time
 from urllib.parse import urlparse
@@ -308,7 +308,7 @@ class PipelineOrchestrator:
                         )
                 
                 if not llm_candidates:
-                    logger.warning(f"No annotated candidates available for LLM evaluation")
+                    logger.warning("No annotated candidates available for LLM evaluation")
                     result.status = PipelineStatus.INSUFFICIENT_ANNOTATIONS
                     result.error_message = "No candidates with annotations available for LLM evaluation"
                     return result
@@ -459,7 +459,7 @@ async def main():
         print(f"  Summary: {result.summary()}")
         
         if result.processing_details:
-            print(f"\n  Processing times:")
+            print("\n  Processing times:")
             for key, value in result.processing_details.items():
                 if key.endswith("_time"):
                     print(f"    {key}: {value:.2f}s")

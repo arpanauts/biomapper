@@ -9,8 +9,6 @@ It uses the synthetic test dataset with a mix of different UniProt ID types.
 """
 import asyncio
 import logging
-import os
-import sys
 import pandas as pd
 from pathlib import Path
 

@@ -2,9 +2,7 @@
 
 import pytest
 import asyncio
-from unittest.mock import MagicMock, patch
-import logging
-from typing import Dict, List, Tuple, Any, Optional
+from unittest.mock import MagicMock
 
 from biomapper.core.composite_handler import CompositeIdentifierHandler, CompositeMiddleware
 from biomapper.db.models import CompositePatternConfig, CompositeProcessingStep

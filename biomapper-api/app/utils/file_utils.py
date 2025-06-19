@@ -2,13 +2,11 @@
 Utilities for file operations.
 """
 import os
-import shutil
 from pathlib import Path
 from typing import List, Optional
 
 from fastapi import UploadFile
 
-from app.core.config import settings
 
 
 async def save_upload_file(upload_file: UploadFile, destination: Path) -> Path:

@@ -9,9 +9,7 @@ import os
 import json
 import yaml
 import click
-import asyncio
 import logging
-from typing import Dict, Any, Optional
 
 from biomapper.mapping.metadata.initialize import (
     initialize_metadata_system,
@@ -276,7 +274,7 @@ def map_entity(db_path, source_id, source_type, target_type, resource):
     click.echo("      It's meant as an example of how the dispatcher would be used.")
 
     # Show the mapping request
-    click.echo(f"\nMapping request:")
+    click.echo("\nMapping request:")
     click.echo(f"  Source ID:    {source_id}")
     click.echo(f"  Source Type:  {source_type}")
     click.echo(f"  Target Type:  {target_type}")

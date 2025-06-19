@@ -5,9 +5,8 @@ Metabolomics Workbench team to enable consistent naming across different studies
 """
 
 import logging
-import os
 from dataclasses import dataclass
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional, Dict
 import re
 import pandas as pd
 import io

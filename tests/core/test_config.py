@@ -4,7 +4,6 @@ import pytest
 import tempfile
 import json
 import yaml
-from pathlib import Path
 
 from biomapper.core.config import Config
 

@@ -3,7 +3,6 @@
 import os
 import tempfile
 import unittest
-from pathlib import Path
 
 from biomapper.cache.manager import CacheManager
 from biomapper.transitivity.builder import TransitivityBuilder

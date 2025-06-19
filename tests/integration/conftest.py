@@ -7,25 +7,16 @@ including database mocks and configurations.
 
 import asyncio
 import pytest
-import pytest_asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 
 from biomapper.core.mapping_executor import MappingExecutor
 from biomapper.db.models import (
     Endpoint, 
     EndpointPropertyConfig,
     MappingPath,
-    MappingResource,
-    MappingPathStep,
-    OntologyPreference
-)
-from biomapper.db.cache_models import (
-    EntityMapping,
-    MappingSession,
-    PathExecutionLog
+    MappingPathStep
 )
 
 

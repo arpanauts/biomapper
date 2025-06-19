@@ -12,8 +12,7 @@ Tests the new API methods that were refactored from script utilities:
 
 import pytest
 import json
-from unittest.mock import AsyncMock, MagicMock, patch, call
-from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import os
 

@@ -30,7 +30,6 @@ class ActionLoader:
         if self._registry is None:
             # Import the registry and trigger action registrations
             from biomapper.core.strategy_actions.registry import ACTION_REGISTRY
-            import biomapper.core.strategy_actions
             self._registry = ACTION_REGISTRY
         return self._registry
     

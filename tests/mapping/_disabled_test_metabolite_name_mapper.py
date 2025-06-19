@@ -13,7 +13,6 @@ from biomapper.mapping.metabolite.name import (
     MetaboliteClass,
     MetaboliteMapping,
     MetaboliteNameMapper,
-    Classification,
 )
 
 

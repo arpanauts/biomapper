@@ -43,14 +43,14 @@ async def main():
     
     if detailed_output:
         # Show global metadata
-        print(f"\nMapping Configuration:")
+        print("\nMapping Configuration:")
         print(f"  Collection: {detailed_output.metadata['collection']}")
         print(f"  Model: {detailed_output.metadata['embedding_model']}")
         print(f"  Distance Metric: {detailed_output.metadata['distance_metric']}")
         print(f"  Top K: {detailed_output.metadata['top_k']}")
         
         # Show individual results
-        print(f"\nDetailed Results:")
+        print("\nDetailed Results:")
         for result in detailed_output.results:
             print(f"\n{result.identifier}:")
             if result.qdrant_similarity_score is not None:
@@ -62,7 +62,7 @@ async def main():
                         print(f"  All scores: {[f'{s:.3f}' for s in result.metadata['all_scores']]}")
                 print(f"  Score interpretation: {result.metadata.get('score_interpretation', 'N/A')}")
             else:
-                print(f"  No mapping found")
+                print("  No mapping found")
                 if "error" in result.metadata:
                     print(f"  Error: {result.metadata['error']}")
 

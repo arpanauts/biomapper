@@ -5,7 +5,6 @@ import logging
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from sqlalchemy import and_, or_, func
 from sqlalchemy.orm import Session
 
 from ..cache.manager import CacheManager

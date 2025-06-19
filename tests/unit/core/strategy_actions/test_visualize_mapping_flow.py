@@ -2,8 +2,7 @@
 
 import pytest
 import json
-from unittest.mock import Mock, AsyncMock, patch, mock_open
-from datetime import datetime
+from unittest.mock import Mock, patch, mock_open
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from biomapper.core.strategy_actions.visualize_mapping_flow import VisualizeMappingFlowAction

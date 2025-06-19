@@ -3,8 +3,6 @@
 import pytest
 import numpy as np
 from unittest.mock import Mock, MagicMock, patch
-from typing import List, Dict, Any
-import asyncio
 import sys
 
 # Mock qdrant_client module if not available
@@ -21,7 +19,7 @@ except ImportError:
     sys.modules['sentence_transformers'] = MagicMock()
 
 from biomapper.mapping.clients.pubchem_rag_client import PubChemRAGMappingClient
-from biomapper.schemas.rag_schema import MappingResultItem, MappingOutput
+from biomapper.schemas.rag_schema import MappingOutput
 
 
 class TestPubChemRAGMappingClientScores:

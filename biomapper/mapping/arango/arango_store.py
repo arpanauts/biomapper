@@ -1,6 +1,7 @@
 """ArangoDB implementation of the BaseArango interface."""
 
-from typing import Any, Dict, List, Optional, Set, Tuple, cast
+import json
+from typing import Any, List, Optional, Set, Tuple
 from pyArango.connection import Connection
 from pyArango.database import Database
 from pyArango.document import Document

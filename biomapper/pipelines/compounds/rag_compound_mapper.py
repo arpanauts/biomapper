@@ -19,7 +19,7 @@ from .compound_mapper import CompoundClass
 from ...core.base_store import BaseVectorStore
 from ...monitoring.langfuse_tracker import LangfuseTracker
 from ...monitoring.metrics import MetricsTracker
-from ...schemas.rag_schema import LLMMapperResult, Match, RAGMetrics
+from ...schemas.rag_schema import Match
 from .compound_mapper import CompoundDocument
 
 logger = logging.getLogger(__name__)

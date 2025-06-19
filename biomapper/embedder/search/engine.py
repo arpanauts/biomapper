@@ -1,12 +1,9 @@
 """Search engine for embeddings."""
 
 from typing import List, Dict, Any, Optional, Union
-import logging
-import numpy as np
 
 from ...core.base_rag import BaseEmbedder
 from ...core.base_store import BaseVectorStore
-from ..models.schemas import EmbedderItem
 
 
 class EmbedderSearchEngine:

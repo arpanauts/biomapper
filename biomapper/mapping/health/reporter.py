@@ -9,12 +9,11 @@ failure patterns, and recommendations for improvement.
 import json
 import logging
 import datetime
-from typing import Dict, List, Any, Optional, Union, Tuple
+from typing import Dict, Any, Optional
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from biomapper.db.models_health import EndpointPropertyHealth, HealthCheckLog
 from biomapper.db.session import get_session
 
 logger = logging.getLogger(__name__)
@@ -345,7 +344,7 @@ class ReportFormatter:
         # Summary
         if "summary" in report:
             summary = report["summary"]
-            lines.append(f"SUMMARY:")
+            lines.append("SUMMARY:")
             lines.append(f"  Total endpoints: {summary['total_endpoints']}")
             lines.append(f"  Total configs:  {summary['total_configs']}")
             lines.append(
@@ -437,7 +436,7 @@ class ReportFormatter:
             "  </style>",
             "</head>",
             "<body>",
-            f"  <h1>Endpoint Health Report</h1>",
+            "  <h1>Endpoint Health Report</h1>",
             f"  <p>Generated at: {report['generated_at']}</p>",
         ]
 
@@ -454,22 +453,22 @@ class ReportFormatter:
                     "      <th>Configurations</th>",
                     "    </tr>",
                     "    <tr class='healthy'>",
-                    f"      <td>Healthy</td>",
+                    "      <td>Healthy</td>",
                     f"      <td>{summary['healthy_endpoints']}</td>",
                     f"      <td>{summary['healthy_configs']}</td>",
                     "    </tr>",
                     "    <tr class='at-risk'>",
-                    f"      <td>At Risk</td>",
+                    "      <td>At Risk</td>",
                     f"      <td>{summary['at_risk_endpoints']}</td>",
                     f"      <td>{summary['at_risk_configs']}</td>",
                     "    </tr>",
                     "    <tr class='failed'>",
-                    f"      <td>Failed</td>",
+                    "      <td>Failed</td>",
                     f"      <td>{summary['failed_endpoints']}</td>",
                     f"      <td>{summary['failed_configs']}</td>",
                     "    </tr>",
                     "    <tr>",
-                    f"      <td><strong>Total</strong></td>",
+                    "      <td><strong>Total</strong></td>",
                     f"      <td>{summary['total_endpoints']}</td>",
                     f"      <td>{summary['total_configs']}</td>",
                     "    </tr>",

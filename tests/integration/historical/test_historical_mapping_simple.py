@@ -11,7 +11,6 @@ import asyncio
 import logging
 import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
 
 from biomapper.mapping.clients.uniprot_historical_resolver_client import UniProtHistoricalResolverClient
 

@@ -6,12 +6,12 @@ IDs using the UniProt Historical Resolver, and performs matching with composite/
 """
 
 import logging
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Set
 from collections import defaultdict
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .base import StrategyAction, ActionContext
+from .base import StrategyAction
 from .registry import register_action
 from biomapper.db.models import Endpoint
 from biomapper.mapping.clients.uniprot_historical_resolver_client import UniProtHistoricalResolverClient

@@ -2,22 +2,18 @@
 
 import datetime
 import json
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List
 
 from sqlalchemy import (
-    Boolean,
     Column,
     DateTime,
     Float,
-    ForeignKey,
     Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
 
 from biomapper.db.models import Base
 

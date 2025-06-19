@@ -8,8 +8,6 @@ endpoint relationship mappings.
 import click
 import asyncio
 import logging
-import json
-from datetime import datetime
 
 from biomapper.db.session import DatabaseManager
 from biomapper.mapping.relationships.path_finder import RelationshipPathFinder

@@ -179,11 +179,11 @@ async def main():
             if annotation.synonyms:
                 print(f"  Synonyms (first 3): {', '.join(annotation.synonyms[:3])}")
             else:
-                print(f"  Synonyms: N/A")
+                print("  Synonyms: N/A")
             if annotation.description:
                 print(f"  Description: {annotation.description[:100]}...")
             else:
-                print(f"  Description: N/A")
+                print("  Description: N/A")
             print()
         else:
             print(f"CID {cid}: Failed to fetch annotations (see logs for details)\n")

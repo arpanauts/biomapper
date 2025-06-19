@@ -3,7 +3,7 @@ Dependency injection for FastAPI routes.
 """
 from typing import Generator
 
-from fastapi import Depends, HTTPException, status
+from fastapi import HTTPException, status
 
 from app.core.session import Session, session_manager
 from app.services.csv_service import CSVService

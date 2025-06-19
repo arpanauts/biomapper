@@ -97,7 +97,7 @@ class MetadataQueryService:
         except SQLAlchemyError as e:
             self.logger.error(f"Database error retrieving endpoint {endpoint_name}: {e}", exc_info=True)
             raise DatabaseQueryError(
-                f"Database error fetching endpoint",
+                "Database error fetching endpoint",
                 details={"endpoint": endpoint_name, "error": str(e)}
             ) from e
     
@@ -142,7 +142,7 @@ class MetadataQueryService:
                 exc_info=True
             )
             raise DatabaseQueryError(
-                f"Database error fetching ontology type",
+                "Database error fetching ontology type",
                 details={"endpoint": endpoint_name, "property": property_name, "error": str(e)}
             ) from e
         except Exception as e:
@@ -151,7 +151,7 @@ class MetadataQueryService:
                 exc_info=True
             )
             raise BiomapperError(
-                f"An unexpected error occurred while retrieving ontology type",
+                "An unexpected error occurred while retrieving ontology type",
                 error_code=ErrorCode.DATABASE_QUERY_ERROR,
                 details={"endpoint": endpoint_name, "property": property_name, "error": str(e)}
             ) from e

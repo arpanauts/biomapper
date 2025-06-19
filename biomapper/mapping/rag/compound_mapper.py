@@ -6,12 +6,10 @@ import numpy as np
 
 import chromadb
 from chromadb.config import Settings
-from pydantic import BaseModel
 
 from .base_rag import BaseRAGMapper, BaseEmbedder, BasePromptManager, Document
 from ...monitoring.langfuse_tracker import LangfuseTracker
 from ...monitoring.metrics import MetricsTracker
-from ...schemas.rag_schema import LLMMapperResult, Match, RAGMetrics
 from ...schemas.store_schema import VectorStoreConfig
 
 logger = logging.getLogger(__name__)

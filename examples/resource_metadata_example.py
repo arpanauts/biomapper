@@ -9,7 +9,6 @@ mapping operations.
 import asyncio
 import os
 import logging
-from typing import Dict, List, Any
 
 from biomapper.mapping.metadata.initialize import (
     initialize_metadata_system,

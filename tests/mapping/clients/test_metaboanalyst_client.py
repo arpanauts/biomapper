@@ -1,15 +1,12 @@
 """Tests for the MetaboAnalyst client."""
 
-from unittest import mock
 import pytest
-import requests
 import requests_mock
 
 from biomapper.mapping.clients.metaboanalyst_client import (
     MetaboAnalystClient,
     MetaboAnalystConfig,
     MetaboAnalystError,
-    MetaboAnalystResult,
 )
 
 

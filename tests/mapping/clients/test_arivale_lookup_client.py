@@ -3,11 +3,8 @@
 import os
 import asyncio
 import pytest
-import pandas as pd
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
-from biomapper.core.exceptions import ClientInitializationError, ClientExecutionError
+from biomapper.core.exceptions import ClientInitializationError
 from biomapper.mapping.clients.arivale_lookup_client import ArivaleMetadataLookupClient
 
 

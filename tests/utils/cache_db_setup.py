@@ -1,7 +1,5 @@
 """Test utilities for cache database setup."""
 
-from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import create_async_engine
 from biomapper.db.cache_models import Base as CacheBase
 
 async def init_cache_tables_async(engine):

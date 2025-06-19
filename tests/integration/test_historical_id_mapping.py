@@ -6,20 +6,15 @@ This test validates the complete mapping pipeline from UKBB identifiers to Ariva
 focusing on the ability to handle both direct mappings and historical ID resolution.
 """
 
-import asyncio
 import json
 import logging
-import os
-import sys
 import pytest
-from typing import Dict, List, Any, Optional, Set, Tuple
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import MagicMock
 
-from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import necessary components
-from biomapper.core.mapping_executor import MappingExecutor, PathExecutionStatus
-from biomapper.core.exceptions import NoPathFoundError, ClientError
+from biomapper.core.mapping_executor import PathExecutionStatus
+from biomapper.core.exceptions import ClientError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

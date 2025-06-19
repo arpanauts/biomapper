@@ -9,14 +9,13 @@ docs/technical_notes/composite_identifier_handling.md, supporting the
 generalization of composite identifier handling.
 """
 
-import asyncio
 import logging
 import re
-from typing import Dict, List, Optional, Set, Tuple, Any, Union
+from typing import Dict, List, Optional, Tuple, Any
 from sqlalchemy.orm import Session
 
 from biomapper.db.models import CompositePatternConfig, CompositeProcessingStep
-from biomapper.core.exceptions import BiomapperError, ConfigurationError
+from biomapper.core.exceptions import ConfigurationError
 
 logger = logging.getLogger(__name__)
 

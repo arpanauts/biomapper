@@ -6,8 +6,6 @@ Diagnostic script to investigate V-shaped patterns in volcano plots
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-from scipy import stats
 
 # Set display options
 pd.set_option('display.max_columns', 100)

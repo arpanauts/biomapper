@@ -1,7 +1,7 @@
 """Configuration utilities for the Biomapper Embedder module."""
 
 import os
-from typing import Dict, Any, Optional
+from typing import Optional
 from pydantic import BaseModel, Field
 
 

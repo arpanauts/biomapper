@@ -2,10 +2,8 @@
 
 import pytest
 import numpy as np
-from unittest.mock import Mock, MagicMock, patch, AsyncMock
+from unittest.mock import Mock, patch
 from typing import List, Dict, Any, Optional
-import asyncio
-import os
 
 # Mock the config loading before importing
 with patch('os.makedirs'):

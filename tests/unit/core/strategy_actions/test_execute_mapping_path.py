@@ -1,7 +1,7 @@
 """Unit tests for ExecuteMappingPathAction."""
 
 import pytest
-from unittest.mock import Mock, AsyncMock, MagicMock
+from unittest.mock import Mock, AsyncMock
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from biomapper.core.strategy_actions.execute_mapping_path import ExecuteMappingPathAction

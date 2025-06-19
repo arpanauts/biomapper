@@ -7,7 +7,7 @@ and builds on the same infrastructure as the forward mapping client.
 import logging
 from typing import Dict, List, Optional, Any, Tuple
 
-from biomapper.core.exceptions import ClientInitializationError, ClientExecutionError
+from biomapper.core.exceptions import ClientExecutionError
 from biomapper.mapping.clients.base_client import (
     BaseMappingClient,
     CachedMappingClientMixin,

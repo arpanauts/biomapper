@@ -115,7 +115,7 @@ class RobustExecutionCoordinator:
             if checkpoint_state:
                 # This would need to be implemented based on how strategies track state
                 # For now, we'll just pass through to the standard method
-                self.logger.info(f"Checkpoint found but strategy resumption not yet fully implemented")
+                self.logger.info("Checkpoint found but strategy resumption not yet fully implemented")
             
             # Build arguments for the strategy execution
             strategy_args = {

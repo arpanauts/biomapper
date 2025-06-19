@@ -5,17 +5,15 @@ This module provides commands for checking, analyzing, and reporting on
 the health of endpoint property extraction configurations.
 """
 
-import os
 import json
 import click
 import asyncio
 import logging
-from typing import Dict, Any, Optional, List
 
 from biomapper.db.session import DatabaseManager
 from biomapper.mapping.health.monitor import EndpointHealthMonitor
 from biomapper.mapping.health.reporter import HealthReportGenerator, ReportFormatter
-from biomapper.mapping.health.analyzer import ConfigImprover, PerformanceClassifier
+from biomapper.mapping.health.analyzer import ConfigImprover
 
 # Configure logging
 logging.basicConfig(

@@ -2,12 +2,8 @@
 
 import pytest
 import pytest_asyncio
-import asyncio
-from pathlib import Path
-from typing import List, Dict, Any
 
 from biomapper.core.mapping_executor import MappingExecutor
-from biomapper.config import settings
 from biomapper.db.models import MappingStrategy, MappingStrategyStep
 
 
@@ -224,7 +220,6 @@ class TestUKBBToHPAYAMLStrategy:
 async def test_full_yaml_strategy_workflow():
     """Test the complete workflow including database population."""
     import tempfile
-    import shutil
     from pathlib import Path
     
     with tempfile.TemporaryDirectory() as tmpdir:

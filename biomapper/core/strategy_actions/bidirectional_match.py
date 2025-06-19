@@ -8,11 +8,11 @@ This action performs bidirectional matching with support for:
 """
 
 import logging
-from typing import Dict, Any, List, Optional, Set, Tuple
+from typing import Dict, Any, List, Set, Tuple
 from collections import defaultdict
 from datetime import datetime
 
-from .base import StrategyAction, ActionContext
+from .base import StrategyAction
 from .registry import register_action
 from biomapper.db.models import Endpoint
 

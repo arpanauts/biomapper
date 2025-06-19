@@ -1,7 +1,7 @@
 """
 Health check endpoints for API monitoring.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 router = APIRouter()
 

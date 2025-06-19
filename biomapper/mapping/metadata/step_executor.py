@@ -2,11 +2,10 @@
 
 import json
 import logging
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
 
 from biomapper.db.session import get_async_session
 from biomapper.mapping.metadata.interfaces import StepExecutor, ResourceAdapter

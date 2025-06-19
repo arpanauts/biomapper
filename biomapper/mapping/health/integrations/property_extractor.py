@@ -6,12 +6,11 @@ functions, automatically recording extraction attempts for health monitoring.
 """
 
 import time
-import json
 import logging
 import functools
-from typing import Dict, List, Any, Optional, Union, Callable, Awaitable, TypeVar
+from typing import Any, Optional, Callable, Awaitable, TypeVar
 
-from biomapper.mapping.health.tracker import PropertyHealthTracker, ErrorCategorizer
+from biomapper.mapping.health.tracker import PropertyHealthTracker
 
 logger = logging.getLogger(__name__)
 

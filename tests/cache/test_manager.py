@@ -4,12 +4,10 @@ import datetime
 import os
 import tempfile
 import unittest
-from pathlib import Path
 
 from biomapper.cache.manager import CacheManager
-from biomapper.db.models import CacheStats, EntityTypeConfig
+from biomapper.db.models import CacheStats
 from biomapper.db.cache_models import EntityMapping, MappingMetadata
-from biomapper.db.session import DatabaseManager
 from tests.utils.test_db_manager import TestDatabaseManager
 
 

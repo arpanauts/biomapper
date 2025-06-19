@@ -8,7 +8,7 @@ improvements to endpoint property extraction configurations.
 import re
 import json
 import logging
-from typing import Dict, List, Any, Optional, Union, Tuple
+from typing import Dict, List, Any, Optional
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError

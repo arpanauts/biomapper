@@ -3,11 +3,8 @@ Service for mapping operations with Biomapper.
 """
 import asyncio
 import os
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-import uuid
-import json
 
 import pandas as pd
 from fastapi import HTTPException, status

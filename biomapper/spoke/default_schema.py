@@ -19,7 +19,7 @@ This schema mapping captures the core entity types and relationships from these
 integrated data sources to support Biomapper's hybrid architecture.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 # Default schema definition for SPOKE knowledge graph
 SPOKE_DEFAULT_SCHEMA = {

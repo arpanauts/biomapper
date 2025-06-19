@@ -1,7 +1,7 @@
 """Pipeline for protein name standardization."""
 
 import logging
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 from ...core.base_pipeline import BaseMappingPipeline, BaseNameMapper
 from ...core.base_rag import BaseRAGMapper

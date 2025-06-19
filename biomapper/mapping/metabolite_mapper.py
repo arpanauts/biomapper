@@ -6,8 +6,7 @@ that integrates with the Resource Metadata System to provide intelligent routing
 of mapping operations across various resources.
 """
 
-import logging
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional
 
 from biomapper.mapping.base_mapper import AbstractEntityMapper
 

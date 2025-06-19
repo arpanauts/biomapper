@@ -2,11 +2,10 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, TypeVar, Generic
+from typing import Any, Dict, List, Optional, TypeVar
 import logging
 
 import numpy as np
-from pydantic import BaseModel
 
 from ..monitoring.langfuse_tracker import LangfuseTracker
 from ..monitoring.metrics import MetricsTracker

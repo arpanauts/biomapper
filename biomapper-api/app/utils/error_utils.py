@@ -3,7 +3,7 @@ Utilities for error handling.
 """
 from typing import Optional, Dict, Any
 
-from fastapi import HTTPException, status
+from fastapi import status
 
 
 class APIError(Exception):

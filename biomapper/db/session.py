@@ -3,13 +3,12 @@
 import os
 from pathlib import Path
 import logging
-from typing import Any, Optional, AsyncGenerator
-import asyncio
+from typing import Any, Optional
 
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, AsyncEngine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
 # Import settings
 from biomapper.config import settings

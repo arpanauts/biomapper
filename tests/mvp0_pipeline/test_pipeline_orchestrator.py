@@ -8,14 +8,12 @@ the complete pipeline execution flow.
 
 import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from typing import List, Dict
+from unittest.mock import Mock, AsyncMock, patch
 
 from biomapper.mvp0_pipeline.pipeline_orchestrator import PipelineOrchestrator, create_orchestrator
 from biomapper.mvp0_pipeline.pipeline_config import PipelineConfig
 from biomapper.schemas.pipeline_schema import (
     PipelineMappingResult, 
-    BatchMappingResult, 
     PipelineStatus
 )
 from biomapper.schemas.mvp0_schema import QdrantSearchResultItem, PubChemAnnotation

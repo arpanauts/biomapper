@@ -1,9 +1,7 @@
 """Tests for the IO utility functions."""
 
 import os
-import pytest
 import tempfile
-import pandas as pd
 from biomapper.utils.io_utils import load_tabular_file, get_max_file_size
 
 

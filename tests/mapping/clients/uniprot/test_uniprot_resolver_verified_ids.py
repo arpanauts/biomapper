@@ -6,7 +6,6 @@ that correctly match the current state of the UniProt database.
 """
 import asyncio
 import logging
-from typing import Dict, List, Optional, Tuple
 
 from biomapper.mapping.clients.uniprot_historical_resolver_client import UniProtHistoricalResolverClient
 
@@ -85,7 +84,7 @@ async def run_test():
             
         if type_match and id_match:
             success_count += 1
-            print(f"  ✓ Verified successfully")
+            print("  ✓ Verified successfully")
         else:
             if not type_match:
                 print(f"  ✗ Type mismatch - Expected: {expected_type}, Got: {metadata}")

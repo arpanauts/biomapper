@@ -16,7 +16,6 @@ from biomapper.mapping.adapters.csv_adapter import CSVAdapter
 from biomapper.core.strategy_actions.base import BaseStrategyAction
 
 if TYPE_CHECKING:
-    from biomapper.core.mapping_executor import MappingExecutor
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)

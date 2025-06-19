@@ -1,7 +1,7 @@
 """Test suite for compound mapping functionality."""
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from biomapper.core.base_client import APIResponse
 from biomapper.pipelines.compounds.compound_mapper import (

@@ -5,17 +5,14 @@ This module provides an adapter for interacting with the SPOKE knowledge graph,
 following the ResourceAdapter and KnowledgeGraphClient protocols.
 """
 
-import time
 import logging
 import asyncio
 from typing import Dict, List, Any, Optional
 
 from arango import ArangoClient
-from arango.database import Database
 
 from biomapper.mapping.metadata.interfaces import (
     BaseResourceAdapter,
-    KnowledgeGraphClient,
 )
 
 logger = logging.getLogger(__name__)

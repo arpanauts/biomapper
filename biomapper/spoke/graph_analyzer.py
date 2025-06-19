@@ -7,10 +7,9 @@ specifically for ArangoDB-based knowledge graphs, including SPOKE.
 import asyncio
 import logging
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from arango import ArangoClient
-from arango.database import StandardDatabase
 
 from biomapper.core.graph_analyzer import (
     IdentifierConfidence,
@@ -18,7 +17,7 @@ from biomapper.core.graph_analyzer import (
     NodeTypeMetadata,
     RelationshipMetadata,
 )
-from biomapper.spoke.client import SPOKEConfig, SPOKEDBClient
+from biomapper.spoke.client import SPOKEConfig
 
 
 logger = logging.getLogger(__name__)

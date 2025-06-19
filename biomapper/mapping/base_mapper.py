@@ -9,7 +9,7 @@ import asyncio
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional
 
 from biomapper.mapping.metadata.manager import ResourceMetadataManager
 from biomapper.mapping.adapters.cache_adapter import CacheResourceAdapter

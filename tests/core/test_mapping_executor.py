@@ -1,31 +1,23 @@
 """Tests for the MappingExecutor."""
-import asyncio
 import pytest
 import logging
 import json
-import re
-from unittest.mock import MagicMock, AsyncMock, patch, call, ANY
+from unittest.mock import MagicMock, AsyncMock, patch
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
-    AsyncSessionTransaction,
-    AsyncEngine,
     create_async_engine,
     async_sessionmaker,
 )
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError, OperationalError
-from sqlalchemy import event, select
+from sqlalchemy.exc import SQLAlchemyError, OperationalError
+from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from biomapper.db.models import Base as MetamapperBase
-from biomapper.core.mapping_executor import MappingExecutor, ReversiblePath
+from biomapper.core.mapping_executor import MappingExecutor
 from biomapper.core.exceptions import (
     BiomapperError,
-    NoPathFoundError,
-    ClientError,
     ClientExecutionError,
     ClientInitializationError,
-    ConfigurationError,
     CacheRetrievalError,
-    CacheStorageError,
     CacheTransactionError,
     ErrorCode,
     CacheError,
@@ -41,9 +33,7 @@ from biomapper.db.models import (
     OntologyPreference,
 )
 from biomapper.db.cache_models import (
-    PathExecutionLog as MappingPathExecutionLog,
     PathExecutionStatus,
-    EntityMapping,
 )
 
 logger = logging.getLogger(__name__)

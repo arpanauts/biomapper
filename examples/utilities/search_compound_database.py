@@ -4,7 +4,7 @@ import argparse
 import asyncio
 from typing import Dict, List, Optional, Any
 
-from biomapper.mapping.rag.chroma import ChromaVectorStore, ChromaDocument
+from biomapper.mapping.rag.chroma import ChromaVectorStore
 from biomapper.mapping.rag.embedder import ChromaEmbedder
 from biomapper.schemas.store_schema import VectorStoreConfig
 

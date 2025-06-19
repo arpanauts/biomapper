@@ -3,8 +3,7 @@ Tests for BidirectionalMatchAction.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import Mock, AsyncMock, patch
 import pandas as pd
 
 from biomapper.core.strategy_actions.bidirectional_match import BidirectionalMatchAction

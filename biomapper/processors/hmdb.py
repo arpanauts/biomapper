@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Optional, AsyncGenerator, cast, Any
+from typing import List, Optional, AsyncGenerator, cast
 import xml.etree.ElementTree as ET
 import logging
 from tqdm.asyncio import tqdm

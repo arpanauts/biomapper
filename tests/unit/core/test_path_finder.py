@@ -3,8 +3,7 @@
 import pytest
 import asyncio
 import time
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from typing import List
+from unittest.mock import Mock, AsyncMock, patch
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
@@ -14,8 +13,6 @@ from biomapper.core.engine_components.reversible_path import ReversiblePath
 from biomapper.core.exceptions import BiomapperError, ErrorCode
 from biomapper.db.models import (
     MappingPath,
-    MappingPathStep,
-    MappingResource,
     EndpointRelationship,
     Endpoint
 )

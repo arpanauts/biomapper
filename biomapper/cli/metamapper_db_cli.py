@@ -7,14 +7,11 @@ the metamapper configuration database.
 
 import asyncio
 import json
-import yaml
 import importlib
 import logging
-from typing import Dict, List, Any, Optional
-from pathlib import Path
 
 import click
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from biomapper.config import settings
@@ -23,15 +20,8 @@ from biomapper.db.models import (
     MappingResource,
     MappingPath,
     MappingPathStep,
-    Endpoint,
-    EndpointRelationship,
-    OntologyPreference,
     PropertyExtractionConfig,
-    EndpointPropertyConfig,
     OntologyCoverage,
-    Ontology,
-    Property,
-    RelationshipMappingPath,
 )
 
 # Configure logging

@@ -9,15 +9,13 @@ management, and result aggregation.
 
 import asyncio
 import time
-import os
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Union, Tuple, Any, Set
+from typing import Dict, List, Optional, Union, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .cache_manager import CacheManager
-from biomapper.db.models import MappingPath, MappingPathStep
-from biomapper.core.exceptions import ClientInitializationError, MappingExecutionError
+from biomapper.db.models import MappingPath
 from biomapper.db.cache_models import PathExecutionStatus
 
 

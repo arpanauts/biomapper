@@ -1,13 +1,11 @@
 """Unit tests for the UMLSClient."""
 
 import pytest
-import aiohttp
-import asyncio
 import time
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from biomapper.mapping.clients.umls_client import UMLSClient
-from biomapper.core.exceptions import ClientExecutionError, ClientInitializationError
+from biomapper.core.exceptions import ClientInitializationError
 
 
 @pytest.fixture

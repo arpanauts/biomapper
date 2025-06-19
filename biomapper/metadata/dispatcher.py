@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from typing import Any, Dict, List, Optional, Protocol, Type, TypeVar, Union
+from typing import Any, Dict, List, Optional, Protocol, Type, TypeVar
 
 from biomapper.metadata.models import OperationType, OperationStatus
 from biomapper.metadata.manager import ResourceMetadataManager

@@ -1,8 +1,7 @@
 """Utilities for file input/output operations."""
 
 import os
-import sys
-from typing import Optional, Dict, Any, Union, TypeVar, cast
+from typing import Optional, Any, Union, cast
 from os import PathLike
 import pandas as pd
 import psutil  # type: ignore

@@ -4,7 +4,7 @@ import json
 import pytest
 import logging
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, AsyncMock, patch, ANY
+from unittest.mock import MagicMock, AsyncMock, patch
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy import event, select
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import declarative_base
 from sqlalchemy.future import select
 
 from biomapper.db.cache_models import (
@@ -22,20 +21,16 @@ from biomapper.db.cache_models import (
     PathExecutionStatus,
 )
 from biomapper.db.models import (
-    Base as MetamapperBase,
     MappingPath,
     MappingPathStep,
     MappingResource,
 )
 from biomapper.core.exceptions import (
-    CacheStorageError,
-    CacheTransactionError,
     CacheError,
 )
 from biomapper.core.mapping_executor import (
     MappingExecutor,
     ReversiblePath,
-    PydanticEncoder,
 )
 
 logger = logging.getLogger(__name__)

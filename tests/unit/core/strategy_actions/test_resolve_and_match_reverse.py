@@ -11,7 +11,6 @@ Tests the reverse resolution and matching functionality, including:
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime
 
 from biomapper.core.strategy_actions.resolve_and_match_reverse import ResolveAndMatchReverse
 from biomapper.db.models import Endpoint

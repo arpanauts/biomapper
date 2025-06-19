@@ -2,13 +2,13 @@
 
 import json
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from .base import StrategyAction, ActionContext
+from .base import StrategyAction
 from .registry import register_action
-from biomapper.db.models import Endpoint, EndpointPropertyConfig, PropertyExtractionConfig
+from biomapper.db.models import Endpoint, EndpointPropertyConfig
 
 
 @register_action("CONVERT_IDENTIFIERS_LOCAL")
@@ -135,7 +135,7 @@ class ConvertIdentifiersLocalAction(StrategyAction):
             # to understand which properties to use
             if mapping_path.source_type == mapping_path.target_type:
                 # Get the first step of the mapping path to find the resource
-                from biomapper.db.models import MappingPathStep, MappingResource
+                from biomapper.db.models import MappingPathStep
                 from sqlalchemy.orm import selectinload
                 
                 steps_stmt = (

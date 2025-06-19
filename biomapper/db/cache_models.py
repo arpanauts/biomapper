@@ -3,7 +3,7 @@
 import datetime
 import json
 import enum
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 from sqlalchemy import (
     Column,

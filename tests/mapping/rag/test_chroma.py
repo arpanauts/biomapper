@@ -3,7 +3,6 @@
 import pytest
 import numpy as np
 from unittest.mock import Mock, patch
-from chromadb.api.types import QueryResult
 from chromadb import Settings as ChromaSettings
 
 from biomapper.mapping.rag.chroma import (

@@ -8,7 +8,7 @@ saving logic from the run_full_ukbb_hpa_mapping_bidirectional.py script.
 import os
 import json
 import pandas as pd
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from datetime import datetime
 from biomapper.core.strategy_actions.base import BaseStrategyAction
 from biomapper.core.utils.placeholder_resolver import resolve_file_path
