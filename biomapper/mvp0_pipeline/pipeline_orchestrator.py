@@ -11,7 +11,7 @@ and result aggregation across all pipeline components.
 """
 
 import logging
-from typing import List, Dict, Optional, Any
+from typing import List, Optional
 import asyncio
 import time
 from urllib.parse import urlparse
@@ -185,7 +185,16 @@ class PipelineOrchestrator:
         
         # Calculate summary statistics
         successful_mappings = sum(1 for r in results if r.has_mapping())
-        failed_mappings = sum(1 for r in results if not r.is_successful())
+        # Count only actual errors as failures, not "no match found" states
+        error_statuses = {
+            PipelineStatus.COMPONENT_ERROR_QDRANT,
+            PipelineStatus.COMPONENT_ERROR_PUBCHEM, 
+            PipelineStatus.COMPONENT_ERROR_LLM,
+            PipelineStatus.CONFIG_ERROR,
+            PipelineStatus.VALIDATION_ERROR,
+            PipelineStatus.UNKNOWN_ERROR
+        }
+        failed_mappings = sum(1 for r in results if r.status in error_statuses)
         
         # Create batch result
         batch_result = BatchMappingResult(
@@ -251,6 +260,7 @@ class PipelineOrchestrator:
                 if not qdrant_results:
                     logger.info(f"No Qdrant hits for '{biochemical_name}'")
                     result.status = PipelineStatus.NO_QDRANT_HITS
+                    result.qdrant_results = []  # Set empty list instead of None
                     result.error_message = "No similar compounds found in Qdrant vector database"
                     return result
                 
@@ -308,7 +318,7 @@ class PipelineOrchestrator:
                         )
                 
                 if not llm_candidates:
-                    logger.warning(f"No annotated candidates available for LLM evaluation")
+                    logger.warning("No annotated candidates available for LLM evaluation")
                     result.status = PipelineStatus.INSUFFICIENT_ANNOTATIONS
                     result.error_message = "No candidates with annotations available for LLM evaluation"
                     return result
@@ -459,7 +469,7 @@ async def main():
         print(f"  Summary: {result.summary()}")
         
         if result.processing_details:
-            print(f"\n  Processing times:")
+            print("\n  Processing times:")
             for key, value in result.processing_details.items():
                 if key.endswith("_time"):
                     print(f"    {key}: {value:.2f}s")
