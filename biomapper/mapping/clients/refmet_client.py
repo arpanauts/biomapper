@@ -30,8 +30,11 @@ class RefMetError(Exception):
 class RefMetConfig:
     """Configuration for RefMet API client."""
 
-    # The base URL for the Metabolomics Workbench REST API
-    base_url: str = "https://www.metabolomicsworkbench.org/rest"
+    # The base URL for the Metabolomics Workbench
+    base_url: str = "https://www.metabolomicsworkbench.org"
+
+    # REST API URL
+    rest_url: str = "https://www.metabolomicsworkbench.org/rest"
 
     # Legacy base URL for direct database access
     legacy_url: str = "https://www.metabolomicsworkbench.org/databases/refmet"
@@ -162,14 +165,13 @@ class RefMetClient:
         """
         # Clean the name for search
         clean_name = re.sub(r"[^a-zA-Z0-9\s\-]", " ", name)
-        clean_name = re.sub(r"\s+", " ", clean_name).strip()
+        clean_name = re.sub(r"\s+", " ", clean_name).strip().lower()
 
         # First try local lookup if available
         if self.df_refmet is not None:
             try:
                 # Match by name (case-insensitive)
-                clean_name_lower = clean_name.lower()
-                mask = self.df_refmet["refmet_name"].str.lower() == clean_name_lower
+                mask = self.df_refmet["refmet_name"].str.lower() == clean_name
                 matching_rows = self.df_refmet[mask]
 
                 if not matching_rows.empty:
@@ -200,7 +202,7 @@ class RefMetClient:
         logger.info(f"Falling back to RefMet API for name search: {name}")
 
         # Use the proper REST API with refmet context and match endpoint
-        url = f"{self.config.base_url}/refmet/match/{clean_name}"
+        url = f"{self.config.rest_url}/refmet/match/{clean_name}"
 
         try:
             response = self.session.get(url, timeout=self.config.timeout)
@@ -209,14 +211,15 @@ class RefMetClient:
             data = response.json()
             if not data:
                 # If match endpoint fails, try the name lookup
-                url = f"{self.config.base_url}/refmet/name/{clean_name}/all"
+                url = f"{self.config.rest_url}/refmet/name/{clean_name}/all"
                 response = self.session.get(url, timeout=self.config.timeout)
                 response.raise_for_status()
                 data = response.json()
 
                 if not data:
                     logger.warning(f"No RefMet entity found for name: {name}")
-                    return None
+                    # Try direct search as a last resort
+                    return self._direct_search(clean_name)
 
             # Process the API result
             result = self._create_result_from_api_response(
@@ -228,10 +231,10 @@ class RefMetClient:
             logger.warning(f"RefMet API search failed for '{name}': {str(e)}")
 
             # Try direct search as a last resort
-            return self._direct_search(name)
+            return self._direct_search(clean_name)
 
     def _direct_search(self, name: str) -> Optional[Dict[str, Any]]:
-        """Internal method for direct RefMet search using alternative endpoints.
+        """Internal method for direct RefMet search using legacy endpoints.
 
         This is a last-resort method when all other search methods fail.
 
@@ -249,7 +252,7 @@ class RefMetClient:
             for term in terms:
                 try:
                     # Use the proper REST API with refmet context
-                    url = f"{self.config.base_url}/refmet/name/{term}/all"
+                    url = f"{self.config.rest_url}/refmet/name/{term}/all"
                     response = self.session.get(url, timeout=self.config.timeout)
                     response.raise_for_status()
 
@@ -263,45 +266,34 @@ class RefMetClient:
                 except Exception:
                     continue
 
-            # If still no results, try the legacy endpoint as a last resort
-            legacy_url = f"{self.config.legacy_url}/name_to_refmet_new_minID.php"
+            # If still no results, try the legacy endpoint as a last resort  
+            legacy_url = f"{self.config.base_url}/name_to_refmet_new_minID.php"
             payload = {"metabolite_name": name}
 
-            response = self.session.post(
-                legacy_url, data=payload, timeout=self.config.timeout
-            )
-            if response.content:
-                # Parse TSV response
-                df = pd.read_csv(io.StringIO(response.text), sep="\t")
-                if not df.empty:
-                    # Extract first row
-                    row = df.iloc[0]
-
-                    # Helper function to safely get values
-                    def safe_get(val: Any) -> str:
-                        return (
-                            str(val).strip()
-                            if pd.notna(val) and str(val).strip() != "-"
-                            else ""
-                        )
-
-                    # Get ChEBI ID and add prefix if it's a valid ID
-                    chebi_id = safe_get(row.get("ChEBI_ID"))
-                    if chebi_id and chebi_id.isdigit():
-                        chebi_id = f"CHEBI:{chebi_id}"
-
-                    # Create the result dictionary
-                    return {
-                        "refmet_id": f"REFMET:{safe_get(row.get('RefMet_ID'))}",
-                        "name": safe_get(row.get("Standardized name")),
-                        "formula": safe_get(row.get("Formula")),
-                        "exact_mass": safe_get(row.get("Exact mass")),
-                        "inchikey": safe_get(row.get("INCHI_KEY")),
-                        "pubchem_id": safe_get(row.get("PubChem_CID")),
-                        "chebi_id": chebi_id,
-                        "hmdb_id": safe_get(row.get("HMDB_ID")),
-                        "kegg_id": safe_get(row.get("KEGG_ID")),
-                    }
+            # Try the POST request with manual retry logic
+            # 1 initial try + max_retries retries = max_retries + 1 total attempts
+            max_attempts = self.config.max_retries + 1
+            last_exception = None
+            
+            for attempt in range(max_attempts):
+                try:
+                    response = self.session.post(
+                        legacy_url, data=payload, timeout=self.config.timeout
+                    )
+                    response.raise_for_status()
+                    
+                    if response.content:
+                        return self._process_legacy_response(response.text)
+                    return None
+                    
+                except requests.exceptions.RequestException as e:
+                    last_exception = e
+                    if attempt < max_attempts - 1:
+                        # Continue to next attempt
+                        continue
+                    else:
+                        # Last attempt failed
+                        raise e
 
             return None
 
@@ -350,7 +342,7 @@ class RefMetClient:
 
             # Use the proper REST API with refmet context - using name lookup as an alternative
             # since it appears the regno endpoint might not work correctly
-            url = f"{self.config.base_url}/refmet/name/{clean_id}/all"
+            url = f"{self.config.rest_url}/refmet/name/{clean_id}/all"
 
             try:
                 response = self.session.get(url, timeout=self.config.timeout)
@@ -449,9 +441,9 @@ class RefMetClient:
             "kegg_id": str(data.get("kegg_id", "")),
         }
 
-    def _process_response(
+    def _process_legacy_response(
         self, response_text: str
-    ) -> Optional[Dict[str, Optional[str]]]:
+    ) -> Optional[Dict[str, str]]:
         """Process the RefMet response text from legacy endpoints."""
         try:
             df = pd.read_csv(io.StringIO(response_text), sep="\t")
@@ -468,6 +460,16 @@ class RefMetClient:
                     else ""
                 )
 
+            # Get RefMet ID - return as is without REFMET prefix to match test expectations
+            refmet_id = safe_get(row.get("RefMet_ID"))
+            
+            # Get compound name to check if this is a valid result
+            compound_name = safe_get(row.get("Standardized name"))
+            
+            # If we don't have a RefMet ID or all critical fields are empty/missing, return None
+            if not refmet_id and not compound_name:
+                return None
+                
             # Get ChEBI ID and add prefix if it's a valid ID
             chebi_id = safe_get(row.get("ChEBI_ID"))
             if chebi_id and chebi_id.isdigit():
@@ -475,8 +477,8 @@ class RefMetClient:
 
             # Create the result dictionary
             return {
-                "refmet_id": f"REFMET:{safe_get(row.get('RefMet_ID'))}",
-                "name": safe_get(row.get("Standardized name")),
+                "refmet_id": refmet_id,
+                "name": compound_name,
                 "formula": safe_get(row.get("Formula")),
                 "exact_mass": safe_get(row.get("Exact mass")),
                 "inchikey": safe_get(row.get("INCHI_KEY")),
