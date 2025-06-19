@@ -256,9 +256,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             try:
                 from biomapper.monitoring.metrics import MetricsTracker
                 self._metrics_tracker = MetricsTracker(
-                    enable_metrics=enable_metrics,
-                    langfuse_tracker=self._langfuse_tracker,
-                    logger=self.logger
+                    langfuse=self._langfuse_tracker
                 )
             except ImportError:
                 self.logger.warning("MetricsTracker not available - langfuse module not installed")
