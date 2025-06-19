@@ -26,7 +26,7 @@ class RAGCompoundMapper:
         # Initialize monitoring
         load_env = os.getenv("ENVIRONMENT") == "development"
         self.tracker = LangfuseTracker(load_env=load_env)
-        self.metrics = MetricsTracker(self.tracker)
+        self.metrics = MetricsTracker(langfuse=self.tracker)
         self.traces = TraceManager(self.tracker)
 
         # Initialize RAG components
