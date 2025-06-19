@@ -56,6 +56,7 @@ metamapper.db-*
 *.swp
 *.swo
 gwr.sh
+agent.sh
 
 # Development and temporary files
 *_test.py
