@@ -51,26 +51,16 @@ class MappingPathExecutionService:
         
         Args:
             session_manager: Database session manager
-            session_manager: Database session manager
             client_manager: ClientManager instance for getting client instances
             cache_manager: CacheManager instance for caching results
             path_finder: Path finding service
             path_execution_manager: Path execution service
             composite_handler: Composite identifier handler
             logger: Optional logger instance
-            path_finder: Path finding service
-            path_execution_manager: Path execution service
-            composite_handler: Composite identifier handler
-            logger: Optional logger instance
         """
-        self.session_manager = session_manager
         self.session_manager = session_manager
         self.client_manager = client_manager
         self.cache_manager = cache_manager
-        self.path_finder = path_finder
-        self.path_execution_manager = path_execution_manager
-        self.composite_handler = composite_handler
-        self.logger = logger or logging.getLogger(__name__)
         self.path_finder = path_finder
         self.path_execution_manager = path_execution_manager
         self.composite_handler = composite_handler

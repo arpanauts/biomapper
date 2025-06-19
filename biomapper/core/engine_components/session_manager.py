@@ -1,8 +1,7 @@
 """Session management module for handling database connections and sessions."""
 import logging
 from pathlib import Path
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 
 class SessionManager:
@@ -41,14 +40,14 @@ class SessionManager:
         # Setup SQLAlchemy engines and sessions for Metamapper
         meta_async_url = self._get_async_url(self.metamapper_db_url)
         self.async_metamapper_engine = create_async_engine(meta_async_url, echo=self.echo_sql)
-        self.MetamapperSessionFactory = sessionmaker(
+        self.MetamapperSessionFactory = async_sessionmaker(
             self.async_metamapper_engine, class_=AsyncSession, expire_on_commit=False
         )
         
         # Setup SQLAlchemy engines and sessions for Mapping Cache
         cache_async_url = self._get_async_url(self.mapping_cache_db_url)
         self.async_cache_engine = create_async_engine(cache_async_url, echo=self.echo_sql)
-        self.CacheSessionFactory = sessionmaker(
+        self.CacheSessionFactory = async_sessionmaker(
             self.async_cache_engine, class_=AsyncSession, expire_on_commit=False
         )
     

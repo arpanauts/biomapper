@@ -35,7 +35,7 @@ async def populated_db(tmp_path):
         await conn.run_sync(CacheBase.metadata.create_all)
     
     # Run populate script to load configurations
-    from scripts.populate_metamapper_db import populate_entity_type
+    from scripts.setup_and_configuration.populate_metamapper_db import populate_entity_type
     from pathlib import Path
     import yaml
     
