@@ -53,22 +53,6 @@ class UniProtEnsemblProteinMappingClient(UniProtIDMappingClient):
         if "session" in merged_config:
             parent_kwargs["session"] = merged_config.pop("session")
 
-        # Initialize the parent class with valid parameters
-        super().__init__(**parent_kwargs)
-        # Extract parent class parameters from config
-        parent_kwargs = {
-            "from_db": merged_config.pop("from_db"),
-            "to_db": merged_config.pop("to_db"),
-        }
-        
-        # Add optional parameters if they exist in config
-        if "base_url" in merged_config:
-            parent_kwargs["base_url"] = merged_config.pop("base_url")
-        if "timeout" in merged_config:
-            parent_kwargs["timeout"] = merged_config.pop("timeout")
-        if "session" in merged_config:
-            parent_kwargs["session"] = merged_config.pop("session")
-        
         # Initialize the parent class with our configuration
         super().__init__(**parent_kwargs)
 

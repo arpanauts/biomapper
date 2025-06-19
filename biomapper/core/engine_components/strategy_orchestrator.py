@@ -137,10 +137,17 @@ class StrategyOrchestrator:
                 if not target_endpoint:
                     raise ConfigurationError(f"Target endpoint '{target_endpoint_name}' not found")
             
+            # Initialize tracking variables
+            current_identifiers = input_identifiers.copy()
+            current_ontology_type = source_ontology_type or strategy.default_source_ontology_type or "UNKNOWN"
+            step_results = []
+            
             # Initialize strategy context
             strategy_context = initial_context or {}
             strategy_context.update({
                 'initial_identifiers': input_identifiers.copy(),
+                'current_identifiers': current_identifiers.copy(),
+                'current_ontology_type': current_ontology_type,
                 'step_results': [],
                 'all_provenance': [],
                 'mapping_results': {},
@@ -151,11 +158,6 @@ class StrategyOrchestrator:
                 'target_endpoint': target_endpoint.name if target_endpoint else None,
                 'initial_count': len(input_identifiers)
             })
-            
-            # Initialize tracking variables
-            current_identifiers = input_identifiers.copy()
-            current_ontology_type = source_ontology_type or strategy.default_source_ontology_type or "UNKNOWN"
-            step_results = []
             
             # Sort steps by order
             sorted_steps = sorted(strategy.steps, key=lambda s: s.step_order)
