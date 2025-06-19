@@ -19,6 +19,9 @@ def cli_runner():
 def mock_session():
     """Fixture that provides a mock database session."""
     session = AsyncMock()
+    # Configure the async mock properly
+    session.execute = AsyncMock()
+    session.close = AsyncMock()
     return session
 
 
@@ -28,8 +31,17 @@ class TestResourcesCommands:
     @patch('biomapper.cli.metamapper_db_cli.get_async_session')
     def test_resources_list_empty(self, mock_get_session, cli_runner, mock_session):
         """Test listing resources when none exist."""
-        mock_get_session.return_value = mock_session
-        mock_session.execute.return_value.scalars.return_value.all.return_value = []
+        # Mock the async function to return the mock session
+        async def return_session():
+            return mock_session
+        mock_get_session.side_effect = return_session
+        
+        # Create mock result object with proper chain
+        mock_result = MagicMock()
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_result.scalars.return_value = mock_scalars
+        mock_session.execute.return_value = mock_result
         
         result = cli_runner.invoke(metamapper_db_cli, ['resources', 'list'])
         
@@ -39,8 +51,17 @@ class TestResourcesCommands:
     @patch('biomapper.cli.metamapper_db_cli.get_async_session')
     def test_resources_list_json_output(self, mock_get_session, cli_runner, mock_session):
         """Test listing resources with JSON output."""
-        mock_get_session.return_value = mock_session
-        mock_session.execute.return_value.scalars.return_value.all.return_value = []
+        # Mock the async function to return the mock session
+        async def return_session():
+            return mock_session
+        mock_get_session.side_effect = return_session
+        
+        # Create mock result object with proper chain
+        mock_result = MagicMock()
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_result.scalars.return_value = mock_scalars
+        mock_session.execute.return_value = mock_result
         
         result = cli_runner.invoke(metamapper_db_cli, ['resources', 'list', '--json'])
         
@@ -50,8 +71,15 @@ class TestResourcesCommands:
     @patch('biomapper.cli.metamapper_db_cli.get_async_session')
     def test_show_resource_not_found(self, mock_get_session, cli_runner, mock_session):
         """Test showing a resource that doesn't exist."""
-        mock_get_session.return_value = mock_session
-        mock_session.execute.return_value.scalar_one_or_none.return_value = None
+        # Mock the async function to return the mock session
+        async def return_session():
+            return mock_session
+        mock_get_session.side_effect = return_session
+        
+        # Create mock result object with proper chain
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = mock_result
         
         result = cli_runner.invoke(metamapper_db_cli, ['resources', 'show', 'nonexistent'])
         
@@ -65,8 +93,17 @@ class TestPathsCommands:
     @patch('biomapper.cli.metamapper_db_cli.get_async_session')
     def test_find_paths_no_results(self, mock_get_session, cli_runner, mock_session):
         """Test finding paths with no results."""
-        mock_get_session.return_value = mock_session
-        mock_session.execute.return_value.scalars.return_value.all.return_value = []
+        # Mock the async function to return the mock session
+        async def return_session():
+            return mock_session
+        mock_get_session.side_effect = return_session
+        
+        # Create mock result object with proper chain
+        mock_result = MagicMock()
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_result.scalars.return_value = mock_scalars
+        mock_session.execute.return_value = mock_result
         
         result = cli_runner.invoke(metamapper_db_cli, ['paths', 'find', '--from', 'GENE_NAME', '--to', 'UNIPROTKB_AC'])
         
@@ -80,8 +117,17 @@ class TestValidationCommands:
     @patch('biomapper.cli.metamapper_db_cli.get_async_session')
     def test_validate_clients_empty(self, mock_get_session, cli_runner, mock_session):
         """Test client validation with no clients."""
-        mock_get_session.return_value = mock_session
-        mock_session.execute.return_value.scalars.return_value.all.return_value = []
+        # Mock the async function to return the mock session
+        async def return_session():
+            return mock_session
+        mock_get_session.side_effect = return_session
+        
+        # Create mock result object with proper chain
+        mock_result = MagicMock()
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = []
+        mock_result.scalars.return_value = mock_scalars
+        mock_session.execute.return_value = mock_result
         
         result = cli_runner.invoke(metamapper_db_cli, ['validate', 'clients'])
         
