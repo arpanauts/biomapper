@@ -206,100 +206,38 @@ class MappingExecutor(CompositeIdentifierMixin):
             max_retries=max_retries,
             retry_delay=retry_delay
         )
-        self._langfuse_tracker = None
         
-        # Initialize metrics tracking if enabled and langfuse is available
-        if self.enable_metrics:
-            try:
-                import langfuse
-                self._langfuse_tracker = langfuse.Langfuse(
-                    host=os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com"),
-                    public_key=os.environ.get("LANGFUSE_PUBLIC_KEY"),
-                    secret_key=os.environ.get("LANGFUSE_SECRET_KEY"),
-                )
-                self.logger.info("Langfuse metrics tracking initialized")
-            except (ImportError, Exception) as e:
-                self.logger.warning(f"Langfuse metrics tracking not available: {e}")
-
-        # Initialize client manager for handling client instantiation and caching
-        self.client_manager = ClientManager(logger=self.logger)
+        # Initialize all components
+        components = self._initializer.initialize_components(self)
         
-        # Initialize config loader for handling strategy configuration files
-        self.config_loader = ConfigLoader(logger=self.logger)
+        # Assign components to self
+        self.session_manager = components['session_manager']
+        self.client_manager = components['client_manager']
+        self.config_loader = components['config_loader']
+        self.strategy_handler = components['strategy_handler']
+        self.path_finder = components['path_finder']
+        self.path_execution_manager = components['path_execution_manager']
+        self.cache_manager = components['cache_manager']
+        self.identifier_loader = components['identifier_loader']
+        self.strategy_orchestrator = components['strategy_orchestrator']
+        self.checkpoint_manager = components['checkpoint_manager']
+        self.progress_reporter = components['progress_reporter']
+        self._langfuse_tracker = components['langfuse_tracker']
         
-        # Initialize strategy handler
-        self.strategy_handler = StrategyHandler(mapping_executor=self)
+        # Create convenience references for backward compatibility
+        convenience_refs = self._initializer.get_convenience_references()
+        self.async_metamapper_engine = convenience_refs['async_metamapper_engine']
+        self.MetamapperSessionFactory = convenience_refs['MetamapperSessionFactory']
+        self.async_metamapper_session = convenience_refs['async_metamapper_session']
+        self.async_cache_engine = convenience_refs['async_cache_engine']
+        self.CacheSessionFactory = convenience_refs['CacheSessionFactory']
+        self.async_cache_session = convenience_refs['async_cache_session']
         
-        # Initialize path finder with cache settings
-        self.path_finder = PathFinder(
-            cache_size=path_cache_size,
-            cache_expiry_seconds=path_cache_expiry_seconds
-        )
-        
-        # Initialize path execution manager
-        self.path_execution_manager = PathExecutionManager(
-            metamapper_session_factory=None,  # Will be set after creating session factory
-            cache_manager=None,  # MappingExecutor handles caching directly
-            logger=self.logger,
-            semaphore=None,  # Will create semaphore as needed
-            max_retries=max_retries,
-            retry_delay=retry_delay,
-            batch_size=batch_size,
-            max_concurrent_batches=max_concurrent_batches,
-            enable_metrics=enable_metrics,
-            load_client_func=self._load_client,
-            execute_mapping_step_func=self._execute_mapping_step,
-            calculate_confidence_score_func=self._calculate_confidence_score,
-            create_mapping_path_details_func=self._create_mapping_path_details,
-            determine_mapping_source_func=self._determine_mapping_source,
-            track_mapping_metrics_func=self.track_mapping_metrics if enable_metrics else None
-        )
-        
-        # Log database URLs being used
-        self.logger.info(f"Using Metamapper DB URL: {self.metamapper_db_url}")
-        self.logger.info(f"Using Mapping Cache DB URL: {self.mapping_cache_db_url}")
-        self.logger.info(f"Initialized with path_cache_size={path_cache_size}, concurrent_batches={max_concurrent_batches}")
-
-        # Initialize the SessionManager
-        self.session_manager = SessionManager(
-            metamapper_db_url=self.metamapper_db_url,
-            mapping_cache_db_url=self.mapping_cache_db_url,
-            echo_sql=echo_sql
-        )
+        # Set function references after MappingExecutor is fully initialized
+        self._initializer.set_executor_function_references(self)
         
         # Initialize MetadataQueryService
         self.metadata_query_service = MetadataQueryService(self.session_manager)
-        
-        # Create convenience references for backward compatibility
-        self.async_metamapper_engine = self.session_manager.async_metamapper_engine
-        self.MetamapperSessionFactory = self.session_manager.MetamapperSessionFactory
-        self.async_metamapper_session = self.session_manager.async_metamapper_session
-        self.async_cache_engine = self.session_manager.async_cache_engine
-        self.CacheSessionFactory = self.session_manager.CacheSessionFactory
-        self.async_cache_session = self.session_manager.async_cache_session
-        
-        # Update the path execution manager with the session factory
-        self.path_execution_manager.metamapper_session_factory = self.session_manager.MetamapperSessionFactory
-
-        # Initialize CacheManager
-        self.cache_manager = CacheManager(
-            cache_sessionmaker=self.session_manager.CacheSessionFactory,
-            logger=self.logger
-        )
-        
-        # Initialize IdentifierLoader
-        self.identifier_loader = IdentifierLoader(
-            metamapper_session_factory=self.MetamapperSessionFactory
-        )
-
-        # Initialize StrategyOrchestrator
-        self.strategy_orchestrator = StrategyOrchestrator(
-            metamapper_session_factory=self.session_manager.MetamapperSessionFactory,
-            cache_manager=self.cache_manager,
-            strategy_handler=self.strategy_handler,
-            mapping_executor=self,  # Pass self for backwards compatibility
-            logger=self.logger
-        )
         
         # Initialize RobustExecutionCoordinator
         self.robust_execution_coordinator = RobustExecutionCoordinator(
@@ -312,6 +250,26 @@ class MappingExecutor(CompositeIdentifierMixin):
             checkpoint_enabled=self.checkpoint_enabled,
             logger=self.logger
         )
+        
+        # Initialize metrics tracker if needed
+        if enable_metrics:
+            try:
+                from biomapper.monitoring.metrics import MetricsTracker
+                self._metrics_tracker = MetricsTracker(
+                    enable_metrics=enable_metrics,
+                    langfuse_tracker=self._langfuse_tracker,
+                    logger=self.logger
+                )
+            except ImportError:
+                self.logger.warning("MetricsTracker not available - langfuse module not installed")
+                self._metrics_tracker = None
+        else:
+            self._metrics_tracker = None
+        
+        # Initialize MappingResultBundle (extracted module)
+        self.MappingResultBundle = MappingResultBundle
+        
+        self.logger.info("MappingExecutor initialization complete")
 
     async def _init_db_tables(self, engine, base_metadata):
         """Initialize database tables if they don't exist.
@@ -404,34 +362,8 @@ class MappingExecutor(CompositeIdentifierMixin):
             retry_delay=retry_delay,
         )
         
-        # Initialize all components
-        components = self._initializer.initialize_components(self)
-        
-        # Assign components to self
-        self.session_manager = components['session_manager']
-        self.client_manager = components['client_manager']
-        self.config_loader = components['config_loader']
-        self.strategy_handler = components['strategy_handler']
-        self.path_finder = components['path_finder']
-        self.path_execution_manager = components['path_execution_manager']
-        self.cache_manager = components['cache_manager']
-        self.identifier_loader = components['identifier_loader']
-        self.strategy_orchestrator = components['strategy_orchestrator']
-        self.checkpoint_manager = components['checkpoint_manager']
-        self.progress_reporter = components['progress_reporter']
-        self._langfuse_tracker = components['langfuse_tracker']
-        
-        # Create convenience references for backward compatibility
-        convenience_refs = self._initializer.get_convenience_references()
-        self.async_metamapper_engine = convenience_refs['async_metamapper_engine']
-        self.MetamapperSessionFactory = convenience_refs['MetamapperSessionFactory']
-        self.async_metamapper_session = convenience_refs['async_metamapper_session']
-        self.async_cache_engine = convenience_refs['async_cache_engine']
-        self.CacheSessionFactory = convenience_refs['CacheSessionFactory']
-        self.async_cache_session = convenience_refs['async_cache_session']
-        
-        # Set function references after MappingExecutor is fully initialized
-        self._initializer.set_executor_function_references(self)
+        # Executor is already fully initialized by __init__
+        return executor
 
     def get_cache_session(self):
         """Get a cache database session."""
