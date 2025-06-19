@@ -172,7 +172,29 @@ class TestVisualizeMappingFlowAction:
         action = VisualizeMappingFlowAction(mock_session)
         
         # Mock matplotlib
-        with patch('biomapper.core.strategy_actions.visualize_mapping_flow.plt') as mock_plt:
+        with patch('matplotlib.pyplot') as mock_plt:
+            # Set up mock for subplots
+            mock_fig = Mock()
+            mock_ax = Mock()
+            mock_ax2 = Mock()
+            
+            # Mock bar returns
+            mock_bar1 = Mock()
+            mock_bar1.get_height.return_value = 5
+            mock_bar1.get_x.return_value = 0
+            mock_bar1.get_width.return_value = 0.35
+            mock_bar2 = Mock()
+            mock_bar2.get_height.return_value = 4
+            mock_bar2.get_x.return_value = 0.35
+            mock_bar2.get_width.return_value = 0.35
+            
+            mock_ax.bar.side_effect = [[mock_bar1], [mock_bar2]]  # Return list of bars
+            mock_ax.twinx.return_value = mock_ax2
+            mock_ax.get_legend_handles_labels.return_value = ([], [])
+            mock_ax2.get_legend_handles_labels.return_value = ([], [])
+            mock_ax2.plot.return_value = []
+            mock_plt.subplots.return_value = (mock_fig, mock_ax)
+            
             with patch('builtins.open', mock_open()):
                 result = await action.execute(
                     current_identifiers=['P001', 'P002'],
@@ -196,8 +218,16 @@ class TestVisualizeMappingFlowAction:
         
         action = VisualizeMappingFlowAction(mock_session)
         
-        # Simulate ImportError for matplotlib
-        with patch('biomapper.core.strategy_actions.visualize_mapping_flow.plt', side_effect=ImportError):
+        # Simulate ImportError for matplotlib by patching the import mechanism
+        import builtins
+        original_import = builtins.__import__
+        
+        def mock_import(name, *args, **kwargs):
+            if name == 'matplotlib.pyplot':
+                raise ImportError('matplotlib not available')
+            return original_import(name, *args, **kwargs)
+        
+        with patch('builtins.__import__', side_effect=mock_import):
             with patch('builtins.open', mock_open()) as mock_file:
                 result = await action.execute(
                     current_identifiers=['P001', 'P002'],

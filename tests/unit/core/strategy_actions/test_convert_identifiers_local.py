@@ -38,6 +38,8 @@ class TestConvertIdentifiersLocalAction:
         # Input config
         input_extraction = Mock(spec=PropertyExtractionConfig)
         input_extraction.column_name = "uniprot_id"
+        input_extraction.extraction_pattern = '{"column": "uniprot_id"}'
+        input_extraction.extraction_method = "column"
         
         input_config = Mock(spec=EndpointPropertyConfig)
         input_config.ontology_type = "PROTEIN_UNIPROT"
@@ -46,6 +48,8 @@ class TestConvertIdentifiersLocalAction:
         # Output config
         output_extraction = Mock(spec=PropertyExtractionConfig)
         output_extraction.column_name = "ensembl_id"
+        output_extraction.extraction_pattern = '{"column": "ensembl_id"}'
+        output_extraction.extraction_method = "column"
         
         output_config = Mock(spec=EndpointPropertyConfig)
         output_config.ontology_type = "PROTEIN_ENSEMBL"
@@ -198,7 +202,7 @@ class TestConvertIdentifiersLocalAction:
             assert result['input_identifiers'] == []
             assert result['output_identifiers'] == []
             assert result['provenance'] == []
-            assert result['details']['total_input'] == 0
+            assert result['details']['skipped'] == 'empty_input'
     
     @pytest.mark.asyncio
     async def test_empty_endpoint_data(self, mock_session, mock_endpoints, mock_property_configs):
@@ -312,7 +316,7 @@ class TestConvertIdentifiersLocalAction:
             )
             
             # Should use target endpoint
-            MockCSVAdapter.assert_called_with(target_endpoint)
+            MockCSVAdapter.assert_called_with(endpoint=target_endpoint)
             assert result['details']['endpoint_used'] == 'target_endpoint'
     
     @pytest.mark.asyncio
@@ -322,6 +326,7 @@ class TestConvertIdentifiersLocalAction:
         
         # Modify mock configs for different input type
         mock_property_configs[0].ontology_type = 'GENE_SYMBOL'
+        mock_property_configs[0].property_extraction_config.extraction_pattern = '{"column": "gene_symbol"}'
         
         # Setup mock session
         mock_result = Mock()

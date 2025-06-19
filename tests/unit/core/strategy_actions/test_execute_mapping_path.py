@@ -21,6 +21,15 @@ class MockMappingResultBundle:
     """Mock mapping result bundle for testing."""
     def __init__(self, results=None):
         self.results = results or {}
+    
+    def __contains__(self, key):
+        return key in self.results
+    
+    def __getitem__(self, key):
+        return self.results[key]
+    
+    def get(self, key, default=None):
+        return self.results.get(key, default)
 
 
 class TestExecuteMappingPathAction:
@@ -66,10 +75,22 @@ class TestExecuteMappingPathAction:
     @pytest.fixture
     def mock_mapping_result_bundle(self):
         """Create a mock mapping result bundle."""
-        # Create individual mapping results
-        result1 = MockMappingResult("P12345", "ENSP001", 0.95, "UniProt")
-        result2 = MockMappingResult("Q67890", "ENSP002", 0.90, "UniProt")
-        result3 = MockMappingResult("R11111", None, 0.0, None)  # Unmapped
+        # Create mapping result dictionaries as expected by the action
+        result1 = {
+            'target_identifiers': ['ENSP001'],
+            'confidence_score': 0.95,
+            'mapping_source': 'UniProt'
+        }
+        result2 = {
+            'target_identifiers': ['ENSP002'],
+            'confidence_score': 0.90,
+            'mapping_source': 'UniProt'
+        }
+        result3 = {
+            'target_identifiers': [],
+            'confidence_score': 0.0,
+            'mapping_source': None
+        }
         
         bundle = MockMappingResultBundle({
             "P12345": result1,
@@ -134,12 +155,13 @@ class TestExecuteMappingPathAction:
         
         # Verify executor was called correctly
         mock_mapping_executor._execute_path.assert_called_once_with(
-            path_id=1,
-            identifiers=['P12345', 'Q67890', 'R11111'],
-            is_reverse=False,
-            use_cache=True,
-            max_cache_age_days=7,
-            min_confidence=0.8
+            session=mock_session,
+            path=mock_mapping_path,
+            input_identifiers=['P12345', 'Q67890', 'R11111'],
+            source_ontology='PROTEIN_UNIPROT',
+            target_ontology='PROTEIN_ENSEMBL',
+            batch_size=250,
+            filter_confidence=0.8
         )
     
     @pytest.mark.asyncio
@@ -259,12 +281,13 @@ class TestExecuteMappingPathAction:
         
         # Verify executor was called with default cache settings
         mock_mapping_executor._execute_path.assert_called_once_with(
-            path_id=1,
-            identifiers=['P12345'],
-            is_reverse=False,
-            use_cache=True,  # Default
-            max_cache_age_days=None,  # Not specified
-            min_confidence=0.0  # Default
+            session=mock_session,
+            path=mock_mapping_path,
+            input_identifiers=['P12345'],
+            source_ontology='PROTEIN_UNIPROT',
+            target_ontology='PROTEIN_ENSEMBL',
+            batch_size=250,  # Default
+            filter_confidence=0.0  # Default
         )
     
     @pytest.mark.asyncio
@@ -279,8 +302,16 @@ class TestExecuteMappingPathAction:
         mock_session.execute.return_value = mock_result
         
         # Create result bundle with all unmapped
-        result1 = MockMappingResult("P12345", None, 0.0, None)
-        result2 = MockMappingResult("Q67890", None, 0.0, None)
+        result1 = {
+            'target_identifiers': [],
+            'confidence_score': 0.0,
+            'mapping_source': None
+        }
+        result2 = {
+            'target_identifiers': [],
+            'confidence_score': 0.0,
+            'mapping_source': None
+        }
         
         bundle = MockMappingResultBundle({
             "P12345": result1,
