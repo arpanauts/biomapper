@@ -254,8 +254,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             try:
                 from biomapper.monitoring.metrics import MetricsTracker
                 self._metrics_tracker = MetricsTracker(
-                    langfuse=self._langfuse_tracker
-                    langfuse=self._langfuse_tracker
+                    langfuse=self._langfuse_tracker,
                     langfuse_tracker=self._langfuse_tracker,
                     logger=self.logger
                 )
