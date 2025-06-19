@@ -15,14 +15,11 @@ import logging
 from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING
 from datetime import datetime, timezone
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from biomapper.core.exceptions import (
     ConfigurationError,
     MappingExecutionError,
-    StrategyNotFoundError,
-    InactiveStrategyError,
 )
 from biomapper.core.engine_components.action_executor import ActionExecutor
 
@@ -30,7 +27,6 @@ if TYPE_CHECKING:
     from biomapper.core.mapping_executor import MappingExecutor
     from biomapper.core.engine_components.strategy_handler import StrategyHandler
     from biomapper.core.engine_components.cache_manager import CacheManager
-    from biomapper.db.models import Endpoint, MappingStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -141,10 +137,17 @@ class StrategyOrchestrator:
                 if not target_endpoint:
                     raise ConfigurationError(f"Target endpoint '{target_endpoint_name}' not found")
             
+            # Initialize tracking variables
+            current_identifiers = input_identifiers.copy()
+            current_ontology_type = source_ontology_type or strategy.default_source_ontology_type or "UNKNOWN"
+            step_results = []
+            
             # Initialize strategy context
             strategy_context = initial_context or {}
             strategy_context.update({
                 'initial_identifiers': input_identifiers.copy(),
+                'current_identifiers': current_identifiers.copy(),
+                'current_ontology_type': current_ontology_type,
                 'step_results': [],
                 'all_provenance': [],
                 'mapping_results': {},
@@ -155,11 +158,6 @@ class StrategyOrchestrator:
                 'target_endpoint': target_endpoint.name if target_endpoint else None,
                 'initial_count': len(input_identifiers)
             })
-            
-            # Initialize tracking variables
-            current_identifiers = input_identifiers.copy()
-            current_ontology_type = source_ontology_type or strategy.default_source_ontology_type or "UNKNOWN"
-            step_results = []
             
             # Sort steps by order
             sorted_steps = sorted(strategy.steps, key=lambda s: s.step_order)

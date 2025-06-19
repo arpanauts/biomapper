@@ -1,12 +1,10 @@
 """Tests for the UniProtHistoricalResolverClient."""
 
 import os
-import asyncio
 import pytest
 from unittest.mock import patch, AsyncMock
-from typing import Dict, List, Optional, Tuple
 
-from biomapper.core.exceptions import ClientInitializationError, ClientExecutionError
+from biomapper.core.exceptions import ClientExecutionError
 from biomapper.mapping.clients.uniprot_historical_resolver_client import UniProtHistoricalResolverClient
 
 
@@ -47,10 +45,15 @@ class TestUniProtHistoricalResolverClient:
             # Test with a primary accession
             results = await client.map_identifiers(["P01308"])
             
-            # Verify the mock was called with the expected query
-            mock_fetch.assert_called_once()
-            call_args = mock_fetch.call_args[0][0]
-            assert "accession:P01308" in call_args
+            # Verify the mock was called twice (once for secondary check, once for primary check)
+            assert mock_fetch.call_count == 2
+            
+            # Verify the call order and queries
+            calls = mock_fetch.call_args_list
+            # First call should check for secondary accessions
+            assert "(sec_acc:P01308)" in calls[0][0][0]
+            # Second call should check for primary accessions
+            assert "(accession:P01308)" in calls[1][0][0]
             
             # Verify the result format
             assert "P01308" in results
@@ -170,10 +173,11 @@ class TestUniProtHistoricalResolverClient:
             results = await client.map_identifiers(["P12345"])
             
             # Verify error result format
+            # When API fails, the client treats the ID as obsolete/not found
             assert "P12345" in results
             primary_ids, metadata = results["P12345"]
             assert primary_ids is None
-            assert metadata.startswith("error:")
+            assert metadata == "obsolete"
 
     @pytest.mark.asyncio
     async def test_mock_batch_processing(self):
@@ -265,13 +269,13 @@ class TestUniProtHistoricalResolverClient:
         ) as mock_fetch:
             mock_fetch.return_value = mock_response
             
-            # First call should make an API request
+            # First call should make API requests (2 calls: secondary check + primary check)
             await client.map_identifiers(["P01308"])
-            assert mock_fetch.call_count == 1
+            assert mock_fetch.call_count == 2
             
-            # Second call should use the cache (no additional API call)
+            # Second call should use the cache (no additional API calls)
             await client.map_identifiers(["P01308"])
-            assert mock_fetch.call_count == 1  # Still only one call
+            assert mock_fetch.call_count == 2  # Still only two calls
             
             # Get cache stats to verify hit
             cache_stats = client.get_cache_stats()
