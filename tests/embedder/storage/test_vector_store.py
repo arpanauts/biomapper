@@ -236,14 +236,15 @@ class TestFAISSVectorStore:
         """Test IVFFlat index type (requires training)."""
         store = FAISSVectorStore(dimension=384, index_type="IVFFlat")
         
-        # Need enough data to train IVF index
+        # Need enough data to train IVF index (FAISS requires ~39 points per centroid)
+        # With 384 dimensions, nlist=96, so we need at least 96*39=3744 points
         np.random.seed(42)
-        embeddings = np.random.randn(100, 384).astype(np.float32)
-        ids = [f"item_{i}" for i in range(100)]
-        metadata = [{"name": f"Item {i}"} for i in range(100)]
+        embeddings = np.random.randn(4000, 384).astype(np.float32)
+        ids = [f"item_{i}" for i in range(4000)]
+        metadata = [{"name": f"Item {i}"} for i in range(4000)]
         
         store.add_embeddings(embeddings, ids, metadata)
-        assert store.get_size() == 100
+        assert store.get_size() == 4000
         
         # Test search
         results = store.search(embeddings[0], k=5)

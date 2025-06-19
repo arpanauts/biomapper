@@ -221,6 +221,12 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Initialize MappingPathExecutionService
         self.path_execution_service = MappingPathExecutionService(
+            logger=self.logger,
+            client_manager=self.client_manager,
+            cache_manager=self.cache_manager
+        
+        # Initialize MappingPathExecutionService
+        self.path_execution_service = MappingPathExecutionService(
             session_manager=self.session_manager,
             client_manager=self.client_manager,
             cache_manager=self.cache_manager,
@@ -249,9 +255,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             try:
                 from biomapper.monitoring.metrics import MetricsTracker
                 self._metrics_tracker = MetricsTracker(
-                    langfuse=self._langfuse_tracker,
-                    langfuse_tracker=self._langfuse_tracker,
-                    logger=self.logger
+                    langfuse=self._langfuse_tracker
                 )
             except ImportError:
                 self.logger.warning("MetricsTracker not available - langfuse module not installed")
@@ -265,7 +269,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         # Initialize StrategyExecutionService
         self.strategy_execution_service = StrategyExecutionService(
             strategy_orchestrator=self.strategy_orchestrator,
+            strategy_orchestrator=self.strategy_orchestrator,
             robust_execution_coordinator=self.robust_execution_coordinator,
+            logger=self.logger
             logger=self.logger
         )
         
