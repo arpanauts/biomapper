@@ -228,15 +228,6 @@ class MappingExecutor(CompositeIdentifierMixin):
         # Set executor reference for delegation
         self.path_execution_service.set_executor(self)
         
-        # Initialize MappingPathExecutionService
-        self.path_execution_service = MappingPathExecutionService(
-            logger=self.logger,
-            client_manager=self.client_manager,
-            cache_manager=self.cache_manager
-        )
-        # Set executor reference for delegation
-        self.path_execution_service.set_executor(self)
-        
         # Initialize RobustExecutionCoordinator
         self.robust_execution_coordinator = RobustExecutionCoordinator(
             strategy_orchestrator=self.strategy_orchestrator,
@@ -254,9 +245,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             try:
                 from biomapper.monitoring.metrics import MetricsTracker
                 self._metrics_tracker = MetricsTracker(
-                    langfuse=self._langfuse_tracker,
-                    langfuse_tracker=self._langfuse_tracker,
-                    logger=self.logger
+                    langfuse=self._langfuse_tracker
                 )
             except ImportError:
                 self.logger.warning("MetricsTracker not available - langfuse module not installed")
@@ -269,12 +258,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Initialize StrategyExecutionService
         self.strategy_execution_service = StrategyExecutionService(
-            logger=self.logger,
-            config_loader=self.config_loader,
+            strategy_orchestrator=self.strategy_orchestrator,
             robust_execution_coordinator=self.robust_execution_coordinator,
-            session_manager=self.session_manager,
-            identifier_loader=self.identifier_loader,
-            progress_reporter=self.progress_reporter,
+            logger=self.logger
         )
         
         self.logger.info("MappingExecutor initialization complete")

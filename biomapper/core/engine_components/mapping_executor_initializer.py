@@ -26,6 +26,7 @@ from .checkpoint_manager import CheckpointManager
 from .progress_reporter import ProgressReporter
 
 from ..exceptions import BiomapperError, ErrorCode
+from sqlalchemy import inspect
 from biomapper.config import settings
 
 # Import models for cache DB
@@ -318,8 +319,8 @@ class MappingExecutorInitializer:
             mapping_executor: The fully initialized MappingExecutor instance
         """
         if self.path_execution_manager:
-            # Set function references - use client_manager.get_client_instance instead of _load_client
-            self.path_execution_manager._load_client = mapping_executor.client_manager.get_client_instance
+            # Set function references
+            self.path_execution_manager._load_client = getattr(mapping_executor, '_load_client', None)
             self.path_execution_manager._execute_mapping_step = getattr(mapping_executor, '_execute_mapping_step', None)
             self.path_execution_manager._calculate_confidence_score = getattr(mapping_executor, '_calculate_confidence_score', self.path_execution_manager._calculate_confidence_score)
             self.path_execution_manager._create_mapping_path_details = getattr(mapping_executor, '_create_mapping_path_details', self.path_execution_manager._create_mapping_path_details)
@@ -328,6 +329,58 @@ class MappingExecutorInitializer:
                 self.path_execution_manager.track_mapping_metrics = getattr(mapping_executor, 'track_mapping_metrics', None)
     
     
+    async def _init_db_tables(self, engine, metadata):
+        """Initialize database tables using the provided engine and metadata.
+        
+        Args:
+            engine: The SQLAlchemy async engine
+            metadata: The SQLAlchemy metadata object containing table definitions
+            
+        Raises:
+            BiomapperError: If database table initialization fails
+        """
+        try:
+            self.logger.debug(f"Checking if tables exist in database: {engine.url}")
+            
+            # Check if tables already exist
+            async with engine.connect() as connection:
+                def check_tables_exist(connection):
+                    # Check if any tables from our metadata exist
+                    try:
+                        # Simple check - try to get table names
+                        inspector = inspect(connection)
+                        existing_tables = inspector.get_table_names()
+                        metadata_tables = [table.name for table in metadata.tables.values()]
+                        
+                        # Return True if any of our tables already exist
+                        return any(table in existing_tables for table in metadata_tables)
+                    except Exception:
+                        # If inspection fails, assume tables don't exist
+                        return False
+                
+                tables_exist = await connection.run_sync(check_tables_exist)
+                
+                if tables_exist:
+                    self.logger.debug("Database tables already exist, skipping creation")
+                    return
+                    
+            self.logger.info("Creating database tables...")
+            async with engine.begin() as connection:
+                await connection.run_sync(metadata.create_all)
+                
+            self.logger.info("Database tables initialized successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize database tables: {str(e)}", exc_info=True)
+            raise BiomapperError(
+                f"Failed to initialize database tables: {str(e)}",
+                error_code=ErrorCode.DATABASE_INITIALIZATION_ERROR,
+                details={
+                    "database_url": str(engine.url),
+                    "error": str(e)
+                }
+            ) from e
+
     async def create_executor(self):
         """Asynchronously create and initialize a MappingExecutor instance.
         
