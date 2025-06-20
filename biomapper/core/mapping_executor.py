@@ -28,6 +28,9 @@ from biomapper.core.exceptions import (
 
 # Import new strategy handling modules
 from biomapper.core.engine_components.reversible_path import ReversiblePath
+
+# Import services
+from biomapper.core.services import IterativeMappingService
 from biomapper.core.engine_components.checkpoint_manager import CheckpointManager
 from biomapper.core.engine_components.progress_reporter import ProgressReporter
 from biomapper.core.services.metadata_query_service import MetadataQueryService
@@ -229,16 +232,8 @@ class MappingExecutor(CompositeIdentifierMixin):
             logger=self.logger
         )
         
-        # Initialize MappingPathExecutionService
-        self.path_execution_service = MappingPathExecutionService(
-            session_manager=self.session_manager,
-            client_manager=self.client_manager,
-            cache_manager=self.cache_manager,
-            path_finder=self.path_finder,
-            path_execution_manager=self.path_execution_manager,
-            composite_handler=self,  # MappingExecutor implements composite handling
-            logger=self.logger
-        )
+        # Initialize IterativeMappingService
+        self.iterative_mapping_service = IterativeMappingService(logger=self.logger)
         
         # Set executor reference for delegation
         self.path_execution_service.set_executor(self)
@@ -869,228 +864,42 @@ class MappingExecutor(CompositeIdentifierMixin):
                         else:
                             self.logger.info("Direct primary path execution yielded no new mappings.")
 
-                # --- 3 & 4. Identify Unmapped Entities & Attempt Secondary -> Primary Conversion ---
-                self.logger.info("--- Steps 3 & 4: Identifying Unmapped Entities & Attempting Secondary -> Primary Conversion ---")
+                # --- 3, 4, & 5. Iterative Secondary Mapping ---
+                self.logger.info("--- Steps 3, 4, & 5: Performing Iterative Secondary Mapping ---")
                 secondary_start = time.time()
                 unmapped_ids_step3 = list(original_input_ids_set - processed_ids) # IDs not mapped by cache or Step 2
                 
-                # Initialize tracking for derived primary IDs - needed regardless of whether step 3 & 4 are executed
-                derived_primary_ids = {}  # Will store {source_id: {'primary_id': derived_id, 'provenance': details}}
-
-                if not unmapped_ids_step3:
-                    self.logger.info("All input identifiers successfully mapped or handled in previous steps. Skipping Steps 3 & 4.")
-                else:
-                    self.logger.info(f"Found {len(unmapped_ids_step3)} identifiers remaining for Steps 3 & 4: {unmapped_ids_step3[:10]}...")
-
-                    # --- 3a. Find and prioritize available secondary ontology types ---
-                    # Get all available secondary properties for the source endpoint
-                    all_properties = await self._get_endpoint_properties(meta_session, source_endpoint_name)
-                    
-                    # Filter to only secondary properties (those with different ontology than primary)
-                    secondary_properties = [prop for prop in all_properties 
-                                           if prop.property_name != source_property_name 
-                                           and prop.ontology_type 
-                                           and prop.ontology_type != primary_source_ontology]
-                    
-                    if not secondary_properties:
-                        self.logger.warning(f"No suitable secondary properties/ontologies found for source endpoint '{source_endpoint_name}' (excluding primary '{source_property_name}' / '{primary_source_ontology}'). Skipping Steps 3 & 4.")
-                    else:
-                        # Get ontology preferences for the source endpoint to prioritize secondary types
-                        preferences = await self._get_ontology_preferences(meta_session, source_endpoint_name)
-                        
-                        # Sort secondary properties by preference priority (or use order by ID if no preference found)
-                        if preferences:
-                            # Create a mapping of ontology_type to priority from preferences
-                            priority_map = {pref.ontology_name: pref.priority for pref in preferences}
-                            # Sort secondary properties by priority (lower number = higher priority)
-                            secondary_properties.sort(key=lambda prop: priority_map.get(prop.ontology_type, 999))
-                            self.logger.info(f"Sorted {len(secondary_properties)} secondary properties by endpoint preference priority.")
-                        else:
-                            self.logger.info(f"No ontology preferences found for '{source_endpoint_name}'. Using default property order.")
-                            
-                        # Initialize tracking for derived primary IDs
-                        derived_primary_ids = {}  # Will store {source_id: {'primary_id': derived_id, 'provenance': details}}
-                        
-                        # --- 4. Iterate through secondary types for each unmapped entity ---
-                        for secondary_prop in secondary_properties:
-                            # Skip processing if all IDs now have derived primaries
-                            unmapped_ids_without_derived = [uid for uid in unmapped_ids_step3 if uid not in derived_primary_ids]
-                            if not unmapped_ids_without_derived:
-                                self.logger.info("All unmapped identifiers now have derived primary IDs. Skipping remaining secondary properties.")
-                                break
-                                
-                            secondary_source_ontology = secondary_prop.ontology_type
-                            secondary_source_property_name = secondary_prop.property_name
-                            
-                            self.logger.info(f"Processing secondary property '{secondary_source_property_name}' with ontology type '{secondary_source_ontology}'")
-                            self.logger.info(f"Remaining unmapped entities without derived primaries: {len(unmapped_ids_without_derived)}")
-                            
-                            # Find a path that converts this secondary ontology to primary source ontology
-                            # This is different from before - we're looking for Secondary -> PRIMARY SOURCE (not target)
-                            secondary_to_primary_path = await self._find_best_path(
-                                meta_session,
-                                secondary_source_ontology,  # From secondary source ontology
-                                primary_source_ontology,    # To primary SOURCE ontology (not target)
-                                preferred_direction=mapping_direction,
-                                allow_reverse=try_reverse_mapping,
-                            )
-                            
-                            if not secondary_to_primary_path:
-                                self.logger.warning(f"No mapping path found from secondary ontology {secondary_source_ontology} to primary source ontology {primary_source_ontology}. Trying next secondary property.")
-                                continue  # Try next secondary property
-                                
-                            self.logger.info(f"Found secondary-to-primary path: {secondary_to_primary_path.name} (ID: {secondary_to_primary_path.id})")
-                            self.logger.info(f"Executing secondary-to-primary conversion for {len(unmapped_ids_without_derived)} identifiers.")
-                            
-                            # Execute this path to convert secondary -> primary source
-                            conversion_results = await self._execute_path(
-                                meta_session,
-                                secondary_to_primary_path,
-                                unmapped_ids_without_derived,
-                                secondary_source_ontology,  # Start with secondary
-                                primary_source_ontology,    # Convert to primary source
-                                mapping_session_id=mapping_session_id,
-                                batch_size=batch_size,
-                                max_hop_count=max_hop_count,
-                                filter_confidence=min_confidence,
-                                max_concurrent_batches=max_concurrent_batches
-                            )
-                            
-                            # Process results - for each successfully converted ID, store the derived primary
-                            if conversion_results:
-                                num_newly_derived = 0
-                                for source_id, result_data in conversion_results.items():
-                                    if result_data and result_data.get("target_identifiers"):
-                                        # Store the derived primary ID(s) for this source ID
-                                        derived_primary_ids[source_id] = {
-                                            "primary_ids": result_data["target_identifiers"],
-                                            "provenance": {
-                                                "derived_from": secondary_source_ontology,
-                                                "via_path": secondary_to_primary_path.name,
-                                                "path_id": secondary_to_primary_path.id,
-                                                "confidence": result_data.get("confidence_score", 0.0),
-                                            }
-                                        }
-                                        num_newly_derived += 1
-                                        
-                                self.logger.info(f"Derived primary IDs for {num_newly_derived} entities using {secondary_source_ontology} -> {primary_source_ontology} conversion.")
-                            else:
-                                self.logger.info(f"No primary IDs derived from {secondary_source_ontology} -> {primary_source_ontology} conversion.")
-                                
-                        self.logger.info(f"Secondary-to-primary conversion complete. Derived primary IDs for {len(derived_primary_ids)}/{len(unmapped_ids_step3)} unmapped entities.")
-
-                # --- 5. Re-attempt Direct Primary Mapping using derived primary IDs ---
-                self.logger.info("--- Step 5: Re-attempting Direct Primary Mapping using derived primary IDs ---")
+                # Use the IterativeMappingService to handle the complex iterative mapping logic
+                iterative_results = await self.iterative_mapping_service.perform_iterative_mapping(
+                    unmapped_ids=unmapped_ids_step3,
+                    source_endpoint_name=source_endpoint_name,
+                    target_endpoint_name=target_endpoint_name,
+                    primary_source_ontology=primary_source_ontology,
+                    primary_target_ontology=primary_target_ontology,
+                    source_property_name=source_property_name,
+                    primary_path=primary_path,
+                    meta_session=meta_session,
+                    mapping_executor=self,
+                    mapping_session_id=mapping_session_id,
+                    mapping_direction=mapping_direction,
+                    try_reverse_mapping=try_reverse_mapping,
+                    use_cache=use_cache,
+                    max_cache_age_days=max_cache_age_days,
+                    batch_size=batch_size,
+                    max_concurrent_batches=max_concurrent_batches,
+                    max_hop_count=max_hop_count,
+                    min_confidence=min_confidence,
+                )
                 
-                # Check if we have any derived primary IDs to process
-                if not derived_primary_ids:
-                    self.logger.info("No derived primary IDs available. Skipping Step 5.")
-                else:
-                    self.logger.info(f"Re-attempting primary mapping using derived IDs for {len(derived_primary_ids)} entities.")
-                    
-                    # Check if we have a primary path to execute
-                    if not primary_path:
-                        self.logger.warning(f"No direct mapping path from {primary_source_ontology} to {primary_target_ontology} available for Step 5.")
-                    else:
-                        # Process each derived ID separately as they may have different primary IDs
-                        for source_id, derived_data in derived_primary_ids.items():
-                            if source_id in processed_ids:
-                                # Skip if this ID was already successfully mapped somewhere
-                                continue
-                                
-                            derived_primary_id_list = derived_data["primary_ids"]
-                            provenance_info = derived_data["provenance"]
-                            
-                            # For each derived primary ID, attempt the mapping to target
-                            for derived_primary_id in derived_primary_id_list:
-                                self.logger.debug(f"Attempting mapping for {source_id} using derived primary ID {derived_primary_id}")
-                                
-                                # --- CORRECTED CACHE CHECK for the derived_primary_id ---
-                                cached_derived_mapping = None
-                                if use_cache:
-                                    self.logger.debug(f"Checking cache for derived ID: {derived_primary_id} ({primary_source_ontology}) -> {primary_target_ontology}")
-                                    # Calculate expiry time if max_cache_age_days is specified
-                                    expiry_time = None
-                                    if max_cache_age_days is not None:
-                                        expiry_time = datetime.now(timezone.utc) - timedelta(days=max_cache_age_days)
-                                    
-                                    cache_results_for_derived, _ = await self.cache_manager.check_cache(
-                                        input_identifiers=[derived_primary_id],
-                                        source_ontology=primary_source_ontology,
-                                        target_ontology=primary_target_ontology,
-                                        expiry_time=expiry_time
-                                    )
-                                    if cache_results_for_derived and derived_primary_id in cache_results_for_derived:
-                                        cached_derived_mapping = cache_results_for_derived[derived_primary_id]
-                                        self.logger.info(f"Cache hit for derived ID {derived_primary_id} -> {cached_derived_mapping.get('target_identifiers')}")
-
-                                # Initialize derived_mapping_results_for_current_id
-                                derived_mapping_results_for_current_id = None
-
-                                if cached_derived_mapping:
-                                    # Use the cached result directly
-                                    derived_mapping_results_for_current_id = {derived_primary_id: cached_derived_mapping}
-                                elif primary_path: # Only execute path if no cache hit and primary_path exists
-                                    self.logger.debug(f"Cache miss or not used for derived ID {derived_primary_id}. Executing primary_path.")
-                                    derived_mapping_results_for_current_id = await self._execute_path(
-                                        meta_session,
-                                        primary_path,
-                                        [derived_primary_id],  # Just the single derived ID
-                                        primary_source_ontology,
-                                        primary_target_ontology,
-                                        mapping_session_id=mapping_session_id,
-                                        batch_size=batch_size, 
-                                        max_hop_count=max_hop_count,
-                                        filter_confidence=min_confidence,
-                                        max_concurrent_batches=max_concurrent_batches
-                                    )
-                                else:
-                                    self.logger.debug(f"No primary_path available to execute for derived ID {derived_primary_id}. Skipping execution for this ID.")
-                                
-                                # Process results - connect back to original source ID
-                                if derived_mapping_results_for_current_id and derived_primary_id in derived_mapping_results_for_current_id:
-                                    result_data = derived_mapping_results_for_current_id[derived_primary_id]
-                                    if result_data and result_data.get("target_identifiers"):
-                                        source_result = {
-                                            "source_identifier": source_id,
-                                            "target_identifiers": result_data["target_identifiers"],
-                                            "status": PathExecutionStatus.SUCCESS.value,
-                                            "message": f"Mapped via derived primary ID {derived_primary_id}" + (" (from cache)" if cached_derived_mapping else ""),
-                                            "confidence_score": result_data.get("confidence_score", 0.5) * 0.9,  # Slightly lower confidence for indirect mapping
-                                            "hop_count": (result_data.get("hop_count", 0) + 1 if result_data.get("hop_count") is not None else 2), # Add a hop for derivation; ensure hop_count exists
-                                            "mapping_direction": result_data.get("mapping_direction", "forward"),
-                                            "derived_path": True,
-                                            "intermediate_id": derived_primary_id,
-                                            "mapping_path_details": result_data.get("mapping_path_details")
-                                        }
-
-                                        current_path_details_str = source_result.get("mapping_path_details")
-                                        new_path_details = {}
-                                        if isinstance(current_path_details_str, str):
-                                            try:
-                                                new_path_details = json.loads(current_path_details_str)
-                                            except json.JSONDecodeError:
-                                                self.logger.warning(f"Could not parse path_details JSON from mapping result: {current_path_details_str}")
-                                                new_path_details = {"original_mapping_step_details": current_path_details_str}
-                                        elif isinstance(current_path_details_str, dict):
-                                            new_path_details = current_path_details_str
-                                        elif current_path_details_str is None:
-                                            new_path_details = {}
-                                        else:
-                                            self.logger.warning(f"Unexpected type for path_details: {type(current_path_details_str)}. Storing as string.")
-                                            new_path_details = {"original_mapping_step_details": str(current_path_details_str)}
-                                            
-                                        new_path_details["derived_step_provenance"] = provenance_info
-                                        source_result["mapping_path_details"] = json.dumps(new_path_details)
-                                        
-                                        successful_mappings[source_id] = source_result
-                                        processed_ids.add(source_id)
-                                        self.logger.debug(f"Successfully mapped {source_id} to {source_result['target_identifiers']} via derived ID {derived_primary_id}")
-                                        break  # Stop processing additional derived IDs for this source_id once we have a success
-                            
-                        # Log summary of indirect mapping results
-                        newly_mapped = len([sid for sid in derived_primary_ids.keys() if sid in processed_ids])
-                        self.logger.info(f"Indirect mapping using derived primary IDs successfully mapped {newly_mapped}/{len(derived_primary_ids)} additional entities.")
+                # Unpack the results from the iterative mapping service
+                iterative_successful_mappings, iterative_processed_ids, derived_primary_ids = iterative_results
+                
+                # Merge the results back into the main tracking variables
+                successful_mappings.update(iterative_successful_mappings)
+                processed_ids.update(iterative_processed_ids)
+                
+                # Log timing for iterative mapping
+                self.logger.info(f"TIMING: iterative secondary mapping took {time.time() - secondary_start:.3f}s")
 
                 # --- 6. Bidirectional Validation (if requested) ---
                 if validate_bidirectional:

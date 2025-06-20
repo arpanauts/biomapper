@@ -1,29 +1,5 @@
-"""Services package for centralized business logic."""
+"""Core services for biomapper."""
 
-from .mapping_path_execution_service import MappingPathExecutionService
-from .metadata_query_service import MetadataQueryService
-from .execution_trace_logger import ExecutionTraceLogger
+from .iterative_mapping_service import IterativeMappingService
 
-__all__ = [
-    "MappingPathExecutionService",
-    "MetadataQueryService", 
-    "ExecutionTraceLogger"
-]
-
-from .strategy_execution_service import StrategyExecutionService
-from .metadata_query_service import MetadataQueryService
-
-__all__ = [
-    "StrategyExecutionService",
-    "MetadataQueryService",
-]
-
-from .mapping_path_execution_service import MappingPathExecutionService
-from .metadata_query_service import MetadataQueryService
-from .execution_trace_logger import ExecutionTraceLogger
-
-__all__ = [
-    "MappingPathExecutionService",
-    "MetadataQueryService", 
-    "ExecutionTraceLogger"
-]
+__all__ = ["IterativeMappingService"]
