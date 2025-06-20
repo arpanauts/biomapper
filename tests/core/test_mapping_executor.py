@@ -947,7 +947,7 @@ async def test_execute_mapping_step_generic_exception(mapping_executor):
         assert exc_info.value.error_code == ErrorCode.CLIENT_EXECUTION_ERROR
 
         # Verify the mock client was called correctly
-        mock_client.map_identifiers.assert_called_once_with(["ID1", "ID2"])
+        mock_client.map_identifiers.assert_called_once_with(["ID1", "ID2"], config=None)
 
 
 @pytest.mark.asyncio
