@@ -33,6 +33,7 @@ from biomapper.core.engine_components.progress_reporter import ProgressReporter
 from biomapper.core.services.metadata_query_service import MetadataQueryService
 from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
 from biomapper.core.services.strategy_execution_service import StrategyExecutionService
+from biomapper.core.services.execution_lifecycle_service import ExecutionLifecycleService
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
 from biomapper.core.engine_components.robust_execution_coordinator import RobustExecutionCoordinator
 
@@ -242,6 +243,13 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Set executor reference for delegation
         self.path_execution_service.set_executor(self)
+        
+        # Initialize ExecutionLifecycleService
+        self.lifecycle_service = ExecutionLifecycleService(
+            checkpoint_manager=self.checkpoint_manager,
+            progress_reporter=self.progress_reporter,
+            metrics_manager=self._langfuse_tracker
+        )
         
         # Initialize RobustExecutionCoordinator
         self.robust_execution_coordinator = RobustExecutionCoordinator(
@@ -2463,8 +2471,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         Args:
             callback: Function that takes a progress dict as argument
         """
-        self.progress_reporter.add_callback(callback)
-        self.checkpoint_manager.add_progress_callback(callback)
+        self.lifecycle_service.add_progress_callback(callback)
     
     
     async def execute_with_retry(
@@ -2491,7 +2498,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         for attempt in range(self.max_retries):
             try:
                 # Report attempt
-                self.progress_reporter.report({
+                await self.lifecycle_service.report_progress({
                     'type': 'retry_attempt',
                     'operation': operation_name,
                     'attempt': attempt + 1,
@@ -2522,7 +2529,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         self.logger.error(f"{error_msg}: {last_error}")
         
         # Report failure
-        self.progress_reporter.report({
+        await self.lifecycle_service.report_progress({
             'type': 'retry_exhausted',
             'operation': operation_name,
             'attempts': self.max_retries,
@@ -2589,15 +2596,17 @@ class MappingExecutor(CompositeIdentifierMixin):
             )
             
             # Report batch start
-            self.progress_reporter.report({
-                'type': 'batch_start',
-                'processor': processor_name,
-                'batch_num': batch_num,
-                'total_batches': total_batches,
-                'batch_size': len(batch),
-                'total_processed': processed_count + i,
-                'total_count': total_count
-            })
+            await self.lifecycle_service.report_batch_progress(
+                batch_number=batch_num,
+                total_batches=total_batches,
+                items_processed=processed_count + i,
+                total_items=total_count,
+                batch_metadata={
+                    'type': 'batch_start',
+                    'processor': processor_name,
+                    'batch_size': len(batch)
+                }
+            )
             
             try:
                 # Process batch with retry
@@ -2629,19 +2638,25 @@ class MappingExecutor(CompositeIdentifierMixin):
                             if key not in checkpoint_data:
                                 checkpoint_data[key] = value
                                 
-                    await self.checkpoint_manager.save_checkpoint(execution_id, checkpoint_data)
+                    await self.lifecycle_service.save_batch_checkpoint(
+                        execution_id=execution_id,
+                        batch_number=batch_num,
+                        batch_state=checkpoint_data,
+                        checkpoint_metadata={'processor': processor_name}
+                    )
                 
                 # Report batch completion
-                self.progress_reporter.report({
-                    'type': 'batch_complete',
-                    'processor': processor_name,
-                    'batch_num': batch_num,
-                    'total_batches': total_batches,
-                    'batch_results': len(batch_results),
-                    'total_processed': current_processed,
-                    'total_count': total_count,
-                    'progress_percent': (current_processed / total_count * 100)
-                })
+                await self.lifecycle_service.report_batch_progress(
+                    batch_number=batch_num,
+                    total_batches=total_batches,
+                    items_processed=current_processed,
+                    total_items=total_count,
+                    batch_metadata={
+                        'type': 'batch_complete',
+                        'processor': processor_name,
+                        'batch_results': len(batch_results)
+                    }
+                )
                 
             except Exception as e:
                 self.logger.error(
@@ -2649,7 +2664,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                 )
                 
                 # Report batch failure
-                self.progress_reporter.report({
+                await self.lifecycle_service.report_progress({
                     'type': 'batch_failed',
                     'processor': processor_name,
                     'batch_num': batch_num,
@@ -2728,7 +2743,14 @@ class MappingExecutor(CompositeIdentifierMixin):
             execution_id: Unique identifier for the execution
             checkpoint_data: Data to save in the checkpoint
         """
-        return self.checkpoint_manager.save_checkpoint(execution_id, checkpoint_data)
+        # Create an async task to save checkpoint
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If we're already in an async context, create a task
+            asyncio.create_task(self.lifecycle_service.save_checkpoint(execution_id, checkpoint_data))
+        else:
+            # Otherwise, run it synchronously
+            loop.run_until_complete(self.lifecycle_service.save_checkpoint(execution_id, checkpoint_data))
 
     def load_checkpoint(self, execution_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -2740,7 +2762,14 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Checkpoint data if found, None otherwise
         """
-        return self.checkpoint_manager.load_checkpoint(execution_id)
+        # Create an async task to load checkpoint
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Can't await in sync context when loop is running
+            # Return None for now, async version should be used
+            return None
+        else:
+            return loop.run_until_complete(self.lifecycle_service.load_checkpoint(execution_id))
 
     def _report_progress(self, progress_data: Dict[str, Any]):
         """
@@ -2749,7 +2778,12 @@ class MappingExecutor(CompositeIdentifierMixin):
         Args:
             progress_data: Progress information to report
         """
-        return self.progress_reporter.report(progress_data)
+        # Create an async task to report progress
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.create_task(self.lifecycle_service.report_progress(progress_data))
+        else:
+            loop.run_until_complete(self.lifecycle_service.report_progress(progress_data))
     
     # Checkpoint-related delegate methods for backward compatibility
     
@@ -2761,7 +2795,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             execution_id: Unique identifier for the execution
             checkpoint_data: Data to save in the checkpoint
         """
-        await self.checkpoint_manager.save_checkpoint(execution_id, checkpoint_data)
+        await self.lifecycle_service.save_checkpoint(execution_id, checkpoint_data)
     
     async def load_checkpoint(self, execution_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -2773,16 +2807,16 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Checkpoint data if found, None otherwise
         """
-        return await self.checkpoint_manager.load_checkpoint(execution_id)
+        return await self.lifecycle_service.load_checkpoint(execution_id)
     
-    def _report_progress(self, progress_data: Dict[str, Any]):
+    async def _report_progress(self, progress_data: Dict[str, Any]):
         """
         Report progress to registered callbacks.
         
         Args:
             progress_data: Progress information to report
         """
-        self.progress_reporter.report(progress_data)
+        await self.lifecycle_service.report_progress(progress_data)
     
     # Client delegate methods
     
@@ -2793,17 +2827,17 @@ class MappingExecutor(CompositeIdentifierMixin):
     @property
     def checkpoint_dir(self):
         """Get the checkpoint directory path."""
-        return self.checkpoint_manager.checkpoint_dir
+        return self.lifecycle_service.get_checkpoint_directory()
     
     @checkpoint_dir.setter
     def checkpoint_dir(self, value):
         """Set the checkpoint directory path."""
-        if hasattr(self.checkpoint_manager, 'checkpoint_dir'):
-            from pathlib import Path
-            if value is not None:
-                self.checkpoint_manager.checkpoint_dir = Path(value)
-                self.checkpoint_manager.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-                self.checkpoint_manager.checkpoint_enabled = True
-            else:
-                self.checkpoint_manager.checkpoint_dir = None
-                self.checkpoint_manager.checkpoint_enabled = False
+        from pathlib import Path
+        if value is not None:
+            self.lifecycle_service.set_checkpoint_directory(Path(value))
+            # Ensure directory exists
+            Path(value).mkdir(parents=True, exist_ok=True)
+            self.checkpoint_enabled = True
+        else:
+            self.lifecycle_service.set_checkpoint_directory(None)
+            self.checkpoint_enabled = False
