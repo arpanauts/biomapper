@@ -1,5 +1,8 @@
-"""Services package for centralized business logic."""
+"""Core services for biomapper."""
 
+from .iterative_mapping_service import IterativeMappingService
+
+__all__ = ["IterativeMappingService"]
 from .database_setup_service import DatabaseSetupService
 from .execution_trace_logger import ExecutionTraceLogger
 from .mapping_path_execution_service import MappingPathExecutionService
