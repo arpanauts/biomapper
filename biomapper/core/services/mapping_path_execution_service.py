@@ -44,6 +44,7 @@ class MappingPathExecutionService:
         path_finder,
         path_execution_manager,
         composite_handler,
+        step_execution_service=None,
         logger: Optional[logging.Logger] = None
     ):
         """
@@ -56,6 +57,7 @@ class MappingPathExecutionService:
             path_finder: Path finding service
             path_execution_manager: Path execution service
             composite_handler: Composite identifier handler
+            step_execution_service: Optional MappingStepExecutionService for step execution
             logger: Optional logger instance
         """
         self.session_manager = session_manager
@@ -64,6 +66,7 @@ class MappingPathExecutionService:
         self.path_finder = path_finder
         self.path_execution_manager = path_execution_manager
         self.composite_handler = composite_handler
+        self.step_execution_service = step_execution_service
         self.logger = logger or logging.getLogger(__name__)
         # Store reference to executor for _execute_mapping_step delegation
         self._executor = None
@@ -213,11 +216,19 @@ class MappingPathExecutionService:
                             input_values_for_step = list(step_input_ids)
                             self.logger.info(f"EXEC_PATH_DEBUG ({path.name}): Step '{step.id}', inputs: {input_values_for_step}")
                             
-                            step_results = await self._executor._execute_mapping_step(
-                                step=step,
-                                input_values=input_values_for_step,
-                                is_reverse=is_reverse_execution
-                            )
+                            # Use step execution service if available, otherwise fall back to executor
+                            if self.step_execution_service:
+                                step_results = await self.step_execution_service.execute_step(
+                                    step=step,
+                                    input_values=input_values_for_step,
+                                    is_reverse=is_reverse_execution
+                                )
+                            else:
+                                step_results = await self._executor._execute_mapping_step(
+                                    step=step,
+                                    input_values=input_values_for_step,
+                                    is_reverse=is_reverse_execution
+                                )
                             
                             self.logger.info(f"EXEC_PATH_DEBUG ({path.name}): Step '{step.id}', step_results: {step_results}")
                             

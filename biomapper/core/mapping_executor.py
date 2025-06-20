@@ -32,6 +32,7 @@ from biomapper.core.engine_components.checkpoint_manager import CheckpointManage
 from biomapper.core.engine_components.progress_reporter import ProgressReporter
 from biomapper.core.services.metadata_query_service import MetadataQueryService
 from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
+from biomapper.core.services.mapping_step_execution_service import MappingStepExecutionService
 from biomapper.core.services.strategy_execution_service import StrategyExecutionService
 from biomapper.core.services.result_aggregation_service import ResultAggregationService
 from biomapper.core.services.bidirectional_validation_service import BidirectionalValidationService
@@ -228,6 +229,13 @@ class MappingExecutor(CompositeIdentifierMixin):
         # Initialize DirectMappingService
         self.direct_mapping_service = DirectMappingService(logger=self.logger)
         
+        # Initialize MappingStepExecutionService
+        self.step_execution_service = MappingStepExecutionService(
+            client_manager=self.client_manager,
+            cache_manager=self.cache_manager,
+            logger=self.logger
+        )
+        
         # Initialize MappingPathExecutionService with all required arguments
         self.path_execution_service = MappingPathExecutionService(
             session_manager=self.session_manager,
@@ -236,17 +244,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             path_finder=self.path_finder,
             path_execution_manager=self.path_execution_manager,
             composite_handler=self,  # MappingExecutor implements composite handling
-            logger=self.logger
-        )
-        
-        # Initialize MappingPathExecutionService
-        self.path_execution_service = MappingPathExecutionService(
-            session_manager=self.session_manager,
-            client_manager=self.client_manager,
-            cache_manager=self.cache_manager,
-            path_finder=self.path_finder,
-            path_execution_manager=self.path_execution_manager,
-            composite_handler=self,  # MappingExecutor implements composite handling
+            step_execution_service=self.step_execution_service,
             logger=self.logger
         )
         
@@ -497,170 +495,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Dictionary mapping input IDs to tuples: (list of output IDs, successful source component ID or None)
         """
-        step_start = time.time()
-        self.logger.debug(f"TIMING: _execute_mapping_step started for {len(input_values)} identifiers")
-        
-        try:
-            client_load_start = time.time()
-            client_instance = await self.client_manager.get_client_instance(step.mapping_resource)
-            self.logger.debug(f"TIMING: get_client_instance took {time.time() - client_load_start:.3f}s")
-        except ClientInitializationError:
-            # Propagate initialization errors directly
-            raise
-
-        try:
-            if not is_reverse:
-                # Normal forward execution
-                self.logger.debug(
-                    f"_execute_mapping_step calling {client_instance.__class__.__name__}.map_identifiers with {len(input_values)} identifiers."
-                )
-                if len(input_values) < 10:
-                    self.logger.debug(f"  Input sample: {input_values}")
-                else:
-                    self.logger.debug(f"  Input sample: {input_values[:10]}...")
-                # map_identifiers is expected to return the rich dictionary:
-                # {'primary_ids': [...], 'input_to_primary': {in:out}, 'errors': [...]}
-                # This needs to be converted to Dict[str, Tuple[Optional[List[str]], Optional[str]]]
-                mapping_start = time.time()
-                # Check if we should bypass cache for specific clients
-                client_config = None
-                if (hasattr(client_instance, '__class__') and 
-                    client_instance.__class__.__name__ == 'UniProtHistoricalResolverClient' and
-                    os.environ.get('BYPASS_UNIPROT_CACHE', '').lower() == 'true'):
-                    self.logger.info("Bypassing cache for UniProtHistoricalResolverClient")
-                    client_config = {'bypass_cache': True}
-                
-                client_results_from_map_identifiers = await client_instance.map_identifiers(input_values, config=client_config)
-                self.logger.debug(f"TIMING: client.map_identifiers took {time.time() - mapping_start:.3f}s")
-            
-                processed_step_results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
-            
-                # Iterate through the results from the client
-                # client_results_from_map_identifiers is Dict[str, Tuple[Optional[List[str]], Optional[str_metadata]]]
-                for input_id, client_tuple in client_results_from_map_identifiers.items():
-                    mapped_ids_list, _ = client_tuple # metadata_or_component_id is the second part
-                
-                    # _execute_mapping_step is documented to return:
-                    # Dict[input_ID, Tuple[Optional[List[output_IDs]], Optional[successful_source_component_ID]]]
-                    # We will pass the mapped_ids_list as is.
-                    # The metadata from UniProtHistoricalResolver (e.g., "primary") is not a structural component_id.
-                    # So, pass None for the component_id part of the tuple here.
-                    if mapped_ids_list:
-                        processed_step_results[input_id] = (mapped_ids_list, None) 
-                    else:
-                        # Client indicated no mapping or an error for this specific ID in its structure
-                        processed_step_results[input_id] = (None, None)
-
-                # Ensure all original input_values passed to the step have an entry in the output
-                # This handles cases where an input_id might not even be in client_results_from_map_identifiers' keys
-                for val in input_values:
-                    if val not in processed_step_results:
-                        processed_step_results[val] = (None, None)
-                self.logger.debug(f"TIMING: _execute_mapping_step completed in {time.time() - step_start:.3f}s")
-                return processed_step_results
-            else:
-                # Reverse execution - try specialized reverse method first
-                if hasattr(client_instance, "reverse_map_identifiers"):
-                    self.logger.debug(
-                        f"Using specialized reverse_map_identifiers method for {step.mapping_resource.name}"
-                    )
-                    client_results_dict = await client_instance.reverse_map_identifiers(
-                        input_values
-                    )
-                    # client_results_dict is in the rich format:
-                    # {'primary_ids': [...], 'input_to_primary': {in_id: out_id}, 'errors': [{'input_id': ...}]}
-                    
-                    # Expected output format for _execute_mapping_step is:
-                    # Dict[str, Tuple[Optional[List[str]], Optional[str]]]
-                    # i.e., Dict[original_input_id, ([mapped_ids_for_this_input], successful_component_if_any)]
-                    
-                    processed_step_results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
-                    
-                    successful_mappings = client_results_dict.get('input_to_primary', {})
-                    for input_id, mapped_primary_id in successful_mappings.items():
-                        # The format is ([mapped_id], None) where None is for component_id (not applicable here)
-                        processed_step_results[input_id] = ([mapped_primary_id], None) 
-                    
-                    errors_list = client_results_dict.get('errors', [])
-                    for error_detail in errors_list:
-                        error_input_id = error_detail.get('input_id')
-                        if error_input_id:
-                            processed_step_results[error_input_id] = (None, None)
-                            
-                    # Ensure all original input_values passed to the step have an entry in the output
-                    for val in input_values:
-                        if val not in processed_step_results:
-                            # Default to no mapping if not covered by success or error from client
-                            processed_step_results[val] = (None, None) 
-                    self.logger.debug(f"TIMING: _execute_mapping_step (reverse) completed in {time.time() - step_start:.3f}s")
-                    return processed_step_results
-
-                # Fall back to inverting the results of forward mapping
-                # NOTE: Conceptual issue here if map_identifiers expects source-type IDs
-                # and input_values are target-type IDs.
-                self.logger.info(
-                    f"Executing reverse mapping for {step.mapping_resource.name} by inverting forward results"
-                )
-                # client_instance.map_identifiers is expected to return the rich structure.
-                forward_results_dict = await client_instance.map_identifiers(input_values)
-
-                # Now invert the mapping (target_id → [source_id])
-                # The output of _execute_mapping_step should be Dict[str, Tuple[Optional[List[str]], Optional[str]]]
-                # where the key is the *original input_id to this step* (which are target_ids in this context)
-                inverted_results: Dict[str, Tuple[Optional[List[str]], Optional[str]]] = {}
-                
-                # Iterate through successful forward mappings from the client's perspective:
-                # {source_id_of_client_map: target_id_of_client_map}
-                for client_source_id, client_target_id in forward_results_dict.get('input_to_primary', {}).items():
-                    # We are interested if this client_target_id is one of the IDs we are trying to map from (i.e., in input_values)
-                    if client_target_id in input_values:
-                        if client_target_id not in inverted_results:
-                            inverted_results[client_target_id] = ([], None)
-                        # Ensure the list is not None before appending
-                        if inverted_results[client_target_id][0] is not None:
-                             inverted_results[client_target_id][0].append(client_source_id)
-                        else: # Should not happen if initialized with ([], None)
-                             inverted_results[client_target_id] = ([client_source_id], None)
-            
-                # Add empty results (None, None) for step's input_values that didn't appear as a target in the forward map
-                for original_step_input_id in input_values:
-                    if original_step_input_id not in inverted_results:
-                        inverted_results[original_step_input_id] = (None, None)
-                
-                return inverted_results
-
-        except ClientError as ce:  # Catch specific client errors if raised by client
-            self.logger.error(
-                f"ClientError during execution step for {step.mapping_resource.name}: {ce}",
-                exc_info=False, # Only log the exception message unless debug is high
-            )
-
-            # Ensure details is always a dictionary
-            details_dict = (
-                ce.details
-                if isinstance(ce.details, dict)
-                else {"error_message": str(ce.details)}
-            )
-
-            raise ClientExecutionError(
-                f"Client error during step execution: {ce.message}",
-                client_name=step.mapping_resource.name,
-                details=details_dict,
-                error_code=ErrorCode.CLIENT_EXECUTION_ERROR,
-            ) from ce
-        except (
-            Exception
-        ) as e:  # Fallback for other unexpected errors during client execution
-            error_details = {"original_exception": str(e)}
-            self.logger.error(
-                f"Unexpected error during execution step for {step.mapping_resource.name}: {e}",
-                exc_info=True,
-            )
-            raise ClientExecutionError(
-                "Unexpected error during step execution",
-                client_name=step.mapping_resource.name,
-                details=error_details,
-            ) from e
+        # Delegate to the dedicated service
+        return await self.step_execution_service.execute_step(step, input_values, is_reverse)
 
 
 
