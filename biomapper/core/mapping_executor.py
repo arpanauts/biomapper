@@ -33,6 +33,7 @@ from biomapper.core.engine_components.progress_reporter import ProgressReporter
 from biomapper.core.services.metadata_query_service import MetadataQueryService
 from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
 from biomapper.core.services.strategy_execution_service import StrategyExecutionService
+from biomapper.core.services.result_aggregation_service import ResultAggregationService
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
 from biomapper.core.engine_components.robust_execution_coordinator import RobustExecutionCoordinator
 
@@ -277,6 +278,9 @@ class MappingExecutor(CompositeIdentifierMixin):
             robust_execution_coordinator=self.robust_execution_coordinator,
             logger=self.logger
         )
+        
+        # Initialize ResultAggregationService
+        self.result_aggregation_service = ResultAggregationService(logger=self.logger)
         
         self.logger.info("MappingExecutor initialization complete")
 
@@ -1155,67 +1159,46 @@ class MappingExecutor(CompositeIdentifierMixin):
 
                 # --- 7. Aggregate Results & Finalize ---
                 self.logger.info("--- Step 7: Aggregating final results ---")
-                final_results = successful_mappings
                 
-                # Add nulls for any original inputs that were never successfully processed
-                unmapped_count = 0
-                for input_id in original_input_ids_set:
-                    if input_id not in processed_ids:
-                        # Use a consistent structure for not found/mapped
-                        final_results[input_id] = {
-                            "source_identifier": input_id,
-                            "target_identifiers": None,
-                            "status": PathExecutionStatus.NO_MAPPING_FOUND.value,
-                            "message": "No successful mapping found via direct or secondary paths.",
-                            "confidence_score": 0.0,
-                            "mapping_path_details": None,
-                            "hop_count": None,
-                            "mapping_direction": None,
-                        }
-                        unmapped_count += 1
+                # Use ResultAggregationService to aggregate results
+                final_results = self.result_aggregation_service.aggregate_mapping_results(
+                    successful_mappings=successful_mappings,
+                    original_input_ids=input_identifiers,
+                    processed_ids=processed_ids,
+                    strategy_name="execute_mapping",
+                    source_ontology_type=source_endpoint_name,
+                    target_ontology_type=target_endpoint_name,
+                )
                 
-                self.logger.info(f"Mapping finished. Successfully processed {len(processed_ids)}/{len(original_input_ids_set)} inputs. ({unmapped_count} unmapped)")
                 return final_results
                 
         except BiomapperError as e:
             # Logged within specific steps or helpers typically
             self.logger.error(f"Biomapper Error during mapping execution: {e}", exc_info=True)
-            # Return partial results + indicate error
-            final_results = {**successful_mappings}
-            error_count = 0
-            for input_id in original_input_ids_set:
-                if input_id not in processed_ids:
-                    final_results[input_id] = {
-                        "source_identifier": input_id,
-                        "target_identifiers": None,
-                        "status": PathExecutionStatus.ERROR.value,
-                        "message": f"Mapping failed due to error: {e}",
-                        # Add error details if possible/safe
-                        "confidence_score": 0.0,
-                        "mapping_direction": None,
-                    }
-                    error_count += 1
-            self.logger.warning(f"Returning partial results due to error. {error_count} inputs potentially affected.")
+            
+            # Use ResultAggregationService to aggregate error results
+            final_results = self.result_aggregation_service.aggregate_error_results(
+                successful_mappings=successful_mappings,
+                original_input_ids=input_identifiers,
+                processed_ids=processed_ids,
+                error=e,
+                error_status=PathExecutionStatus.ERROR,
+            )
+            
             return final_results
             
         except Exception as e:
             self.logger.exception("Unhandled exception during mapping execution.")
-            # Re-raise as a generic mapping error? Or return error structure?
-            # For now, return error structure for all non-processed IDs
-            final_results = {**successful_mappings}
-            error_count = 0
-            for input_id in original_input_ids_set:
-                if input_id not in processed_ids:
-                    final_results[input_id] = {
-                        "source_identifier": input_id,
-                        "target_identifiers": None,
-                        "status": PathExecutionStatus.ERROR.value,
-                        "message": f"Unexpected error during mapping: {e}",
-                        "confidence_score": 0.0,
-                        "mapping_direction": None,
-                    }
-                    error_count += 1
-            self.logger.error(f"Unhandled exception affected {error_count} inputs.")
+            
+            # Use ResultAggregationService to aggregate error results
+            final_results = self.result_aggregation_service.aggregate_error_results(
+                successful_mappings=successful_mappings,
+                original_input_ids=input_identifiers,
+                processed_ids=processed_ids,
+                error=e,
+                error_status=PathExecutionStatus.ERROR,
+            )
+            
             return final_results
             
         finally:
