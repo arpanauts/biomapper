@@ -33,6 +33,7 @@ from biomapper.core.engine_components.progress_reporter import ProgressReporter
 from biomapper.core.services.metadata_query_service import MetadataQueryService
 from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
 from biomapper.core.services.strategy_execution_service import StrategyExecutionService
+from biomapper.core.services.bidirectional_validation_service import BidirectionalValidationService
 from biomapper.core.services.direct_mapping_service import DirectMappingService
 from biomapper.core.services.execution_lifecycle_service import ExecutionLifecycleService
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
@@ -219,6 +220,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Initialize MetadataQueryService
         self.metadata_query_service = MetadataQueryService(self.session_manager)
+        
+        # Initialize BidirectionalValidationService
+        self.bidirectional_validation_service = BidirectionalValidationService()
         
         # Initialize DirectMappingService
         self.direct_mapping_service = DirectMappingService(logger=self.logger)
@@ -1084,64 +1088,22 @@ class MappingExecutor(CompositeIdentifierMixin):
 
                 # --- 6. Bidirectional Validation (if requested) ---
                 if validate_bidirectional:
-                    self.logger.info("--- Step 6: Performing Bidirectional Validation ---")
-                    
-                    # Skip if no successful mappings to validate
-                    if not successful_mappings:
-                        self.logger.info("No successful mappings to validate. Skipping bidirectional validation.")
-                    else:
-                        # Extract all target IDs that need validation
-                        target_ids_to_validate = set()
-                        for result in successful_mappings.values():
-                            if result and result.get("target_identifiers"):
-                                target_ids_to_validate.update(result["target_identifiers"])
-                        
-                        self.logger.info(f"Found {len(target_ids_to_validate)} unique target IDs to validate")
-                        
-                        # Find a reverse mapping path from target back to source
-                        primary_source_ontology = await self._get_ontology_type(
-                            meta_session, source_endpoint_name, source_property_name
-                        )
-                        primary_target_ontology = await self._get_ontology_type(
-                            meta_session, target_endpoint_name, target_property_name
-                        )
-                        
-                        self.logger.info(f"Step 1: Finding reverse mapping path from {primary_target_ontology} back to {primary_source_ontology}...")
-                        reverse_path = await self._find_best_path(
-                            meta_session,
-                            primary_target_ontology,  # Using target as source
-                            primary_source_ontology,  # Using source as target
-                            preferred_direction="forward",  # We want a direct T->S path
-                            allow_reverse=True,  # Allow using S->T paths in reverse if needed
-                            source_endpoint=target_endpoint,  # Note: swapped for reverse
-                            target_endpoint=source_endpoint,  # Note: swapped for reverse
-                        )
-                        
-                        if not reverse_path:
-                            self.logger.warning(f"No reverse mapping path found from {primary_target_ontology} to {primary_source_ontology}. Validation incomplete.")
-                        else:
-                            self.logger.info(f"Step 2: Found reverse path: {reverse_path.name} (id={reverse_path.id})")
-                            
-                            # Execute reverse mapping
-                            self.logger.info("Step 3: Reverse mapping from target to source...")
-                            reverse_results = await self._execute_path(
-                                meta_session,
-                                reverse_path,
-                                list(target_ids_to_validate),
-                                primary_target_ontology,
-                                primary_source_ontology,
-                                mapping_session_id=mapping_session_id,
-                                batch_size=batch_size,
-                                max_concurrent_batches=max_concurrent_batches,
-                                filter_confidence=min_confidence
-                            )
-                            
-                            # Now enrich successful_mappings with validation status
-                            self.logger.info("Step 4: Reconciling bidirectional mappings...")
-                            successful_mappings = await self._reconcile_bidirectional_mappings(
-                                successful_mappings,
-                                reverse_results
-                            )
+                    # Delegate to the BidirectionalValidationService
+                    successful_mappings = await self.bidirectional_validation_service.validate_mappings(
+                        mapping_executor=self,
+                        meta_session=meta_session,
+                        successful_mappings=successful_mappings,
+                        source_endpoint_name=source_endpoint_name,
+                        target_endpoint_name=target_endpoint_name,
+                        source_property_name=source_property_name,
+                        target_property_name=target_property_name,
+                        source_endpoint=source_endpoint,
+                        target_endpoint=target_endpoint,
+                        mapping_session_id=mapping_session_id,
+                        batch_size=batch_size,
+                        max_concurrent_batches=max_concurrent_batches,
+                        min_confidence=min_confidence
+                    )
 
                 # --- 7. Aggregate Results & Finalize ---
                 self.logger.info("--- Step 7: Aggregating final results ---")
@@ -1328,93 +1290,6 @@ class MappingExecutor(CompositeIdentifierMixin):
             max_concurrent_batches=max_concurrent_batches
         )
 
-    async def _reconcile_bidirectional_mappings(
-        self,
-        forward_mappings: Dict[str, Dict[str, Any]],
-        reverse_results: Dict[str, Dict[str, Any]]
-    ) -> Dict[str, Dict[str, Any]]:
-        """
-        Enrich forward mappings with bidirectional validation status.
-        
-        Instead of filtering, this adds validation status information to each mapping
-        that succeeded in the primary S->T direction.
-        
-        Args:
-            forward_mappings: Dictionary of source_id -> mapping_result from forward mapping
-            reverse_results: Dictionary of target_id -> reverse_mapping_result from reverse mapping
-            
-        Returns:
-            Dictionary of enriched source_id -> mapping_result with validation status added
-        """
-        validated_count = 0
-        unidirectional_count = 0
-        
-        target_to_sources = {} # Stores target_id -> set of all source_ids it can reverse map to
-        for target_id, rev_res_item in reverse_results.items():
-            if rev_res_item and rev_res_item.get("target_identifiers"):
-                all_reverse_mapped_to_source_ids = set(rev_res_item["target_identifiers"])
-                
-                # Handle Arivale ID components in reverse mapped IDs
-                # If client returns "INF_P12345", ensure "P12345" is also considered.
-                current_set_copy = set(all_reverse_mapped_to_source_ids) # Iterate over a copy
-                for rs_id in current_set_copy:
-                    if any(rs_id.startswith(p) for p in ('INF_', 'CAM_', 'CVD_', 'CVD2_', 'DEV_')):
-                        parts = rs_id.split('_', 1)
-                        if len(parts) > 1:
-                            all_reverse_mapped_to_source_ids.add(parts[1]) # Add the UniProt part
-            
-                target_to_sources[target_id] = all_reverse_mapped_to_source_ids
-    
-        enriched_mappings = {}
-        for source_id, fwd_res_item in forward_mappings.items():
-            enriched_result = fwd_res_item.copy()
-            
-            if not fwd_res_item or not fwd_res_item.get("target_identifiers"):
-                enriched_result["validation_status"] = "Successful (NoFwdTarget)"
-                unidirectional_count += 1
-            else:
-                forward_mapped_target_ids = fwd_res_item["target_identifiers"]
-                current_status_for_source = None
-
-                for target_id_from_fwd_map in forward_mapped_target_ids:
-                    if target_id_from_fwd_map in target_to_sources: # This forward target has reverse mapping data
-                        all_possible_reverse_sources_for_target = target_to_sources[target_id_from_fwd_map]
-                        
-                        if source_id in all_possible_reverse_sources_for_target: # Original source_id is among them
-                            primary_reverse_mapped_id = reverse_results.get(target_id_from_fwd_map, {}).get("mapped_value")
-                            
-                            # Normalize primary_reverse_mapped_id if it's an Arivale ID
-                            normalized_primary_reverse_id = primary_reverse_mapped_id
-                            if primary_reverse_mapped_id and any(primary_reverse_mapped_id.startswith(p) for p in ('INF_', 'CAM_', 'CVD_', 'CVD2_', 'DEV_')):
-                                parts = primary_reverse_mapped_id.split('_', 1)
-                                if len(parts) > 1:
-                                    normalized_primary_reverse_id = parts[1]
-
-                            if normalized_primary_reverse_id == source_id:
-                                current_status_for_source = "Validated"
-                            else:
-                                current_status_for_source = "Validated (Ambiguous)"
-                            break # Found validation status for this source_id
-            
-                if current_status_for_source:
-                    enriched_result["validation_status"] = current_status_for_source
-                    validated_count += 1
-                else: # No validation path found to the original source_id
-                    any_fwd_target_had_reverse_data = any(tid in target_to_sources for tid in forward_mapped_target_ids)
-                    if any_fwd_target_had_reverse_data:
-                        enriched_result["validation_status"] = "Successful"
-                    else:
-                        enriched_result["validation_status"] = "Successful (NoReversePath)"
-                    unidirectional_count += 1
-            
-            # Add this entry to the enriched_mappings dictionary
-            enriched_mappings[source_id] = enriched_result
-    
-        self.logger.info(
-            f"Validation status: {validated_count} validated (bidirectional), "
-            f"{unidirectional_count} successful (one-directional only)"
-        )
-        return enriched_mappings
 
     async def execute_strategy(
         self,
