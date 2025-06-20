@@ -33,6 +33,7 @@ from biomapper.core.engine_components.progress_reporter import ProgressReporter
 from biomapper.core.services.metadata_query_service import MetadataQueryService
 from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
 from biomapper.core.services.strategy_execution_service import StrategyExecutionService
+from biomapper.core.services.direct_mapping_service import DirectMappingService
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
 from biomapper.core.engine_components.robust_execution_coordinator import RobustExecutionCoordinator
 
@@ -217,6 +218,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         
         # Initialize MetadataQueryService
         self.metadata_query_service = MetadataQueryService(self.session_manager)
+        
+        # Initialize DirectMappingService
+        self.direct_mapping_service = DirectMappingService(logger=self.logger)
         
         # Initialize MappingPathExecutionService with all required arguments
         self.path_execution_service = MappingPathExecutionService(
@@ -812,62 +816,40 @@ class MappingExecutor(CompositeIdentifierMixin):
                 self.logger.info(f"TIMING: endpoint configuration took {time.time() - config_start:.3f}s")
 
                 # --- 2. Attempt Direct Primary Mapping (Source Ontology -> Target Ontology) ---
-                self.logger.info("--- Step 2: Attempting Direct Primary Mapping ---")
-                path_find_start = time.time()
-                primary_path = await self._find_best_path(
-                    meta_session,
-                    primary_source_ontology,
-                    primary_target_ontology,
-                    preferred_direction=mapping_direction,
-                    allow_reverse=try_reverse_mapping,
+                # Use the DirectMappingService to handle this step
+                direct_mapping_result = await self.direct_mapping_service.execute_direct_mapping(
+                    meta_session=meta_session,
+                    path_finder=self.path_finder,
+                    path_executor=self,
+                    primary_source_ontology=primary_source_ontology,
+                    primary_target_ontology=primary_target_ontology,
+                    original_input_ids_set=original_input_ids_set,
+                    processed_ids=processed_ids,
+                    successful_mappings=successful_mappings,
+                    mapping_direction=mapping_direction,
+                    try_reverse_mapping=try_reverse_mapping,
                     source_endpoint=source_endpoint,
                     target_endpoint=target_endpoint,
+                    mapping_session_id=mapping_session_id,
+                    batch_size=batch_size,
+                    max_hop_count=max_hop_count,
+                    min_confidence=min_confidence,
+                    max_concurrent_batches=max_concurrent_batches
                 )
-                self.logger.info(f"TIMING: _find_best_path took {time.time() - path_find_start:.3f}s")
-
-                if not primary_path:
-                    self.logger.warning(
-                        f"No direct primary mapping path found from {primary_source_ontology} to {primary_target_ontology}."
+                
+                # Store the primary path reference for potential use in step 5
+                primary_path = None
+                if direct_mapping_result["path_found"]:
+                    # We need to retrieve the path object for later use in step 5
+                    primary_path = await self._find_best_path(
+                        meta_session,
+                        primary_source_ontology,
+                        primary_target_ontology,
+                        preferred_direction=mapping_direction,
+                        allow_reverse=try_reverse_mapping,
+                        source_endpoint=source_endpoint,
+                        target_endpoint=target_endpoint,
                     )
-                else:
-                    self.logger.info(f"Found direct primary path: {primary_path.name} (ID: {primary_path.id})")
-                    # Determine which IDs need processing (not found in cache)
-                    ids_to_process_step2 = list(original_input_ids_set - processed_ids)
-                    if not ids_to_process_step2:
-                         self.logger.info("All relevant identifiers already processed via cache. Skipping Step 2 execution.")
-                    else:
-                        self.logger.info(f"Executing direct primary path for {len(ids_to_process_step2)} identifiers.")
-                        path_exec_start = time.time()
-                        primary_results_details = await self._execute_path(
-                            meta_session,
-                            primary_path,
-                            ids_to_process_step2, # Process only those not found in cache yet
-                            primary_source_ontology,
-                            primary_target_ontology,
-                            mapping_session_id=mapping_session_id,
-                            batch_size=batch_size,
-                            max_hop_count=max_hop_count,
-                            filter_confidence=min_confidence,
-                            max_concurrent_batches=max_concurrent_batches
-                        )
-                        self.logger.info(f"TIMING: _execute_path took {time.time() - path_exec_start:.3f}s")
-
-                        # Process results from direct path
-                        if primary_results_details:
-                            num_newly_mapped = 0
-                            for source_id, result_data in primary_results_details.items():
-                                # Ensure result_data is not None and contains target_identifiers
-                                if result_data and result_data.get("target_identifiers") is not None:
-                                    if source_id not in successful_mappings:
-                                        successful_mappings[source_id] = result_data
-                                        processed_ids.add(source_id)
-                                        num_newly_mapped += 1
-                                    else:
-                                        # Handle potential updates or conflicts if needed, though cache should prevent this
-                                        self.logger.debug(f"Identifier {source_id} already mapped, skipping update from direct path.")
-                            self.logger.info(f"Direct primary path execution mapped {num_newly_mapped} additional identifiers.")
-                        else:
-                            self.logger.info("Direct primary path execution yielded no new mappings.")
 
                 # --- 3 & 4. Identify Unmapped Entities & Attempt Secondary -> Primary Conversion ---
                 self.logger.info("--- Steps 3 & 4: Identifying Unmapped Entities & Attempting Secondary -> Primary Conversion ---")
