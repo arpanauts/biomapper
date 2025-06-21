@@ -266,12 +266,12 @@ class CacheManager:
                         continue
                     
                     # Calculate confidence score
-                    confidence_score = self._calculate_confidence_score(result, hop_count, is_reversed, path_step_details)
+                    confidence_score = self.calculate_confidence_score(result, hop_count, is_reversed, path_step_details)
                     
                     self.logger.debug(f"Source: {source_id}, Hops: {hop_count}, Reversed: {is_reversed}, Confidence: {confidence_score}")
                     
                     # Create mapping_path_details JSON with complete path information
-                    mapping_path_details_dict = self._create_mapping_path_details(
+                    mapping_path_details_dict = self.create_mapping_path_details(
                         path_id=path_id,
                         path_name=path_name,
                         hop_count=hop_count,
@@ -289,7 +289,7 @@ class CacheManager:
                     # Create entity mapping for each valid target identifier
                     for target_id in valid_target_ids:
                         # Determine mapping source based on path details
-                        source_type = self._determine_mapping_source(path_step_details)
+                        source_type = self.determine_mapping_source(path_step_details)
                         
                         entity_mapping = EntityMapping(
                             source_id=str(source_id),  # Correct field name
