@@ -6,8 +6,8 @@ to validate the initial results. It encapsulates the logic previously embedded
 in the MappingExecutor.execute_mapping method.
 """
 
+import logging
 from typing import Dict, Any, Set, Optional
-from loguru import logger
 
 
 class BidirectionalValidationService:
@@ -19,7 +19,7 @@ class BidirectionalValidationService:
     """
     
     def __init__(self) -> None:
-        self.logger = logger
+        self.logger = logging.getLogger(__name__)
     
     async def validate_mappings(
         self,

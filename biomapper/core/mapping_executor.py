@@ -43,6 +43,11 @@ from biomapper.core.services.direct_mapping_service import DirectMappingService
 from biomapper.core.services.execution_lifecycle_service import ExecutionLifecycleService
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
 from biomapper.core.engine_components.robust_execution_coordinator import RobustExecutionCoordinator
+from biomapper.core.services.execution_services import (
+    IterativeExecutionService,
+    DbStrategyExecutionService,
+    YamlStrategyExecutionService,
+)
 
 # Import utilities
 from biomapper.core.utils.placeholder_resolver import resolve_placeholders
@@ -359,6 +364,31 @@ class MappingExecutor(CompositeIdentifierMixin):
         # Initialize ResultAggregationService
         self.result_aggregation_service = ResultAggregationService(logger=self.logger)
         
+        # Initialize the new execution services
+        self.iterative_execution_service = IterativeExecutionService(
+            direct_mapping_service=self.direct_mapping_service,
+            iterative_mapping_service=self.iterative_mapping_service,
+            bidirectional_validation_service=self.bidirectional_validation_service,
+            result_aggregation_service=self.result_aggregation_service,
+            path_finder=self.path_finder,
+            composite_handler=self._composite_handler,
+            async_metamapper_session=self.async_metamapper_session,
+            metadata_query_service=self.metadata_query_service,
+            logger=self.logger,
+        )
+        # Set the executor reference
+        self.iterative_execution_service.set_executor(self)
+        
+        self.db_strategy_execution_service = DbStrategyExecutionService(
+            strategy_execution_service=self.strategy_execution_service,
+            logger=self.logger,
+        )
+        
+        self.yaml_strategy_execution_service = YamlStrategyExecutionService(
+            strategy_orchestrator=self.strategy_orchestrator,
+            logger=self.logger,
+        )
+        
         self.logger.info("MappingExecutor initialization complete")
 
     
@@ -438,375 +468,80 @@ class MappingExecutor(CompositeIdentifierMixin):
         source_endpoint_name: str,
         target_endpoint_name: str,
         input_identifiers: List[str] = None,
-        input_data: List[str] = None, # Preferred input parameter
+        input_data: List[str] = None,
         source_property_name: str = "PrimaryIdentifier",
         target_property_name: str = "PrimaryIdentifier",
-        source_ontology_type: str = None,  # Optional: provide source ontology directly
-        target_ontology_type: str = None,  # Optional: provide target ontology directly
+        source_ontology_type: str = None,
+        target_ontology_type: str = None,
         use_cache: bool = True,
         max_cache_age_days: Optional[int] = None,
-        mapping_direction: str = "forward", # Primarily for initial path finding bias
-        try_reverse_mapping: bool = False, # Allows using reversed path if no forward found
-        validate_bidirectional: bool = False, # Validates forward mappings by testing reverse mapping
-        progress_callback: Optional[callable] = None, # Callback function for reporting progress
-        batch_size: int = 250,  # Number of identifiers to process in each batch
-        max_concurrent_batches: Optional[int] = None,  # Maximum number of batches to process concurrently
-        max_hop_count: Optional[int] = None,  # Maximum number of hops to allow in paths
-        min_confidence: float = 0.0,  # Minimum confidence score to accept
-        enable_metrics: Optional[bool] = None,  # Whether to enable metrics tracking
+        mapping_direction: str = "forward",
+        try_reverse_mapping: bool = False,
+        validate_bidirectional: bool = False,
+        progress_callback: Optional[callable] = None,
+        batch_size: int = 250,
+        max_concurrent_batches: Optional[int] = None,
+        max_hop_count: Optional[int] = None,
+        min_confidence: float = 0.0,
+        enable_metrics: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """
         Execute a mapping process based on endpoint configurations, using an iterative strategy.
 
-        Steps:
+        This method delegates to the IterativeExecutionService for the actual execution logic.
+        The service handles:
         1. Attempt direct mapping using the primary shared ontology.
         2. Identify unmapped entities.
-        3. For unmapped entities, attempt to convert secondary identifiers to the primary shared ontology based on priority. (To be implemented next)
-        4. Re-attempt direct mapping using derived primary identifiers. (To be implemented next)
+        3. For unmapped entities, attempt to convert secondary identifiers to the primary shared ontology.
+        4. Re-attempt direct mapping using derived primary identifiers.
         5. Aggregate results.
 
-        :param source_endpoint_name: Source endpoint name
-        :param target_endpoint_name: Target endpoint name
-        :param input_identifiers: List of identifiers to map (deprecated, use input_data instead)
-        :param input_data: List of identifiers to map (preferred parameter)
-        :param source_property_name: Property name defining the primary ontology type for the source endpoint
-        :param target_property_name: Property name defining the primary ontology type for the target endpoint
-        :param use_cache: Whether to check the cache before executing mapping steps
-        :param max_cache_age_days: Maximum age of cached results to use (None = no limit)
-        :param mapping_direction: The preferred direction ('forward' or 'reverse') - influences path selection but strategy remains the same.
-        :param try_reverse_mapping: Allows using a reversed path if no forward path found in direct/indirect steps.
-        :param validate_bidirectional: If True, validates forward mappings by running a reverse mapping and checking if target IDs map back to their source.
-        :param progress_callback: Optional callback function for reporting progress (signature: callback(current: int, total: int, status: str))
-        :return: Dictionary with mapping results, including provenance and validation status when bidirectional validation is enabled.
+        Args:
+            source_endpoint_name: Source endpoint name
+            target_endpoint_name: Target endpoint name
+            input_identifiers: List of identifiers to map (deprecated, use input_data instead)
+            input_data: List of identifiers to map (preferred parameter)
+            source_property_name: Property name defining the primary ontology type for the source endpoint
+            target_property_name: Property name defining the primary ontology type for the target endpoint
+            source_ontology_type: Optional source ontology type override
+            target_ontology_type: Optional target ontology type override
+            use_cache: Whether to check the cache before executing mapping steps
+            max_cache_age_days: Maximum age of cached results to use (None = no limit)
+            mapping_direction: The preferred direction ('forward' or 'reverse')
+            try_reverse_mapping: Allows using a reversed path if no forward path found
+            validate_bidirectional: If True, validates forward mappings by testing reverse mapping
+            progress_callback: Optional callback function for reporting progress
+            batch_size: Number of identifiers to process in each batch
+            max_concurrent_batches: Maximum number of batches to process concurrently
+            max_hop_count: Maximum number of hops to allow in paths
+            min_confidence: Minimum confidence score to accept
+            enable_metrics: Whether to enable metrics tracking
+
+        Returns:
+            Dictionary with mapping results, including provenance and validation status
         """
-        # --- Input Handling ---
-        if input_data is not None and input_identifiers is None:
-            input_identifiers = input_data
-        elif input_identifiers is None and input_data is None:
-            self.logger.warning("No input identifiers provided for mapping.")
-            return {} # Return empty if no input
-        # Ensure it's a list even if None was passed initially
-        input_identifiers = input_identifiers if input_identifiers is not None else []
-
-        # Use a set for efficient lookup and to handle potential duplicates in input
-        original_input_ids_set = set(input_identifiers)
-        successful_mappings = {}  # Store successfully mapped {input_id: result_details}
-        processed_ids = set() # Track IDs processed in any successful step (cache hit or execution)
-        final_results = {} # Initialize final results
-        
-        # Initialize progress tracking variables
-        total_ids = len(original_input_ids_set)
-        current_progress = 0
-        
-        # Report initial progress if callback provided
-        if progress_callback:
-            progress_callback(current_progress, total_ids, "Starting mapping process")
-
-        # Set default parameter values from class attributes if not provided
-        if max_concurrent_batches is None:
-            max_concurrent_batches = getattr(self, "max_concurrent_batches", 5)
-        
-        if enable_metrics is None:
-            enable_metrics = getattr(self, "enable_metrics", True)
-            
-        # Start overall execution performance tracking
-        overall_start_time = time.time()
-        self.logger.info(f"TIMING: execute_mapping started for {len(original_input_ids_set)} identifiers")
-        
-        # --- 0. Initial Setup --- Create a mapping session for logging ---
-        setup_start = time.time()
-        mapping_session_id = await self._create_mapping_session_log(
-            source_endpoint_name, target_endpoint_name, source_property_name,
-            target_property_name, use_cache, try_reverse_mapping, len(original_input_ids_set),
-            max_cache_age_days=max_cache_age_days
+        return await self.iterative_execution_service.execute(
+            source_endpoint_name=source_endpoint_name,
+            target_endpoint_name=target_endpoint_name,
+            input_identifiers=input_identifiers,
+            input_data=input_data,
+            source_property_name=source_property_name,
+            target_property_name=target_property_name,
+            source_ontology_type=source_ontology_type,
+            target_ontology_type=target_ontology_type,
+            use_cache=use_cache,
+            max_cache_age_days=max_cache_age_days,
+            mapping_direction=mapping_direction,
+            try_reverse_mapping=try_reverse_mapping,
+            validate_bidirectional=validate_bidirectional,
+            progress_callback=progress_callback,
+            batch_size=batch_size,
+            max_concurrent_batches=max_concurrent_batches,
+            max_hop_count=max_hop_count,
+            min_confidence=min_confidence,
+            enable_metrics=enable_metrics,
+            mapping_executor=self,  # Pass self as the mapping_executor for callbacks
         )
-        self.logger.info(f"TIMING: mapping session setup took {time.time() - setup_start:.3f}s")
-
-        try:
-            # --- 1. Get Endpoint Config and Primary Ontologies ---
-            config_start = time.time()
-            async with self.async_metamapper_session() as meta_session:
-                self.logger.info(
-                    f"Executing mapping: {source_endpoint_name}.{source_property_name} -> {target_endpoint_name}.{target_property_name}"
-                )
-                
-                # --- Check for composite identifiers and handle if needed ---
-                # Skip composite handling for this optimization test
-                self._composite_initialized = True
-                # if not self._composite_initialized:
-                #     await self._initialize_composite_handler(meta_session)
-                
-                # Get the primary source ontology type (needed to check for composite patterns)
-                primary_source_ontology = await self._get_ontology_type(
-                    meta_session, source_endpoint_name, source_property_name
-                )
-                
-                # Check if composite identifier handling is needed for this ontology type
-                if self._composite_handler.has_patterns_for_ontology(primary_source_ontology):
-                    self.logger.info(f"Detected potential composite identifiers for ontology type '{primary_source_ontology}'")
-                    
-                    # Check if we should use composite handling
-                    use_composite_handling = True
-                    for input_id in input_identifiers:
-                        if self._composite_handler.is_composite(input_id, primary_source_ontology):
-                            self.logger.info(f"Found composite identifier pattern in '{input_id}'. Using composite identifier handling.")
-                            break
-                    else:
-                        # No composite identifiers found in input
-                        use_composite_handling = False
-                    
-                    if use_composite_handling:
-                        # Use the specialized method that handles composite identifiers
-                        return await self.execute_mapping_with_composite_handling(
-                            meta_session,
-                            input_identifiers,
-                            source_endpoint_name,
-                            target_endpoint_name,
-                            primary_source_ontology,
-                            # We don't have target_ontology yet, so get it now
-                            await self._get_ontology_type(meta_session, target_endpoint_name, target_property_name),
-                            mapping_session_id=mapping_session_id,
-                            source_property_name=source_property_name,
-                            target_property_name=target_property_name,
-                            use_cache=use_cache,
-                            max_cache_age_days=max_cache_age_days,
-                            mapping_direction=mapping_direction,
-                            try_reverse_mapping=try_reverse_mapping
-                        )
-
-                # Fetch endpoints and primary ontology types
-                source_endpoint = await self._get_endpoint(meta_session, source_endpoint_name)
-                target_endpoint = await self._get_endpoint(meta_session, target_endpoint_name)
-                # We already have primary_source_ontology from the composite identifier check
-                primary_target_ontology = await self._get_ontology_type(
-                    meta_session, target_endpoint_name, target_property_name
-                )
-
-                # --- Debug Logging ---
-                src_prop_name = getattr(source_endpoint, 'primary_property_name', 'NOT_FOUND') if source_endpoint else 'ENDPOINT_NONE'
-                tgt_prop_name = getattr(target_endpoint, 'primary_property_name', 'NOT_FOUND') if target_endpoint else 'ENDPOINT_NONE'
-                self.logger.info(f"DEBUG: SrcEP PrimaryProp: {src_prop_name}")
-                self.logger.info(f"DEBUG: TgtEP PrimaryProp: {tgt_prop_name}")
-                # --- End Debug Logging ---
-
-                # Validate configuration
-                if not all([source_endpoint, target_endpoint, primary_source_ontology, primary_target_ontology]):
-                    error_message = "Configuration Error: Could not determine endpoints or primary ontologies."
-                    # Log specific missing items if needed
-                    self.logger.error(f"{error_message} SourceEndpoint: {source_endpoint}, TargetEndpoint: {target_endpoint}, SourceOntology: {primary_source_ontology}, TargetOntology: {primary_target_ontology}")
-                    raise ConfigurationError(error_message) # Use ConfigurationError directly
-
-                self.logger.info(f"Primary mapping ontologies: {primary_source_ontology} -> {primary_target_ontology}")
-                self.logger.info(f"TIMING: endpoint configuration took {time.time() - config_start:.3f}s")
-
-                # --- 2. Attempt Direct Primary Mapping (Source Ontology -> Target Ontology) ---
-                # Use the DirectMappingService to handle this step
-                direct_mapping_result = await self.direct_mapping_service.execute_direct_mapping(
-                    meta_session=meta_session,
-                    path_finder=self.path_finder,
-                    path_executor=self,
-                    primary_source_ontology=primary_source_ontology,
-                    primary_target_ontology=primary_target_ontology,
-                    original_input_ids_set=original_input_ids_set,
-                    processed_ids=processed_ids,
-                    successful_mappings=successful_mappings,
-                    mapping_direction=mapping_direction,
-                    try_reverse_mapping=try_reverse_mapping,
-                    source_endpoint=source_endpoint,
-                    target_endpoint=target_endpoint,
-                    mapping_session_id=mapping_session_id,
-                    batch_size=batch_size,
-                    max_hop_count=max_hop_count,
-                    min_confidence=min_confidence,
-                    max_concurrent_batches=max_concurrent_batches
-                )
-                
-                # Store the primary path reference for potential use in step 5
-                primary_path = None
-                if direct_mapping_result["path_found"]:
-                    # We need to retrieve the path object for later use in step 5
-                    primary_path = await self._find_best_path(
-                        meta_session,
-                        primary_source_ontology,
-                        primary_target_ontology,
-                        preferred_direction=mapping_direction,
-                        allow_reverse=try_reverse_mapping,
-                        source_endpoint=source_endpoint,
-                        target_endpoint=target_endpoint,
-                    )
-
-                # --- 3, 4, & 5. Iterative Secondary Mapping ---
-                self.logger.info("--- Steps 3, 4, & 5: Performing Iterative Secondary Mapping ---")
-                secondary_start = time.time()
-                unmapped_ids_step3 = list(original_input_ids_set - processed_ids) # IDs not mapped by cache or Step 2
-                
-                # Use the IterativeMappingService to handle the complex iterative mapping logic
-                iterative_results = await self.iterative_mapping_service.perform_iterative_mapping(
-                    unmapped_ids=unmapped_ids_step3,
-                    source_endpoint_name=source_endpoint_name,
-                    target_endpoint_name=target_endpoint_name,
-                    primary_source_ontology=primary_source_ontology,
-                    primary_target_ontology=primary_target_ontology,
-                    source_property_name=source_property_name,
-                    primary_path=primary_path,
-                    meta_session=meta_session,
-                    mapping_executor=self,
-                    mapping_session_id=mapping_session_id,
-                    mapping_direction=mapping_direction,
-                    try_reverse_mapping=try_reverse_mapping,
-                    use_cache=use_cache,
-                    max_cache_age_days=max_cache_age_days,
-                    batch_size=batch_size,
-                    max_concurrent_batches=max_concurrent_batches,
-                    max_hop_count=max_hop_count,
-                    min_confidence=min_confidence,
-                )
-                
-                # Unpack the results from the iterative mapping service
-                iterative_successful_mappings, iterative_processed_ids, derived_primary_ids = iterative_results
-                
-                # Merge the results back into the main tracking variables
-                successful_mappings.update(iterative_successful_mappings)
-                processed_ids.update(iterative_processed_ids)
-                
-                # Log timing for iterative mapping
-                self.logger.info(f"TIMING: iterative secondary mapping took {time.time() - secondary_start:.3f}s")
-
-                # --- 6. Bidirectional Validation (if requested) ---
-                if validate_bidirectional:
-                    # Delegate to the BidirectionalValidationService
-                    successful_mappings = await self.bidirectional_validation_service.validate_mappings(
-                        mapping_executor=self,
-                        meta_session=meta_session,
-                        successful_mappings=successful_mappings,
-                        source_endpoint_name=source_endpoint_name,
-                        target_endpoint_name=target_endpoint_name,
-                        source_property_name=source_property_name,
-                        target_property_name=target_property_name,
-                        source_endpoint=source_endpoint,
-                        target_endpoint=target_endpoint,
-                        mapping_session_id=mapping_session_id,
-                        batch_size=batch_size,
-                        max_concurrent_batches=max_concurrent_batches,
-                        min_confidence=min_confidence
-                    )
-
-                # --- 7. Aggregate Results & Finalize ---
-                self.logger.info("--- Step 7: Aggregating final results ---")
-                
-                # Use ResultAggregationService to aggregate results
-                final_results = self.result_aggregation_service.aggregate_mapping_results(
-                    successful_mappings=successful_mappings,
-                    original_input_ids=input_identifiers,
-                    processed_ids=processed_ids,
-                    strategy_name="execute_mapping",
-                    source_ontology_type=source_endpoint_name,
-                    target_ontology_type=target_endpoint_name,
-                )
-                
-                return final_results
-                
-        except BiomapperError as e:
-            # Logged within specific steps or helpers typically
-            self.logger.error(f"Biomapper Error during mapping execution: {e}", exc_info=True)
-            
-            # Use ResultAggregationService to aggregate error results
-            final_results = self.result_aggregation_service.aggregate_error_results(
-                successful_mappings=successful_mappings,
-                original_input_ids=input_identifiers,
-                processed_ids=processed_ids,
-                error=e,
-                error_status=PathExecutionStatus.ERROR,
-            )
-            
-            return final_results
-            
-        except Exception as e:
-            self.logger.exception("Unhandled exception during mapping execution.")
-            
-            # Use ResultAggregationService to aggregate error results
-            final_results = self.result_aggregation_service.aggregate_error_results(
-                successful_mappings=successful_mappings,
-                original_input_ids=input_identifiers,
-                processed_ids=processed_ids,
-                error=e,
-                error_status=PathExecutionStatus.ERROR,
-            )
-            
-            return final_results
-            
-        finally:
-            # Update session log upon completion (success, partial, or handled failure)
-            if 'mapping_session_id' in locals() and mapping_session_id:
-                status = PathExecutionStatus.SUCCESS
-                if 'final_results' in locals():
-                    # Check for error status - use string literals since we need to compare with string values
-                    # PathExecutionStatus.FAILURE.value is the proper way to check error status
-                    if any(r.get("status") == "failure" for r in final_results.values()):
-                        status = PathExecutionStatus.PARTIAL_SUCCESS
-                elif 'e' in locals():
-                    status = PathExecutionStatus.FAILURE
-                    
-                # Calculate overall execution metrics
-                overall_end_time = time.time()
-                total_execution_time = overall_end_time - overall_start_time
-                
-                # Count results
-                results_count = len([r for r in final_results.values() if r.get("target_identifiers")])
-                
-                # Calculate unmapped count here to ensure it's always defined
-                unmapped_count = 0
-                if 'original_input_ids_set' in locals() and 'processed_ids' in locals():
-                    # If both variables are defined, calculate unmapped count properly
-                    unmapped_count = len(original_input_ids_set) - len(processed_ids)
-                elif 'original_input_ids_set' in locals() and 'final_results' in locals():
-                    # Alternative calculation if processed_ids is not available but final_results is
-                    unmapped_count = len(original_input_ids_set) - results_count
-                
-                execution_metrics = {
-                    "source_endpoint": source_endpoint_name,
-                    "target_endpoint": target_endpoint_name,
-                    "input_count": len(original_input_ids_set) if 'original_input_ids_set' in locals() else 0,
-                    "result_count": results_count,
-                    "unmapped_count": unmapped_count,
-                    "success_rate": (results_count / len(original_input_ids_set) * 100) if 'original_input_ids_set' in locals() and original_input_ids_set else 0,
-                    "total_execution_time": total_execution_time,
-                    "batch_size": batch_size,
-                    "max_concurrent_batches": max_concurrent_batches,
-                    "try_reverse_mapping": try_reverse_mapping,
-                    "mapping_direction": mapping_direction,
-                    "start_time": overall_start_time,
-                    "end_time": overall_end_time
-                }
-                
-                # Log overall execution metrics
-                self.logger.info(
-                    f"Mapping execution completed in {total_execution_time:.3f}s: "
-                    f"{results_count}/{execution_metrics['input_count']} successful "
-                    f"({execution_metrics['success_rate']:.1f}%), "
-                    f"{execution_metrics['unmapped_count']} unmapped"
-                )
-                
-                # Track performance metrics if enabled
-                if enable_metrics:
-                    try:
-                        await self.track_mapping_metrics("mapping_execution", execution_metrics)
-                        
-                        # Also save performance metrics to database
-                        if mapping_session_id:
-                            await self._save_metrics_to_database(mapping_session_id, "mapping_execution", execution_metrics)
-                    except Exception as e:
-                        self.logger.warning(f"Error tracking metrics: {str(e)}")
-                
-                await self._update_mapping_session_log(
-                    mapping_session_id, 
-                    status=status,
-                    end_time=get_current_utc_time(),
-                    results_count=results_count,
-                    error_message=str(e) if 'e' in locals() else None
-                )
-            else:
-                self.logger.error("mapping_session_id not defined, cannot update session log.")
 
     async def _execute_path(
         self,
@@ -865,9 +600,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         entity_type: Optional[str] = None,
     ) -> MappingResultBundle:
         """
-        Execute a named mapping strategy from the database (delegates to StrategyExecutionService).
+        Execute a named mapping strategy from the database.
         
-        This method delegates to the StrategyExecutionService for executing database-stored
+        This method delegates to the DbStrategyExecutionService for executing database-stored
         mapping strategies. This is the legacy method maintained for backward compatibility.
         
         Args:
@@ -885,7 +620,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             InactiveStrategyError: If the strategy is not active
             MappingExecutionError: If an error occurs during execution
         """
-        return await self.strategy_execution_service.execute_strategy(
+        return await self.db_strategy_execution_service.execute(
             strategy_name=strategy_name,
             initial_identifiers=initial_identifiers,
             source_ontology_type=source_ontology_type,
@@ -911,11 +646,10 @@ class MappingExecutor(CompositeIdentifierMixin):
         """
         Execute a YAML-defined mapping strategy using dedicated strategy action classes.
         
-        This method executes a multi-step mapping strategy defined in YAML configuration.
-        Each step in the strategy is executed sequentially using dedicated action classes
-        (ConvertIdentifiersLocalAction, ExecuteMappingPathAction, FilterByTargetPresenceAction),
-        with the output of one step becoming the input for the next. The `is_required` field 
-        on each step controls whether step failures halt execution or allow it to continue.
+        This method delegates to the YamlStrategyExecutionService for executing multi-step
+        mapping strategies defined in YAML configuration. Each step in the strategy is
+        executed sequentially using dedicated action classes, with the output of one step
+        becoming the input for the next.
         
         Args:
             strategy_name: Name of the strategy defined in YAML configuration
@@ -957,12 +691,11 @@ class MappingExecutor(CompositeIdentifierMixin):
             >>> print(f"Final identifiers: {result['final_identifiers']}")
             >>> print(f"Step results: {len(result['step_results'])}")
         """
-        # Delegate to StrategyOrchestrator
-        return await self.strategy_orchestrator.execute_strategy(
+        return await self.yaml_strategy_execution_service.execute(
             strategy_name=strategy_name,
-            input_identifiers=input_identifiers,
             source_endpoint_name=source_endpoint_name,
             target_endpoint_name=target_endpoint_name,
+            input_identifiers=input_identifiers,
             source_ontology_type=source_ontology_type,
             target_ontology_type=target_ontology_type,
             use_cache=use_cache,
