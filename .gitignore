@@ -47,6 +47,7 @@ MANIFEST
 vector_store/
 hmdb_metabolites.xml
 mapping_cache.db
+mapping_cache.db-*
 metamapper.db-*
 *.prof
 
