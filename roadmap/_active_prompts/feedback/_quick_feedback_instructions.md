@@ -10,3 +10,5 @@ Create a detailed Markdown feedback file at:
 - **Confidence Assessment:** [quality, testing coverage, risk level]
 - **Environment Changes:** [any files created, permissions changed, etc.]
 - **Lessons Learned:** [patterns that worked or should be avoided]
+
+If necessary, commit the feedback file to the current git worktree branch.
