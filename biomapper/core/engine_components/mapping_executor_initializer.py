@@ -384,8 +384,8 @@ class MappingExecutorInitializer:
     async def create_executor(self):
         """Asynchronously create and initialize a MappingExecutor instance.
         
-        This factory method creates a MappingExecutor instance, initializes
-        all its components, and sets up the database tables for cache database.
+        This factory method creates all components needed by MappingExecutor,
+        initializes the database tables, and returns a fully configured executor.
         
         Returns:
             An initialized MappingExecutor instance with database tables created
@@ -394,27 +394,45 @@ class MappingExecutorInitializer:
             # Import here to avoid circular imports
             from ..mapping_executor import MappingExecutor
             
-            # Create instance with standard constructor - this will handle all initialization
+            # Create a dummy executor to pass to components that need it
+            # This will be replaced with the real executor after it's created
+            dummy_executor = type('DummyExecutor', (), {})()
+            
+            # Initialize all components
+            components = self.initialize_components(dummy_executor)
+            
+            # Create the executor with pre-initialized components
             executor = MappingExecutor(
-                metamapper_db_url=self.metamapper_db_url,
-                mapping_cache_db_url=self.mapping_cache_db_url,
-                echo_sql=self.echo_sql,
-                path_cache_size=self.path_cache_size,
-                path_cache_expiry_seconds=self.path_cache_expiry_seconds,
-                max_concurrent_batches=self.max_concurrent_batches,
-                enable_metrics=self.enable_metrics,
-                checkpoint_enabled=self.checkpoint_enabled,
-                checkpoint_dir=self.checkpoint_dir,
+                session_manager=components['session_manager'],
+                client_manager=components['client_manager'],
+                config_loader=components['config_loader'],
+                strategy_handler=components['strategy_handler'],
+                path_finder=components['path_finder'],
+                path_execution_manager=components['path_execution_manager'],
+                cache_manager=components['cache_manager'],
+                identifier_loader=components['identifier_loader'],
+                strategy_orchestrator=components['strategy_orchestrator'],
+                checkpoint_manager=components['checkpoint_manager'],
+                progress_reporter=components['progress_reporter'],
+                langfuse_tracker=components['langfuse_tracker'],
+                # Pass configuration parameters for backward compatibility
                 batch_size=self.batch_size,
                 max_retries=self.max_retries,
                 retry_delay=self.retry_delay,
+                checkpoint_enabled=self.checkpoint_enabled,
+                max_concurrent_batches=self.max_concurrent_batches,
+                enable_metrics=self.enable_metrics,
             )
             
-            # Initialize cache database tables using the _init_db_tables method
-            await self._init_db_tables(executor.async_cache_engine, CacheBase.metadata)
+            # Now update components that need the real executor reference
+            components['strategy_handler'].mapping_executor = executor
+            components['strategy_orchestrator'].mapping_executor = executor
             
-            # Note: We don't initialize metamapper tables here because they're assumed to be
-            # already set up and populated. The issue is specifically with cache tables.
+            # Set function references
+            self.set_executor_function_references(executor)
+            
+            # Initialize cache database tables
+            await self._init_db_tables(components['session_manager'].async_cache_engine, CacheBase.metadata)
             
             executor.logger.info("MappingExecutor instance created and database tables initialized.")
             return executor

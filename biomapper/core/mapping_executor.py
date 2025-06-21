@@ -66,7 +66,8 @@ from ..db.models import (
 from ..db.cache_models import (
     PathExecutionStatus,
     MappingSession,  # Add this for session logging
-    ExecutionMetric # Added ExecutionMetric
+    ExecutionMetric, # Added ExecutionMetric
+    Base as CacheBase,  # Add for database table creation
 )
 
 # Import models for metamapper DB
@@ -108,28 +109,45 @@ class MappingExecutor(CompositeIdentifierMixin):
 
     def __init__(
         self,
+        # Support both old-style (config params) and new-style (pre-initialized components)
         metamapper_db_url: Optional[str] = None,
         mapping_cache_db_url: Optional[str] = None,
-        echo_sql: bool = False, # Added parameter to control SQL echoing
-        path_cache_size: int = 100, # Maximum number of paths to cache
-        path_cache_expiry_seconds: int = 300, # Cache expiry time in seconds (5 minutes)
-        max_concurrent_batches: int = 5, # Maximum number of batches to process concurrently
-        enable_metrics: bool = True, # Whether to enable metrics tracking
-        # Robust execution parameters with backward-compatible defaults
+        echo_sql: bool = False,
+        path_cache_size: int = 100,
+        path_cache_expiry_seconds: int = 300,
+        max_concurrent_batches: int = 5,
+        enable_metrics: bool = True,
         checkpoint_enabled: bool = False,
         checkpoint_dir: Optional[str] = None,
         batch_size: int = 100,
         max_retries: int = 3,
         retry_delay: int = 5,
+        # Pre-initialized components (new style)
+        session_manager=None,
+        client_manager=None,
+        config_loader=None,
+        strategy_handler=None,
+        path_finder=None,
+        path_execution_manager=None,
+        cache_manager=None,
+        identifier_loader=None,
+        strategy_orchestrator=None,
+        checkpoint_manager=None,
+        progress_reporter=None,
+        langfuse_tracker=None,
     ):
         """
         Initializes the MappingExecutor.
+        
+        Supports two initialization modes:
+        1. Legacy mode: Pass configuration parameters and components are created internally
+        2. Component mode: Pass pre-initialized components directly
 
-        Args:
-            metamapper_db_url: URL for the metamapper database. If None, uses settings.metamapper_db_url.
-            mapping_cache_db_url: URL for the mapping cache database. If None, uses settings.cache_db_url.
-            echo_sql: Boolean flag to enable SQL echoing for debugging purposes.
-            path_cache_size: Maximum number of paths to cache in memory
+        Legacy mode args:
+            metamapper_db_url: URL for the metamapper database
+            mapping_cache_db_url: URL for the mapping cache database
+            echo_sql: Boolean flag to enable SQL echoing
+            path_cache_size: Maximum number of paths to cache
             path_cache_expiry_seconds: Cache expiry time in seconds
             max_concurrent_batches: Maximum number of batches to process concurrently
             enable_metrics: Whether to enable metrics tracking
@@ -139,93 +157,133 @@ class MappingExecutor(CompositeIdentifierMixin):
             max_retries: Maximum retry attempts for failed operations
             retry_delay: Delay in seconds between retry attempts
             
-        Returns:
-            An initialized MappingExecutor instance with database tables created
+        Component mode args:
+            session_manager: Pre-initialized SessionManager instance
+            client_manager: Pre-initialized ClientManager instance
+            config_loader: Pre-initialized ConfigLoader instance
+            strategy_handler: Pre-initialized StrategyHandler instance
+            path_finder: Pre-initialized PathFinder instance
+            path_execution_manager: Pre-initialized PathExecutionManager instance
+            cache_manager: Pre-initialized CacheManager instance
+            identifier_loader: Pre-initialized IdentifierLoader instance
+            strategy_orchestrator: Pre-initialized StrategyOrchestrator instance
+            checkpoint_manager: Pre-initialized CheckpointManager instance
+            progress_reporter: Pre-initialized ProgressReporter instance
+            langfuse_tracker: Pre-initialized Langfuse tracker instance
         """
         # Initialize the CompositeIdentifierMixin
         super().__init__()
 
         self.logger = logging.getLogger(__name__)
         
-        # Store core parameters for backward compatibility
-        self.metamapper_db_url = (
-            metamapper_db_url
-            if metamapper_db_url is not None
-            else settings.metamapper_db_url
-        )
-        self.mapping_cache_db_url = (
-            mapping_cache_db_url
-            if mapping_cache_db_url is not None
-            else settings.cache_db_url
-        )
-        self.echo_sql = echo_sql
-        self.batch_size = batch_size
-        self.max_retries = max_retries
-        self.retry_delay = retry_delay
-        self.checkpoint_enabled = checkpoint_enabled
-        
-        # Initialize checkpoint manager
-        self.checkpoint_manager = CheckpointManager(
-            checkpoint_dir=checkpoint_dir if checkpoint_enabled else None,
-            logger=self.logger
-        )
-        
-        # Progress tracking
-        self.progress_reporter = ProgressReporter()
-        
-        # Concurrency settings
-        self.max_concurrent_batches = max_concurrent_batches
-        self.enable_metrics = enable_metrics
-        self._metrics_tracker = None
-        
-        # Initialize all components using the MappingExecutorInitializer
-        self._initializer = MappingExecutorInitializer(
-            metamapper_db_url=metamapper_db_url,
-            mapping_cache_db_url=mapping_cache_db_url,
-            echo_sql=echo_sql,
-            path_cache_size=path_cache_size,
-            path_cache_expiry_seconds=path_cache_expiry_seconds,
-            max_concurrent_batches=max_concurrent_batches,
-            enable_metrics=enable_metrics,
-            checkpoint_enabled=checkpoint_enabled,
-            checkpoint_dir=checkpoint_dir,
-            batch_size=batch_size,
-            max_retries=max_retries,
-            retry_delay=retry_delay
-        )
-        
-        # Initialize all components
-        components = self._initializer.initialize_components(self)
-        
-        # Assign components to self
-        self.session_manager = components['session_manager']
-        self.client_manager = components['client_manager']
-        self.config_loader = components['config_loader']
-        self.strategy_handler = components['strategy_handler']
-        self.path_finder = components['path_finder']
-        self.path_execution_manager = components['path_execution_manager']
-        self.cache_manager = components['cache_manager']
-        self.identifier_loader = components['identifier_loader']
-        self.strategy_orchestrator = components['strategy_orchestrator']
-        self.checkpoint_manager = components['checkpoint_manager']
-        self.progress_reporter = components['progress_reporter']
-        self._langfuse_tracker = components['langfuse_tracker']
-        
-        # Create convenience references for backward compatibility
-        convenience_refs = self._initializer.get_convenience_references()
-        self.async_metamapper_engine = convenience_refs['async_metamapper_engine']
-        self.MetamapperSessionFactory = convenience_refs['MetamapperSessionFactory']
-        self.async_metamapper_session = convenience_refs['async_metamapper_session']
-        self.async_cache_engine = convenience_refs['async_cache_engine']
-        self.CacheSessionFactory = convenience_refs['CacheSessionFactory']
-        self.async_cache_session = convenience_refs['async_cache_session']
-        
-        # Set function references after MappingExecutor is fully initialized
-        self._initializer.set_executor_function_references(self)
+        # Check if we're in legacy mode (configuration parameters) or component mode
+        if session_manager is None:
+            # Legacy mode: use MappingExecutorInitializer to create components
+            self.logger.debug("Initializing MappingExecutor in legacy mode")
+            
+            # Store configuration parameters
+            self.batch_size = batch_size
+            self.max_retries = max_retries
+            self.retry_delay = retry_delay
+            self.checkpoint_enabled = checkpoint_enabled
+            self.max_concurrent_batches = max_concurrent_batches
+            self.enable_metrics = enable_metrics
+            self._metrics_tracker = None
+            
+            # Initialize all components using the MappingExecutorInitializer
+            self._initializer = MappingExecutorInitializer(
+                metamapper_db_url=metamapper_db_url,
+                mapping_cache_db_url=mapping_cache_db_url,
+                echo_sql=echo_sql,
+                path_cache_size=path_cache_size,
+                path_cache_expiry_seconds=path_cache_expiry_seconds,
+                max_concurrent_batches=max_concurrent_batches,
+                enable_metrics=enable_metrics,
+                checkpoint_enabled=checkpoint_enabled,
+                checkpoint_dir=checkpoint_dir,
+                batch_size=batch_size,
+                max_retries=max_retries,
+                retry_delay=retry_delay
+            )
+            
+            # Initialize all components
+            components = self._initializer.initialize_components(self)
+            
+            # Assign components to self
+            self.session_manager = components['session_manager']
+            self.client_manager = components['client_manager']
+            self.config_loader = components['config_loader']
+            self.strategy_handler = components['strategy_handler']
+            self.path_finder = components['path_finder']
+            self.path_execution_manager = components['path_execution_manager']
+            self.cache_manager = components['cache_manager']
+            self.identifier_loader = components['identifier_loader']
+            self.strategy_orchestrator = components['strategy_orchestrator']
+            self.checkpoint_manager = components['checkpoint_manager']
+            self.progress_reporter = components['progress_reporter']
+            self._langfuse_tracker = components['langfuse_tracker']
+            
+            # Create convenience references for backward compatibility
+            convenience_refs = self._initializer.get_convenience_references()
+            self.async_metamapper_engine = convenience_refs['async_metamapper_engine']
+            self.MetamapperSessionFactory = convenience_refs['MetamapperSessionFactory']
+            self.async_metamapper_session = convenience_refs['async_metamapper_session']
+            self.async_cache_engine = convenience_refs['async_cache_engine']
+            self.CacheSessionFactory = convenience_refs['CacheSessionFactory']
+            self.async_cache_session = convenience_refs['async_cache_session']
+            
+            # Set function references after MappingExecutor is fully initialized
+            self._initializer.set_executor_function_references(self)
+            
+            # Store DB URLs for backward compatibility
+            self.metamapper_db_url = metamapper_db_url if metamapper_db_url else settings.metamapper_db_url
+            self.mapping_cache_db_url = mapping_cache_db_url if mapping_cache_db_url else settings.cache_db_url
+            self.echo_sql = echo_sql
+            
+        else:
+            # Component mode: use pre-initialized components
+            self.logger.debug("Initializing MappingExecutor in component mode")
+            
+            # Store configuration parameters
+            self.batch_size = batch_size
+            self.max_retries = max_retries
+            self.retry_delay = retry_delay
+            self.checkpoint_enabled = checkpoint_enabled
+            self.max_concurrent_batches = max_concurrent_batches
+            self.enable_metrics = enable_metrics
+            
+            # Assign pre-initialized components
+            self.session_manager = session_manager
+            self.client_manager = client_manager
+            self.config_loader = config_loader
+            self.strategy_handler = strategy_handler
+            self.path_finder = path_finder
+            self.path_execution_manager = path_execution_manager
+            self.cache_manager = cache_manager
+            self.identifier_loader = identifier_loader
+            self.strategy_orchestrator = strategy_orchestrator
+            self.checkpoint_manager = checkpoint_manager
+            self.progress_reporter = progress_reporter
+            self._langfuse_tracker = langfuse_tracker
+            self._metrics_tracker = None
+            
+            # Create convenience references for backward compatibility
+            self.async_metamapper_engine = self.session_manager.async_metamapper_engine
+            self.MetamapperSessionFactory = self.session_manager.MetamapperSessionFactory
+            self.async_metamapper_session = self.session_manager.async_metamapper_session
+            self.async_cache_engine = self.session_manager.async_cache_engine
+            self.CacheSessionFactory = self.session_manager.CacheSessionFactory
+            self.async_cache_session = self.session_manager.async_cache_session
+            
+            # Store DB URLs for backward compatibility (extract from session_manager)
+            self.metamapper_db_url = str(self.async_metamapper_engine.url)
+            self.mapping_cache_db_url = str(self.async_cache_engine.url)
+            self.echo_sql = self.async_metamapper_engine.echo
         
         # Initialize MetadataQueryService
         self.metadata_query_service = MetadataQueryService(self.session_manager)
         
+        # Initialize MappingPathExecutionService with all required arguments
         # Initialize BidirectionalValidationService
         self.bidirectional_validation_service = BidirectionalValidationService()
         
@@ -323,8 +381,8 @@ class MappingExecutor(CompositeIdentifierMixin):
     ):
         """Asynchronously create and initialize a MappingExecutor instance.
         
-        This factory method creates a MappingExecutor instance and initializes
-        the database tables for both metamapper and cache databases.
+        This factory method uses MappingExecutorInitializer to create all components
+        and initializes the database tables for both metamapper and cache databases.
         
         Args:
             metamapper_db_url: URL for the metamapper database. If None, uses settings.metamapper_db_url.
@@ -343,8 +401,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             An initialized MappingExecutor instance with database tables created
         """
-        # Create instance with standard constructor
-        executor = cls(
+        # Create initializer with all configuration parameters
+        initializer = MappingExecutorInitializer(
             metamapper_db_url=metamapper_db_url,
             mapping_cache_db_url=mapping_cache_db_url,
             echo_sql=echo_sql,
@@ -359,10 +417,13 @@ class MappingExecutor(CompositeIdentifierMixin):
             retry_delay=retry_delay,
         )
         
-        # Initialize database tables using DatabaseSetupService
+        # Use the initializer to create the executor
+        executor = await initializer.create_executor()
+        
+        # Initialize metamapper database tables using DatabaseSetupService
+        # (cache tables are already initialized in create_executor)
         db_setup_service = DatabaseSetupService(logger=executor.logger)
         await db_setup_service.initialize_tables(executor.async_metamapper_engine, MetamapperBase.metadata)
-        await db_setup_service.initialize_tables(executor.async_cache_engine, CacheBase.metadata)
         
         return executor
 
