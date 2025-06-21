@@ -906,6 +906,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         progress_callback: Optional[callable] = None,
         batch_size: int = 250,
         min_confidence: float = 0.0,
+        initial_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Execute a YAML-defined mapping strategy using dedicated strategy action classes.
@@ -928,6 +929,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             progress_callback: Optional callback function(current_step, total_steps, status)
             batch_size: Size of batches for processing (default: 250)
             min_confidence: Minimum confidence threshold (default: 0.0)
+            initial_context: Optional initial context dictionary to merge into execution context
             
         Returns:
             Dict[str, Any]: A MappingResultBundle-structured dictionary containing:
@@ -968,6 +970,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             progress_callback=progress_callback,
             batch_size=batch_size,
             min_confidence=min_confidence,
+            initial_context=initial_context,
         )
     async def _get_endpoint_by_name(self, session: AsyncSession, endpoint_name: str) -> Optional[Endpoint]:
         """
