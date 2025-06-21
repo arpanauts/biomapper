@@ -90,37 +90,22 @@ logger.info(f"Logging initialized. Log file: {log_file_path}") # Test message
 # CONFIGURATION VARIABLES
 # ============================================================================
 
-# Output configuration
+# The directory where results and summaries will be saved.
+# This is passed dynamically to the strategy.
 OUTPUT_RESULTS_DIR = "/home/ubuntu/biomapper/data/results/"
-OUTPUT_RESULTS_FILENAME = "full_ukbb_to_hpa_mapping_results.csv"
-OUTPUT_RESULTS_FILE_PATH = os.path.join(OUTPUT_RESULTS_DIR, OUTPUT_RESULTS_FILENAME)
-
-# Summary file for tracking strategy performance
-SUMMARY_FILENAME = "full_ukbb_to_hpa_mapping_summary.json"
-SUMMARY_FILE_PATH = os.path.join(OUTPUT_RESULTS_DIR, SUMMARY_FILENAME)
-
-# Default data directory (set as environment variable if not already set)
-DEFAULT_DATA_DIR = "/home/ubuntu/biomapper/data"
 
 # Checkpoint directory for robust execution
 CHECKPOINT_DIR = "/home/ubuntu/biomapper/data/checkpoints"
 
-# Strategy name to execute - typically a strategy like UKBB_TO_HPA_BIDIRECTIONAL_EFFICIENT
-# Note: The OPTIMIZED strategy has a design flaw where it processes ALL unmatched HPA proteins,
-# causing timeouts even with small datasets. Use EFFICIENT instead.
+# The name of the self-contained YAML strategy to execute.
 STRATEGY_NAME = "UKBB_TO_HPA_BIDIRECTIONAL_EFFICIENT"
-
-# Endpoint names as defined in metamapper.db (from protein_config.yaml)
-SOURCE_ENDPOINT_NAME = "UKBB_PROTEIN"
-TARGET_ENDPOINT_NAME = "HPA_OSP_PROTEIN"
 
 # ============================================================================
 # MAIN MAPPING FUNCTION
 # ============================================================================
 
 
-async def run_full_mapping(checkpoint_enabled: bool = True, batch_size: int = 250, 
-                          max_retries: int = 3, enable_progress: bool = True):
+async def run_full_mapping(checkpoint_enabled: bool = True, batch_size: int = 250, max_retries: int = 3, enable_progress: bool = True):
     """
     Main function to execute the full UKBB to HPA protein mapping using an enhanced strategy.
     
@@ -194,18 +179,21 @@ async def run_full_mapping(checkpoint_enabled: bool = True, batch_size: int = 25
             executor.add_progress_callback(progress_callback)
             logger.info("Progress tracking enabled.")
         
-        # Execute mapping strategy
-        logger.info(f"Executing strategy '{STRATEGY_NAME}'...")
+        # The strategy is self-contained and loads its own identifiers.
+        # We just need to provide the output directory via the context.
+        initial_context = {
+            "output_dir": OUTPUT_RESULTS_DIR
+        }
+
+        logger.info(f"Executing YAML strategy: '{STRATEGY_NAME}'")
+        logger.info(f"Results will be saved in: {OUTPUT_RESULTS_DIR}")
         logger.info("This may take some time for large datasets...")
         
-        result = await executor.execute_yaml_strategy_robust(
+        result = await executor.execute_yaml_strategy(
             strategy_name=STRATEGY_NAME,
-            input_identifiers=[],  # Strategy loads its own identifiers
-            source_endpoint_name=SOURCE_ENDPOINT_NAME,
-            target_endpoint_name=TARGET_ENDPOINT_NAME,
+            initial_context=initial_context,
             execution_id=execution_id,
-            resume_from_checkpoint=checkpoint_enabled,
-            use_cache=True
+            resume_from_checkpoint=checkpoint_enabled
         )
         
         logger.info("Strategy execution completed.")
