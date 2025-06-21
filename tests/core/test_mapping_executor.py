@@ -534,8 +534,8 @@ async def test_execute_mapping_success(mapping_executor, mock_config_db):
 
         # Call execute_mapping on our mocked executor instance
         result = await mapping_executor.execute_mapping(
-            source_endpoint_name,
-            target_endpoint_name,
+            source_endpoint_name=source_endpoint_name,
+            target_endpoint_name=target_endpoint_name,
             input_identifiers=input_ids,
             source_property_name=source_property_name,
             target_property_name=target_property_name,
@@ -550,8 +550,8 @@ async def test_execute_mapping_success(mapping_executor, mock_config_db):
 
     # Verify the mock was called with the correct parameters
     mock_execute.assert_called_once_with(
-        source_endpoint_name,
-        target_endpoint_name,
+        source_endpoint_name=source_endpoint_name,
+        target_endpoint_name=target_endpoint_name,
         input_identifiers=input_ids,
         source_property_name=source_property_name,
         target_property_name=target_property_name,
@@ -588,8 +588,8 @@ async def test_execute_mapping_no_path_found(mapping_executor):
     
     # Act: Call execute_mapping
     result = await mapping_executor.execute_mapping(
-        "gene_endpoint",
-        "ensembl_endpoint",
+        source_endpoint_name="gene_endpoint",
+        target_endpoint_name="ensembl_endpoint",
         input_identifiers=input_ids,
         source_property_name="PrimaryIdentifier",
         target_property_name="EnsemblGeneID",
@@ -652,8 +652,8 @@ async def test_execute_mapping_client_error(mapping_executor, mock_config_db):
 
         # Call execute_mapping
         result = await mapping_executor.execute_mapping(
-            source_endpoint_name,
-            target_endpoint_name,
+            source_endpoint_name=source_endpoint_name,
+            target_endpoint_name=target_endpoint_name,
             input_identifiers=input_ids,
             source_property_name=source_property_name,
             target_property_name=target_property_name,
@@ -667,8 +667,8 @@ async def test_execute_mapping_client_error(mapping_executor, mock_config_db):
 
     # Verify the mock was called with the correct parameters
     mock_execute.assert_called_once_with(
-        source_endpoint_name,
-        target_endpoint_name,
+        source_endpoint_name=source_endpoint_name,
+        target_endpoint_name=target_endpoint_name,
         input_identifiers=input_ids,
         source_property_name=source_property_name,
         target_property_name=target_property_name,
@@ -723,8 +723,8 @@ async def test_execute_mapping_partial_results(mapping_executor, mock_config_db)
 
         # Call execute_mapping on our mocked executor instance
         result = await mapping_executor.execute_mapping(
-            source_endpoint_name,
-            target_endpoint_name,
+            source_endpoint_name=source_endpoint_name,
+            target_endpoint_name=target_endpoint_name,
             input_identifiers=input_ids,
             source_property_name=source_property_name,
             target_property_name=target_property_name,
@@ -740,8 +740,8 @@ async def test_execute_mapping_partial_results(mapping_executor, mock_config_db)
 
     # Verify the mock was called with the correct parameters
     mock_execute.assert_called_once_with(
-        source_endpoint_name,
-        target_endpoint_name,
+        source_endpoint_name=source_endpoint_name,
+        target_endpoint_name=target_endpoint_name,
         input_identifiers=input_ids,
         source_property_name=source_property_name,
         target_property_name=target_property_name,
@@ -783,8 +783,8 @@ async def test_execute_mapping_empty_input(mapping_executor, mock_config_db):
 
     # Verify the mock was called with the correct parameters
     mock_execute.assert_called_once_with(
-        source_endpoint_name,
-        target_endpoint_name,
+        source_endpoint_name=source_endpoint_name,
+        target_endpoint_name=target_endpoint_name,
         input_identifiers=input_ids,
         source_property_name=source_property_name,
         target_property_name=target_property_name,
