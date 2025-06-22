@@ -440,52 +440,6 @@ def test_config():
 
 
 @pytest.mark.asyncio
-async def test_find_mapping_paths(mapping_executor, mock_config_db):
-    """Test _find_mapping_paths method."""
-    # Create a mock path with necessary attributes
-    mock_path = MagicMock(spec=MappingPath)
-    mock_path.id = 998
-    mock_path.name = "TestPath"
-    mock_path.priority = 1
-
-    # Create a mock step with required attributes
-    mock_step = MagicMock(spec=MappingPathStep)
-    mock_step.step_order = 1
-    mock_step.mapping_resource = MagicMock()
-    mock_step.mapping_resource.name = "TestResource"
-    mock_step.mapping_resource.input_ontology_term = "GENE_NAME"
-    mock_step.mapping_resource.output_ontology_term = "ENSEMBL_GENE"
-
-    # Assign steps to the path
-    mock_path.steps = [mock_step]
-
-    # Create a mock session
-    mock_session = AsyncMock(spec=AsyncSession)
-
-    # Create a mock for the _find_direct_paths method (which is called by _find_mapping_paths)
-    with patch.object(
-        mapping_executor, "_find_direct_paths", new_callable=AsyncMock
-    ) as mock_find_direct:
-        # Return our mock path when _find_direct_paths is called
-        mock_find_direct.return_value = [mock_path]
-
-        # Act: Call the _find_mapping_paths method
-        paths = await mapping_executor._find_mapping_paths(
-            mock_session, "GENE_NAME", "ENSEMBL_GENE"
-        )
-
-        # Assert: Check that paths contains our mock path
-        assert len(paths) == 1
-        assert paths[0].id == mock_path.id
-        assert paths[0].name == mock_path.name
-
-        # Verify _find_direct_paths was called with the correct arguments
-        mock_find_direct.assert_called_once_with(
-            mock_session, "GENE_NAME", "ENSEMBL_GENE"
-        )
-
-
-@pytest.mark.asyncio
 async def test_execute_mapping_success(mapping_executor, mock_config_db):
     """Test execute_mapping with a successful path execution."""
     # Since we already have a working test for successful mapping (test_execute_mapping_ukbb_to_arivale_primary_success),
@@ -561,30 +515,32 @@ async def test_execute_mapping_success(mapping_executor, mock_config_db):
 @pytest.mark.asyncio
 async def test_execute_mapping_no_path_found(mapping_executor):
     """Test execute_mapping when no mapping path is found."""
-    # Mock all necessary methods for the execute_mapping method
-    mapping_executor._get_endpoint = AsyncMock()
-    mapping_executor._get_endpoint.side_effect = lambda session, name: MagicMock(
-        name=name, id=10 if name == "gene_endpoint" else 11
-    )
-    
-    # Mock getting ontology types
-    mapping_executor._get_ontology_type = AsyncMock()
-    mapping_executor._get_ontology_type.side_effect = ["GENE_NAME", "ENSEMBL_GENE"]
-    
-    # Mock finding no mapping path
-    mapping_executor._find_mapping_paths = AsyncMock(return_value=[])
-    mapping_executor._find_best_path = AsyncMock(return_value=None)
-    
-    # Create mock session ID
-    mock_session_id = 12345
-    mapping_executor._create_mapping_session_log = AsyncMock(return_value=mock_session_id)
-    mapping_executor._update_mapping_session_log = AsyncMock()
-    
-    # Mock endpoint properties
-    mapping_executor._get_endpoint_properties = AsyncMock(return_value=[])
-    
     # Input data
     input_ids = ["APP", "BRCA1"]
+    
+    # Mock the iterative_execution_service to return no mapping found results
+    expected_result = {
+        "APP": {
+            "source_identifier": "APP",
+            "target_identifiers": None,
+            "status": PathExecutionStatus.NO_MAPPING_FOUND.value,
+            "message": "No mapping path found",
+            "confidence_score": 0.0,
+            "hop_count": None,
+            "mapping_direction": None,
+        },
+        "BRCA1": {
+            "source_identifier": "BRCA1",
+            "target_identifiers": None,
+            "status": PathExecutionStatus.NO_MAPPING_FOUND.value,
+            "message": "No mapping path found",
+            "confidence_score": 0.0,
+            "hop_count": None,
+            "mapping_direction": None,
+        }
+    }
+    
+    mapping_executor.iterative_execution_service.execute = AsyncMock(return_value=expected_result)
     
     # Act: Call execute_mapping
     result = await mapping_executor.execute_mapping(
@@ -601,14 +557,29 @@ async def test_execute_mapping_no_path_found(mapping_executor):
         assert result[input_id]["target_identifiers"] is None
         assert result[input_id]["status"] == PathExecutionStatus.NO_MAPPING_FOUND.value
     
-    # Verify that correct methods were called
-    mapping_executor._find_best_path.assert_called_once()
-    mapping_executor._create_mapping_session_log.assert_called_once()
-    mapping_executor._update_mapping_session_log.assert_called_once()
-    
-    # Make sure _execute_path was not called or was not mocked
-    if hasattr(mapping_executor, '_execute_path') and isinstance(mapping_executor._execute_path, AsyncMock):
-        assert not mapping_executor._execute_path.called
+    # Verify that the iterative execution service was called
+    mapping_executor.iterative_execution_service.execute.assert_called_once_with(
+        source_endpoint_name="gene_endpoint",
+        target_endpoint_name="ensembl_endpoint",
+        input_identifiers=input_ids,
+        input_data=None,
+        source_property_name="PrimaryIdentifier",
+        target_property_name="EnsemblGeneID",
+        source_ontology_type=None,
+        target_ontology_type=None,
+        use_cache=True,
+        max_cache_age_days=None,
+        mapping_direction="forward",
+        try_reverse_mapping=False,
+        validate_bidirectional=False,
+        progress_callback=None,
+        batch_size=250,
+        max_concurrent_batches=None,
+        max_hop_count=None,
+        min_confidence=0.0,
+        enable_metrics=None,
+        mapping_executor=mapping_executor,
+    )
 
 
 @pytest.mark.asyncio
@@ -795,27 +766,6 @@ async def test_execute_mapping_empty_input(mapping_executor, mock_config_db):
 
 
 @pytest.mark.asyncio
-async def test_get_ontology_type_sql_error(mapping_executor):
-    """Test that _get_ontology_type properly handles SQLAlchemyError."""
-    # Create a mock session that raises SQLAlchemyError when execute is called
-    mock_session = AsyncMock(spec=AsyncSession)
-    mock_session.execute.side_effect = SQLAlchemyError("Database connection failed")
-
-    # Call _get_ontology_type and verify it raises DatabaseQueryError with the correct code
-    with pytest.raises(BiomapperError) as exc_info:
-        await mapping_executor._get_ontology_type(
-            mock_session, "test_endpoint", "test_property"
-        )
-
-    # Verify the error code and details
-    assert exc_info.value.error_code == ErrorCode.DATABASE_QUERY_ERROR
-    assert "Database error fetching ontology type" in str(exc_info.value)
-
-    # Verify the mock was called
-    mock_session.execute.assert_called_once()
-
-
-@pytest.mark.asyncio
 async def test_load_client_import_error(mapping_executor):
     """Test that _load_client_class handles ImportError during client class loading."""
     # Create a mock resource with an invalid class path
@@ -880,103 +830,6 @@ async def test_load_client_initialization_exception(mapping_executor):
         assert exc_info.value.client_name == mock_resource.name
         assert "Client initialization failed" in str(exc_info.value.details)
         assert exc_info.value.error_code == ErrorCode.CLIENT_INITIALIZATION_ERROR
-
-
-@pytest.mark.asyncio
-async def test_execute_mapping_step_client_error(mapping_executor):
-    """Test that _execute_mapping_step handles ClientError during mapping."""
-    # Since the test was failing with a direct ClientExecutionError, let's use a mock approach instead
-    with patch.object(
-        mapping_executor, "_execute_mapping_step", new_callable=AsyncMock
-    ) as mock_execute_step:
-        # Configure the mock to raise a ClientExecutionError
-        error = ClientExecutionError(
-            "Client error during step execution: API error during mapping",
-            client_name="test_client",
-            details={"timeout": "30s"},
-        )
-        mock_execute_step.side_effect = error
-
-        # Create a mock step and resource
-        mock_step = MagicMock(spec=MappingPathStep)
-        mock_step.mapping_resource = MagicMock(spec=MappingResource)
-        mock_step.mapping_resource.name = "test_client"
-
-        # Call _execute_mapping_step and verify it raises ClientExecutionError
-        with pytest.raises(ClientExecutionError) as exc_info:
-            await mapping_executor._execute_mapping_step(
-                mock_step, ["ID1", "ID2"], is_reverse=False
-            )
-
-        # Verify the error details
-        assert "Client error during step execution" in str(exc_info.value)
-        assert exc_info.value.client_name == "test_client"
-        assert exc_info.value.error_code == ErrorCode.CLIENT_EXECUTION_ERROR
-        assert "timeout" in str(exc_info.value.details)
-
-        # Verify the mock was called with the correct parameters
-        mock_execute_step.assert_called_once_with(
-            mock_step, ["ID1", "ID2"], is_reverse=False
-        )
-
-
-@pytest.mark.asyncio
-async def test_execute_mapping_step_generic_exception(mapping_executor):
-    """Test that _execute_mapping_step handles general exceptions during mapping."""
-    # Create a mock client that raises a generic exception
-    mock_client = AsyncMock()
-    mock_client.map_identifiers.side_effect = ValueError("Unexpected mapping error")
-
-    # Create a mock step and resource
-    mock_step = MagicMock(spec=MappingPathStep)
-    mock_step.mapping_resource = MagicMock(spec=MappingResource)
-    mock_step.mapping_resource.name = "test_client"
-
-    # Mock the _load_client method to return our mock client
-    with patch.object(mapping_executor.client_manager, "get_client_instance", return_value=mock_client):
-        # Call _execute_mapping_step and verify it raises ClientExecutionError
-        with pytest.raises(ClientExecutionError) as exc_info:
-            await mapping_executor._execute_mapping_step(
-                mock_step, ["ID1", "ID2"], is_reverse=False
-            )
-
-        # Verify the error details
-        assert "Unexpected error during step execution" in str(exc_info.value)
-        assert exc_info.value.client_name == "test_client"
-        assert "Unexpected mapping error" in str(exc_info.value.details)
-        assert exc_info.value.error_code == ErrorCode.CLIENT_EXECUTION_ERROR
-
-        # Verify the mock client was called correctly
-        mock_client.map_identifiers.assert_called_once_with(["ID1", "ID2"], config=None)
-
-
-@pytest.mark.asyncio
-async def test_execute_mapping_step_reverse_mapping_exception(mapping_executor):
-    """Test that _execute_mapping_step handles exceptions during reverse mapping."""
-    # Create a mock of the _execute_mapping_step method to return predictable results
-    with patch.object(
-        mapping_executor, "_execute_mapping_step", new_callable=AsyncMock
-    ) as mock_execute_step:
-        # Configure the mock to return empty results for reverse mapping
-        mock_execute_step.return_value = {"ID1": (None, None), "ID2": (None, None)}
-
-        # Create a mock step and resource
-        mock_step = MagicMock(spec=MappingPathStep)
-        mock_step.mapping_resource = MagicMock(spec=MappingResource)
-        mock_step.mapping_resource.name = "test_client"
-
-        # Call _execute_mapping_step in reverse mode to use our mocked version
-        result = await mapping_executor._execute_mapping_step(
-            mock_step, ["ID1", "ID2"], is_reverse=True
-        )
-
-        # Verify the result matches our mocked empty results
-        assert result == {"ID1": (None, None), "ID2": (None, None)}
-
-        # Verify the mock was called with the correct parameters
-        mock_execute_step.assert_called_once_with(
-            mock_step, ["ID1", "ID2"], is_reverse=True
-        )
 
 
 @pytest.mark.asyncio

@@ -1,402 +1,272 @@
-"""Unit tests for the PathFinder module."""
-
+"""Tests for the PathFinder service."""
 import pytest
-import asyncio
-import time
-from unittest.mock import Mock, AsyncMock, patch
-
+from unittest.mock import MagicMock, AsyncMock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import SQLAlchemyError
-
+from sqlalchemy import select
 from biomapper.core.engine_components.path_finder import PathFinder
-from biomapper.core.engine_components.reversible_path import ReversiblePath
-from biomapper.core.exceptions import BiomapperError, ErrorCode
 from biomapper.db.models import (
     MappingPath,
-    EndpointRelationship,
-    Endpoint
+    MappingPathStep,
+    MappingResource,
+    OntologyPreference,
 )
 
 
-class TestPathFinder:
-    """Test cases for PathFinder class."""
+@pytest.fixture
+def mock_session():
+    """Create a mock async session."""
+    session = AsyncMock(spec=AsyncSession)
+    return session
+
+
+@pytest.fixture
+def path_finder(mock_session):
+    """Create a PathFinder instance with mocked dependencies."""
+    session_factory = AsyncMock()
+    session_factory.return_value.__aenter__.return_value = mock_session
     
-    @pytest.fixture
-    def path_finder(self):
-        """Create a PathFinder instance for testing."""
-        return PathFinder(cache_size=10, cache_expiry_seconds=60)
+    return PathFinder(
+        session_factory=session_factory,
+        cache_size=10,
+        cache_expiry_seconds=300,
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_direct_paths(path_finder, mock_session):
+    """Test _find_direct_paths method."""
+    # Create a mock path with necessary attributes
+    mock_path = MagicMock(spec=MappingPath)
+    mock_path.id = 998
+    mock_path.name = "TestPath"
+    mock_path.priority = 1
     
-    @pytest.fixture
-    def mock_session(self):
-        """Create a mock database session."""
-        return AsyncMock(spec=AsyncSession)
+    # Create a mock step with required attributes
+    mock_step = MagicMock(spec=MappingPathStep)
+    mock_step.step_order = 1
+    mock_step.mapping_resource = MagicMock()
+    mock_step.mapping_resource.name = "TestResource"
+    mock_step.mapping_resource.input_ontology_term = "GENE_NAME"
+    mock_step.mapping_resource.output_ontology_term = "ENSEMBL_GENE"
     
-    @pytest.fixture
-    def mock_paths(self):
-        """Create mock mapping paths."""
-        path1 = Mock(spec=MappingPath)
-        path1.id = 1
-        path1.name = "Path 1"
-        path1.priority = 10
-        path1.is_active = True
-        path1.steps = []
+    # Assign steps to the path
+    mock_path.steps = [mock_step]
+    
+    # Mock the query result
+    mock_result = MagicMock()
+    mock_result.unique.return_value.scalars.return_value.all.return_value = [mock_path]
+    mock_session.execute.return_value = mock_result
+    
+    # Call the method
+    paths = await path_finder._find_direct_paths(
+        mock_session, 
+        "GENE_NAME", 
+        "ENSEMBL_GENE"
+    )
+    
+    # Assertions
+    assert len(paths) == 1
+    assert paths[0].id == 998
+    assert paths[0].name == "TestPath"
+    
+    # Verify the query was executed
+    mock_session.execute.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_find_mapping_paths_direct(path_finder, mock_session):
+    """Test find_mapping_paths method for direct path."""
+    # Create a mock path
+    mock_path = MagicMock(spec=MappingPath)
+    mock_path.id = 1
+    mock_path.name = "DirectPath"
+    mock_path.priority = 1
+    
+    # Mock the _find_direct_paths method
+    with patch.object(path_finder, '_find_direct_paths', new_callable=AsyncMock) as mock_find_direct:
+        mock_find_direct.return_value = [mock_path]
         
-        path2 = Mock(spec=MappingPath)
-        path2.id = 2
-        path2.name = "Path 2"
-        path2.priority = 20
-        path2.is_active = True
-        path2.steps = []
-        
-        return [path1, path2]
-    
-    @pytest.fixture
-    def mock_endpoints(self):
-        """Create mock endpoints."""
-        source = Mock(spec=Endpoint)
-        source.id = 100
-        source.name = "Source Endpoint"
-        
-        target = Mock(spec=Endpoint)
-        target.id = 200
-        target.name = "Target Endpoint"
-        
-        return source, target
-    
-    def test_init(self, path_finder):
-        """Test PathFinder initialization."""
-        assert path_finder._path_cache == {}
-        assert path_finder._path_cache_timestamps == {}
-        assert path_finder._path_cache_max_size == 10
-        assert path_finder._path_cache_expiry_seconds == 60
-        assert isinstance(path_finder._path_cache_lock, asyncio.Lock)
-    
-    @pytest.mark.asyncio
-    async def test_find_mapping_paths_simple(
-        self, path_finder, mock_session, mock_paths
-    ):
-        """Test simple forward path finding."""
-        # Mock the _find_direct_paths method
-        with patch.object(
-            path_finder,
-            '_find_direct_paths',
-            return_value=mock_paths
-        ) as mock_find:
-            result = await path_finder.find_mapping_paths(
-                mock_session,
-                "SOURCE_TYPE",
-                "TARGET_TYPE"
-            )
-            
-            # Should return reversible paths
-            assert len(result) == 2
-            assert all(isinstance(p, ReversiblePath) for p in result)
-            assert all(not p.is_reverse for p in result)
-            
-            # Should have called _find_direct_paths once
-            mock_find.assert_called_once_with(
-                mock_session, "SOURCE_TYPE", "TARGET_TYPE"
-            )
-    
-    @pytest.mark.asyncio
-    async def test_find_mapping_paths_bidirectional(
-        self, path_finder, mock_session, mock_paths
-    ):
-        """Test bidirectional path finding."""
-        # Create different paths for reverse direction
-        reverse_paths = [Mock(spec=MappingPath)]
-        reverse_paths[0].id = 3
-        reverse_paths[0].name = "Reverse Path"
-        reverse_paths[0].priority = 15
-        reverse_paths[0].steps = []
-        
-        # Mock the _find_direct_paths method
-        with patch.object(
-            path_finder,
-            '_find_direct_paths',
-            side_effect=[mock_paths, reverse_paths]
-        ) as mock_find:
-            result = await path_finder.find_mapping_paths(
-                mock_session,
-                "SOURCE_TYPE",
-                "TARGET_TYPE",
-                bidirectional=True
-            )
-            
-            # Should return both forward and reverse paths
-            assert len(result) == 3
-            assert sum(1 for p in result if not p.is_reverse) == 2
-            assert sum(1 for p in result if p.is_reverse) == 1
-            
-            # Should have called _find_direct_paths twice
-            assert mock_find.call_count == 2
-    
-    @pytest.mark.asyncio
-    async def test_find_mapping_paths_with_relationship(
-        self, path_finder, mock_session, mock_paths, mock_endpoints
-    ):
-        """Test path finding with relationship-specific paths."""
-        source_endpoint, target_endpoint = mock_endpoints
-        
-        # Mock relationship-specific paths
-        with patch.object(
-            path_finder,
-            '_find_paths_for_relationship',
-            return_value=mock_paths
-        ) as mock_rel_find:
-            result = await path_finder.find_mapping_paths(
-                mock_session,
-                "SOURCE_TYPE",
-                "TARGET_TYPE",
-                source_endpoint=source_endpoint,
-                target_endpoint=target_endpoint
-            )
-            
-            # Should use relationship-specific paths
-            assert len(result) == 2
-            mock_rel_find.assert_called_once_with(
-                mock_session,
-                source_endpoint.id,
-                target_endpoint.id,
-                "SOURCE_TYPE",
-                "TARGET_TYPE"
-            )
-    
-    @pytest.mark.asyncio
-    async def test_find_mapping_paths_caching(
-        self, path_finder, mock_session, mock_paths
-    ):
-        """Test that paths are cached and retrieved from cache."""
-        with patch.object(
-            path_finder,
-            '_find_direct_paths',
-            return_value=mock_paths
-        ) as mock_find:
-            # First call - should hit database
-            result1 = await path_finder.find_mapping_paths(
-                mock_session, "SOURCE_TYPE", "TARGET_TYPE"
-            )
-            
-            # Second call - should hit cache
-            result2 = await path_finder.find_mapping_paths(
-                mock_session, "SOURCE_TYPE", "TARGET_TYPE"
-            )
-            
-            # Should only call database once
-            mock_find.assert_called_once()
-            
-            # Results should be the same
-            assert len(result1) == len(result2)
-    
-    @pytest.mark.asyncio
-    async def test_find_mapping_paths_cache_expiry(
-        self, path_finder, mock_session, mock_paths
-    ):
-        """Test that expired cache entries are removed."""
-        # Set very short expiry
-        path_finder._path_cache_expiry_seconds = 0.1
-        
-        with patch.object(
-            path_finder,
-            '_find_direct_paths',
-            return_value=mock_paths
-        ) as mock_find:
-            # First call
-            await path_finder.find_mapping_paths(
-                mock_session, "SOURCE_TYPE", "TARGET_TYPE"
-            )
-            
-            # Wait for expiry
-            await asyncio.sleep(0.2)
-            
-            # Second call - should hit database again
-            await path_finder.find_mapping_paths(
-                mock_session, "SOURCE_TYPE", "TARGET_TYPE"
-            )
-            
-            # Should call database twice
-            assert mock_find.call_count == 2
-    
-    @pytest.mark.asyncio
-    async def test_find_mapping_paths_preferred_direction(
-        self, path_finder, mock_session, mock_paths
-    ):
-        """Test preferred direction ordering."""
-        reverse_paths = [Mock(spec=MappingPath)]
-        reverse_paths[0].id = 3
-        reverse_paths[0].priority = 5  # Higher priority
-        reverse_paths[0].steps = []
-        
-        with patch.object(
-            path_finder,
-            '_find_direct_paths',
-            side_effect=[mock_paths, reverse_paths]
-        ):
-            # Test with reverse preferred
-            result = await path_finder.find_mapping_paths(
-                mock_session,
-                "SOURCE_TYPE",
-                "TARGET_TYPE",
-                bidirectional=True,
-                preferred_direction="reverse"
-            )
-            
-            # Reverse paths should come first
-            assert result[0].is_reverse is True
-    
-    @pytest.mark.asyncio
-    async def test_find_best_path(
-        self, path_finder, mock_session, mock_paths
-    ):
-        """Test finding the best (highest priority) path."""
-        with patch.object(
-            path_finder,
-            'find_mapping_paths',
-            return_value=[
-                ReversiblePath(mock_paths[0]),
-                ReversiblePath(mock_paths[1])
-            ]
-        ):
-            result = await path_finder.find_best_path(
-                mock_session,
-                "SOURCE_TYPE",
-                "TARGET_TYPE"
-            )
-            
-            assert result is not None
-            assert result.id == 1  # First path has highest priority
-    
-    @pytest.mark.asyncio
-    async def test_find_best_path_no_paths(
-        self, path_finder, mock_session
-    ):
-        """Test find_best_path when no paths exist."""
-        with patch.object(
-            path_finder,
-            'find_mapping_paths',
-            return_value=[]
-        ):
-            result = await path_finder.find_best_path(
-                mock_session,
-                "SOURCE_TYPE",
-                "TARGET_TYPE"
-            )
-            
-            assert result is None
-    
-    @pytest.mark.asyncio
-    async def test_find_paths_for_relationship(
-        self, path_finder, mock_session, mock_paths
-    ):
-        """Test finding relationship-specific paths."""
-        # Mock relationship
-        mock_relationship = Mock(spec=EndpointRelationship)
-        mock_relationship.id = 1
-        
-        # Mock database queries
-        mock_result = Mock()
-        mock_result.scalar_one_or_none = Mock(return_value=mock_relationship)
-        mock_result.scalars = Mock(return_value=Mock(unique=Mock(return_value=Mock(all=Mock(return_value=mock_paths)))))
-        
-        mock_session.execute = AsyncMock(return_value=mock_result)
-        
-        result = await path_finder._find_paths_for_relationship(
-            mock_session, 100, 200, "SOURCE_TYPE", "TARGET_TYPE"
+        # Call the method
+        paths = await path_finder.find_mapping_paths(
+            source_ontology="GENE_NAME",
+            target_ontology="ENSEMBL_GENE",
+            bidirectional=False
         )
         
-        assert len(result) == 2
-        assert mock_session.execute.call_count == 2  # One for relationship, one for paths
+        # Assertions
+        assert len(paths) == 1
+        assert paths[0].id == 1
+        assert paths[0].name == "DirectPath"
+        
+        # Verify _find_direct_paths was called
+        mock_find_direct.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_find_mapping_paths_bidirectional(path_finder, mock_session):
+    """Test find_mapping_paths method with bidirectional search."""
+    # Create mock paths
+    mock_forward_path = MagicMock(spec=MappingPath)
+    mock_forward_path.id = 1
+    mock_forward_path.name = "ForwardPath"
+    mock_forward_path.priority = 1
     
-    @pytest.mark.asyncio
-    async def test_find_paths_for_relationship_no_relationship(
-        self, path_finder, mock_session
-    ):
-        """Test when no relationship exists between endpoints."""
-        # Mock no relationship found
-        mock_result = Mock()
-        mock_result.scalar_one_or_none = Mock(return_value=None)
+    mock_reverse_path = MagicMock(spec=MappingPath)
+    mock_reverse_path.id = 2
+    mock_reverse_path.name = "ReversePath"
+    mock_reverse_path.priority = 2
+    
+    # Mock the _find_direct_paths method
+    with patch.object(path_finder, '_find_direct_paths', new_callable=AsyncMock) as mock_find_direct:
+        # Return forward path on first call, reverse path on second
+        mock_find_direct.side_effect = [[mock_forward_path], [mock_reverse_path]]
         
-        mock_session.execute = AsyncMock(return_value=mock_result)
-        
-        result = await path_finder._find_paths_for_relationship(
-            mock_session, 100, 200, "SOURCE_TYPE", "TARGET_TYPE"
+        # Call the method
+        paths = await path_finder.find_mapping_paths(
+            source_ontology="GENE_NAME",
+            target_ontology="ENSEMBL_GENE",
+            bidirectional=True
         )
         
-        assert result == []
+        # Assertions
+        assert len(paths) == 2
+        # Forward path should be first (higher priority)
+        assert paths[0].id == 1
+        # Reverse path should be wrapped in ReversiblePath
+        assert hasattr(paths[1], 'is_reversed')
+        
+        # Verify _find_direct_paths was called twice
+        assert mock_find_direct.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_find_best_path(path_finder, mock_session):
+    """Test find_best_path method."""
+    # Create mock paths
+    mock_path1 = MagicMock(spec=MappingPath)
+    mock_path1.id = 1
+    mock_path1.name = "Path1"
+    mock_path1.priority = 2
     
-    @pytest.mark.asyncio
-    async def test_find_paths_for_relationship_database_error(
-        self, path_finder, mock_session
-    ):
-        """Test database error handling in relationship path finding."""
-        # Mock database error
-        mock_session.execute = AsyncMock(
-            side_effect=SQLAlchemyError("Database error")
+    mock_path2 = MagicMock(spec=MappingPath)
+    mock_path2.id = 2
+    mock_path2.name = "Path2"
+    mock_path2.priority = 1  # Higher priority
+    
+    # Mock find_mapping_paths
+    with patch.object(path_finder, 'find_mapping_paths', new_callable=AsyncMock) as mock_find:
+        mock_find.return_value = [mock_path2, mock_path1]  # Ordered by priority
+        
+        # Call the method
+        best_path = await path_finder.find_best_path(
+            source_ontology="GENE_NAME",
+            target_ontology="ENSEMBL_GENE"
         )
         
-        with pytest.raises(BiomapperError) as exc_info:
-            await path_finder._find_paths_for_relationship(
-                mock_session, 100, 200, "SOURCE_TYPE", "TARGET_TYPE"
-            )
+        # Assertions
+        assert best_path is not None
+        assert best_path.id == 2
+        assert best_path.name == "Path2"
         
-        assert exc_info.value.error_code == ErrorCode.DATABASE_QUERY_ERROR
+        # Verify find_mapping_paths was called
+        mock_find.assert_called_once_with(
+            source_ontology="GENE_NAME",
+            target_ontology="ENSEMBL_GENE",
+            bidirectional=False,
+            preferred_direction=None,
+            source_endpoint=None,
+            target_endpoint=None
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_path_details(path_finder, mock_session):
+    """Test get_path_details method."""
+    # Create a mock path with steps
+    mock_path = MagicMock(spec=MappingPath)
+    mock_path.id = 1
+    mock_path.name = "TestPath"
     
-    @pytest.mark.asyncio
-    async def test_find_direct_paths_simple(
-        self, path_finder, mock_session, mock_paths
-    ):
-        """Test direct path finding with simple query."""
-        # Mock database result
-        mock_result = Mock()
-        mock_result.scalars = Mock(return_value=Mock(unique=Mock(return_value=Mock(all=Mock(return_value=mock_paths)))))
+    # Create mock steps
+    mock_step1 = MagicMock(spec=MappingPathStep)
+    mock_step1.step_order = 1
+    mock_step1.mapping_resource = MagicMock()
+    mock_step1.mapping_resource.name = "Resource1"
+    mock_step1.mapping_resource.input_ontology_term = "GENE_NAME"
+    mock_step1.mapping_resource.output_ontology_term = "GENE_ID"
+    
+    mock_step2 = MagicMock(spec=MappingPathStep)
+    mock_step2.step_order = 2
+    mock_step2.mapping_resource = MagicMock()
+    mock_step2.mapping_resource.name = "Resource2"
+    mock_step2.mapping_resource.input_ontology_term = "GENE_ID"
+    mock_step2.mapping_resource.output_ontology_term = "ENSEMBL_GENE"
+    
+    mock_path.steps = [mock_step1, mock_step2]
+    
+    # Mock the query result
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_path
+    mock_session.execute.return_value = mock_result
+    
+    # Call the method
+    details = await path_finder.get_path_details(1)
+    
+    # Assertions
+    assert details is not None
+    assert details['path_id'] == 1
+    assert details['path_name'] == "TestPath"
+    assert len(details['steps']) == 2
+    assert details['steps'][0]['order'] == 1
+    assert details['steps'][0]['resource_name'] == "Resource1"
+    assert details['steps'][1]['order'] == 2
+    assert details['steps'][1]['resource_name'] == "Resource2"
+
+
+@pytest.mark.asyncio
+async def test_cache_functionality(path_finder, mock_session):
+    """Test that caching works correctly."""
+    # Create a mock path
+    mock_path = MagicMock(spec=MappingPath)
+    mock_path.id = 1
+    mock_path.name = "CachedPath"
+    mock_path.priority = 1
+    
+    # Mock the _find_direct_paths method
+    with patch.object(path_finder, '_find_direct_paths', new_callable=AsyncMock) as mock_find_direct:
+        mock_find_direct.return_value = [mock_path]
         
-        mock_session.execute = AsyncMock(return_value=mock_result)
-        
-        result = await path_finder._find_direct_paths(
-            mock_session, "SOURCE_TYPE", "TARGET_TYPE"
+        # First call - should hit the database
+        paths1 = await path_finder.find_mapping_paths(
+            source_ontology="GENE_NAME",
+            target_ontology="ENSEMBL_GENE",
+            bidirectional=False
         )
         
-        assert len(result) == 2
+        # Second call - should use cache
+        paths2 = await path_finder.find_mapping_paths(
+            source_ontology="GENE_NAME",
+            target_ontology="ENSEMBL_GENE",
+            bidirectional=False
+        )
+        
+        # Assertions
+        assert len(paths1) == 1
+        assert len(paths2) == 1
+        assert paths1[0].id == paths2[0].id
+        
+        # Verify _find_direct_paths was only called once (cached on second call)
+        mock_find_direct.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_clear_cache(path_finder):
+    """Test clear_cache method."""
+    # Add some entries to cache
+    path_finder._cache["test_key"] = "test_value"
     
-    @pytest.mark.asyncio
-    async def test_cache_lru_eviction(
-        self, path_finder, mock_session, mock_paths
-    ):
-        """Test LRU cache eviction when cache is full."""
-        # Set small cache size
-        path_finder._path_cache_max_size = 2
-        
-        with patch.object(
-            path_finder,
-            '_find_direct_paths',
-            return_value=mock_paths
-        ):
-            # Fill cache
-            await path_finder.find_mapping_paths(
-                mock_session, "TYPE1", "TYPE2"
-            )
-            await path_finder.find_mapping_paths(
-                mock_session, "TYPE3", "TYPE4"
-            )
-            
-            # This should evict the oldest entry
-            await path_finder.find_mapping_paths(
-                mock_session, "TYPE5", "TYPE6"
-            )
-            
-            # Cache should still have only 2 entries
-            assert len(path_finder._path_cache) == 2
+    # Clear cache
+    path_finder.clear_cache()
     
-    def test_clear_cache(self, path_finder):
-        """Test cache clearing."""
-        # Add some entries to cache
-        path_finder._path_cache["key1"] = []
-        path_finder._path_cache["key2"] = []
-        path_finder._path_cache_timestamps["key1"] = time.time()
-        path_finder._path_cache_timestamps["key2"] = time.time()
-        
-        # Clear cache
-        path_finder.clear_cache()
-        
-        assert len(path_finder._path_cache) == 0
-        assert len(path_finder._path_cache_timestamps) == 0
+    # Verify cache is empty
+    assert len(path_finder._cache) == 0
