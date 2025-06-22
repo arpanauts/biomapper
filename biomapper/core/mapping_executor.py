@@ -4,7 +4,9 @@ import os
 import json
 import asyncio
 from typing import List, Dict, Any, Optional, Union, Callable, Tuple
+from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 
@@ -14,20 +16,37 @@ from biomapper.core.exceptions import (
     MappingExecutionError,
     ConfigurationError,
     DatabaseQueryError,
+    CacheStorageError,
+    ErrorCode,
     StrategyNotFoundError,
+    InactiveStrategyError,
 )
+from biomapper.core.engine_components.initialization_service import InitializationService
 from biomapper.core.engine_components.strategy_coordinator_service import StrategyCoordinatorService
 from biomapper.core.engine_components.mapping_coordinator_service import MappingCoordinatorService
 from biomapper.core.engine_components.lifecycle_manager import LifecycleManager
+from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
+
+# Services
+from biomapper.core.services.result_aggregation_service import ResultAggregationService
+from biomapper.core.services.execution_services import (
+    IterativeExecutionService,
+    DbStrategyExecutionService,
+    YamlStrategyExecutionService,
+)
+from biomapper.core.services.database_setup_service import DatabaseSetupService
 
 # Models
 from biomapper.core.models.result_bundle import MappingResultBundle
-from ..db.models import MappingStrategy, Endpoint, EndpointPropertyConfig, MappingPath
+from ..db.models import Base as MetamapperBase, MappingStrategy, Endpoint, EndpointPropertyConfig, MappingPath
+from ..db.cache_models import PathExecutionStatus, MappingSession, ExecutionMetric
 
 # Utilities
 from biomapper.core.utils.placeholder_resolver import resolve_placeholders
+from biomapper.core.utils.time_utils import get_current_utc_time
 
 # Configuration
+from biomapper.config import settings
 
 
 
@@ -60,74 +79,38 @@ class MappingExecutor(CompositeIdentifierMixin):
 
     def __init__(
         self,
-        strategy_coordinator: StrategyCoordinatorService,
-        mapping_coordinator: MappingCoordinatorService,
-        lifecycle_manager: LifecycleManager,
-        metadata_query_service,
-        identifier_loader,
-        session_manager,
-        client_manager,
-        config_loader,
-        async_metamapper_session,
-        async_cache_session,
+        metamapper_db_url: Optional[str] = None,
+        mapping_cache_db_url: Optional[str] = None,
+        echo_sql: bool = False,
+        path_cache_size: int = 100,
+        path_cache_expiry_seconds: int = 300,
+        max_concurrent_batches: int = 5,
+        enable_metrics: bool = True,
+        checkpoint_enabled: bool = False,
+        checkpoint_dir: Optional[str] = None,
         batch_size: int = 100,
         max_retries: int = 3,
         retry_delay: int = 5,
-        checkpoint_enabled: bool = False,
-        max_concurrent_batches: int = 5,
-        enable_metrics: bool = True,
+        # Pre-initialized components (new style)
+        session_manager=None,
+        client_manager=None,
+        config_loader=None,
+        strategy_handler=None,
+        path_finder=None,
+        path_execution_manager=None,
+        cache_manager=None,
+        identifier_loader=None,
+        strategy_orchestrator=None,
+        checkpoint_manager=None,
+        progress_reporter=None,
+        langfuse_tracker=None,
     ):
         """
-        Initializes the MappingExecutor as a pure facade.
-        
-        This constructor only accepts pre-constructed, high-level components.
-        All component creation logic has been removed and is handled by MappingExecutorBuilder.
-        
-        Args:
-            strategy_coordinator: Pre-constructed StrategyCoordinatorService
-            mapping_coordinator: Pre-constructed MappingCoordinatorService
-            lifecycle_manager: Pre-constructed LifecycleManager
-            metadata_query_service: Service for querying metadata
-            identifier_loader: Service for loading identifiers
-            session_manager: Manager for database sessions
-            client_manager: Manager for client instances
-            config_loader: Service for loading configurations
-            async_metamapper_session: Async session factory for metamapper DB
-            async_cache_session: Async session factory for cache DB
-            batch_size: Number of items to process per batch
-            max_retries: Maximum retry attempts for failed operations
-            retry_delay: Delay in seconds between retry attempts
-            checkpoint_enabled: Enable checkpointing for resumable execution
-            max_concurrent_batches: Maximum number of batches to process concurrently
-            enable_metrics: Whether to enable metrics tracking
+        Initializes the MappingExecutor as a lean facade.
+        All component initialization is delegated to InitializationService.
         """
         super().__init__()
         self.logger = logging.getLogger(__name__)
-        
-        # Assign high-level coordinators and managers
-        self.strategy_coordinator = strategy_coordinator
-        self.mapping_coordinator = mapping_coordinator
-        self.lifecycle_manager = lifecycle_manager
-        
-        # Assign required services
-        self.metadata_query_service = metadata_query_service
-        self.identifier_loader = identifier_loader
-        self.session_manager = session_manager
-        self.client_manager = client_manager
-        self.config_loader = config_loader
-        
-        # Assign session factories for backward compatibility
-        self.async_metamapper_session = async_metamapper_session
-        self.async_cache_session = async_cache_session
-        
-        # Store configuration parameters
-        self.batch_size = batch_size
-        self.max_retries = max_retries
-        self.retry_delay = retry_delay
-        self.checkpoint_enabled = checkpoint_enabled
-        self.max_concurrent_batches = max_concurrent_batches
-        self.enable_metrics = enable_metrics
-        
 
         # Use InitializationService to initialize all components
         initialization_service = InitializationService()
@@ -209,7 +192,7 @@ class MappingExecutor(CompositeIdentifierMixin):
     ):
         """Asynchronously create and initialize a MappingExecutor instance.
         
-        This factory method uses MappingExecutorBuilder to construct the executor
+        This factory method uses MappingExecutorInitializer to create all components
         and initializes the database tables for both metamapper and cache databases.
         
         Args:
@@ -229,10 +212,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             An initialized MappingExecutor instance with database tables created
         """
-        from biomapper.core.engine_components.mapping_executor_builder import MappingExecutorBuilder
-        
-        # Create builder with all configuration parameters
-        builder = MappingExecutorBuilder(
+        # Create initializer with all configuration parameters
+        initializer = MappingExecutorInitializer(
             metamapper_db_url=metamapper_db_url,
             mapping_cache_db_url=mapping_cache_db_url,
             echo_sql=echo_sql,
@@ -247,8 +228,13 @@ class MappingExecutor(CompositeIdentifierMixin):
             retry_delay=retry_delay,
         )
         
-        # Use the builder to create the executor (includes database initialization)
-        executor = await builder.build_async()
+        # Use the initializer to create the executor
+        executor = await initializer.create_executor()
+        
+        # Initialize metamapper database tables using DatabaseSetupService
+        # (cache tables are already initialized in create_executor)
+        db_setup_service = DatabaseSetupService(logger=executor.logger)
+        await db_setup_service.initialize_tables(executor.async_metamapper_engine, MetamapperBase.metadata)
         
         return executor
 
@@ -310,7 +296,7 @@ class MappingExecutor(CompositeIdentifierMixin):
     async def _execute_path(
         self,
         session: AsyncSession, # Pass meta session
-        path: Union[MappingPath, Any],  # ReversiblePath from engine_components
+        path: Union[MappingPath, "ReversiblePath"],
         input_identifiers: List[str],
         source_ontology: str,
         target_ontology: str,
@@ -498,8 +484,64 @@ class MappingExecutor(CompositeIdentifierMixin):
             event_type: The type of event being tracked (e.g., path_execution, batch_processing)
             metrics: A dictionary containing metrics to track
         """
-        # Delegate metrics tracking to the lifecycle manager
-        await self.lifecycle_manager.track_metrics(event_type, metrics)
+        # If Langfuse tracking is enabled, send metrics there
+        if hasattr(self, "_langfuse_tracker") and self._langfuse_tracker:
+            try:
+                # If this is a path execution event, create a trace
+                if event_type == "path_execution":
+                    trace_id = f"path_{metrics['path_id']}_{int(metrics['start_time'])}"
+                    
+                    # Create a trace for the entire path execution
+                    trace = self._langfuse_tracker.trace(
+                        name="path_execution",
+                        id=trace_id,
+                        metadata={
+                            "path_id": metrics.get("path_id"),
+                            "is_reverse": metrics.get("is_reverse", False),
+                            "input_count": metrics.get("input_count", 0),
+                            "batch_size": metrics.get("batch_size", 0),
+                            "max_concurrent_batches": metrics.get("max_concurrent_batches", 1)
+                        }
+                    )
+                    
+                    # Add spans for each batch
+                    for batch_key, batch_metrics in metrics.get("processing_times", {}).items():
+                        batch_span = trace.span(
+                            name=f"batch_{batch_key}",
+                            start_time=datetime.fromtimestamp(batch_metrics.get("start_time", 0)),
+                            end_time=datetime.fromtimestamp(batch_metrics.get("start_time", 0) + batch_metrics.get("total_time", 0)),
+                            metadata={
+                                "batch_size": batch_metrics.get("batch_size", 0),
+                                "success_count": batch_metrics.get("success_count", 0),
+                                "error_count": batch_metrics.get("error_count", 0),
+                                "filtered_count": batch_metrics.get("filtered_count", 0)
+                            }
+                        )
+                        
+                        if "error" in batch_metrics:
+                            batch_span.add_observation(
+                                name="error",
+                                value=batch_metrics["error"],
+                                metadata={"error_type": batch_metrics.get("error_type", "unknown")}
+                            )
+                            
+                    # Add summary metrics
+                    trace.update(
+                        metadata={
+                            "total_execution_time": metrics.get("total_execution_time", 0),
+                            "success_count": metrics.get("success_count", 0),
+                            "error_count": metrics.get("error_count", 0),
+                            "filtered_count": metrics.get("filtered_count", 0),
+                            "missing_ids": metrics.get("missing_ids", 0),
+                            "result_count": metrics.get("result_count", 0)
+                        }
+                    )
+                    
+                self.logger.debug(f"Sent '{event_type}' metrics to monitoring system")
+            except Exception as e:
+                self.logger.warning(f"Failed to send metrics to monitoring system: {str(e)}")
+                
+        # Additional monitoring systems could be integrated here
             
     
     # ============================================================================
@@ -531,7 +573,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         endpoint_name: str, 
         ontology_type: str,
         return_dataframe: bool = False
-    ) -> Union[List[str], Any]:  # pd.DataFrame
+    ) -> Union[List[str], 'pd.DataFrame']:
         """
         Load identifiers from an endpoint using its configuration in metamapper.db.
         
