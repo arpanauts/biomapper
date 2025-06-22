@@ -1,18 +1,24 @@
 """
 MappingExecutor Initializer for handling MappingExecutor initialization logic.
 
-This module contains the MappingExecutorInitializer class which is responsible for:
+**DEPRECATED**: This module is deprecated. Use InitializationService instead.
+
+This module contains the MappingExecutorInitializer class which was responsible for:
 - Setting up all engine components required by MappingExecutor
 - Configuring database connections and sessions
 - Initializing performance monitoring and metrics tracking
 - Managing component dependencies and lifecycle
 - Providing a clean separation of initialization concerns from core execution logic
+
+All this functionality has been moved to InitializationService.
 """
 
 import logging
 import os
-from typing import Optional
+import warnings
+from typing import Optional, Dict, Any
 
+from .initialization_service import InitializationService
 from .session_manager import SessionManager
 from .client_manager import ClientManager
 from .config_loader import ConfigLoader
@@ -41,10 +47,16 @@ from ..services.database_setup_service import DatabaseSetupService
 class MappingExecutorInitializer:
     """Handles initialization of MappingExecutor components and dependencies.
     
-    This class encapsulates all the complex initialization logic required to set up
-    a MappingExecutor instance with all its dependencies properly configured and
-    connected. It provides a clean separation between initialization concerns and
-    core execution logic.
+    **DEPRECATED**: This class is deprecated in favor of InitializationService.
+    Use InitializationService.create_components_from_config() instead.
+    
+    This class was responsible for encapsulating all the complex initialization logic
+    required to set up a MappingExecutor instance with all its dependencies properly
+    configured and connected. This functionality has been moved to InitializationService
+    which provides a cleaner, more centralized approach to component creation.
+    
+    This class now delegates all initialization to InitializationService for backward
+    compatibility and will be removed in a future version.
     """
     
     def __init__(
@@ -64,6 +76,8 @@ class MappingExecutorInitializer:
     ):
         """Initialize the MappingExecutorInitializer with configuration parameters.
         
+        **DEPRECATED**: Use InitializationService instead.
+        
         Args:
             metamapper_db_url: URL for the metamapper database. If None, uses settings.metamapper_db_url.
             mapping_cache_db_url: URL for the mapping cache database. If None, uses settings.cache_db_url.
@@ -78,6 +92,11 @@ class MappingExecutorInitializer:
             max_retries: Maximum retry attempts for failed operations
             retry_delay: Delay in seconds between retry attempts
         """
+        warnings.warn(
+            "MappingExecutorInitializer is deprecated. Use InitializationService instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.logger = logging.getLogger(__name__)
         
         # Store configuration parameters
@@ -125,261 +144,154 @@ class MappingExecutorInitializer:
     def initialize_components(self, mapping_executor):
         """Initialize all components required by the MappingExecutor.
         
+        **DEPRECATED**: This method now delegates to InitializationService.
+        
         Args:
             mapping_executor: The MappingExecutor instance to initialize components for
             
         Returns:
             dict: Dictionary containing all initialized components
         """
-        try:
-            # Initialize components in dependency order
-            self._initialize_core_components()
-            self._initialize_session_manager()
-            self._initialize_cache_manager()
-            self._initialize_execution_components(mapping_executor)
-            self._initialize_metrics_tracking()
-            
-            # Return all components for assignment to MappingExecutor
-            return {
-                'session_manager': self.session_manager,
-                'client_manager': self.client_manager,
-                'config_loader': self.config_loader,
-                'strategy_handler': self.strategy_handler,
-                'path_finder': self.path_finder,
-                'path_execution_manager': self.path_execution_manager,
-                'cache_manager': self.cache_manager,
-                'identifier_loader': self.identifier_loader,
-                'strategy_orchestrator': self.strategy_orchestrator,
-                'checkpoint_manager': self.checkpoint_manager,
-                'progress_reporter': self.progress_reporter,
-                'langfuse_tracker': self._langfuse_tracker,
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Failed to initialize MappingExecutor components: {str(e)}", exc_info=True)
-            raise BiomapperError(
-                f"MappingExecutor initialization failed: {str(e)}",
-                error_code=ErrorCode.CONFIGURATION_ERROR,
-                details={
-                    "metamapper_db_url": self.metamapper_db_url,
-                    "cache_db_url": self.mapping_cache_db_url,
-                    "error": str(e)
-                }
-            ) from e
+        self.logger.info("MappingExecutorInitializer.initialize_components is deprecated, delegating to InitializationService")
+        
+        # Create configuration dictionary
+        config = {
+            'metamapper_db_url': self.metamapper_db_url,
+            'mapping_cache_db_url': self.mapping_cache_db_url,
+            'echo_sql': self.echo_sql,
+            'path_cache_size': self.path_cache_size,
+            'path_cache_expiry_seconds': self.path_cache_expiry_seconds,
+            'max_concurrent_batches': self.max_concurrent_batches,
+            'enable_metrics': self.enable_metrics,
+            'checkpoint_enabled': self.checkpoint_enabled,
+            'checkpoint_dir': self.checkpoint_dir,
+            'batch_size': self.batch_size,
+            'max_retries': self.max_retries,
+            'retry_delay': self.retry_delay,
+        }
+        
+        # Use InitializationService to create all components
+        initialization_service = InitializationService()
+        components = initialization_service.create_components_from_config(config)
+        
+        # Complete initialization with mapping_executor reference
+        components = initialization_service.complete_initialization(mapping_executor, components)
+        
+        # Store references to components for backward compatibility
+        self.session_manager = components['session_manager']
+        self.client_manager = components['client_manager']
+        self.config_loader = components['config_loader']
+        self.strategy_handler = components['strategy_handler']
+        self.path_finder = components['path_finder']
+        self.path_execution_manager = components['path_execution_manager']
+        self.cache_manager = components['cache_manager']
+        self.identifier_loader = components['identifier_loader']
+        self.strategy_orchestrator = components['strategy_orchestrator']
+        self.checkpoint_manager = components['checkpoint_manager']
+        self.progress_reporter = components['progress_reporter']
+        self._langfuse_tracker = components['langfuse_tracker']
+        
+        return components
     
     def _initialize_core_components(self):
-        """Initialize core components that don't depend on other components."""
-        self.logger.debug("Initializing core components...")
+        """Initialize core components that don't depend on other components.
         
-        # Initialize checkpoint manager
-        self.checkpoint_manager = CheckpointManager(
-            checkpoint_dir=self.checkpoint_dir if self.checkpoint_enabled else None,
-            logger=self.logger
+        **DEPRECATED**: This method is no longer used. All initialization is handled by InitializationService.
+        """
+        warnings.warn(
+            "_initialize_core_components is deprecated and no longer used.",
+            DeprecationWarning,
+            stacklevel=2
         )
-        
-        # Initialize progress reporter
-        self.progress_reporter = ProgressReporter()
-        
-        # Initialize client manager for handling client instantiation and caching
-        self.client_manager = ClientManager(logger=self.logger)
-        
-        # Initialize config loader for handling strategy configuration files
-        self.config_loader = ConfigLoader(logger=self.logger)
-        
-        # Initialize path finder with cache settings
-        self.path_finder = PathFinder(
-            cache_size=self.path_cache_size,
-            cache_expiry_seconds=self.path_cache_expiry_seconds
-        )
-        
-        self.logger.debug("Core components initialized successfully")
     
     def _initialize_session_manager(self):
-        """Initialize the SessionManager and database connections."""
-        self.logger.debug("Initializing session manager...")
+        """Initialize the SessionManager and database connections.
         
-        self.session_manager = SessionManager(
-            metamapper_db_url=self.metamapper_db_url,
-            mapping_cache_db_url=self.mapping_cache_db_url,
-            echo_sql=self.echo_sql
+        **DEPRECATED**: This method is no longer used. All initialization is handled by InitializationService.
+        """
+        warnings.warn(
+            "_initialize_session_manager is deprecated and no longer used.",
+            DeprecationWarning,
+            stacklevel=2
         )
-        
-        self.logger.debug("Session manager initialized successfully")
     
     def _initialize_cache_manager(self):
-        """Initialize the CacheManager with database session factory."""
-        self.logger.debug("Initializing cache manager...")
+        """Initialize the CacheManager with database session factory.
         
-        if not self.session_manager:
-            raise BiomapperError(
-                "SessionManager must be initialized before CacheManager",
-                error_code=ErrorCode.CONFIGURATION_ERROR
-            )
-        
-        self.cache_manager = CacheManager(
-            cache_sessionmaker=self.session_manager.CacheSessionFactory,
-            logger=self.logger
+        **DEPRECATED**: This method is no longer used. All initialization is handled by InitializationService.
+        """
+        warnings.warn(
+            "_initialize_cache_manager is deprecated and no longer used.",
+            DeprecationWarning,
+            stacklevel=2
         )
-        
-        self.logger.debug("Cache manager initialized successfully")
     
     def _initialize_execution_components(self, mapping_executor):
         """Initialize execution-related components that depend on other components.
         
+        **DEPRECATED**: This method is no longer used. All initialization is handled by InitializationService.
+        
         Args:
             mapping_executor: The MappingExecutor instance to provide to components
         """
-        self.logger.debug("Initializing execution components...")
-        
-        # Initialize strategy handler (needs mapping_executor reference)
-        self.strategy_handler = StrategyHandler(mapping_executor=mapping_executor)
-        
-        # Initialize identifier loader
-        self.identifier_loader = IdentifierLoader(
-            metamapper_session_factory=self.session_manager.MetamapperSessionFactory
+        warnings.warn(
+            "_initialize_execution_components is deprecated and no longer used.",
+            DeprecationWarning,
+            stacklevel=2
         )
-        
-        # Initialize path execution manager (function references will be set later)
-        self.path_execution_manager = PathExecutionManager(
-            metamapper_session_factory=self.session_manager.MetamapperSessionFactory,
-            cache_manager=None,  # MappingExecutor handles caching directly
-            logger=self.logger,
-            semaphore=None,  # Will create semaphore as needed
-            max_retries=self.max_retries,
-            retry_delay=self.retry_delay,
-            batch_size=self.batch_size,
-            max_concurrent_batches=self.max_concurrent_batches,
-            enable_metrics=self.enable_metrics,
-            load_client_func=None,  # Will be set after MappingExecutor is fully initialized
-            execute_mapping_step_func=None,  # Will be set after MappingExecutor is fully initialized
-            calculate_confidence_score_func=None,  # Will be set after MappingExecutor is fully initialized
-            create_mapping_path_details_func=None,  # Will be set after MappingExecutor is fully initialized
-            determine_mapping_source_func=None,  # Will be set after MappingExecutor is fully initialized
-            track_mapping_metrics_func=None  # Will be set after MappingExecutor is fully initialized
-        )
-        
-        # Initialize strategy orchestrator
-        self.strategy_orchestrator = StrategyOrchestrator(
-            metamapper_session_factory=self.session_manager.MetamapperSessionFactory,
-            cache_manager=self.cache_manager,
-            strategy_handler=self.strategy_handler,
-            mapping_executor=mapping_executor,  # Pass self for backwards compatibility
-            logger=self.logger
-        )
-        
-        self.logger.debug("Execution components initialized successfully")
     
     def _initialize_metrics_tracking(self):
-        """Initialize metrics tracking if enabled and available."""
-        self.logger.debug("Initializing metrics tracking...")
+        """Initialize metrics tracking if enabled and available.
         
-        if not self.enable_metrics:
-            self.logger.debug("Metrics tracking disabled")
-            return
-        
-        try:
-            import langfuse
-            self._langfuse_tracker = langfuse.Langfuse(
-                host=os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com"),
-                public_key=os.environ.get("LANGFUSE_PUBLIC_KEY"),
-                secret_key=os.environ.get("LANGFUSE_SECRET_KEY"),
-            )
-            self.logger.info("Langfuse metrics tracking initialized")
-        except (ImportError, Exception) as e:
-            self.logger.warning(f"Langfuse metrics tracking not available: {e}")
-            self._langfuse_tracker = None
-        
-        self.logger.debug("Metrics tracking initialization completed")
+        **DEPRECATED**: This method is no longer used. All initialization is handled by InitializationService.
+        """
+        warnings.warn(
+            "_initialize_metrics_tracking is deprecated and no longer used.",
+            DeprecationWarning,
+            stacklevel=2
+        )
     
     def get_convenience_references(self):
         """Get convenience references for backward compatibility.
         
+        **DEPRECATED**: This method now delegates to InitializationService.
+        
         Returns:
             dict: Dictionary containing convenience references to engine and session factories
         """
+        warnings.warn(
+            "get_convenience_references is deprecated. Use InitializationService._get_session_convenience_references instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        
         if not self.session_manager:
             raise BiomapperError(
                 "SessionManager must be initialized before getting convenience references",
                 error_code=ErrorCode.CONFIGURATION_ERROR
             )
         
-        return {
-            'async_metamapper_engine': self.session_manager.async_metamapper_engine,
-            'MetamapperSessionFactory': self.session_manager.MetamapperSessionFactory,
-            'async_metamapper_session': self.session_manager.async_metamapper_session,
-            'async_cache_engine': self.session_manager.async_cache_engine,
-            'CacheSessionFactory': self.session_manager.CacheSessionFactory,
-            'async_cache_session': self.session_manager.async_cache_session,
-        }
+        initialization_service = InitializationService()
+        return initialization_service._get_session_convenience_references(self.session_manager)
     
     def set_executor_function_references(self, mapping_executor):
         """Set function references on PathExecutionManager after MappingExecutor is fully initialized.
         
+        **DEPRECATED**: This method now delegates to InitializationService.
+        
         Args:
             mapping_executor: The fully initialized MappingExecutor instance
         """
-        if self.path_execution_manager:
-            # Set function references
-            self.path_execution_manager._load_client = getattr(mapping_executor, '_load_client', None)
-            self.path_execution_manager._execute_mapping_step = getattr(mapping_executor, '_execute_mapping_step', None)
-            self.path_execution_manager._calculate_confidence_score = getattr(mapping_executor, '_calculate_confidence_score', self.path_execution_manager._calculate_confidence_score)
-            self.path_execution_manager._create_mapping_path_details = getattr(mapping_executor, '_create_mapping_path_details', self.path_execution_manager._create_mapping_path_details)
-            self.path_execution_manager._determine_mapping_source = getattr(mapping_executor, '_determine_mapping_source', self.path_execution_manager._determine_mapping_source)
-            if self.enable_metrics:
-                self.path_execution_manager.track_mapping_metrics = getattr(mapping_executor, 'track_mapping_metrics', None)
-    
-    
-    async def _init_db_tables(self, engine, metadata):
-        """Initialize database tables using the provided engine and metadata.
+        warnings.warn(
+            "set_executor_function_references is deprecated. Use InitializationService.set_executor_function_references instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         
-        Args:
-            engine: The SQLAlchemy async engine
-            metadata: The SQLAlchemy metadata object containing table definitions
-            
-        Raises:
-            BiomapperError: If database table initialization fails
-        """
-        try:
-            self.logger.debug(f"Checking if tables exist in database: {engine.url}")
-            
-            # Check if tables already exist
-            async with engine.connect() as connection:
-                def check_tables_exist(connection):
-                    # Check if any tables from our metadata exist
-                    try:
-                        # Simple check - try to get table names
-                        inspector = inspect(connection)
-                        existing_tables = inspector.get_table_names()
-                        metadata_tables = [table.name for table in metadata.tables.values()]
-                        
-                        # Return True if any of our tables already exist
-                        return any(table in existing_tables for table in metadata_tables)
-                    except Exception:
-                        # If inspection fails, assume tables don't exist
-                        return False
-                
-                tables_exist = await connection.run_sync(check_tables_exist)
-                
-                if tables_exist:
-                    self.logger.debug("Database tables already exist, skipping creation")
-                    return
-                    
-            self.logger.info("Creating database tables...")
-            async with engine.begin() as connection:
-                await connection.run_sync(metadata.create_all)
-                
-            self.logger.info("Database tables initialized successfully")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to initialize database tables: {str(e)}", exc_info=True)
-            raise BiomapperError(
-                f"Failed to initialize database tables: {str(e)}",
-                error_code=ErrorCode.DATABASE_INITIALIZATION_ERROR,
-                details={
-                    "database_url": str(engine.url),
-                    "error": str(e)
-                }
-            ) from e
+        if self.path_execution_manager:
+            initialization_service = InitializationService()
+            initialization_service.set_executor_function_references(mapping_executor, self.path_execution_manager)
+    
 
     async def create_executor(self):
         """Asynchronously create and initialize a MappingExecutor instance.
