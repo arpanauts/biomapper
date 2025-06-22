@@ -265,6 +265,13 @@ class MappingExecutor(CompositeIdentifierMixin):
             metrics_manager=self._langfuse_tracker
         )
         
+        # Initialize LifecycleManager
+        self.lifecycle_manager = LifecycleManager(
+            session_manager=self.session_manager,
+            execution_lifecycle_service=self.lifecycle_service,
+            client_manager=self.client_manager
+        )
+        
         # Initialize RobustExecutionCoordinator
         self.robust_execution_coordinator = RobustExecutionCoordinator(
             strategy_orchestrator=self.strategy_orchestrator,
@@ -659,23 +666,7 @@ class MappingExecutor(CompositeIdentifierMixin):
 
     async def async_dispose(self):
         """Asynchronously dispose of underlying database engines."""
-        self.logger.info("Disposing of MappingExecutor engines...")
-        
-        # Dispose metamapper engine
-        if hasattr(self, 'async_metamapper_engine') and self.async_metamapper_engine:
-            await self.async_metamapper_engine.dispose()
-            self.logger.info("Metamapper engine disposed.")
-            
-        # Dispose cache engine  
-        if hasattr(self, 'async_cache_engine') and self.async_cache_engine:
-            await self.async_cache_engine.dispose()
-            self.logger.info("Cache engine disposed.")
-            
-        # Clear client cache
-        if hasattr(self, 'client_manager'):
-            self.client_manager.clear_cache()
-            
-        self.logger.info("MappingExecutor engines disposed.")
+        await self.lifecycle_manager.async_dispose()
 
     async def track_mapping_metrics(self, event_type: str, metrics: Dict[str, Any]) -> None:
         """
@@ -1272,7 +1263,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         Args:
             callback: Function that takes a progress dict as argument
         """
-        self.lifecycle_service.add_progress_callback(callback)
+        self.lifecycle_manager.add_progress_callback(callback)
     
     
     async def execute_with_retry(
@@ -1299,7 +1290,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         for attempt in range(self.max_retries):
             try:
                 # Report attempt
-                await self.lifecycle_service.report_progress({
+                await self.lifecycle_manager.report_progress({
                     'type': 'retry_attempt',
                     'operation': operation_name,
                     'attempt': attempt + 1,
@@ -1330,7 +1321,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         self.logger.error(f"{error_msg}: {last_error}")
         
         # Report failure
-        await self.lifecycle_service.report_progress({
+        await self.lifecycle_manager.report_progress({
             'type': 'retry_exhausted',
             'operation': operation_name,
             'attempts': self.max_retries,
@@ -1397,7 +1388,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             )
             
             # Report batch start
-            await self.lifecycle_service.report_batch_progress(
+            await self.lifecycle_manager.report_batch_progress(
                 batch_number=batch_num,
                 total_batches=total_batches,
                 items_processed=processed_count + i,
@@ -1439,7 +1430,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                             if key not in checkpoint_data:
                                 checkpoint_data[key] = value
                                 
-                    await self.lifecycle_service.save_batch_checkpoint(
+                    await self.lifecycle_manager.save_batch_checkpoint(
                         execution_id=execution_id,
                         batch_number=batch_num,
                         batch_state=checkpoint_data,
@@ -1447,7 +1438,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                     )
                 
                 # Report batch completion
-                await self.lifecycle_service.report_batch_progress(
+                await self.lifecycle_manager.report_batch_progress(
                     batch_number=batch_num,
                     total_batches=total_batches,
                     items_processed=current_processed,
@@ -1465,7 +1456,7 @@ class MappingExecutor(CompositeIdentifierMixin):
                 )
                 
                 # Report batch failure
-                await self.lifecycle_service.report_progress({
+                await self.lifecycle_manager.report_progress({
                     'type': 'batch_failed',
                     'processor': processor_name,
                     'batch_num': batch_num,
@@ -1545,7 +1536,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         Args:
             progress_data: Progress information to report
         """
-        await self.lifecycle_service.report_progress(progress_data)
+        await self.lifecycle_manager.report_progress(progress_data)
     
     # Client delegate methods
     
@@ -1556,20 +1547,14 @@ class MappingExecutor(CompositeIdentifierMixin):
     @property
     def checkpoint_dir(self):
         """Get the checkpoint directory path."""
-        return self.lifecycle_service.get_checkpoint_directory()
+        return self.lifecycle_manager.checkpoint_dir
     
     @checkpoint_dir.setter
     def checkpoint_dir(self, value):
         """Set the checkpoint directory path."""
-        from pathlib import Path
-        if value is not None:
-            self.lifecycle_service.set_checkpoint_directory(Path(value))
-            # Ensure directory exists
-            Path(value).mkdir(parents=True, exist_ok=True)
-            self.checkpoint_enabled = True
-        else:
-            self.lifecycle_service.set_checkpoint_directory(None)
-            self.checkpoint_enabled = False
+        self.lifecycle_manager.checkpoint_dir = value
+        # Update local checkpoint_enabled state to match
+        self.checkpoint_enabled = self.lifecycle_manager.checkpoint_enabled
     
     async def save_checkpoint(self, execution_id: str, checkpoint_data: Dict[str, Any]):
         """
@@ -1579,7 +1564,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             execution_id: Unique identifier for the execution
             checkpoint_data: Data to checkpoint
         """
-        await self.lifecycle_service.save_checkpoint(execution_id, checkpoint_data)
+        await self.lifecycle_manager.save_checkpoint(execution_id, checkpoint_data)
     
     async def load_checkpoint(self, execution_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -1591,4 +1576,4 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Checkpoint data if found, None otherwise
         """
-        return await self.lifecycle_service.load_checkpoint(execution_id)
+        return await self.lifecycle_manager.load_checkpoint(execution_id)
