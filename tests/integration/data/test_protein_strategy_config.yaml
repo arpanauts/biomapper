@@ -1,7 +1,10 @@
 # Test configuration for YAML strategy integration tests
 
-entity_type: test_protein
-version: "1.0"
+entity_types:
+  test_protein:
+    description: "Test protein entity type"
+    version: "1.0"
+    example_identifiers: ["TEST1", "P12345", "HGNC:1234"]
 
 ontologies:
   hgnc:
@@ -215,8 +218,3 @@ mapping_strategies:
           ontology_type_to_match: "hgnc"
           resource_name_for_check: "test_hgnc_mapper"
           include_if_present: true
-
-entity_types:
-  test_protein:
-    description: "Test protein entity type"
-    example_identifiers: ["TEST1", "P12345", "HGNC:1234"]
