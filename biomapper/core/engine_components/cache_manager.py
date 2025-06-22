@@ -166,8 +166,7 @@ class CacheManager:
             self.logger.error(f"Database error during cache check: {str(e)}")
             raise CacheRetrievalError(
                 message=f"Failed to check cache: {str(e)}",
-                source_identifiers=input_identifiers,
-                details={'error': str(e)}
+                details={'source_identifiers': input_identifiers, 'error': str(e)}
             )
         except Exception as e:
             self.logger.error(f"Unexpected error during cache check: {str(e)}")
@@ -337,8 +336,7 @@ class CacheManager:
                 self.logger.error(f"Database error during cache storage: {str(e)}")
                 raise CacheStorageError(
                     message=f"Failed to store cache results: {str(e)}",
-                    cache_data=results_to_cache,
-                    details={'error': str(e)}
+                    details={'cache_data': results_to_cache, 'error': str(e)}
                 )
             except Exception as e:
                 await cache_session.rollback()
@@ -389,8 +387,7 @@ class CacheManager:
                 self.logger.error(f"Failed to create path execution log: {str(e)}")
                 raise CacheTransactionError(
                     message=f"Failed to create path execution log: {str(e)}",
-                    operation="create_path_execution_log",
-                    details={'path_id': path_id, 'error': str(e)}
+                    details={'path_id': path_id, 'operation': 'create_path_execution_log', 'error': str(e)}
                 )
     
     async def get_path_details_from_log(
