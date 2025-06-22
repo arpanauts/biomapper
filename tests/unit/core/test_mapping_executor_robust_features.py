@@ -42,12 +42,34 @@ class MockStrategyAction:
 
 @pytest.fixture
 def mock_executor():
-    """Create a MappingExecutor instance with mocked database connections."""
-    with patch('biomapper.core.engine_components.session_manager.create_async_engine'):
-        executor = MappingExecutor(
-            metamapper_db_url="sqlite+aiosqlite:///:memory:",
-            mapping_cache_db_url="sqlite+aiosqlite:///:memory:",
-            echo_sql=False,
+    """Create a MappingExecutor instance with mocked components."""
+    # Create mock high-level components
+    mock_strategy_coordinator = AsyncMock()
+    mock_mapping_coordinator = AsyncMock()
+    mock_lifecycle_manager = AsyncMock()
+    mock_metadata_query_service = AsyncMock()
+    mock_identifier_loader = AsyncMock()
+    mock_session_manager = AsyncMock()
+    mock_client_manager = AsyncMock()
+    mock_config_loader = AsyncMock()
+    
+    # Mock session factories
+    def mock_session_factory():
+        return AsyncMock()
+    
+    # Create executor using the new constructor
+    executor = MappingExecutor(
+        strategy_coordinator=mock_strategy_coordinator,
+        mapping_coordinator=mock_mapping_coordinator,
+        lifecycle_manager=mock_lifecycle_manager,
+        metadata_query_service=mock_metadata_query_service,
+        identifier_loader=mock_identifier_loader,
+        session_manager=mock_session_manager,
+        client_manager=mock_client_manager,
+        config_loader=mock_config_loader,
+        async_metamapper_session=mock_session_factory,
+        async_cache_session=mock_session_factory,
+        echo_sql=False,
             enable_metrics=False,
             checkpoint_enabled=True,
             batch_size=10,
