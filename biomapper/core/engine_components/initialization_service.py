@@ -327,7 +327,7 @@ class InitializationService:
         components['result_aggregation_service'] = ResultAggregationService(logger=self.logger)
 
         # Initialize SessionMetricsService
-        components['session_metrics_service'] = SessionMetricsService(logger=self.logger)
+        components['session_metrics_service'] = SessionMetricsService()
         
         # Initialize the new execution services
         components['iterative_execution_service'] = IterativeExecutionService(

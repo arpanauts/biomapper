@@ -146,31 +146,6 @@ class MappingExecutor(CompositeIdentifierMixin):
         for key, value in components.items():
             setattr(self, key, value)
 
-        # Initialize the execution services first, as coordinators depend on them.
-        self.result_aggregation_service = ResultAggregationService(logger=self.logger)
-        
-        self.iterative_execution_service = IterativeExecutionService(
-            direct_mapping_service=self.direct_mapping_service,
-            iterative_mapping_service=self.iterative_mapping_service,
-            bidirectional_validation_service=self.bidirectional_validation_service,
-            result_aggregation_service=self.result_aggregation_service,
-            path_finder=self.path_finder,
-            composite_handler=self._composite_handler,
-            async_metamapper_session=self.async_metamapper_session,
-            metadata_query_service=self.metadata_query_service,
-            logger=self.logger,
-        )
-        
-        self.db_strategy_execution_service = DbStrategyExecutionService(
-            strategy_execution_service=self.strategy_execution_service,
-            logger=self.logger,
-        )
-        
-        self.yaml_strategy_execution_service = YamlStrategyExecutionService(
-            strategy_orchestrator=self.strategy_orchestrator,
-            logger=self.logger,
-        )
-
         # Now, initialize Coordinator and Manager services that compose other services
         self.strategy_coordinator = StrategyCoordinatorService(
             db_strategy_execution_service=self.db_strategy_execution_service,
@@ -188,13 +163,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         self.lifecycle_manager = LifecycleManager(
             session_manager=self.session_manager,
             execution_lifecycle_service=self.lifecycle_service,
-            client_manager=self.client_manager,
-            cache_manager=self.cache_manager,
-            path_finder=self.path_finder,
-            path_execution_manager=self.path_execution_manager,
-            composite_handler=self,  # MappingExecutor implements composite handling
-            step_execution_service=self.step_execution_service,
-            logger=self.logger
+            client_manager=self.client_manager
         )
 
         # Set executor reference for services that need it for callbacks/delegation
