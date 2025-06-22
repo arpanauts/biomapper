@@ -384,12 +384,23 @@ def mock_path_repo():
 
 
 @pytest.fixture
-def mapping_executor():
+async def mapping_executor():
     """Fixture for a properly initialized MappingExecutor with mock sessions."""
-    executor = MappingExecutor(
+    from biomapper.core.engine_components.mapping_executor_builder import MappingExecutorBuilder
+    
+    # Use the builder to create the executor
+    builder = MappingExecutorBuilder(
         metamapper_db_url="sqlite+aiosqlite:///:memory:",
         mapping_cache_db_url="sqlite+aiosqlite:///:memory:",
     )
+    
+    # For testing, we'll create a mock executor instead of fully building
+    # This avoids the complexity of mocking all the dependencies
+    executor = await MappingExecutor.create(
+        metamapper_db_url="sqlite+aiosqlite:///:memory:",
+        mapping_cache_db_url="sqlite+aiosqlite:///:memory:",
+    )
+    
     return executor
 
 
