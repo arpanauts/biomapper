@@ -879,8 +879,6 @@ class InitializationService:
             metadata_query_service=components['metadata_query_service'],
             session_metrics_service=components['session_metrics_service'],
             logger=self.logger,
-            logger=self.logger
-            session_metrics_service=session_metrics_service
         )
     
     def _create_db_strategy_execution_service(
