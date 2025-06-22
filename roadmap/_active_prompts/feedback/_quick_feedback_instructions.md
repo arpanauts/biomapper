@@ -11,4 +11,6 @@ Create a detailed Markdown feedback file at:
 - **Environment Changes:** [any files created, permissions changed, etc.]
 - **Lessons Learned:** [patterns that worked or should be avoided]
 
-If necessary, commit the feedback file to the current git worktree branch.
+If necessary, commit the feedback file and all other changes to the current git worktree branch.
+
+Finally, remind the $USER what git worktree branch you're working on.
