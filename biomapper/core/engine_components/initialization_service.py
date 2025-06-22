@@ -329,7 +329,7 @@ class InitializationService:
             bidirectional_validation_service=components['bidirectional_validation_service'],
             result_aggregation_service=components['result_aggregation_service'],
             path_finder=components['path_finder'],
-            composite_handler=mapping_executor._composite_handler,
+            composite_handler=mapping_executor,
             async_metamapper_session=components['async_metamapper_session'],
             metadata_query_service=components['metadata_query_service'],
             logger=self.logger,
