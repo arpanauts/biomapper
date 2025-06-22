@@ -30,11 +30,28 @@ from biomapper.core.engine_components.initialization_service import Initializati
 from biomapper.core.engine_components.strategy_coordinator_service import StrategyCoordinatorService
 from biomapper.core.engine_components.mapping_coordinator_service import MappingCoordinatorService
 from biomapper.core.engine_components.lifecycle_manager import LifecycleManager
+from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
+from biomapper.core.engine_components.robust_execution_coordinator import RobustExecutionCoordinator
 from biomapper.core.services.database_setup_service import DatabaseSetupService
+from biomapper.core.services.metadata_query_service import MetadataQueryService
+from biomapper.core.services.mapping_handler_service import MappingHandlerService
+from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
+from biomapper.core.services.mapping_step_execution_service import MappingStepExecutionService
+from biomapper.core.services.strategy_execution_service import StrategyExecutionService
+from biomapper.core.services.result_aggregation_service import ResultAggregationService
+from biomapper.core.services.bidirectional_validation_service import BidirectionalValidationService
+from biomapper.core.services.direct_mapping_service import DirectMappingService
+from biomapper.core.services.execution_lifecycle_service import ExecutionLifecycleService
+from biomapper.core.services.execution_services import (
+    IterativeExecutionService,
+    DbStrategyExecutionService,
+    YamlStrategyExecutionService,
+)
+from biomapper.core.services import IterativeMappingService
 
 # Import models
 from biomapper.core.models.result_bundle import MappingResultBundle
-from ..db.models import Base as MetamapperBase, MappingStrategy
+from ..db.models import Base as MetamapperBase, MappingStrategy, Endpoint, EndpointPropertyConfig, MappingPath
 from ..db.cache_models import PathExecutionStatus, MappingSession, ExecutionMetric
 
 # Import utilities
@@ -328,6 +345,13 @@ class MappingExecutor(CompositeIdentifierMixin):
             logger=self.logger,
         )
         
+        # Initialize MappingCoordinatorService
+        self.mapping_coordinator_service = MappingCoordinatorService(
+            iterative_execution_service=self.iterative_execution_service,
+            path_execution_service=self.path_execution_service,
+            logger=self.logger,
+        )
+        
         self.logger.info("MappingExecutor initialization complete")
 
     
@@ -427,7 +451,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         """
         Execute a mapping process based on endpoint configurations, using an iterative strategy.
 
-        This method delegates to the IterativeExecutionService for the actual execution logic.
+        This method delegates to the MappingCoordinatorService which coordinates the execution.
         The service handles:
         1. Attempt direct mapping using the primary shared ontology.
         2. Identify unmapped entities.
@@ -459,7 +483,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Dictionary with mapping results, including provenance and validation status
         """
-        return await self.iterative_execution_service.execute(
+        return await self.mapping_coordinator_service.execute_mapping(
             source_endpoint_name=source_endpoint_name,
             target_endpoint_name=target_endpoint_name,
             input_identifiers=input_identifiers,
@@ -498,7 +522,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         """
         Execute a mapping path or its reverse, with optimized batched processing.
         
-        This method now delegates to MappingPathExecutionService for the actual execution logic.
+        This method now delegates to MappingCoordinatorService for the actual execution logic.
         
         Args:
             session: Database session
@@ -515,14 +539,14 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Dictionary mapping input identifiers to their results
         """
-        # Delegate to MappingPathExecutionService
-        return await self.path_execution_service.execute_path(
+        # Delegate to MappingCoordinatorService
+        return await self.mapping_coordinator_service.execute_path(
+            session=session,
             path=path,
             input_identifiers=input_identifiers,
             source_ontology=source_ontology,
             target_ontology=target_ontology,
             mapping_session_id=mapping_session_id,
-            execution_context=None,
             batch_size=batch_size,
             max_hop_count=max_hop_count,
             filter_confidence=filter_confidence,
