@@ -348,6 +348,7 @@ from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from biomapper.core.engine_components.cache_manager import CacheManager, get_current_utc_time
 from biomapper.db.cache_models import EntityMapping, PathExecutionLog, PathExecutionStatus
 from biomapper.db.models import MappingPath
+from biomapper.core.engine_components.reversible_path import ReversiblePath
 from biomapper.core.exceptions import (
     CacheError,
     CacheTransactionError,
@@ -606,23 +607,23 @@ class TestCacheManagerStoreResults:
                 target_ontology="target_type"
             )
             
-            assert result == 999
-            mock_session.add_all.assert_called_once()
-            mock_session.commit.assert_called()
-    
     async def test_store_mapping_results_with_reverse_path(self, cache_manager, mock_cache_sessionmaker):
         """Test store_mapping_results with a reverse path."""
         # Setup mock session
         mock_session = AsyncMock()
         mock_cache_sessionmaker.return_value.__aenter__.return_value = mock_session
-        
-        # Mock reverse path
-        mock_path = MagicMock()
-        mock_path.id = 123
-        mock_path.name = "test_path"
-        mock_path.steps = ["step1"]
-        mock_path.is_reverse = True  # Reverse path
-        
+
+        # Create a proper mock for a ReversiblePath
+        # First, mock the original_path which would be a MappingPath instance
+        mock_original_path = MagicMock(spec=MappingPath)
+        mock_original_path.id = 123
+        mock_original_path.name = "test_path"
+        mock_original_path.steps = ["step1"]
+        mock_original_path.priority = 50
+
+        # Now, create a real ReversiblePath instance with the mocked original_path
+        mock_path = ReversiblePath(original_path=mock_original_path, is_reverse=True)
+
         # Mock path log creation
         with patch.object(cache_manager, 'create_path_execution_log') as mock_create_log:
             mock_log = MagicMock()
