@@ -17,6 +17,7 @@ from ...db.models import (
     Endpoint,
     EndpointPropertyConfig,
     OntologyPreference,
+    MappingStrategy,
 )
 
 
@@ -155,3 +156,35 @@ class MetadataQueryService:
                 error_code=ErrorCode.DATABASE_QUERY_ERROR,
                 details={"endpoint": endpoint_name, "property": property_name, "error": str(e)}
             ) from e
+    
+    async def get_endpoint_by_name(self, session: AsyncSession, endpoint_name: str) -> Optional[Endpoint]:
+        """
+        Retrieve an endpoint configuration by name from the metamapper database.
+        
+        Args:
+            session: Active database session
+            endpoint_name: Name of the endpoint to retrieve
+            
+        Returns:
+            Endpoint object if found, None otherwise
+        """
+        return await self.get_endpoint(session, endpoint_name)
+    
+    async def get_strategy(self, strategy_name: str) -> Optional[MappingStrategy]:
+        """
+        Get a strategy by name from the database.
+        
+        Args:
+            strategy_name: Name of the strategy to retrieve
+            
+        Returns:
+            MappingStrategy object if found, None otherwise
+        """
+        try:
+            async with self.session_manager.async_metamapper_session() as session:
+                query = select(MappingStrategy).where(MappingStrategy.name == strategy_name)
+                result = await session.execute(query)
+                return result.scalar_one_or_none()
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error getting strategy {strategy_name}: {e}")
+            return None
