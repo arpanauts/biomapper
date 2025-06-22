@@ -10,6 +10,8 @@ from unittest.mock import Mock, AsyncMock, patch
 from pathlib import Path
 import tempfile
 import shutil
+import asyncio
+import os
 
 from biomapper.core.services.checkpoint_service import CheckpointService
 from biomapper.core.services.execution_lifecycle_service import ExecutionLifecycleService
@@ -278,3 +280,71 @@ class TestCheckpointService:
         assert checkpoint_service.validate_checkpoint_data("not a dict") is False
         assert checkpoint_service.validate_checkpoint_data(None) is False
         assert checkpoint_service.validate_checkpoint_data([1, 2, 3]) is False
+    
+    async def test_save_checkpoint_large_data(self, checkpoint_service, mock_lifecycle_service, temp_checkpoint_dir):
+        """Test saving checkpoint with large data."""
+        checkpoint_service.set_checkpoint_directory(temp_checkpoint_dir)
+        
+        # Create large checkpoint data
+        large_data = {f"key_{i}": f"value_{i}" * 100 for i in range(1000)}
+        
+        await checkpoint_service.save_checkpoint("large-exec", large_data)
+        mock_lifecycle_service.save_checkpoint.assert_called_once_with("large-exec", large_data)
+    
+    async def test_concurrent_checkpoint_operations(self, checkpoint_service, mock_lifecycle_service, temp_checkpoint_dir):
+        """Test concurrent checkpoint save operations."""
+        checkpoint_service.set_checkpoint_directory(temp_checkpoint_dir)
+        
+        # Create multiple concurrent save operations
+        tasks = []
+        for i in range(10):
+            task = checkpoint_service.save_checkpoint(f"exec-{i}", {"index": i})
+            tasks.append(task)
+        
+        # Execute all concurrently
+        await asyncio.gather(*tasks)
+        
+        # Verify all were called
+        assert mock_lifecycle_service.save_checkpoint.call_count == 10
+    
+    def test_set_checkpoint_directory_with_invalid_path(self, checkpoint_service, mock_lifecycle_service, temp_checkpoint_dir):
+        """Test setting checkpoint directory with invalid path."""
+        # Use a path within temp directory that doesn't exist yet
+        non_existent_path = os.path.join(temp_checkpoint_dir, "nonexistent", "path", "to", "checkpoints")
+        checkpoint_service.set_checkpoint_directory(non_existent_path)
+        
+        # Should create the directory and update the path
+        assert checkpoint_service.checkpoint_directory == Path(non_existent_path)
+        assert checkpoint_service.is_enabled is True
+        assert os.path.exists(non_existent_path)
+    
+    async def test_save_batch_checkpoint_edge_cases(self, checkpoint_service, mock_lifecycle_service, temp_checkpoint_dir):
+        """Test save batch checkpoint with edge cases."""
+        checkpoint_service.set_checkpoint_directory(temp_checkpoint_dir)
+        
+        # Test with batch number 0
+        await checkpoint_service.save_batch_checkpoint(
+            "exec-1", 0, {"started": True}, {"is_first": True}
+        )
+        
+        # Test with negative batch number (should still work)
+        await checkpoint_service.save_batch_checkpoint(
+            "exec-1", -1, {"error": "negative batch"}, None
+        )
+        
+        # Test with very large batch number
+        await checkpoint_service.save_batch_checkpoint(
+            "exec-1", 999999, {"large": True}, {"test": "edge case"}
+        )
+        
+        assert mock_lifecycle_service.save_batch_checkpoint.call_count == 3
+    
+    async def test_load_checkpoint_with_corrupted_data(self, checkpoint_service, mock_lifecycle_service, temp_checkpoint_dir):
+        """Test loading checkpoint when data is corrupted."""
+        checkpoint_service.set_checkpoint_directory(temp_checkpoint_dir)
+        
+        # Simulate corrupted data by raising exception
+        mock_lifecycle_service.load_checkpoint.side_effect = ValueError("Invalid checkpoint format")
+        
+        with pytest.raises(ValueError, match="Invalid checkpoint format"):
+            await checkpoint_service.load_checkpoint("corrupted-exec")
