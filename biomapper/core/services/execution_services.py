@@ -30,13 +30,21 @@ from biomapper.core.utils.time_utils import get_current_utc_time
 
 class IterativeExecutionService:
     """
-    Service for executing iterative mapping between endpoints.
+    Service for executing iterative mapping strategies in biomapper's service-oriented architecture.
     
-    This service handles the complex multi-step mapping process that includes:
-    1. Direct primary mapping
-    2. Iterative secondary mapping for unmapped identifiers
-    3. Bidirectional validation (optional)
-    4. Result aggregation
+    The IterativeExecutionService is a specialized service that handles iterative mapping
+    approaches where mappings are attempted through multiple providers or strategies
+    sequentially. It is part of the service layer that the MappingExecutor facade delegates to.
+    
+    Key Responsibilities:
+    1. Execute multi-step mapping processes with fallback strategies
+    2. Handle direct primary mapping attempts
+    3. Perform iterative secondary mapping for unmapped identifiers
+    4. Optionally validate mappings bidirectionally
+    5. Aggregate results from multiple mapping attempts
+    
+    This service exemplifies the separation of concerns in the new architecture, focusing
+    solely on iterative execution logic while delegating specific operations to other services.
     """
     
     def __init__(
@@ -450,10 +458,20 @@ class IterativeExecutionService:
 
 class DbStrategyExecutionService:
     """
-    Service for executing database-stored mapping strategies.
+    Service for executing database-stored mapping strategies in biomapper's service architecture.
     
-    This service handles the execution of mapping strategies that are stored
-    in the database, delegating to the StrategyExecutionService.
+    The DbStrategyExecutionService is a specialized service that executes mapping strategies
+    stored in the database, allowing for dynamic strategy management without code changes.
+    It is part of the execution services layer that the MappingExecutor facade delegates to.
+    
+    Key Responsibilities:
+    - Retrieve mapping strategies from the database by name
+    - Execute database-defined strategies with runtime parameters
+    - Support dynamic strategy updates without application restart
+    - Maintain compatibility with legacy database strategy format
+    
+    This service enables data-driven configuration of mapping workflows, allowing
+    administrators to modify strategies through database updates rather than code changes.
     """
     
     def __init__(
@@ -511,10 +529,22 @@ class DbStrategyExecutionService:
 
 class YamlStrategyExecutionService:
     """
-    Service for executing YAML-defined mapping strategies.
+    Service for executing YAML-defined mapping strategies in biomapper's service architecture.
     
-    This service handles the execution of mapping strategies that are defined
-    in YAML configuration files, delegating to the StrategyOrchestrator.
+    The YamlStrategyExecutionService is a specialized service that executes mapping workflows
+    defined in YAML configuration files. It is the primary method for defining complex,
+    multi-step mapping pipelines and is part of the execution services layer that the
+    MappingExecutor facade delegates to.
+    
+    Key Responsibilities:
+    - Load and parse YAML strategy definitions from configuration files
+    - Execute multi-step workflows with StrategyAction classes
+    - Pass initial context and parameters to strategy steps
+    - Orchestrate complex mapping pipelines declaratively
+    - Support configuration-driven workflow modifications
+    
+    This service embodies the configuration-driven philosophy of the new architecture,
+    allowing complex mapping logic to be defined and modified without changing code.
     """
     
     def __init__(

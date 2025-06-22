@@ -49,6 +49,7 @@ Key Features
    :maxdepth: 2
    :caption: API Reference
    
+   api/services
    api/core
    api/mapping
    api/monitoring
