@@ -1,7 +1,10 @@
 # Test configuration for optional steps in YAML strategies
 
-entity_type: test_optional
-version: "1.0"
+entity_types:
+  test_optional:
+    description: "Test optional entity type"
+    version: "1.0"
+    example_identifiers: ["TEST1", "P12345", "HGNC:1234"]
 
 ontologies:
   hgnc:
@@ -316,8 +319,3 @@ mapping_strategies:
           ontology_type_to_match: "uniprot"
           resource_name_for_check: "fail_resource_3"
           include_if_present: true
-
-entity_types:
-  test_optional:
-    description: "Test entity type specifically for optional steps testing"
-    example_identifiers: ["TEST1", "P12345", "HGNC:1234"]
