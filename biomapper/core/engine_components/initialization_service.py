@@ -860,6 +860,26 @@ class InitializationService:
             metadata_query_service=metadata_query_service,
             session_metrics_service=session_metrics_service,
             logger=self.logger
+        )
+        
+
+        # Initialize SessionMetricsService
+        components['session_metrics_service'] = SessionMetricsService()
+        
+        # Initialize the new execution services
+        components['iterative_execution_service'] = IterativeExecutionService(
+            direct_mapping_service=components['direct_mapping_service'],
+            iterative_mapping_service=components['iterative_mapping_service'],
+            bidirectional_validation_service=components['bidirectional_validation_service'],
+            result_aggregation_service=components['result_aggregation_service'],
+            path_finder=components['path_finder'],
+            composite_handler=mapping_executor,
+            async_metamapper_session=components['async_metamapper_session'],
+            async_cache_session=components['async_cache_session'],
+            metadata_query_service=components['metadata_query_service'],
+            session_metrics_service=components['session_metrics_service'],
+            logger=self.logger,
+            logger=self.logger
             session_metrics_service=session_metrics_service
         )
     
