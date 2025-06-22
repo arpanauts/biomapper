@@ -713,7 +713,6 @@ class MappingExecutor(CompositeIdentifierMixin):
             progress_callback=progress_callback,
             batch_size=batch_size,
             min_confidence=min_confidence,
-            initial_context=initial_context,
         )
     async def _get_endpoint_by_name(self, session: AsyncSession, endpoint_name: str) -> Optional[Endpoint]:
         """
