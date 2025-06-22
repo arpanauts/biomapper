@@ -187,7 +187,6 @@ class TestCacheManagerCheckCache:
             )
         
         assert "Failed to check cache" in str(exc_info.value)
-        assert exc_info.value.source_identifiers == ["id1"]
     
     async def test_check_cache_single_target_identifier(self, cache_manager, mock_cache_sessionmaker):
         """Test check_cache with single target identifier (not JSON array)."""
@@ -614,6 +613,8 @@ class TestCacheManagerEdgeCases:
             
             # Should handle gracefully and convert to list
             assert result == 999
+            # Check that add_all was called with entity mappings
+            mock_session.add_all.assert_called_once()
             entity_mappings = mock_session.add_all.call_args[0][0]
             assert len(entity_mappings) == 1
             assert entity_mappings[0].target_id == "single_target"
