@@ -125,7 +125,11 @@ class TestPathFinder:
     # Test Case 1: Test Direct Path Discovery
     @pytest.mark.asyncio
     async def test_find_mapping_paths_returns_direct_path(self, path_finder, mock_session, mock_direct_path):
-        """Test that find_mapping_paths correctly discovers and returns a single-step direct path."""
+        """Test behavioral contract: given source and target types, returns direct mapping path.
+        
+        Validates that PathFinder can discover single-step mapping paths where
+        one resource directly maps from source to target ontology.
+        """
         # Mock the session to return a direct path
         mock_result = Mock()
         mock_result.scalars = Mock(return_value=Mock(
@@ -151,7 +155,11 @@ class TestPathFinder:
     # Test Case 2: Test Multi-Step Path Discovery
     @pytest.mark.asyncio
     async def test_find_mapping_paths_returns_multi_step_path(self, path_finder, mock_session, mock_indirect_path):
-        """Test that find_mapping_paths correctly discovers and assembles multi-step paths."""
+        """Test behavioral contract: discovers paths requiring multiple mapping steps.
+        
+        Validates that PathFinder can assemble multi-step paths where multiple
+        resources must be chained together to map from source to target.
+        """
         # Mock the session to return an indirect path
         mock_result = Mock()
         mock_result.scalars = Mock(return_value=Mock(
@@ -178,7 +186,11 @@ class TestPathFinder:
     # Test Case 3: Test No Path Scenario
     @pytest.mark.asyncio
     async def test_find_mapping_paths_returns_empty_when_no_paths_exist(self, path_finder, mock_session):
-        """Test that find_mapping_paths gracefully returns empty list when no mapping paths exist."""
+        """Test behavioral contract: returns empty list when no valid mapping path exists.
+        
+        Validates graceful handling when no path can connect the requested
+        source and target ontology types.
+        """
         # Mock the session to return no paths
         mock_result = Mock()
         mock_result.scalars = Mock(return_value=Mock(
@@ -201,7 +213,11 @@ class TestPathFinder:
     async def test_find_mapping_paths_orders_by_priority(
         self, path_finder, mock_session, mock_direct_path, mock_indirect_path
     ):
-        """Test that PathFinder correctly selects the path with highest priority."""
+        """Test behavioral contract: paths are returned in priority order.
+        
+        Validates that paths are sorted by priority value where lower numbers
+        indicate higher priority (priority 5 comes before priority 10).
+        """
         # Create additional path with different priority
         high_priority_path = Mock(spec=MappingPath)
         high_priority_path.id = 3
@@ -287,10 +303,65 @@ class TestPathFinder:
         
         assert details == {}
     
+    @pytest.mark.asyncio
+    async def test_behavioral_path_caching_demonstrates_performance_optimization(
+        self, path_finder, mock_session, mock_direct_path
+    ):
+        """Test behavioral contract: PathFinder implements caching for performance optimization.
+        
+        This test follows the exact behavioral testing pattern specified:
+        a. Mock the database session dependency
+        b. Call path_finder.find_path(...) once
+        c. Assert that the database was called
+        d. Call path_finder.find_path(...) a second time with exact same parameters
+        e. Assert that the database was NOT called the second time
+        f. Call path_finder.find_path(...) a third time with different parameters
+        g. Assert that the database WAS called the third time
+        """
+        # Mock the database query
+        mock_result = Mock()
+        mock_result.scalars = Mock(return_value=Mock(
+            unique=Mock(return_value=Mock(all=Mock(return_value=[mock_direct_path])))
+        ))
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        
+        # Track initial state
+        initial_db_calls = mock_session.execute.call_count
+        assert initial_db_calls == 0  # Verify clean state
+        
+        # Step b: First call with specific parameters
+        source_type = "GENE_SYMBOL" 
+        target_type = "UNIPROT_ID"
+        result1 = await path_finder.find_mapping_paths(mock_session, source_type, target_type)
+        
+        # Step c: Assert database was called
+        first_call_db_count = mock_session.execute.call_count
+        assert first_call_db_count > initial_db_calls, "Database should be called on first request"
+        
+        # Step d: Second call with EXACT same parameters
+        result2 = await path_finder.find_mapping_paths(mock_session, source_type, target_type)
+        
+        # Step e: Assert database was NOT called again (cache hit)
+        second_call_db_count = mock_session.execute.call_count
+        assert second_call_db_count == first_call_db_count, "Database should NOT be called on cache hit"
+        
+        # Verify cached results are identical
+        assert len(result1) == len(result2)
+        assert result1[0].name == result2[0].name
+        
+        # Step f: Third call with DIFFERENT parameters
+        different_source = "ENSEMBL_ID"
+        different_target = "REFSEQ_ID"
+        result3 = await path_finder.find_mapping_paths(mock_session, different_source, different_target)
+        
+        # Step g: Assert database WAS called for new parameters
+        third_call_db_count = mock_session.execute.call_count
+        assert third_call_db_count > second_call_db_count, "Database should be called for new parameters"
+    
     # Test Case 6: Test Path Caching Behavior
     @pytest.mark.asyncio
     async def test_path_caching_behavior(self, path_finder, mock_session, mock_direct_path):
-        """Test that find_mapping_paths caches results through behavioral observation.
+        """Test behavioral contract: PathFinder caches results to avoid redundant database queries.
         
         This test validates caching behavior without inspecting internal cache state.
         Instead, it observes whether the database is called for repeated requests.
@@ -302,40 +373,101 @@ class TestPathFinder:
         ))
         mock_session.execute = AsyncMock(return_value=mock_result)
         
-        # First call - should query database
+        # Step a: Call find_path once and verify database is called
         result1 = await path_finder.find_mapping_paths(
             mock_session,
             "GENE_SYMBOL",
             "UNIPROT_ID"
         )
         
-        # Verify database was called at least once
+        # Step b/c: Assert that the database was called
         assert mock_session.execute.call_count > 0
         initial_call_count = mock_session.execute.call_count
         
-        # Second call with same parameters - should use cache
+        # Step d: Call find_path a second time with the exact same parameters
         result2 = await path_finder.find_mapping_paths(
             mock_session,
             "GENE_SYMBOL",
             "UNIPROT_ID"
         )
         
-        # Database should NOT have been called again
+        # Step e: Assert that the database was NOT called the second time
         assert mock_session.execute.call_count == initial_call_count
         
-        # Results should be consistent
+        # Verify results are consistent (same data returned from cache)
         assert len(result1) == len(result2) == 1
         assert result1[0].name == result2[0].name
         
-        # Third call with DIFFERENT parameters - should query database again
+        # Step f: Call find_path a third time with different parameters
         result3 = await path_finder.find_mapping_paths(
             mock_session,
             "DIFFERENT_SOURCE",
             "DIFFERENT_TARGET"
         )
         
-        # Database SHOULD have been called for different parameters
+        # Step g: Assert that the database WAS called the third time
         assert mock_session.execute.call_count > initial_call_count
+    
+    @pytest.mark.asyncio
+    async def test_find_best_path_returns_highest_priority_path(
+        self, path_finder, mock_session, mock_direct_path, mock_indirect_path
+    ):
+        """Test behavioral contract: find_best_path returns the single highest-priority path.
+        
+        Validates that when multiple paths exist, find_best_path returns only
+        the one with the best (lowest) priority value.
+        """
+        # Create a high priority path
+        high_priority_path = Mock(spec=MappingPath)
+        high_priority_path.id = 3
+        high_priority_path.name = "Best Path"
+        high_priority_path.priority = 1  # Highest priority
+        high_priority_path.is_active = True
+        high_priority_path.steps = []
+        
+        # Mock database to return multiple paths
+        mock_result = Mock()
+        mock_result.scalars = Mock(return_value=Mock(
+            unique=Mock(return_value=Mock(all=Mock(
+                return_value=[mock_indirect_path, mock_direct_path, high_priority_path]
+            )))
+        ))
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        
+        # Call find_best_path
+        best_path = await path_finder.find_best_path(
+            mock_session,
+            "GENE_SYMBOL", 
+            "UNIPROT_ID"
+        )
+        
+        # Should return the single best path
+        assert best_path is not None
+        assert isinstance(best_path, ReversiblePath)
+        assert best_path.original_path == high_priority_path
+        assert best_path.priority == 1
+    
+    @pytest.mark.asyncio
+    async def test_find_best_path_returns_none_when_no_paths_exist(
+        self, path_finder, mock_session
+    ):
+        """Test behavioral contract: find_best_path returns None when no paths exist."""
+        # Mock empty result
+        mock_result = Mock()
+        mock_result.scalars = Mock(return_value=Mock(
+            unique=Mock(return_value=Mock(all=Mock(return_value=[])))
+        ))
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        
+        # Call find_best_path
+        best_path = await path_finder.find_best_path(
+            mock_session,
+            "NONEXISTENT_SOURCE",
+            "NONEXISTENT_TARGET"
+        )
+        
+        # Should return None
+        assert best_path is None
     
     @pytest.mark.asyncio
     async def test_cache_distinguishes_parameters(self, path_finder, mock_session, mock_direct_path):
