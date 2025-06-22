@@ -1,93 +1,48 @@
-import asyncio
-import json
+import logging
+import time
 import os
-import time # Add import time
-from typing import List, Dict, Any, Optional, Tuple, Union, Callable
-from datetime import datetime, timezone, timedelta
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+import json
+import asyncio
+from typing import List, Dict, Any, Optional, Union, Callable
+from datetime import datetime
+from pathlib import Path
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.future import select
-from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 # Import composite identifier handling
 from biomapper.core.mapping_executor_composite import CompositeIdentifierMixin
+
+# Import exceptions
 from biomapper.core.exceptions import (
-    BiomapperError,
-    ClientError,
-    ConfigurationError, # Import ConfigurationError
     MappingExecutionError,
-    ClientExecutionError,
-    ClientInitializationError,
+    ConfigurationError,
+    DatabaseQueryError,
     CacheStorageError,
-    ErrorCode, # Import ErrorCode
-    DatabaseQueryError, # Import DatabaseQueryError
+    ErrorCode,
     StrategyNotFoundError,
     InactiveStrategyError,
 )
 
-# Import new strategy handling modules
-from biomapper.core.engine_components.reversible_path import ReversiblePath
+# Import services and components
+from biomapper.core.engine_components.initialization_service import InitializationService
+from biomapper.core.engine_components.strategy_coordinator_service import StrategyCoordinatorService
+from biomapper.core.engine_components.mapping_coordinator_service import MappingCoordinatorService
+from biomapper.core.engine_components.lifecycle_manager import LifecycleManager
+from biomapper.core.services.database_setup_service import DatabaseSetupService
 
-# Import services
-from biomapper.core.services import IterativeMappingService
-from biomapper.core.engine_components.checkpoint_manager import CheckpointManager
-from biomapper.core.engine_components.progress_reporter import ProgressReporter
-from biomapper.core.services.metadata_query_service import MetadataQueryService
-from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
-from biomapper.core.services.mapping_step_execution_service import MappingStepExecutionService
-from biomapper.core.services.strategy_execution_service import StrategyExecutionService
-from biomapper.core.services.result_aggregation_service import ResultAggregationService
-from biomapper.core.services.bidirectional_validation_service import BidirectionalValidationService
-from biomapper.core.services.direct_mapping_service import DirectMappingService
-from biomapper.core.services.execution_lifecycle_service import ExecutionLifecycleService
-from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
-from biomapper.core.engine_components.robust_execution_coordinator import RobustExecutionCoordinator
-from biomapper.core.services.execution_services import (
-    IterativeExecutionService,
-    DbStrategyExecutionService,
-    YamlStrategyExecutionService,
-)
-from biomapper.core.services.mapping_handler_service import MappingHandlerService
+# Import models
+from biomapper.core.models.result_bundle import MappingResultBundle
+from ..db.models import Base as MetamapperBase, MappingStrategy
+from ..db.cache_models import PathExecutionStatus, MappingSession, ExecutionMetric
 
 # Import utilities
 from biomapper.core.utils.placeholder_resolver import resolve_placeholders
 from biomapper.core.utils.time_utils import get_current_utc_time
 
-# Import models
-from biomapper.core.models.result_bundle import MappingResultBundle
-
-# Import models for metamapper DB
-from ..db.models import (
-    Endpoint,
-    EndpointPropertyConfig,
-    MappingPath,
-    MappingPathStep,
-    OntologyPreference,
-    MappingStrategy,
-    MappingStrategyStep,
-)
-
-# Import models for cache DB
-from ..db.cache_models import (
-    PathExecutionStatus,
-    MappingSession,  # Add this for session logging
-    ExecutionMetric, # Added ExecutionMetric
-    Base as CacheBase,  # Add for database table creation
-)
-
-# Import models for metamapper DB
-from ..db.models import Base as MetamapperBase
-
-# Import database setup service
-from .services.database_setup_service import DatabaseSetupService
-
-# Import our centralized configuration settings
+# Import configuration
 from biomapper.config import settings
-
-
-import logging # Re-added import
-import os # Add import os
 
 
 
@@ -148,43 +103,12 @@ class MappingExecutor(CompositeIdentifierMixin):
         langfuse_tracker=None,
     ):
         """
-        Initializes the MappingExecutor.
+        Initializes the MappingExecutor as a lean facade.
         
-        Supports two initialization modes:
-        1. Legacy mode: Pass configuration parameters and components are created internally
-        2. Component mode: Pass pre-initialized components directly
-
-        Legacy mode args:
-            metamapper_db_url: URL for the metamapper database
-            mapping_cache_db_url: URL for the mapping cache database
-            echo_sql: Boolean flag to enable SQL echoing
-            path_cache_size: Maximum number of paths to cache
-            path_cache_expiry_seconds: Cache expiry time in seconds
-            max_concurrent_batches: Maximum number of batches to process concurrently
-            enable_metrics: Whether to enable metrics tracking
-            checkpoint_enabled: Enable checkpointing for resumable execution
-            checkpoint_dir: Directory for checkpoint files
-            batch_size: Number of items to process per batch
-            max_retries: Maximum retry attempts for failed operations
-            retry_delay: Delay in seconds between retry attempts
-            
-        Component mode args:
-            session_manager: Pre-initialized SessionManager instance
-            client_manager: Pre-initialized ClientManager instance
-            config_loader: Pre-initialized ConfigLoader instance
-            strategy_handler: Pre-initialized StrategyHandler instance
-            path_finder: Pre-initialized PathFinder instance
-            path_execution_manager: Pre-initialized PathExecutionManager instance
-            cache_manager: Pre-initialized CacheManager instance
-            identifier_loader: Pre-initialized IdentifierLoader instance
-            strategy_orchestrator: Pre-initialized StrategyOrchestrator instance
-            checkpoint_manager: Pre-initialized CheckpointManager instance
-            progress_reporter: Pre-initialized ProgressReporter instance
-            langfuse_tracker: Pre-initialized Langfuse tracker instance
+        All component initialization is delegated to InitializationService.
         """
         # Initialize the CompositeIdentifierMixin
         super().__init__()
-
         self.logger = logging.getLogger(__name__)
         
         # Check if we're in legacy mode (configuration parameters) or component mode
