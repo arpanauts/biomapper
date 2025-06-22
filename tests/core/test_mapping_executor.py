@@ -440,6 +440,56 @@ def test_config():
 
 
 @pytest.mark.asyncio
+async def test_path_finder_find_mapping_paths(mapping_executor, mock_config_db):
+    """Test PathFinder.find_mapping_paths method through MappingExecutor."""
+    # Create a mock path with necessary attributes
+    mock_path = MagicMock(spec=MappingPath)
+    mock_path.id = 998
+    mock_path.name = "TestPath"
+    mock_path.priority = 1
+
+    # Create a mock step with required attributes
+    mock_step = MagicMock(spec=MappingPathStep)
+    mock_step.step_order = 1
+    mock_step.mapping_resource = MagicMock()
+    mock_step.mapping_resource.name = "TestResource"
+    mock_step.mapping_resource.input_ontology_term = "GENE_NAME"
+    mock_step.mapping_resource.output_ontology_term = "ENSEMBL_GENE"
+
+    # Assign steps to the path
+    mock_path.steps = [mock_step]
+
+    # Create a mock session
+    mock_session = AsyncMock(spec=AsyncSession)
+
+    # Mock the path_finder's find_mapping_paths method
+    with patch.object(
+        mapping_executor.path_finder, "find_mapping_paths", new_callable=AsyncMock
+    ) as mock_find_paths:
+        # Create mock ReversiblePath wrapper
+        from biomapper.core.engine_components.reversible_path import ReversiblePath
+        mock_reversible_path = ReversiblePath(mock_path, is_reverse=False)
+        
+        # Return our mock path wrapped in ReversiblePath when find_mapping_paths is called
+        mock_find_paths.return_value = [mock_reversible_path]
+
+        # Act: Call the path_finder's find_mapping_paths method
+        paths = await mapping_executor.path_finder.find_mapping_paths(
+            mock_session, "GENE_NAME", "ENSEMBL_GENE"
+        )
+
+        # Assert: Check that paths contains our mock path
+        assert len(paths) == 1
+        assert paths[0].id == mock_path.id
+        assert paths[0].name == mock_path.name
+
+        # Verify find_mapping_paths was called with the correct arguments
+        mock_find_paths.assert_called_once_with(
+            mock_session, "GENE_NAME", "ENSEMBL_GENE"
+        )
+
+
+@pytest.mark.asyncio
 async def test_execute_mapping_success(mapping_executor, mock_config_db):
     """Test execute_mapping with a successful path execution."""
     # Since we already have a working test for successful mapping (test_execute_mapping_ukbb_to_arivale_primary_success),

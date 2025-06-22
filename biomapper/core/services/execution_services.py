@@ -276,12 +276,11 @@ class IterativeExecutionService:
                 # Store the primary path reference
                 primary_path = None
                 if direct_mapping_result["path_found"]:
-                    primary_path = await self._executor._find_best_path(
+                    primary_path = await self.path_finder.find_best_path(
                         meta_session,
                         primary_source_ontology,
                         primary_target_ontology,
-                        preferred_direction=mapping_direction,
-                        allow_reverse=try_reverse_mapping,
+                        bidirectional=try_reverse_mapping,
                         source_endpoint=source_endpoint,
                         target_endpoint=target_endpoint,
                     )
