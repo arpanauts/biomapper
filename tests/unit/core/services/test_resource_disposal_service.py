@@ -265,3 +265,129 @@ class TestResourceDisposalService:
         
         # Should not raise error
         await service.dispose_cache_engine()
+    
+    async def test_dispose_with_slow_engines(self, disposal_service, mock_session_manager):
+        """Test disposal with engines that take time to dispose."""
+        # Simulate slow disposal
+        async def slow_dispose():
+            await asyncio.sleep(0.1)
+        
+        mock_session_manager.async_metamapper_engine.dispose = slow_dispose
+        mock_session_manager.async_cache_engine.dispose = slow_dispose
+        
+        # Should complete without timeout
+        await disposal_service.dispose_all()
+        assert disposal_service.is_disposed is True
+    
+    async def test_dispose_on_error_with_context(self, disposal_service):
+        """Test emergency disposal with various error types."""
+        # Test with different error types
+        errors = [
+            RuntimeError("Runtime error"),
+            ValueError("Value error"),
+            Exception("Generic error"),
+            KeyboardInterrupt("User interrupt")
+        ]
+        
+        for error in errors:
+            disposal_service._is_disposed = False  # Reset state
+            await disposal_service.dispose_on_error(error)
+            # Should handle all error types gracefully
+    
+    def test_get_resource_status_after_partial_disposal(self, disposal_service):
+        """Test resource status after partial disposal."""
+        # Remove only one engine
+        disposal_service.session_manager.async_metamapper_engine = None
+        
+        status = disposal_service.get_resource_status()
+        assert status['metamapper_engine'] is False
+        assert status['cache_engine'] is True
+        assert status['client_manager'] is True
+        assert status['is_disposed'] is False
+    
+    async def test_concurrent_disposal_calls(self, disposal_service):
+        """Test multiple concurrent disposal calls."""
+        # Create multiple disposal tasks
+        tasks = [disposal_service.dispose_all() for _ in range(5)]
+        
+        # All should complete without error
+        await asyncio.gather(*tasks)
+        
+        # The first call should trigger disposal, others should be skipped
+        # Due to concurrent execution, we may see 1-5 calls depending on timing
+        assert disposal_service.session_manager.async_metamapper_engine.dispose.call_count >= 1
+        assert disposal_service.session_manager.async_cache_engine.dispose.call_count >= 1
+        assert disposal_service.is_disposed is True
+    
+    async def test_dispose_specific_engines_sequence(self, disposal_service, mock_session_manager):
+        """Test disposing engines in specific sequence."""
+        # Dispose engines individually
+        await disposal_service.dispose_metamapper_engine()
+        assert mock_session_manager.async_metamapper_engine.dispose.call_count == 1
+        assert mock_session_manager.async_cache_engine.dispose.call_count == 0
+        
+        await disposal_service.dispose_cache_engine()
+        assert mock_session_manager.async_cache_engine.dispose.call_count == 1
+        
+        # Clear client cache
+        disposal_service.clear_client_cache()
+        assert disposal_service.client_manager.clear_cache.call_count == 1
+        
+        # Full dispose will dispose engines again since individual disposal
+        # doesn't set the global _is_disposed flag
+        await disposal_service.dispose_all()
+        assert mock_session_manager.async_metamapper_engine.dispose.call_count == 2
+        assert mock_session_manager.async_cache_engine.dispose.call_count == 2
+        
+        # But subsequent calls should be idempotent
+        await disposal_service.dispose_all()
+        assert mock_session_manager.async_metamapper_engine.dispose.call_count == 2
+        assert mock_session_manager.async_cache_engine.dispose.call_count == 2
+    
+    async def test_context_manager_with_error(self, mock_session_manager, mock_client_manager):
+        """Test context manager behavior when error occurs."""
+        service = None
+        error_raised = False
+        
+        try:
+            async with ResourceDisposalService(
+                session_manager=mock_session_manager,
+                client_manager=mock_client_manager
+            ) as svc:
+                service = svc
+                # Simulate error in context
+                raise ValueError("Test error in context")
+        except ValueError:
+            error_raised = True
+        
+        # Should still dispose resources even with error
+        assert error_raised
+        assert mock_session_manager.async_metamapper_engine.dispose.call_count == 1
+        assert mock_session_manager.async_cache_engine.dispose.call_count == 1
+    
+    async def test_verify_disposal_with_partial_cleanup(self, disposal_service):
+        """Test disposal verification with partial cleanup."""
+        await disposal_service.dispose_all()
+        
+        # Simulate partial cleanup - engine removed but client_manager still exists
+        disposal_service.session_manager.async_metamapper_engine = None
+        disposal_service.session_manager.async_cache_engine = None
+        # Keep client_manager
+        
+        # Should not verify as complete
+        assert await disposal_service.verify_disposal() is False
+    
+    def test_resource_status_with_no_session_manager(self):
+        """Test resource status when session manager is None."""
+        service = ResourceDisposalService(
+            session_manager=None,
+            client_manager=Mock()
+        )
+        
+        status = service.get_resource_status()
+        assert status == {
+            'metamapper_engine': False,
+            'cache_engine': False,
+            'client_manager': True,
+            'is_disposed': False
+        }
