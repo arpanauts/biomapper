@@ -32,6 +32,25 @@ from biomapper.core.engine_components.mapping_coordinator_service import Mapping
 from biomapper.core.engine_components.lifecycle_manager import LifecycleManager
 from biomapper.core.services.database_setup_service import DatabaseSetupService
 
+# Import execution services
+from biomapper.core.services.execution_services import (
+    IterativeExecutionService,
+    DbStrategyExecutionService,
+    YamlStrategyExecutionService,
+)
+from biomapper.core.services.strategy_execution_service import StrategyExecutionService
+from biomapper.core.services.result_aggregation_service import ResultAggregationService
+from biomapper.core.services.bidirectional_validation_service import BidirectionalValidationService
+from biomapper.core.services.direct_mapping_service import DirectMappingService
+from biomapper.core.services.mapping_handler_service import MappingHandlerService
+from biomapper.core.services.metadata_query_service import MetadataQueryService
+from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
+from biomapper.core.services.mapping_step_execution_service import MappingStepExecutionService
+from biomapper.core.services.iterative_mapping_service import IterativeMappingService
+from biomapper.core.services.execution_lifecycle_service import ExecutionLifecycleService
+from biomapper.core.engine_components.robust_execution_coordinator import RobustExecutionCoordinator
+from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
+
 # Import models
 from biomapper.core.models.result_bundle import MappingResultBundle
 from ..db.models import Base as MetamapperBase, MappingStrategy
@@ -328,6 +347,14 @@ class MappingExecutor(CompositeIdentifierMixin):
             logger=self.logger,
         )
         
+        # Initialize StrategyCoordinatorService to consolidate all strategy execution
+        self.strategy_coordinator = StrategyCoordinatorService(
+            db_strategy_execution_service=self.db_strategy_execution_service,
+            yaml_strategy_execution_service=self.yaml_strategy_execution_service,
+            robust_execution_coordinator=self.robust_execution_coordinator,
+            logger=self.logger
+        )
+        
         self.logger.info("MappingExecutor initialization complete")
 
     
@@ -541,8 +568,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         """
         Execute a named mapping strategy from the database.
         
-        This method delegates to the DbStrategyExecutionService for executing database-stored
-        mapping strategies. This is the legacy method maintained for backward compatibility.
+        This method delegates to the StrategyCoordinatorService which coordinates
+        the execution through DbStrategyExecutionService. This is the legacy method 
+        maintained for backward compatibility.
         
         Args:
             strategy_name: Name of the strategy to execute
@@ -559,7 +587,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             InactiveStrategyError: If the strategy is not active
             MappingExecutionError: If an error occurs during execution
         """
-        return await self.db_strategy_execution_service.execute(
+        return await self.strategy_coordinator.execute_strategy(
             strategy_name=strategy_name,
             initial_identifiers=initial_identifiers,
             source_ontology_type=source_ontology_type,
@@ -585,8 +613,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         """
         Execute a YAML-defined mapping strategy using dedicated strategy action classes.
         
-        This method delegates to the YamlStrategyExecutionService for executing multi-step
-        mapping strategies defined in YAML configuration. Each step in the strategy is
+        This method delegates to the StrategyCoordinatorService which coordinates
+        the execution through YamlStrategyExecutionService. Each step in the strategy is
         executed sequentially using dedicated action classes, with the output of one step
         becoming the input for the next.
         
@@ -630,7 +658,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             >>> print(f"Final identifiers: {result['final_identifiers']}")
             >>> print(f"Step results: {len(result['step_results'])}")
         """
-        return await self.yaml_strategy_execution_service.execute(
+        return await self.strategy_coordinator.execute_yaml_strategy(
             strategy_name=strategy_name,
             source_endpoint_name=source_endpoint_name,
             target_endpoint_name=target_endpoint_name,
@@ -1491,8 +1519,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         """
         Execute a YAML strategy with robust error handling and checkpointing.
         
-        This wraps the standard execute_yaml_strategy method with additional
-        robustness features via the RobustExecutionCoordinator.
+        This method delegates to the StrategyCoordinatorService which wraps 
+        the standard execute_yaml_strategy method with additional robustness 
+        features via the RobustExecutionCoordinator.
         
         Args:
             strategy_name: Name of the strategy to execute
@@ -1506,8 +1535,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Strategy execution results with additional robustness metadata
         """
-        # Delegate to the RobustExecutionCoordinator
-        return await self.robust_execution_coordinator.execute_strategy_robustly(
+        # Delegate to the StrategyCoordinatorService
+        return await self.strategy_coordinator.execute_robust_yaml_strategy(
             strategy_name=strategy_name,
             input_identifiers=input_identifiers,
             source_endpoint_name=source_endpoint_name,
