@@ -858,6 +858,8 @@ class InitializationService:
             async_metamapper_session=async_metamapper_session,
             async_cache_session=async_cache_session,
             metadata_query_service=metadata_query_service,
+            session_metrics_service=session_metrics_service,
+            logger=self.logger
             session_metrics_service=session_metrics_service
         )
     

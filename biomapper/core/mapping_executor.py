@@ -133,6 +133,8 @@ class MappingExecutor(CompositeIdentifierMixin):
             execution_session_service=self.execution_session_service,
             checkpoint_service=self.checkpoint_service,
             resource_disposal_service=self.resource_disposal_service,
+            logger=self.logger,
+            client_manager=self.client_manager
             logger=self.logger
         )
 
