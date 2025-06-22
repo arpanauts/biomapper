@@ -95,22 +95,27 @@ import os # Add import os
 
 class MappingExecutor(CompositeIdentifierMixin):
     """
-    Main execution engine for biomapper mapping operations.
+    High-level facade for biomapper's service-oriented mapping architecture.
     
-    The MappingExecutor handles the execution of mapping strategies and individual mapping
-    paths based on configurations stored in the metamapper database. It supports both
-    YAML-defined multi-step mapping strategies and direct path-based mappings.
+    The MappingExecutor serves as the primary entry point for all mapping operations,
+    providing a clean and simple API while delegating complex operations to specialized
+    services. It follows the Facade design pattern to hide the complexity of the underlying
+    service ecosystem from clients.
     
-    Key capabilities:
-    - Execute YAML-defined mapping strategies with multiple sequential steps
-    - Execute individual mapping paths between endpoints  
-    - Manage caching of mapping results and path configurations
-    - Handle bidirectional mapping validation
-    - Support composite identifier processing
-    - Track mapping metrics and performance
+    Architecture Overview:
+    - Acts as a facade that delegates to specialized execution services
+    - Manages initialization and coordination of the service ecosystem
+    - Provides backward compatibility while leveraging the new service architecture
     
-    The executor integrates with dedicated strategy action classes for specific operations
-    and provides comprehensive result tracking with provenance information.
+    Key Responsibilities:
+    - Provides high-level methods for common mapping operations
+    - Delegates YAML strategy execution to YamlStrategyExecutionService
+    - Delegates iterative mapping to IterativeExecutionService
+    - Delegates database strategies to DbStrategyExecutionService
+    - Manages service initialization through MappingExecutorInitializer
+    
+    The executor abstracts away the complexity of service interactions, allowing clients
+    to perform sophisticated mapping operations with simple method calls.
     """
 
     def __init__(
