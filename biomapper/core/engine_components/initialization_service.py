@@ -325,6 +325,9 @@ class InitializationService:
         
         # Initialize ResultAggregationService
         components['result_aggregation_service'] = ResultAggregationService(logger=self.logger)
+
+        # Initialize SessionMetricsService
+        components['session_metrics_service'] = SessionMetricsService(logger=self.logger)
         
         # Initialize the new execution services
         components['iterative_execution_service'] = IterativeExecutionService(
@@ -335,7 +338,9 @@ class InitializationService:
             path_finder=components['path_finder'],
             composite_handler=mapping_executor,
             async_metamapper_session=components['async_metamapper_session'],
+            async_cache_session=components['async_cache_session'],
             metadata_query_service=components['metadata_query_service'],
+            session_metrics_service=components['session_metrics_service'],
             logger=self.logger,
         )
         # Set the executor reference

@@ -26,6 +26,7 @@ from biomapper.core.engine_components.path_finder import PathFinder
 from biomapper.core.composite_handler import CompositeIdentifierHandler
 from biomapper.core.engine_components.strategy_orchestrator import StrategyOrchestrator
 from biomapper.core.utils.time_utils import get_current_utc_time
+from biomapper.core.services.session_metrics_service import SessionMetricsService
 
 
 class IterativeExecutionService:
@@ -56,7 +57,9 @@ class IterativeExecutionService:
         path_finder: PathFinder,
         composite_handler: CompositeIdentifierHandler,
         async_metamapper_session: AsyncContextManager,
+        async_cache_session: AsyncContextManager,
         metadata_query_service,
+        session_metrics_service: SessionMetricsService,
         logger: Optional[logging.Logger] = None,
     ):
         """
@@ -80,7 +83,9 @@ class IterativeExecutionService:
         self.path_finder = path_finder
         self._composite_handler = composite_handler
         self.async_metamapper_session = async_metamapper_session
+        self.async_cache_session = async_cache_session
         self.metadata_query_service = metadata_query_service
+        self.session_metrics_service = session_metrics_service
         self.logger = logger or logging.getLogger(__name__)
         
         # References that will be set by MappingExecutor after initialization
@@ -184,8 +189,8 @@ class IterativeExecutionService:
         
         # --- 0. Initial Setup --- Create a mapping session for logging ---
         setup_start = time.time()
-        async with self._executor.async_cache_session() as cache_session:
-            mapping_session = await self._executor.session_metrics_service.create_mapping_session_log(
+        async with self.async_cache_session() as cache_session:
+            mapping_session = await self.session_metrics_service.create_mapping_session_log(
                 cache_session,
                 source_endpoint_name, target_endpoint_name, source_property_name,
                 target_property_name, use_cache, try_reverse_mapping, len(original_input_ids_set),
@@ -440,17 +445,15 @@ class IterativeExecutionService:
                 # Track performance metrics if enabled
                 if enable_metrics:
                     try:
-                        await self._executor.track_mapping_metrics("mapping_execution", execution_metrics)
-                        
                         # Also save performance metrics to database
                         if mapping_session_id:
-                            async with self._executor.async_cache_session() as cache_session:
-                                await self._executor.session_metrics_service.save_metrics_to_database(cache_session, mapping_session_id, "mapping_execution", execution_metrics)
+                            async with self.async_cache_session() as cache_session:
+                                await self.session_metrics_service.save_metrics_to_database(cache_session, mapping_session_id, "mapping_execution", execution_metrics)
                     except Exception as e:
                         self.logger.warning(f"Error tracking metrics: {str(e)}")
                 
-                async with self._executor.async_cache_session() as cache_session:
-                    await self._executor.session_metrics_service.update_mapping_session_log(
+                async with self.async_cache_session() as cache_session:
+                    await self.session_metrics_service.update_mapping_session_log(
                         cache_session,
                         mapping_session_id, 
                         status=status,
