@@ -116,6 +116,7 @@ class StrategyOrchestrator:
                 - 'statistics': Dict with mapping statistics
                 - 'final_identifiers': List of identifiers after all steps
                 - 'final_ontology_type': Final ontology type after all conversions
+                - 'summary': Dict with consolidated summary including strategy_name, total_mapped, and step_results
         """
         start_time = get_current_utc_time()
         
@@ -260,6 +261,9 @@ class StrategyOrchestrator:
             target_ontology_type=target_ontology_type or strategy.default_target_ontology_type,
         )
         
+        # Calculate summary statistics
+        mapped_count = len([r for r in final_results.values() if r['mapped_value'] is not None])
+        
         # Return comprehensive results
         return {
             'results': final_results,
@@ -274,10 +278,17 @@ class StrategyOrchestrator:
             'statistics': {
                 'initial_count': len(input_identifiers),
                 'final_count': len(current_identifiers),
-                'mapped_count': len([r for r in final_results.values() if r['mapped_value'] is not None]),
+                'mapped_count': mapped_count,
             },
             'final_identifiers': current_identifiers,
             'final_ontology_type': current_ontology_type,
+            'summary': {
+                'strategy_name': strategy_name,
+                'total_input': len(input_identifiers),
+                'total_mapped': mapped_count,
+                'steps_executed': len(step_results),
+                'step_results': step_results,
+            },
         }
     
     def _build_final_results(

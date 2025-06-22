@@ -317,6 +317,32 @@ class TestHistoricalIDMapping:
         setup_mock_endpoints(mock_meta_session, SOURCE_ENDPOINT, TARGET_ENDPOINT, SOURCE_ONTOLOGY, TARGET_ONTOLOGY)
         setup_mock_paths(mock_meta_session, SOURCE_ONTOLOGY, TARGET_ONTOLOGY)
         
+        # Mock the metadata query service to return proper endpoint and ontology info
+        from unittest.mock import MagicMock
+        source_endpoint = MagicMock()
+        source_endpoint.id = 1
+        source_endpoint.name = SOURCE_ENDPOINT
+        target_endpoint = MagicMock()
+        target_endpoint.id = 2  
+        target_endpoint.name = TARGET_ENDPOINT
+        
+        async def mock_get_endpoint(session, endpoint_name):
+            if endpoint_name == SOURCE_ENDPOINT:
+                return source_endpoint
+            elif endpoint_name == TARGET_ENDPOINT:
+                return target_endpoint
+            return None
+            
+        async def mock_get_ontology_type(session, endpoint_name, property_name):
+            if endpoint_name == SOURCE_ENDPOINT and property_name == SOURCE_ONTOLOGY:
+                return SOURCE_ONTOLOGY
+            elif endpoint_name == TARGET_ENDPOINT and property_name == TARGET_ONTOLOGY:
+                return TARGET_ONTOLOGY
+            return None
+            
+        monkeypatch.setattr(executor.metadata_query_service, "get_endpoint", mock_get_endpoint)
+        monkeypatch.setattr(executor.metadata_query_service, "get_ontology_type", mock_get_ontology_type)
+        
         # Track which paths are called
         path_execution_order = []
         
@@ -355,19 +381,20 @@ class TestHistoricalIDMapping:
         # Apply the patch
         monkeypatch.setattr(executor, "_execute_path", patched_execute_path)
         
-        # Also mock _find_all_mapping_paths to return our test paths
-        async def mock_find_all_mapping_paths(session, source_ontology, target_ontology, 
-                                            bidirectional=True, preferred_direction="forward",
-                                            source_endpoint=None, target_endpoint=None):
+        # Mock path finder's find_mapping_paths to return our test paths
+        async def mock_find_mapping_paths(session, source_ontology, target_ontology, 
+                                        bidirectional=True, preferred_direction="forward",
+                                        source_endpoint=None, target_endpoint=None):
             # Return both paths to simulate proper path discovery
-            from biomapper.core.mapping_executor import ReversiblePath
+            from biomapper.core.engine_components.reversible_path import ReversiblePath
             paths = [
                 ReversiblePath(mock_direct_path, is_reverse=False),
                 ReversiblePath(mock_historical_path, is_reverse=False)
             ]
             return paths
         
-        monkeypatch.setattr(executor, "_find_mapping_paths", mock_find_all_mapping_paths)
+        # Mock the path finder's method instead of executor's
+        monkeypatch.setattr(executor.path_finder, "find_mapping_paths", mock_find_mapping_paths)
         
         # Execute mapping with a mix of direct and historical IDs
         await executor.execute_mapping(
@@ -503,6 +530,32 @@ class TestHistoricalIDMapping:
         setup_mock_endpoints(mock_meta_session, SOURCE_ENDPOINT, TARGET_ENDPOINT, SOURCE_ONTOLOGY, TARGET_ONTOLOGY)
         setup_mock_paths(mock_meta_session, SOURCE_ONTOLOGY, TARGET_ONTOLOGY)
         
+        # Mock the metadata query service to return proper endpoint and ontology info
+        from unittest.mock import MagicMock
+        source_endpoint = MagicMock()
+        source_endpoint.id = 1
+        source_endpoint.name = SOURCE_ENDPOINT
+        target_endpoint = MagicMock()
+        target_endpoint.id = 2  
+        target_endpoint.name = TARGET_ENDPOINT
+        
+        async def mock_get_endpoint(session, endpoint_name):
+            if endpoint_name == SOURCE_ENDPOINT:
+                return source_endpoint
+            elif endpoint_name == TARGET_ENDPOINT:
+                return target_endpoint
+            return None
+            
+        async def mock_get_ontology_type(session, endpoint_name, property_name):
+            if endpoint_name == SOURCE_ENDPOINT and property_name == SOURCE_ONTOLOGY:
+                return SOURCE_ONTOLOGY
+            elif endpoint_name == TARGET_ENDPOINT and property_name == TARGET_ONTOLOGY:
+                return TARGET_ONTOLOGY
+            return None
+            
+        monkeypatch.setattr(executor.metadata_query_service, "get_endpoint", mock_get_endpoint)
+        monkeypatch.setattr(executor.metadata_query_service, "get_ontology_type", mock_get_ontology_type)
+        
         # Create a patched version of _execute_path that raises an error
         async def failing_execute_path(*args, **kwargs):
             raise ClientError("Test client error", details={"step": "test_step"})
@@ -510,12 +563,12 @@ class TestHistoricalIDMapping:
         # Apply the patch
         monkeypatch.setattr(executor, "_execute_path", failing_execute_path)
         
-        # Also mock _find_mapping_paths to return a path so _execute_path gets called
+        # Mock path finder's find_mapping_paths to return a path so _execute_path gets called
         async def mock_find_mapping_paths(session, source_ontology, target_ontology, 
                                         bidirectional=True, preferred_direction="forward",
                                         source_endpoint=None, target_endpoint=None):
             # Return a path to ensure _execute_path is called
-            from biomapper.core.mapping_executor import ReversiblePath
+            from biomapper.core.engine_components.reversible_path import ReversiblePath
             mock_path = MagicMock()
             mock_path.name = "Test Path"
             mock_path.id = 1
@@ -523,7 +576,7 @@ class TestHistoricalIDMapping:
             mock_path.is_reverse = False
             return [ReversiblePath(mock_path, is_reverse=False)]
         
-        monkeypatch.setattr(executor, "_find_mapping_paths", mock_find_mapping_paths)
+        monkeypatch.setattr(executor.path_finder, "find_mapping_paths", mock_find_mapping_paths)
         
         # Execute mapping
         results = await executor.execute_mapping(

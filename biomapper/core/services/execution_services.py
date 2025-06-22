@@ -545,6 +545,7 @@ class YamlStrategyExecutionService:
         progress_callback: Optional[callable] = None,
         batch_size: int = 250,
         min_confidence: float = 0.0,
+        initial_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Execute a YAML-defined mapping strategy using dedicated strategy action classes.
@@ -565,6 +566,7 @@ class YamlStrategyExecutionService:
             progress_callback: Optional callback function(current_step, total_steps, status)
             batch_size: Size of batches for processing (default: 250)
             min_confidence: Minimum confidence threshold (default: 0.0)
+            initial_context: Optional initial context dictionary to merge into execution context
             
         Returns:
             Dict[str, Any]: A MappingResultBundle-structured dictionary containing:
@@ -584,6 +586,7 @@ class YamlStrategyExecutionService:
         return await self.strategy_orchestrator.execute_strategy(
             strategy_name=strategy_name,
             input_identifiers=input_identifiers,
+            initial_context=initial_context,
             source_endpoint_name=source_endpoint_name,
             target_endpoint_name=target_endpoint_name,
             source_ontology_type=source_ontology_type,

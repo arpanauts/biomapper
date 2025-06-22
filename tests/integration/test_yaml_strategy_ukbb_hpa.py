@@ -114,8 +114,8 @@ class TestUKBBToHPAYAMLStrategy:
     @pytest.mark.asyncio
     async def test_execute_yaml_strategy_basic(self, mapping_executor):
         """Test basic execution of the YAML strategy."""
-        # Sample test identifiers
-        test_identifiers = ["HGNC:1234", "HGNC:5678"]
+        # Sample test identifiers - using gene symbols that exist in test data
+        test_identifiers = ["TEST1", "TEST2"]
         
         # Execute the strategy
         result = await mapping_executor.execute_yaml_strategy(
@@ -143,8 +143,8 @@ class TestUKBBToHPAYAMLStrategy:
         for step in step_results:
             assert "step_id" in step
             assert "action_type" in step
-            assert "success" in step
-            assert step["success"] is True  # All steps should succeed
+            assert "status" in step
+            assert step["status"] == "success"  # All steps should succeed
     
     @pytest.mark.asyncio
     async def test_execute_yaml_strategy_with_invalid_strategy(self, mapping_executor):
@@ -172,7 +172,7 @@ class TestUKBBToHPAYAMLStrategy:
                 "status": status
             })
         
-        test_identifiers = ["HGNC:1234", "HGNC:5678"]
+        test_identifiers = ["TEST1", "TEST2"]
         
         result = await mapping_executor.execute_yaml_strategy(
             strategy_name="basic_linear_strategy",
@@ -193,7 +193,7 @@ class TestUKBBToHPAYAMLStrategy:
     @pytest.mark.asyncio
     async def test_action_handlers_placeholder_behavior(self, mapping_executor):
         """Test that action handlers return expected placeholder results."""
-        test_identifiers = ["HGNC:1234", "HGNC:5678"]
+        test_identifiers = ["TEST1", "TEST2"]
         
         result = await mapping_executor.execute_yaml_strategy(
             strategy_name="basic_linear_strategy",
