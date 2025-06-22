@@ -4,7 +4,7 @@ import os
 from unittest.mock import Mock, patch, AsyncMock
 import pytest
 
-from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
+from biomapper.core.engine_components.mapping_executor_builder import MappingExecutorBuilder as MappingExecutorInitializer
 from biomapper.core.exceptions import BiomapperError, ErrorCode
 
 

@@ -8,7 +8,6 @@ from .client_manager import ClientManager
 from .path_execution_manager import PathExecutionManager
 from .identifier_loader import IdentifierLoader
 from .initialization_service import InitializationService
-from .mapping_executor_initializer import MappingExecutorInitializer
 from .path_execution_manager import PathExecutionManager
 from .path_finder import PathFinder
 from .progress_reporter import ProgressReporter
@@ -25,7 +24,6 @@ __all__ = [
     "PathExecutionManager",
     "IdentifierLoader",
     "InitializationService",
-    "MappingExecutorInitializer",
     "PathExecutionManager",
     "PathFinder",
     "ProgressReporter",

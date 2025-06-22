@@ -67,14 +67,14 @@ def mock_executor():
         max_concurrent_batches=5,
         enable_metrics=False
     )
-        
-        # Mock the logger
-        executor.logger = MagicMock()
-        
-        # Mock the identifier_loader service
-        executor.identifier_loader = MagicMock()
-        
-        return executor
+    
+    # Mock the logger
+    executor.logger = MagicMock()
+    
+    # Mock the identifier_loader service
+    executor.identifier_loader = MagicMock()
+    
+    return executor
 
 
 @pytest.fixture

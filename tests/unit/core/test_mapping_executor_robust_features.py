@@ -70,63 +70,63 @@ def mock_executor():
         async_metamapper_session=mock_session_factory,
         async_cache_session=mock_session_factory,
         echo_sql=False,
-            enable_metrics=False,
-            checkpoint_enabled=True,
-            batch_size=10,
-            max_retries=3,
-            retry_delay=0.1
+        enable_metrics=False,
+        checkpoint_enabled=True,
+        batch_size=10,
+        max_retries=3,
+        retry_delay=0.1
         )
+    
+    # Mock the session factories
+    executor.async_metamapper_session = AsyncMock()
+    executor.CacheSessionFactory = AsyncMock()
+    
+    # Mock the logger
+    executor.logger = MagicMock()
+    
+    # Mock the lifecycle service methods
+    executor.lifecycle_service = MagicMock()
+    executor.lifecycle_service.get_checkpoint_directory = MagicMock(return_value=None)
+    executor.lifecycle_service.set_checkpoint_directory = MagicMock()
+    executor.lifecycle_service.save_checkpoint = AsyncMock()
+    executor.lifecycle_service.load_checkpoint = AsyncMock()
+    executor.lifecycle_service.report_progress = AsyncMock()
+    executor.lifecycle_service.report_batch_progress = AsyncMock()
+    executor.lifecycle_service.save_batch_checkpoint = AsyncMock()
+    
+    # Create storage for checkpoint data
+    checkpoint_storage = {}
+    
+    async def mock_save_checkpoint(exec_id, data):
+        checkpoint_storage[exec_id] = data
         
-        # Mock the session factories
-        executor.async_metamapper_session = AsyncMock()
-        executor.CacheSessionFactory = AsyncMock()
+    async def mock_load_checkpoint(exec_id):
+        return checkpoint_storage.get(exec_id)
         
-        # Mock the logger
-        executor.logger = MagicMock()
+    executor.lifecycle_service.save_checkpoint.side_effect = mock_save_checkpoint
+    executor.lifecycle_service.load_checkpoint.side_effect = mock_load_checkpoint
+    
+    # Add support for progress callbacks
+    executor._progress_callbacks = []
+    
+    def add_progress_callback(callback):
+        executor._progress_callbacks.append(callback)
         
-        # Mock the lifecycle service methods
-        executor.lifecycle_service = MagicMock()
-        executor.lifecycle_service.get_checkpoint_directory = MagicMock(return_value=None)
-        executor.lifecycle_service.set_checkpoint_directory = MagicMock()
-        executor.lifecycle_service.save_checkpoint = AsyncMock()
-        executor.lifecycle_service.load_checkpoint = AsyncMock()
-        executor.lifecycle_service.report_progress = AsyncMock()
-        executor.lifecycle_service.report_batch_progress = AsyncMock()
-        executor.lifecycle_service.save_batch_checkpoint = AsyncMock()
-        
-        # Create storage for checkpoint data
-        checkpoint_storage = {}
-        
-        async def mock_save_checkpoint(exec_id, data):
-            checkpoint_storage[exec_id] = data
+    executor.add_progress_callback = add_progress_callback
+    
+    # Create a synchronous version for tests that call it directly
+    def report_progress_sync(progress_data):
+        for callback in executor._progress_callbacks:
+            callback(progress_data)
             
-        async def mock_load_checkpoint(exec_id):
-            return checkpoint_storage.get(exec_id)
+    async def report_progress_async(progress_data):
+        report_progress_sync(progress_data)
             
-        executor.lifecycle_service.save_checkpoint.side_effect = mock_save_checkpoint
-        executor.lifecycle_service.load_checkpoint.side_effect = mock_load_checkpoint
-        
-        # Add support for progress callbacks
-        executor._progress_callbacks = []
-        
-        def add_progress_callback(callback):
-            executor._progress_callbacks.append(callback)
-            
-        executor.add_progress_callback = add_progress_callback
-        
-        # Create a synchronous version for tests that call it directly
-        def report_progress_sync(progress_data):
-            for callback in executor._progress_callbacks:
-                callback(progress_data)
-                
-        async def report_progress_async(progress_data):
-            report_progress_sync(progress_data)
-                
-        # Support both sync and async calls
-        executor._report_progress = report_progress_async
-        executor._report_progress_sync = report_progress_sync
-        
-        return executor
+    # Support both sync and async calls
+    executor._report_progress = report_progress_async
+    executor._report_progress_sync = report_progress_sync
+    
+    return executor
 
 
 @pytest.fixture

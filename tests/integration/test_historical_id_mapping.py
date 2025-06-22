@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 
 
 # Import necessary components
-from biomapper.core.mapping_executor import PathExecutionStatus
+from biomapper.db.cache_models import PathExecutionStatus
 from biomapper.core.exceptions import ClientError
 
 # Configure logging
