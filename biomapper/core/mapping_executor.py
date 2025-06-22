@@ -7,8 +7,6 @@ from typing import List, Dict, Any, Optional, Union, Callable
 from datetime import datetime
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-from sqlalchemy.future import select
 from sqlalchemy.exc import SQLAlchemyError
 
 # Import composite identifier handling
@@ -31,8 +29,25 @@ from biomapper.core.engine_components.strategy_coordinator_service import Strate
 from biomapper.core.engine_components.mapping_coordinator_service import MappingCoordinatorService
 from biomapper.core.engine_components.lifecycle_manager import LifecycleManager
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
+from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
 from biomapper.core.engine_components.robust_execution_coordinator import RobustExecutionCoordinator
 from biomapper.core.services.database_setup_service import DatabaseSetupService
+from biomapper.core.services.metadata_query_service import MetadataQueryService
+from biomapper.core.services.mapping_handler_service import MappingHandlerService
+from biomapper.core.services.bidirectional_validation_service import BidirectionalValidationService
+from biomapper.core.services.direct_mapping_service import DirectMappingService
+from biomapper.core.services.mapping_step_execution_service import MappingStepExecutionService
+from biomapper.core.services.iterative_mapping_service import IterativeMappingService
+from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
+from biomapper.core.services.execution_lifecycle_service import ExecutionLifecycleService
+from biomapper.core.services.strategy_execution_service import StrategyExecutionService
+from biomapper.core.services.result_aggregation_service import ResultAggregationService
+from biomapper.core.services.execution_services import (
+    RobustExecutionCoordinator,
+    IterativeExecutionService,
+    DbStrategyExecutionService,
+    YamlStrategyExecutionService
+)
 from biomapper.core.services.metadata_query_service import MetadataQueryService
 from biomapper.core.services.mapping_handler_service import MappingHandlerService
 from biomapper.core.services.mapping_path_execution_service import MappingPathExecutionService
@@ -147,141 +162,102 @@ class MappingExecutor(CompositeIdentifierMixin):
         super().__init__()
         self.logger = logging.getLogger(__name__)
         
-        # Check if we're in legacy mode (configuration parameters) or component mode
-        if session_manager is None:
-            # Legacy mode: use MappingExecutorInitializer to create components
-            self.logger.debug("Initializing MappingExecutor in legacy mode")
-            
-            # Store configuration parameters
-            self.batch_size = batch_size
-            self.max_retries = max_retries
-            self.retry_delay = retry_delay
-            self.checkpoint_enabled = checkpoint_enabled
-            self.max_concurrent_batches = max_concurrent_batches
-            self.enable_metrics = enable_metrics
-            self._metrics_tracker = None
-            
-            # Initialize all components using the MappingExecutorInitializer
-            self._initializer = MappingExecutorInitializer(
-                metamapper_db_url=metamapper_db_url,
-                mapping_cache_db_url=mapping_cache_db_url,
-                echo_sql=echo_sql,
-                path_cache_size=path_cache_size,
-                path_cache_expiry_seconds=path_cache_expiry_seconds,
-                max_concurrent_batches=max_concurrent_batches,
-                enable_metrics=enable_metrics,
-                checkpoint_enabled=checkpoint_enabled,
-                checkpoint_dir=checkpoint_dir,
-                batch_size=batch_size,
-                max_retries=max_retries,
-                retry_delay=retry_delay
-            )
-            
-            # Initialize all components
-            components = self._initializer.initialize_components(self)
-            
-            # Assign components to self
-            self.session_manager = components['session_manager']
-            self.client_manager = components['client_manager']
-            self.config_loader = components['config_loader']
-            self.strategy_handler = components['strategy_handler']
-            self.path_finder = components['path_finder']
-            self.path_execution_manager = components['path_execution_manager']
-            self.cache_manager = components['cache_manager']
-            self.identifier_loader = components['identifier_loader']
-            self.strategy_orchestrator = components['strategy_orchestrator']
-            self.checkpoint_manager = components['checkpoint_manager']
-            self.progress_reporter = components['progress_reporter']
-            self._langfuse_tracker = components['langfuse_tracker']
-            
-            # Create convenience references for backward compatibility
-            convenience_refs = self._initializer.get_convenience_references()
-            self.async_metamapper_engine = convenience_refs['async_metamapper_engine']
-            self.MetamapperSessionFactory = convenience_refs['MetamapperSessionFactory']
-            self.async_metamapper_session = convenience_refs['async_metamapper_session']
-            self.async_cache_engine = convenience_refs['async_cache_engine']
-            self.CacheSessionFactory = convenience_refs['CacheSessionFactory']
-            self.async_cache_session = convenience_refs['async_cache_session']
-            
-            # Set function references after MappingExecutor is fully initialized
-            self._initializer.set_executor_function_references(self)
-            
-            # Store DB URLs for backward compatibility
-            self.metamapper_db_url = metamapper_db_url if metamapper_db_url else settings.metamapper_db_url
-            self.mapping_cache_db_url = mapping_cache_db_url if mapping_cache_db_url else settings.cache_db_url
-            self.echo_sql = echo_sql
-            
-        else:
-            # Component mode: use pre-initialized components
-            self.logger.debug("Initializing MappingExecutor in component mode")
-            
-            # Store configuration parameters
-            self.batch_size = batch_size
-            self.max_retries = max_retries
-            self.retry_delay = retry_delay
-            self.checkpoint_enabled = checkpoint_enabled
-            self.max_concurrent_batches = max_concurrent_batches
-            self.enable_metrics = enable_metrics
-            
-            # Assign pre-initialized components
-            self.session_manager = session_manager
-            self.client_manager = client_manager
-            self.config_loader = config_loader
-            self.strategy_handler = strategy_handler
-            self.path_finder = path_finder
-            self.path_execution_manager = path_execution_manager
-            self.cache_manager = cache_manager
-            self.identifier_loader = identifier_loader
-            self.strategy_orchestrator = strategy_orchestrator
-            self.checkpoint_manager = checkpoint_manager
-            self.progress_reporter = progress_reporter
-            self._langfuse_tracker = langfuse_tracker
-            self._metrics_tracker = None
-            
-            # Create convenience references for backward compatibility
-            self.async_metamapper_engine = self.session_manager.async_metamapper_engine
-            self.MetamapperSessionFactory = self.session_manager.MetamapperSessionFactory
-            self.async_metamapper_session = self.session_manager.async_metamapper_session
-            self.async_cache_engine = self.session_manager.async_cache_engine
-            self.CacheSessionFactory = self.session_manager.CacheSessionFactory
-            self.async_cache_session = self.session_manager.async_cache_session
-            
-            # Store DB URLs for backward compatibility (extract from session_manager)
-            self.metamapper_db_url = str(self.async_metamapper_engine.url)
-            self.mapping_cache_db_url = str(self.async_cache_engine.url)
-            self.echo_sql = self.async_metamapper_engine.echo
-        
-        # Initialize MetadataQueryService
-        self.metadata_query_service = MetadataQueryService(self.session_manager)
-        
-        # Initialize MappingHandlerService
-        self.mapping_handler_service = MappingHandlerService(
-            logger=self.logger,
-            client_manager=self.client_manager,
-            path_finder=self.path_finder,
-            async_metamapper_session=self.async_metamapper_session,
-            metadata_query_service=self.metadata_query_service,
+        # Initialize all components using InitializationService
+        initialization_service = InitializationService()
+        components = initialization_service.initialize_components(
+            mapping_executor=self,
+            metamapper_db_url=metamapper_db_url,
+            mapping_cache_db_url=mapping_cache_db_url,
+            echo_sql=echo_sql,
+            path_cache_size=path_cache_size,
+            path_cache_expiry_seconds=path_cache_expiry_seconds,
+            max_concurrent_batches=max_concurrent_batches,
+            enable_metrics=enable_metrics,
+            checkpoint_enabled=checkpoint_enabled,
+            checkpoint_dir=checkpoint_dir,
+            batch_size=batch_size,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            session_manager=session_manager,
+            client_manager=client_manager,
+            config_loader=config_loader,
+            strategy_handler=strategy_handler,
+            path_finder=path_finder,
+            path_execution_manager=path_execution_manager,
+            cache_manager=cache_manager,
+            identifier_loader=identifier_loader,
+            strategy_orchestrator=strategy_orchestrator,
+            checkpoint_manager=checkpoint_manager,
+            progress_reporter=progress_reporter,
+            langfuse_tracker=langfuse_tracker,
         )
         
-        # Initialize MappingPathExecutionService with all required arguments
-        # Initialize BidirectionalValidationService
-        self.bidirectional_validation_service = BidirectionalValidationService()
+        # Assign all components from the services dictionary
+        self.services = components
         
-        # Initialize DirectMappingService
-        self.direct_mapping_service = DirectMappingService(logger=self.logger)
+        # Assign individual components for backward compatibility
+        self.session_manager = components['session_manager']
+        self.client_manager = components['client_manager']
+        self.config_loader = components['config_loader']
+        self.strategy_handler = components['strategy_handler']
+        self.path_finder = components['path_finder']
+        self.path_execution_manager = components['path_execution_manager']
+        self.cache_manager = components['cache_manager']
+        self.identifier_loader = components['identifier_loader']
+        self.strategy_orchestrator = components['strategy_orchestrator']
+        self.checkpoint_manager = components['checkpoint_manager']
+        self.progress_reporter = components['progress_reporter']
+        self._langfuse_tracker = components['langfuse_tracker']
+        self._metrics_tracker = components['_metrics_tracker']
         
-        # Initialize MappingStepExecutionService
-        self.step_execution_service = MappingStepExecutionService(
-            client_manager=self.client_manager,
-            cache_manager=self.cache_manager,
+        # Assign convenience references for backward compatibility
+        self.async_metamapper_engine = components['async_metamapper_engine']
+        self.MetamapperSessionFactory = components['MetamapperSessionFactory']
+        self.async_metamapper_session = components['async_metamapper_session']
+        self.async_cache_engine = components['async_cache_engine']
+        self.CacheSessionFactory = components['CacheSessionFactory']
+        self.async_cache_session = components['async_cache_session']
+        
+        # Store DB URLs for backward compatibility
+        self.metamapper_db_url = components['metamapper_db_url']
+        self.mapping_cache_db_url = components['mapping_cache_db_url']
+        self.echo_sql = components['echo_sql']
+        
+        # Assign service instances
+        self.metadata_query_service = components['metadata_query_service']
+        self.mapping_handler_service = components['mapping_handler_service']
+        self.bidirectional_validation_service = components['bidirectional_validation_service']
+        self.direct_mapping_service = components['direct_mapping_service']
+        self.step_execution_service = components['step_execution_service']
+        self.iterative_mapping_service = components['iterative_mapping_service']
+        self.path_execution_service = components['path_execution_service']
+        self.lifecycle_service = components['lifecycle_service']
+        self.robust_execution_coordinator = components['robust_execution_coordinator']
+        self.MappingResultBundle = components['MappingResultBundle']
+        self.strategy_execution_service = components['strategy_execution_service']
+        self.result_aggregation_service = components['result_aggregation_service']
+        self.iterative_execution_service = components['iterative_execution_service']
+        self.db_strategy_execution_service = components['db_strategy_execution_service']
+        self.yaml_strategy_execution_service = components['yaml_strategy_execution_service']
+        
+        # Instantiate the coordinator services
+        self.strategy_coordinator = StrategyCoordinatorService(
+            db_strategy_execution_service=self.db_strategy_execution_service,
+            yaml_strategy_execution_service=self.yaml_strategy_execution_service,
+            robust_execution_coordinator=self.robust_execution_coordinator,
             logger=self.logger
         )
         
-        # Initialize IterativeMappingService
-        self.iterative_mapping_service = IterativeMappingService(logger=self.logger)
-        # Initialize MappingPathExecutionService with all required arguments
-        self.path_execution_service = MappingPathExecutionService(
+        self.mapping_coordinator = MappingCoordinatorService(
+            iterative_execution_service=self.iterative_execution_service,
+            path_execution_service=self.path_execution_service,
+            logger=self.logger
+        )
+        
+        self.lifecycle_manager = LifecycleManager(
             session_manager=self.session_manager,
+            execution_lifecycle_service=self.lifecycle_service,
+            client_manager=self.client_manager
             client_manager=self.client_manager,
             cache_manager=self.cache_manager,
             path_finder=self.path_finder,
@@ -594,6 +570,7 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Dictionary with mapping results, including provenance and validation status
         """
+        return await self.mapping_coordinator.execute_mapping(
         return await self.mapping_coordinator_service.execute_mapping(
             source_endpoint_name=source_endpoint_name,
             target_endpoint_name=target_endpoint_name,
@@ -651,6 +628,9 @@ class MappingExecutor(CompositeIdentifierMixin):
             Dictionary mapping input identifiers to their results
         """
         # Delegate to MappingCoordinatorService
+        return await self.mapping_coordinator.execute_path(
+            session=session,
+        # Delegate to MappingCoordinatorService
         return await self.mapping_coordinator_service.execute_path(
             session=session,
             path=path,
@@ -676,6 +656,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         """
         Execute a named mapping strategy from the database.
         
+        This method delegates to the StrategyCoordinatorService for executing database-stored
+        mapping strategies. This is the legacy method maintained for backward compatibility.
         This method delegates to the StrategyCoordinatorService which coordinates
         the execution through DbStrategyExecutionService. This is the legacy method 
         maintained for backward compatibility.
@@ -695,6 +677,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             InactiveStrategyError: If the strategy is not active
             MappingExecutionError: If an error occurs during execution
         """
+        return await self.strategy_coordinator.execute_strategy(
         return await self.strategy_coordinator.execute_strategy(
             strategy_name=strategy_name,
             initial_identifiers=initial_identifiers,
@@ -721,6 +704,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         """
         Execute a YAML-defined mapping strategy using dedicated strategy action classes.
         
+        This method delegates to the StrategyCoordinatorService for executing multi-step
+        mapping strategies defined in YAML configuration. Each step in the strategy is
         This method delegates to the StrategyCoordinatorService which coordinates
         the execution through YamlStrategyExecutionService. Each step in the strategy is
         executed sequentially using dedicated action classes, with the output of one step
@@ -767,6 +752,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             >>> print(f"Step results: {len(result['step_results'])}")
         """
         return await self.strategy_coordinator.execute_yaml_strategy(
+        return await self.strategy_coordinator.execute_yaml_strategy(
             strategy_name=strategy_name,
             source_endpoint_name=source_endpoint_name,
             target_endpoint_name=target_endpoint_name,
@@ -795,6 +781,7 @@ class MappingExecutor(CompositeIdentifierMixin):
 
     async def async_dispose(self):
         """Asynchronously dispose of underlying database engines."""
+        await self.lifecycle_manager.async_dispose()
         await self.lifecycle_manager.async_dispose()
 
     async def track_mapping_metrics(self, event_type: str, metrics: Dict[str, Any]) -> None:
@@ -1629,6 +1616,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         """
         # Delegate to the StrategyCoordinatorService
         return await self.strategy_coordinator.execute_robust_yaml_strategy(
+        # Delegate to the StrategyCoordinatorService
+        return await self.strategy_coordinator.execute_robust_yaml_strategy(
             strategy_name=strategy_name,
             input_identifiers=input_identifiers,
             source_endpoint_name=source_endpoint_name,
@@ -1650,11 +1639,9 @@ class MappingExecutor(CompositeIdentifierMixin):
         """
         try:
             async with self.async_metamapper_session() as session:
-                query = select(MappingStrategy).where(MappingStrategy.name == strategy_name)
-                result = await session.execute(query)
-                return result.scalar_one_or_none()
-        except SQLAlchemyError as e:
-            self.logger.error(f"Database error getting strategy {strategy_name}: {e}")
+                return await self.metadata_query_service.get_strategy(session, strategy_name)
+        except DatabaseQueryError as e:
+            self.logger.error(f"Error getting strategy {strategy_name}: {e}")
             return None
 
 
@@ -1667,6 +1654,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             progress_data: Progress information to report
         """
         await self.lifecycle_manager.report_progress(progress_data)
+        await self.lifecycle_manager.report_progress(progress_data)
     
     # Client delegate methods
     
@@ -1678,10 +1666,16 @@ class MappingExecutor(CompositeIdentifierMixin):
     def checkpoint_dir(self):
         """Get the checkpoint directory path."""
         return self.lifecycle_manager.checkpoint_dir
+        return self.lifecycle_manager.checkpoint_dir
     
     @checkpoint_dir.setter
     def checkpoint_dir(self, value):
         """Set the checkpoint directory path."""
+        self.lifecycle_manager.checkpoint_dir = value
+        if value is not None:
+            self.checkpoint_enabled = True
+        else:
+            self.checkpoint_enabled = False
         self.lifecycle_manager.checkpoint_dir = value
         # Update local checkpoint_enabled state to match
         self.checkpoint_enabled = self.lifecycle_manager.checkpoint_enabled
@@ -1695,6 +1689,7 @@ class MappingExecutor(CompositeIdentifierMixin):
             checkpoint_data: Data to checkpoint
         """
         await self.lifecycle_manager.save_checkpoint(execution_id, checkpoint_data)
+        await self.lifecycle_manager.save_checkpoint(execution_id, checkpoint_data)
     
     async def load_checkpoint(self, execution_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -1706,4 +1701,5 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Checkpoint data if found, None otherwise
         """
+        return await self.lifecycle_manager.load_checkpoint(execution_id)
         return await self.lifecycle_manager.load_checkpoint(execution_id)

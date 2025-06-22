@@ -157,6 +157,38 @@ class MetadataQueryService:
                 details={"endpoint": endpoint_name, "property": property_name, "error": str(e)}
             ) from e
     
+    async def get_strategy(self, session: AsyncSession, strategy_name: str) -> Optional[MappingStrategy]:
+        """
+        Get a strategy by name from the database.
+        
+        Args:
+            session: SQLAlchemy async session
+            strategy_name: Name of the strategy to retrieve
+            
+        Returns:
+            MappingStrategy object if found, None otherwise
+            
+        Raises:
+            DatabaseQueryError: If database error occurs
+        """
+        try:
+            stmt = select(MappingStrategy).where(MappingStrategy.name == strategy_name)
+            result = await session.execute(stmt)
+            strategy = result.scalar_one_or_none()
+            
+            if strategy:
+                self.logger.debug(f"Found strategy: {strategy.name}")
+            else:
+                self.logger.warning(f"Strategy not found: {strategy_name}")
+            
+            return strategy
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error retrieving strategy {strategy_name}: {e}", exc_info=True)
+            raise DatabaseQueryError(
+                "Database error fetching strategy",
+                details={"strategy": strategy_name, "error": str(e)}
+            ) from e
+    
     async def get_endpoint_by_name(self, session: AsyncSession, endpoint_name: str) -> Optional[Endpoint]:
         """
         Retrieve an endpoint configuration by name from the metamapper database.
