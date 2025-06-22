@@ -34,11 +34,10 @@ from biomapper.core.services.execution_services import (
     DbStrategyExecutionService,
     YamlStrategyExecutionService,
 )
-from biomapper.core.services.database_setup_service import DatabaseSetupService
 
 # Models
 from biomapper.core.models.result_bundle import MappingResultBundle
-from ..db.models import Base as MetamapperBase, MappingStrategy, Endpoint, EndpointPropertyConfig, MappingPath
+from ..db.models import MappingStrategy, Endpoint, EndpointPropertyConfig, MappingPath
 from ..db.cache_models import PathExecutionStatus, MappingSession, ExecutionMetric
 
 # Utilities
@@ -229,12 +228,8 @@ class MappingExecutor(CompositeIdentifierMixin):
         )
         
         # Use the initializer to create the executor
+        # The initializer now handles both metamapper and cache database table initialization
         executor = await initializer.create_executor()
-        
-        # Initialize metamapper database tables using DatabaseSetupService
-        # (cache tables are already initialized in create_executor)
-        db_setup_service = DatabaseSetupService(logger=executor.logger)
-        await db_setup_service.initialize_tables(executor.async_metamapper_engine, MetamapperBase.metadata)
         
         return executor
 

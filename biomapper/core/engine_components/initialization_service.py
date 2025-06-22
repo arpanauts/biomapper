@@ -325,6 +325,7 @@ class InitializationService:
         
         # Initialize ResultAggregationService
         components['result_aggregation_service'] = ResultAggregationService(logger=self.logger)
+        
 
         # Initialize SessionMetricsService
         components['session_metrics_service'] = SessionMetricsService()
