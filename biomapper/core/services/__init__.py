@@ -11,6 +11,7 @@ from .execution_services import (
 )
 from .execution_trace_logger import ExecutionTraceLogger
 from .iterative_mapping_service import IterativeMappingService
+from .mapping_handler_service import MappingHandlerService
 from .mapping_path_execution_service import MappingPathExecutionService
 from .mapping_step_execution_service import MappingStepExecutionService
 from .metadata_query_service import MetadataQueryService
@@ -26,6 +27,7 @@ __all__ = [
     "ExecutionTraceLogger",
     "IterativeExecutionService",
     "IterativeMappingService",
+    "MappingHandlerService",
     "MappingPathExecutionService",
     "MappingStepExecutionService",
     "MetadataQueryService",

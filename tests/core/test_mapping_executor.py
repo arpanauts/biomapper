@@ -440,8 +440,8 @@ def test_config():
 
 
 @pytest.mark.asyncio
-async def test_find_mapping_paths(mapping_executor, mock_config_db):
-    """Test _find_mapping_paths method."""
+async def test_path_finder_find_mapping_paths(mapping_executor, mock_config_db):
+    """Test PathFinder.find_mapping_paths method through MappingExecutor."""
     # Create a mock path with necessary attributes
     mock_path = MagicMock(spec=MappingPath)
     mock_path.id = 998
@@ -462,15 +462,19 @@ async def test_find_mapping_paths(mapping_executor, mock_config_db):
     # Create a mock session
     mock_session = AsyncMock(spec=AsyncSession)
 
-    # Create a mock for the _find_direct_paths method (which is called by _find_mapping_paths)
+    # Mock the path_finder's find_mapping_paths method
     with patch.object(
-        mapping_executor, "_find_direct_paths", new_callable=AsyncMock
-    ) as mock_find_direct:
-        # Return our mock path when _find_direct_paths is called
-        mock_find_direct.return_value = [mock_path]
+        mapping_executor.path_finder, "find_mapping_paths", new_callable=AsyncMock
+    ) as mock_find_paths:
+        # Create mock ReversiblePath wrapper
+        from biomapper.core.engine_components.reversible_path import ReversiblePath
+        mock_reversible_path = ReversiblePath(mock_path, is_reverse=False)
+        
+        # Return our mock path wrapped in ReversiblePath when find_mapping_paths is called
+        mock_find_paths.return_value = [mock_reversible_path]
 
-        # Act: Call the _find_mapping_paths method
-        paths = await mapping_executor._find_mapping_paths(
+        # Act: Call the path_finder's find_mapping_paths method
+        paths = await mapping_executor.path_finder.find_mapping_paths(
             mock_session, "GENE_NAME", "ENSEMBL_GENE"
         )
 
@@ -479,8 +483,8 @@ async def test_find_mapping_paths(mapping_executor, mock_config_db):
         assert paths[0].id == mock_path.id
         assert paths[0].name == mock_path.name
 
-        # Verify _find_direct_paths was called with the correct arguments
-        mock_find_direct.assert_called_once_with(
+        # Verify find_mapping_paths was called with the correct arguments
+        mock_find_paths.assert_called_once_with(
             mock_session, "GENE_NAME", "ENSEMBL_GENE"
         )
 
