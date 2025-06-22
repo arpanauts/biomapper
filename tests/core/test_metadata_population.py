@@ -28,10 +28,8 @@ from biomapper.db.models import (
 from biomapper.core.exceptions import (
     CacheError,
 )
-from biomapper.core.mapping_executor import (
-    MappingExecutor,
-    ReversiblePath,
-)
+from biomapper.core.mapping_executor import MappingExecutor
+from biomapper.core.engine_components.reversible_path import ReversiblePath
 
 logger = logging.getLogger(__name__)
 
