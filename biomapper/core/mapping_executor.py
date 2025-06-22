@@ -111,222 +111,86 @@ class MappingExecutor(CompositeIdentifierMixin):
         super().__init__()
         self.logger = logging.getLogger(__name__)
         
-        # Check if we're in legacy mode (configuration parameters) or component mode
-        if session_manager is None:
-            # Legacy mode: use MappingExecutorInitializer to create components
-            self.logger.debug("Initializing MappingExecutor in legacy mode")
-            
-            # Store configuration parameters
-            self.batch_size = batch_size
-            self.max_retries = max_retries
-            self.retry_delay = retry_delay
-            self.checkpoint_enabled = checkpoint_enabled
-            self.max_concurrent_batches = max_concurrent_batches
-            self.enable_metrics = enable_metrics
-            self._metrics_tracker = None
-            
-            # Initialize all components using the MappingExecutorInitializer
-            self._initializer = MappingExecutorInitializer(
-                metamapper_db_url=metamapper_db_url,
-                mapping_cache_db_url=mapping_cache_db_url,
-                echo_sql=echo_sql,
-                path_cache_size=path_cache_size,
-                path_cache_expiry_seconds=path_cache_expiry_seconds,
-                max_concurrent_batches=max_concurrent_batches,
-                enable_metrics=enable_metrics,
-                checkpoint_enabled=checkpoint_enabled,
-                checkpoint_dir=checkpoint_dir,
-                batch_size=batch_size,
-                max_retries=max_retries,
-                retry_delay=retry_delay
-            )
-            
-            # Initialize all components
-            components = self._initializer.initialize_components(self)
-            
-            # Assign components to self
-            self.session_manager = components['session_manager']
-            self.client_manager = components['client_manager']
-            self.config_loader = components['config_loader']
-            self.strategy_handler = components['strategy_handler']
-            self.path_finder = components['path_finder']
-            self.path_execution_manager = components['path_execution_manager']
-            self.cache_manager = components['cache_manager']
-            self.identifier_loader = components['identifier_loader']
-            self.strategy_orchestrator = components['strategy_orchestrator']
-            self.checkpoint_manager = components['checkpoint_manager']
-            self.progress_reporter = components['progress_reporter']
-            self._langfuse_tracker = components['langfuse_tracker']
-            
-            # Create convenience references for backward compatibility
-            convenience_refs = self._initializer.get_convenience_references()
-            self.async_metamapper_engine = convenience_refs['async_metamapper_engine']
-            self.MetamapperSessionFactory = convenience_refs['MetamapperSessionFactory']
-            self.async_metamapper_session = convenience_refs['async_metamapper_session']
-            self.async_cache_engine = convenience_refs['async_cache_engine']
-            self.CacheSessionFactory = convenience_refs['CacheSessionFactory']
-            self.async_cache_session = convenience_refs['async_cache_session']
-            
-            # Set function references after MappingExecutor is fully initialized
-            self._initializer.set_executor_function_references(self)
-            
-            # Store DB URLs for backward compatibility
-            self.metamapper_db_url = metamapper_db_url if metamapper_db_url else settings.metamapper_db_url
-            self.mapping_cache_db_url = mapping_cache_db_url if mapping_cache_db_url else settings.cache_db_url
-            self.echo_sql = echo_sql
-            
-        else:
-            # Component mode: use pre-initialized components
-            self.logger.debug("Initializing MappingExecutor in component mode")
-            
-            # Store configuration parameters
-            self.batch_size = batch_size
-            self.max_retries = max_retries
-            self.retry_delay = retry_delay
-            self.checkpoint_enabled = checkpoint_enabled
-            self.max_concurrent_batches = max_concurrent_batches
-            self.enable_metrics = enable_metrics
-            
-            # Assign pre-initialized components
-            self.session_manager = session_manager
-            self.client_manager = client_manager
-            self.config_loader = config_loader
-            self.strategy_handler = strategy_handler
-            self.path_finder = path_finder
-            self.path_execution_manager = path_execution_manager
-            self.cache_manager = cache_manager
-            self.identifier_loader = identifier_loader
-            self.strategy_orchestrator = strategy_orchestrator
-            self.checkpoint_manager = checkpoint_manager
-            self.progress_reporter = progress_reporter
-            self._langfuse_tracker = langfuse_tracker
-            self._metrics_tracker = None
-            
-            # Create convenience references for backward compatibility
-            self.async_metamapper_engine = self.session_manager.async_metamapper_engine
-            self.MetamapperSessionFactory = self.session_manager.MetamapperSessionFactory
-            self.async_metamapper_session = self.session_manager.async_metamapper_session
-            self.async_cache_engine = self.session_manager.async_cache_engine
-            self.CacheSessionFactory = self.session_manager.CacheSessionFactory
-            self.async_cache_session = self.session_manager.async_cache_session
-            
-            # Store DB URLs for backward compatibility (extract from session_manager)
-            self.metamapper_db_url = str(self.async_metamapper_engine.url)
-            self.mapping_cache_db_url = str(self.async_cache_engine.url)
-            self.echo_sql = self.async_metamapper_engine.echo
-        
-        # Initialize MetadataQueryService
-        self.metadata_query_service = MetadataQueryService(self.session_manager)
-        
-        # Initialize MappingHandlerService
-        self.mapping_handler_service = MappingHandlerService(
-            logger=self.logger,
-            client_manager=self.client_manager,
-            path_finder=self.path_finder,
-            async_metamapper_session=self.async_metamapper_session,
-            metadata_query_service=self.metadata_query_service,
+        # Use InitializationService to initialize all components
+        initialization_service = InitializationService()
+        components = initialization_service.initialize_components(
+            self,
+            metamapper_db_url=metamapper_db_url,
+            mapping_cache_db_url=mapping_cache_db_url,
+            echo_sql=echo_sql,
+            path_cache_size=path_cache_size,
+            path_cache_expiry_seconds=path_cache_expiry_seconds,
+            max_concurrent_batches=max_concurrent_batches,
+            enable_metrics=enable_metrics,
+            checkpoint_enabled=checkpoint_enabled,
+            checkpoint_dir=checkpoint_dir,
+            batch_size=batch_size,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            session_manager=session_manager,
+            client_manager=client_manager,
+            config_loader=config_loader,
+            strategy_handler=strategy_handler,
+            path_finder=path_finder,
+            path_execution_manager=path_execution_manager,
+            cache_manager=cache_manager,
+            identifier_loader=identifier_loader,
+            strategy_orchestrator=strategy_orchestrator,
+            checkpoint_manager=checkpoint_manager,
+            progress_reporter=progress_reporter,
+            langfuse_tracker=langfuse_tracker,
         )
         
-        # Initialize MappingPathExecutionService with all required arguments
-        # Initialize BidirectionalValidationService
-        self.bidirectional_validation_service = BidirectionalValidationService()
+        # Assign all components from the initialization service
+        self.session_manager = components['session_manager']
+        self.client_manager = components['client_manager']
+        self.config_loader = components['config_loader']
+        self.strategy_handler = components['strategy_handler']
+        self.path_finder = components['path_finder']
+        self.path_execution_manager = components['path_execution_manager']
+        self.cache_manager = components['cache_manager']
+        self.identifier_loader = components['identifier_loader']
+        self.strategy_orchestrator = components['strategy_orchestrator']
+        self.checkpoint_manager = components['checkpoint_manager']
+        self.progress_reporter = components['progress_reporter']
+        self._langfuse_tracker = components['langfuse_tracker']
+        self._metrics_tracker = components['_metrics_tracker']
         
-        # Initialize DirectMappingService
-        self.direct_mapping_service = DirectMappingService(logger=self.logger)
+        # Set convenience references
+        self.async_metamapper_engine = components['async_metamapper_engine']
+        self.MetamapperSessionFactory = components['MetamapperSessionFactory']
+        self.async_metamapper_session = components['async_metamapper_session']
+        self.async_cache_engine = components['async_cache_engine']
+        self.CacheSessionFactory = components['CacheSessionFactory']
+        self.async_cache_session = components['async_cache_session']
         
-        # Initialize MappingStepExecutionService
-        self.step_execution_service = MappingStepExecutionService(
-            client_manager=self.client_manager,
-            cache_manager=self.cache_manager,
-            logger=self.logger
-        )
+        # Set configuration attributes
+        self.metamapper_db_url = components['metamapper_db_url']
+        self.mapping_cache_db_url = components['mapping_cache_db_url']
+        self.echo_sql = components['echo_sql']
+        self.batch_size = batch_size
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        self.checkpoint_enabled = checkpoint_enabled
+        self.max_concurrent_batches = max_concurrent_batches
+        self.enable_metrics = enable_metrics
         
-        # Initialize IterativeMappingService
-        self.iterative_mapping_service = IterativeMappingService(logger=self.logger)
-        # Initialize MappingPathExecutionService with all required arguments
-        self.path_execution_service = MappingPathExecutionService(
-            session_manager=self.session_manager,
-            client_manager=self.client_manager,
-            cache_manager=self.cache_manager,
-            path_finder=self.path_finder,
-            path_execution_manager=self.path_execution_manager,
-            composite_handler=self,  # MappingExecutor implements composite handling
-            step_execution_service=self.step_execution_service,
-            logger=self.logger
-        )
-        
-        # Set executor reference for delegation
-        self.path_execution_service.set_executor(self)
-        
-        # Initialize ExecutionLifecycleService
-        self.lifecycle_service = ExecutionLifecycleService(
-            checkpoint_manager=self.checkpoint_manager,
-            progress_reporter=self.progress_reporter,
-            metrics_manager=self._langfuse_tracker
-        )
-        
-        # Initialize RobustExecutionCoordinator
-        self.robust_execution_coordinator = RobustExecutionCoordinator(
-            strategy_orchestrator=self.strategy_orchestrator,
-            checkpoint_manager=self.checkpoint_manager,
-            progress_reporter=self.progress_reporter,
-            batch_size=self.batch_size,
-            max_retries=self.max_retries,
-            retry_delay=self.retry_delay,
-            checkpoint_enabled=self.checkpoint_enabled,
-            logger=self.logger
-        )
-        
-        # Initialize metrics tracker if needed
-        if enable_metrics:
-            try:
-                from biomapper.monitoring.metrics import MetricsTracker
-                self._metrics_tracker = MetricsTracker(
-                    langfuse=self._langfuse_tracker
-                )
-            except ImportError:
-                self.logger.warning("MetricsTracker not available - langfuse module not installed")
-                self._metrics_tracker = None
-        else:
-            self._metrics_tracker = None
-        
-        # Initialize MappingResultBundle (extracted module)
-        self.MappingResultBundle = MappingResultBundle
-        
-        # Initialize StrategyExecutionService
-        self.strategy_execution_service = StrategyExecutionService(
-            strategy_orchestrator=self.strategy_orchestrator,
-            robust_execution_coordinator=self.robust_execution_coordinator,
-            logger=self.logger
-        )
-        
-        # Initialize ResultAggregationService
-        self.result_aggregation_service = ResultAggregationService(logger=self.logger)
-        
-        # Initialize the new execution services
-        self.iterative_execution_service = IterativeExecutionService(
-            direct_mapping_service=self.direct_mapping_service,
-            iterative_mapping_service=self.iterative_mapping_service,
-            bidirectional_validation_service=self.bidirectional_validation_service,
-            result_aggregation_service=self.result_aggregation_service,
-            path_finder=self.path_finder,
-            composite_handler=self._composite_handler,
-            async_metamapper_session=self.async_metamapper_session,
-            metadata_query_service=self.metadata_query_service,
-            logger=self.logger,
-        )
-        # Set the executor reference
-        self.iterative_execution_service.set_executor(self)
-        
-        self.db_strategy_execution_service = DbStrategyExecutionService(
-            strategy_execution_service=self.strategy_execution_service,
-            logger=self.logger,
-        )
-        
-        self.yaml_strategy_execution_service = YamlStrategyExecutionService(
-            strategy_orchestrator=self.strategy_orchestrator,
-            logger=self.logger,
-        )
+        # Set service references
+        self.metadata_query_service = components['metadata_query_service']
+        self.mapping_handler_service = components['mapping_handler_service']
+        self.bidirectional_validation_service = components['bidirectional_validation_service']
+        self.direct_mapping_service = components['direct_mapping_service']
+        self.step_execution_service = components['step_execution_service']
+        self.iterative_mapping_service = components['iterative_mapping_service']
+        self.path_execution_service = components['path_execution_service']
+        self.lifecycle_service = components['lifecycle_service']
+        self.robust_execution_coordinator = components['robust_execution_coordinator']
+        self.MappingResultBundle = components['MappingResultBundle']
+        self.strategy_execution_service = components['strategy_execution_service']
+        self.result_aggregation_service = components['result_aggregation_service']
+        self.iterative_execution_service = components['iterative_execution_service']
+        self.db_strategy_execution_service = components['db_strategy_execution_service']
+        self.yaml_strategy_execution_service = components['yaml_strategy_execution_service']
         
         self.logger.info("MappingExecutor initialization complete")
 
