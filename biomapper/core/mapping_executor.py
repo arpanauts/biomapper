@@ -213,7 +213,6 @@ class MappingExecutor(CompositeIdentifierMixin):
             checkpoint_service=self.checkpoint_service,
             resource_disposal_service=self.resource_disposal_service,
             logger=self.logger
-            client_manager=self.client_manager
         )
 
         # Set executor reference for services that need it for callbacks/delegation
