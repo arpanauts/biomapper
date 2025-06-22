@@ -184,11 +184,14 @@ class IterativeExecutionService:
         
         # --- 0. Initial Setup --- Create a mapping session for logging ---
         setup_start = time.time()
-        mapping_session_id = await self._executor._create_mapping_session_log(
-            source_endpoint_name, target_endpoint_name, source_property_name,
-            target_property_name, use_cache, try_reverse_mapping, len(original_input_ids_set),
-            max_cache_age_days=max_cache_age_days
-        )
+        async with self._executor.async_cache_session() as cache_session:
+            mapping_session = await self._executor.session_metrics_service.create_mapping_session_log(
+                cache_session,
+                source_endpoint_name, target_endpoint_name, source_property_name,
+                target_property_name, use_cache, try_reverse_mapping, len(original_input_ids_set),
+                max_cache_age_days=max_cache_age_days
+            )
+            mapping_session_id = mapping_session.id
         self.logger.info(f"TIMING: mapping session setup took {time.time() - setup_start:.3f}s")
 
         try:
@@ -441,17 +444,20 @@ class IterativeExecutionService:
                         
                         # Also save performance metrics to database
                         if mapping_session_id:
-                            await self._executor._save_metrics_to_database(mapping_session_id, "mapping_execution", execution_metrics)
+                            async with self._executor.async_cache_session() as cache_session:
+                                await self._executor.session_metrics_service.save_metrics_to_database(cache_session, mapping_session_id, "mapping_execution", execution_metrics)
                     except Exception as e:
                         self.logger.warning(f"Error tracking metrics: {str(e)}")
                 
-                await self._executor._update_mapping_session_log(
-                    mapping_session_id, 
-                    status=status,
-                    end_time=get_current_utc_time(),
-                    results_count=results_count,
-                    error_message=str(e) if 'e' in locals() else None
-                )
+                async with self._executor.async_cache_session() as cache_session:
+                    await self._executor.session_metrics_service.update_mapping_session_log(
+                        cache_session,
+                        mapping_session_id, 
+                        status=status,
+                        end_time=get_current_utc_time(),
+                        results_count=results_count,
+                        error_message=str(e) if 'e' in locals() else None
+                    )
             else:
                 self.logger.error("mapping_session_id not defined, cannot update session log.")
 

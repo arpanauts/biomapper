@@ -38,6 +38,7 @@ from biomapper.core.services.execution_services import (
     YamlStrategyExecutionService,
 )
 from biomapper.core.services.mapping_handler_service import MappingHandlerService
+from biomapper.core.services.session_metrics_service import SessionMetricsService
 
 # Import engine components
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
@@ -236,6 +237,9 @@ class InitializationService:
         
         # Initialize services that depend on the core components
         components['metadata_query_service'] = MetadataQueryService(components['session_manager'])
+        
+        # Initialize SessionMetricsService
+        components['session_metrics_service'] = SessionMetricsService()
         
         # Initialize MappingHandlerService
         components['mapping_handler_service'] = MappingHandlerService(
