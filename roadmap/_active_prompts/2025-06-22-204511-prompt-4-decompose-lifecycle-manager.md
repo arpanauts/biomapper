@@ -1,0 +1,52 @@
+# Task: Decompose LifecycleManager
+
+**Task Objective:**
+Analyze and refactor the `biomapper.core.engine_components.lifecycle_manager.LifecycleManager`. This class currently has broad responsibilities, including session management, checkpointing, and client connections. Decompose it into smaller, more focused services to improve modularity and adhere to the Single Responsibility Principle.
+
+**Prerequisites:**
+- The `LifecycleManager` class exists at `/home/ubuntu/biomapper/biomapper/core/engine_components/lifecycle_manager.py`.
+
+**Input Context:**
+- `/home/ubuntu/biomapper/biomapper/core/engine_components/lifecycle_manager.py`: The primary file to be analyzed and refactored.
+- `/home/ubuntu/biomapper/biomapper/core/mapping_executor.py`: To understand how the `LifecycleManager` is currently used.
+
+**Expected Outputs:**
+1.  New service class files created within `/home/ubuntu/biomapper/biomapper/core/services/`, for example:
+    - `execution_session_service.py`: Manages the lifecycle of a mapping session (creation, status updates).
+    - `checkpoint_service.py`: Handles saving and loading of checkpoints.
+2.  The existing `LifecycleManager` will be either removed or become a higher-level coordinator that delegates to the new, smaller services.
+3.  A new unit test file for each new service class created.
+
+**Success Criteria:**
+- The responsibilities of the original `LifecycleManager` are now handled by several smaller, more focused services.
+- The new services are easier to understand and test in isolation.
+- The overall functionality of session management and checkpointing remains intact.
+- All related unit tests are updated and pass.
+
+**Error Recovery Instructions:**
+- If a clean separation is not possible, document the reasons in the code. It may be that `LifecycleManager` is a valid coordinator. In this case, rename it to `LifecycleCoordinator` and ensure its methods are pure delegations.
+- If refactoring breaks existing tests, address the test failures immediately. Do not leave the test suite in a broken state.
+
+**Environment Requirements:**
+- Access to the `biomapper` codebase.
+- `poetry` environment fully installed and operational.
+
+**Task Decomposition:**
+1.  Read through `LifecycleManager` and categorize its public methods by responsibility (e.g., 'checkpointing', 'session management', 'client shutdown').
+2.  For each category, define a new service class (e.g., `CheckpointService`).
+3.  Create the new files for these services in `/home/ubuntu/biomapper/biomapper/core/services/`.
+4.  Move the relevant methods and attributes from `LifecycleManager` into the new service classes.
+5.  Refactor the `LifecycleManager` to delegate calls to these new services, or remove it if it's no longer needed.
+6.  Update the `MappingExecutorBuilder` to construct these new services and pass them to the relevant components.
+7.  Create unit tests for each new service.
+8.  Run the full test suite.
+
+**Validation Checkpoints:**
+- After creating each new service, write its unit tests and ensure they pass.
+- After refactoring `LifecycleManager`, run the tests that previously covered its functionality to ensure they still pass against the new structure.
+
+**Source Prompt Reference:**
+- `/home/ubuntu/biomapper/roadmap/_active_prompts/2025-06-22-204511-prompt-4-decompose-lifecycle-manager.md`
+
+**Context from Previous Attempts:**
+- This is the first attempt at decomposing the `LifecycleManager`.
