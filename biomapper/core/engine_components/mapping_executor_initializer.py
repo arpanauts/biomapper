@@ -393,6 +393,7 @@ class MappingExecutorInitializer:
         try:
             # Import here to avoid circular imports
             from ..mapping_executor import MappingExecutor
+            from ...db.models import Base as MetamapperBase
             
             # Create a dummy executor to pass to components that need it
             # This will be replaced with the real executor after it's created
@@ -431,10 +432,11 @@ class MappingExecutorInitializer:
             # Set function references
             self.set_executor_function_references(executor)
             
-            # Initialize cache database tables
+            # Initialize both metamapper and cache database tables
+            await self._init_db_tables(components['session_manager'].async_metamapper_engine, MetamapperBase.metadata)
             await self._init_db_tables(components['session_manager'].async_cache_engine, CacheBase.metadata)
             
-            executor.logger.info("MappingExecutor instance created and database tables initialized.")
+            executor.logger.info("MappingExecutor instance created and all database tables initialized.")
             return executor
             
         except Exception as e:
