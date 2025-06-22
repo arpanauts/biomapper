@@ -24,7 +24,10 @@ from biomapper.core.exceptions import (
 from biomapper.core.engine_components.initialization_service import InitializationService
 from biomapper.core.engine_components.strategy_coordinator_service import StrategyCoordinatorService
 from biomapper.core.engine_components.mapping_coordinator_service import MappingCoordinatorService
-from biomapper.core.engine_components.lifecycle_manager import LifecycleManager
+from biomapper.core.engine_components.lifecycle_coordinator import LifecycleCoordinator
+from biomapper.core.services.execution_session_service import ExecutionSessionService
+from biomapper.core.services.checkpoint_service import CheckpointService
+from biomapper.core.services.resource_disposal_service import ResourceDisposalService
 from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
 
 # Services
@@ -145,6 +148,33 @@ class MappingExecutor(CompositeIdentifierMixin):
         for key, value in components.items():
             setattr(self, key, value)
 
+        # Initialize the execution services first, as coordinators depend on them.
+        self.result_aggregation_service = ResultAggregationService(logger=self.logger)
+        
+        self.iterative_execution_service = IterativeExecutionService(
+            direct_mapping_service=self.direct_mapping_service,
+            iterative_mapping_service=self.iterative_mapping_service,
+            bidirectional_validation_service=self.bidirectional_validation_service,
+            result_aggregation_service=self.result_aggregation_service,
+            path_finder=self.path_finder,
+            composite_handler=self._composite_handler,
+            async_metamapper_session=self.async_metamapper_session,
+            async_cache_session=self.async_cache_session,
+            metadata_query_service=self.metadata_query_service,
+            session_metrics_service=self.session_metrics_service,
+            logger=self.logger,
+        )
+        
+        self.db_strategy_execution_service = DbStrategyExecutionService(
+            strategy_execution_service=self.strategy_execution_service,
+            logger=self.logger,
+        )
+        
+        self.yaml_strategy_execution_service = YamlStrategyExecutionService(
+            strategy_orchestrator=self.strategy_orchestrator,
+            logger=self.logger,
+        )
+
         # Now, initialize Coordinator and Manager services that compose other services
         self.strategy_coordinator = StrategyCoordinatorService(
             db_strategy_execution_service=self.db_strategy_execution_service,
@@ -159,9 +189,30 @@ class MappingExecutor(CompositeIdentifierMixin):
             logger=self.logger
         )
 
-        self.lifecycle_manager = LifecycleManager(
-            session_manager=self.session_manager,
+        # Create the specialized lifecycle services
+        self.execution_session_service = ExecutionSessionService(
             execution_lifecycle_service=self.lifecycle_service,
+            logger=self.logger
+        )
+        
+        self.checkpoint_service = CheckpointService(
+            execution_lifecycle_service=self.lifecycle_service,
+            checkpoint_dir=checkpoint_dir,
+            logger=self.logger
+        )
+        
+        self.resource_disposal_service = ResourceDisposalService(
+            session_manager=self.session_manager,
+            client_manager=self.client_manager,
+            logger=self.logger
+        )
+        
+        # Create the lifecycle coordinator that delegates to these services
+        self.lifecycle_manager = LifecycleCoordinator(
+            execution_session_service=self.execution_session_service,
+            checkpoint_service=self.checkpoint_service,
+            resource_disposal_service=self.resource_disposal_service,
+            logger=self.logger
             client_manager=self.client_manager
         )
 
