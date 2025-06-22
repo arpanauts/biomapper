@@ -1641,3 +1641,25 @@ class MappingExecutor(CompositeIdentifierMixin):
         else:
             self.lifecycle_service.set_checkpoint_directory(None)
             self.checkpoint_enabled = False
+    
+    async def save_checkpoint(self, execution_id: str, checkpoint_data: Dict[str, Any]):
+        """
+        Save checkpoint data for a given execution.
+        
+        Args:
+            execution_id: Unique identifier for the execution
+            checkpoint_data: Data to checkpoint
+        """
+        await self.lifecycle_service.save_checkpoint(execution_id, checkpoint_data)
+    
+    async def load_checkpoint(self, execution_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Load checkpoint data for a given execution.
+        
+        Args:
+            execution_id: Unique identifier for the execution
+            
+        Returns:
+            Checkpoint data if found, None otherwise
+        """
+        return await self.lifecycle_service.load_checkpoint(execution_id)

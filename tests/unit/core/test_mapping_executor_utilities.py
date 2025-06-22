@@ -34,7 +34,7 @@ from biomapper.db.models import (
 @pytest.fixture
 def mock_executor():
     """Create a MappingExecutor instance with mocked database connections."""
-    with patch('biomapper.core.mapping_executor.create_async_engine'):
+    with patch('biomapper.core.engine_components.session_manager.create_async_engine'):
         executor = MappingExecutor(
             metamapper_db_url="sqlite+aiosqlite:///:memory:",
             mapping_cache_db_url="sqlite+aiosqlite:///:memory:",
@@ -51,6 +51,9 @@ def mock_executor():
         
         # Mock the logger
         executor.logger = MagicMock()
+        
+        # Mock the identifier_loader service
+        executor.identifier_loader = MagicMock()
         
         return executor
 
