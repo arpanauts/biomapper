@@ -426,11 +426,29 @@ async def mapping_executor():
     executor._calculate_confidence_score = MagicMock()
     executor._create_mapping_path_details = MagicMock()
     executor._determine_mapping_source = MagicMock()
-    executor._run_path_steps = AsyncMock()
-    executor._execute_path = AsyncMock()
-    executor._handle_convert_identifiers_local = AsyncMock()
-    executor._handle_execute_mapping_path = AsyncMock()
-    executor._handle_filter_identifiers_by_target_presence = AsyncMock()
+    # Don't mock _run_path_steps since MappingExecutor has a real implementation for test compatibility
+    # Don't mock _execute_path to allow the test to use the real implementation
+    # Don't mock the handler methods since MappingExecutor has real implementations for test compatibility
+    # Only mock them with return values if a specific test needs different behavior
+    if not hasattr(executor, '_handle_convert_identifiers_local'):
+        executor._handle_convert_identifiers_local = AsyncMock(return_value={
+            'status': 'success',
+            'output_identifiers': [],
+            'output_ontology_type': 'TARGET',
+            'details': {}
+        })
+    if not hasattr(executor, '_handle_execute_mapping_path'):
+        executor._handle_execute_mapping_path = AsyncMock(return_value={
+            'status': 'success',
+            'output_identifiers': [],
+            'details': {}
+        })
+    if not hasattr(executor, '_handle_filter_identifiers_by_target_presence'):
+        executor._handle_filter_identifiers_by_target_presence = AsyncMock(return_value={
+            'status': 'success',
+            'output_identifiers': [],
+            'details': {}
+        })
     
     return executor
 
@@ -813,8 +831,8 @@ async def test_execute_mapping_empty_input(mapping_executor, mock_config_db):
 
         # Call execute_mapping with empty input list
         result = await mapping_executor.execute_mapping(
-            source_endpoint_name,
-            target_endpoint_name,
+            source_endpoint_name=source_endpoint_name,
+            target_endpoint_name=target_endpoint_name,
             input_identifiers=input_ids,
             source_property_name=source_property_name,
             target_property_name=target_property_name,
