@@ -8,17 +8,13 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
     async_sessionmaker,
 )
-from sqlalchemy.exc import SQLAlchemyError, OperationalError
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from biomapper.db.models import Base as MetamapperBase
 from biomapper.core.mapping_executor import MappingExecutor
 from biomapper.core.exceptions import (
-    BiomapperError,
     ClientExecutionError,
     ClientInitializationError,
-    CacheRetrievalError,
-    CacheTransactionError,
     ErrorCode,
     CacheError,
     MappingExecutionError,
@@ -853,8 +849,6 @@ async def test_execute_mapping_empty_input(mapping_executor, mock_config_db):
         result = await mapping_executor.execute_mapping(
             source_endpoint_name=source_endpoint_name,
             target_endpoint_name=target_endpoint_name,
-            source_endpoint_name=source_endpoint_name,
-            target_endpoint_name=target_endpoint_name,
             input_identifiers=input_ids,
             source_property_name=source_property_name,
             target_property_name=target_property_name,
@@ -1231,7 +1225,7 @@ async def test_execute_mapping_caches_metadata(mapping_executor, mock_async_cach
     mock_session.added_entities = [mock_entity_mapping]
     
     # Mock __init__ for SQLAlchemy model to capture parameters
-    with patch("biomapper.db.cache_models.EntityMapping", return_value=mock_entity_mapping) as mock_entity_mapping_class:
+    with patch("biomapper.db.cache_models.EntityMapping", return_value=mock_entity_mapping):
         # Mock helper methods (these are called during _cache_results)
         original_calculate_confidence = mapping_executor._calculate_confidence_score
         original_create_mapping_details = mapping_executor._create_mapping_path_details
@@ -1544,7 +1538,7 @@ async def path_execution_manager():
     """Fixture for PathExecutionManager with mocked dependencies."""
     from biomapper.core.engine_components.path_execution_manager import PathExecutionManager
     from biomapper.core.engine_components.cache_manager import CacheManager
-    from unittest.mock import MagicMock, AsyncMock
+    from unittest.mock import MagicMock
     
     # Create mock dependencies
     mock_session_manager = MagicMock()
@@ -1782,7 +1776,7 @@ async def test_run_path_steps_error_handling(mapping_executor):
     mock_path.steps = [mock_step]
     
     # Patch _load_and_initialize_client to return a client that raises an error
-    mock_client = MockStepClient(raise_error=True, error_msg="Simulated client failure")
+    # mock_client = MockStepClient(raise_error=True, error_msg="Simulated client failure")
     
     # The mock implementation doesn't actually execute clients, so it won't raise errors
     # Run the function - it should complete successfully with the mock implementation
@@ -1852,7 +1846,7 @@ async def test_execute_path_integration(mapping_executor):
         assert results["input1"]["mapping_path_details"]["path_id"] == mock_path.id
         assert results["input1"]["mapping_path_details"]["path_name"] == mock_path.name
         assert results["input1"]["mapping_path_details"]["direction"] == "forward"
-        assert results["input1"]["mapping_path_details"]["resolved_historical"] == True
+        assert results["input1"]["mapping_path_details"]["resolved_historical"] is True
 
 
 @pytest.mark.asyncio
