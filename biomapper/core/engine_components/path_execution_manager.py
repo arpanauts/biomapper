@@ -83,7 +83,7 @@ class PathExecutionManager:
         
         # Dependency injection for functions that need access to MappingExecutor's context
         self._load_client = load_client_func
-        self._execute_mapping_step = execute_mapping_step_func
+        self._execute_mapping_step = execute_mapping_step_func or self._default_execute_mapping_step
         self._calculate_confidence_score = calculate_confidence_score_func or self._default_calculate_confidence_score
         self._create_mapping_path_details = create_mapping_path_details_func or self._default_create_mapping_path_details
         self._determine_mapping_source = determine_mapping_source_func or self._default_determine_mapping_source
@@ -243,6 +243,10 @@ class PathExecutionManager:
                                 is_reverse=is_reverse_execution
                             )
                             
+                            # Handle case where _execute_mapping_step returns None
+                            if step_results is None:
+                                step_results = {}
+                            
                             self.logger.info(f"EXEC_PATH_DEBUG ({path.name}): Step '{step.id}', step_results: {step_results}")
                             
                             # Track which original inputs connect to which outputs through this step
@@ -332,7 +336,18 @@ class PathExecutionManager:
                             
                         except Exception as e:
                             self.logger.error(f"Error executing step {step_id}: {str(e)}", exc_info=True)
-                            # We continue with the next step to see if partial results can be obtained
+                            # Raise MappingExecutionError as expected by tests
+                            from biomapper.core.exceptions import MappingExecutionError
+                            raise MappingExecutionError(
+                                f"Client execution failed for step {step_index + 1}: {str(e)}",
+                                details={
+                                    "path_id": path.id,
+                                    "path_name": path.name,
+                                    "step_number": step_index + 1,
+                                    "step_id": step_id,
+                                    "error": str(e)
+                                }
+                            )
                     
                     # Now execution_progress contains our raw results
                     raw_results = execution_progress
@@ -661,3 +676,29 @@ class PathExecutionManager:
                 return "ramp"
                 
         return default_source
+    
+    async def _default_execute_mapping_step(
+        self,
+        step,
+        input_values: List[str],
+        is_reverse: bool = False
+    ) -> Dict[str, tuple]:
+        """
+        Default implementation of execute mapping step.
+        
+        This is a placeholder that returns empty results when no implementation
+        is provided via dependency injection.
+        
+        Args:
+            step: The mapping step to execute
+            input_values: List of input values to map
+            is_reverse: Whether this is a reverse mapping
+            
+        Returns:
+            Dictionary mapping input values to (mapped_ids, source_component) tuples
+        """
+        # Return empty mappings for all inputs
+        return {
+            input_val: ([], None)
+            for input_val in input_values
+        }

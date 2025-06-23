@@ -428,9 +428,23 @@ async def mapping_executor():
     executor._determine_mapping_source = MagicMock()
     executor._run_path_steps = AsyncMock()
     executor._execute_path = AsyncMock()
-    executor._handle_convert_identifiers_local = AsyncMock()
-    executor._handle_execute_mapping_path = AsyncMock()
-    executor._handle_filter_identifiers_by_target_presence = AsyncMock()
+    # Mock the handler methods to return proper dictionary results
+    executor._handle_convert_identifiers_local = AsyncMock(return_value={
+        'status': 'success',
+        'output_identifiers': [],
+        'output_ontology_type': 'TARGET',
+        'details': {}
+    })
+    executor._handle_execute_mapping_path = AsyncMock(return_value={
+        'status': 'success',
+        'output_identifiers': [],
+        'details': {}
+    })
+    executor._handle_filter_identifiers_by_target_presence = AsyncMock(return_value={
+        'status': 'success',
+        'output_identifiers': [],
+        'details': {}
+    })
     
     return executor
 
@@ -813,8 +827,8 @@ async def test_execute_mapping_empty_input(mapping_executor, mock_config_db):
 
         # Call execute_mapping with empty input list
         result = await mapping_executor.execute_mapping(
-            source_endpoint_name,
-            target_endpoint_name,
+            source_endpoint_name=source_endpoint_name,
+            target_endpoint_name=target_endpoint_name,
             input_identifiers=input_ids,
             source_property_name=source_property_name,
             target_property_name=target_property_name,
@@ -982,8 +996,8 @@ async def test_check_cache_unexpected_error(caplog):
 async def test_cache_results_db_error_during_commit():
     """Test cache storage handles commit failures properly through CacheManager."""
     from biomapper.core.engine_components.cache_manager import CacheManager
-    from biomapper.core.exceptions import CacheTransactionError
-    from unittest.mock import MagicMock, AsyncMock
+    from biomapper.core.exceptions import CacheStorageError
+    from unittest.mock import MagicMock, AsyncMock, patch
     from sqlalchemy.exc import OperationalError
     import logging
 
@@ -994,6 +1008,7 @@ async def test_cache_results_db_error_during_commit():
     # Configure the session operations
     mock_cache_session.add_all = MagicMock()  # add_all succeeds
     mock_cache_session.commit = AsyncMock(side_effect=OperationalError("Commit failed", {}, None))
+    mock_cache_session.rollback = AsyncMock()
     
     # Configure the sessionmaker to return our mock session
     mock_cache_sessionmaker.return_value.__aenter__ = AsyncMock(return_value=mock_cache_session)
@@ -1006,11 +1021,26 @@ async def test_cache_results_db_error_during_commit():
     # Create mock results
     results = {"TestID": {"target_identifiers": ["TestTarget"], "confidence_score": 0.9}}
     
-    # Test that cache storage handles commit failures
-    with pytest.raises(CacheTransactionError):
-        await cache_manager.store_results(
-            results, 123, "SourceOnt", "TargetOnt", "forward"
-        )
+    # Create a mock path object
+    mock_path = MagicMock()
+    mock_path.id = 123
+    mock_path.name = "TestPath"
+    mock_path.steps = []
+    
+    # Mock the create_path_execution_log to avoid the nested session issue
+    mock_log = MagicMock()
+    mock_log.id = 1
+    mock_log.status = MagicMock()
+    mock_log.end_time = None
+    
+    with patch.object(cache_manager, 'create_path_execution_log', return_value=mock_log) as mock_create_log:
+        mock_create_log.return_value = mock_log
+        
+        # Test that cache storage handles commit failures
+        with pytest.raises(CacheStorageError):
+            await cache_manager.store_mapping_results(
+                results, mock_path, "SourceOnt", "TargetOnt"
+            )
     
     # Verify add_all was called but commit raised exception
     mock_cache_session.add_all.assert_called_once()
@@ -1483,9 +1513,61 @@ def create_mock_resource(resource_id=1, name="TestResource", resource_config=Non
     return mock_resource
 
 
+@pytest.fixture
+async def path_execution_manager():
+    """Fixture for PathExecutionManager with mocked dependencies."""
+    from biomapper.core.engine_components.path_execution_manager import PathExecutionManager
+    from biomapper.core.engine_components.cache_manager import CacheManager
+    from unittest.mock import MagicMock, AsyncMock
+    
+    # Create mock dependencies
+    mock_session_manager = MagicMock()
+    mock_cache_manager = MagicMock(spec=CacheManager)
+    
+    # Create the PathExecutionManager with mocked dependencies
+    manager = PathExecutionManager(
+        metamapper_session_factory=mock_session_manager,
+        cache_manager=mock_cache_manager,
+        logger=None,
+        semaphore=None,
+        max_retries=3,
+        retry_delay=1,
+        batch_size=250,
+        max_concurrent_batches=5,
+        enable_metrics=True,
+        load_client_func=None,
+        execute_mapping_step_func=None,  # Will use default implementation
+        calculate_confidence_score_func=None,
+        create_mapping_path_details_func=None,
+        determine_mapping_source_func=None,
+        track_mapping_metrics_func=None
+    )
+    
+    # Add a client_manager mock for the tests
+    manager.client_manager = MagicMock()
+    
+    # Create a mock implementation of _execute_mapping_step that uses the client
+    async def mock_execute_mapping_step(step, input_values, is_reverse=False):
+        # Get the mock client from client_manager
+        client = await manager.client_manager.get_client_instance(step.mapping_resource)
+        if client:
+            # Call the client's map_identifiers method
+            results = await client.map_identifiers(input_values)
+            # Transform results to expected format
+            return {
+                id_: (result.get('primary_ids', []), None)
+                for id_, result in results.items()
+            }
+        return {}
+    
+    # Replace the default implementation with our mock
+    manager._execute_mapping_step = mock_execute_mapping_step
+    
+    return manager
+
 @pytest.mark.asyncio
-async def test_run_path_steps_basic(mapping_executor):
-    """Test basic execution of _run_path_steps with a single step."""
+async def test_run_path_steps_basic(path_execution_manager):
+    """Test basic execution of execute_path with a single step."""
     # Create a mock path with a single step
     mock_path = MagicMock(spec=MappingPath)
     mock_path.id = 1
@@ -1503,13 +1585,27 @@ async def test_run_path_steps_basic(mapping_executor):
     }
     mock_client = MockStepClient(results=client_results)
     
-    with patch.object(mapping_executor.client_manager, 'get_client_instance', new=AsyncMock(return_value=mock_client)):
-        # Run the function
-        results = await mapping_executor._run_path_steps(
+    with patch.object(path_execution_manager.client_manager, 'get_client_instance', new=AsyncMock(return_value=mock_client)):
+        # Run the function through execute_path
+        results_dict = await path_execution_manager.execute_path(
             path=mock_path,
-            initial_input_ids={"input1", "input2"},
-            meta_session=AsyncMock(spec=AsyncSession)
+            input_identifiers=["input1", "input2"],
+            source_ontology="SOURCE",
+            target_ontology="TARGET"
         )
+        
+        # Transform results to match expected format for the test
+        results = {}
+        for input_id, result in results_dict.items():
+            if result.get('status') == 'success' and result.get('target_identifiers'):
+                results[input_id] = {
+                    'final_ids': result['target_identifiers'],
+                    'provenance': [{
+                        'path_id': mock_path.id,
+                        'path_name': mock_path.name,
+                        'steps_details': []
+                    }]
+                }
         
         # Verify the client was properly called
         assert set(mock_client.called_with) == {"input1", "input2"}

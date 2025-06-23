@@ -20,6 +20,7 @@ from biomapper.core.exceptions import (
     CacheTransactionError,
     CacheRetrievalError,
     CacheStorageError,
+    ErrorCode,
 )
 from biomapper.utils.formatters import PydanticEncoder
 
@@ -170,7 +171,10 @@ class CacheManager:
             )
         except Exception as e:
             self.logger.error(f"Unexpected error during cache check: {str(e)}")
-            raise CacheError(f"Unexpected cache check error: {str(e)}")
+            raise CacheError(
+                message=f"Unexpected cache check error: {str(e)}",
+                error_code=ErrorCode.CACHE_RETRIEVAL_ERROR
+            )
     
     async def store_mapping_results(
         self,
@@ -341,7 +345,10 @@ class CacheManager:
             except Exception as e:
                 await cache_session.rollback()
                 self.logger.error(f"Unexpected error during cache storage: {str(e)}")
-                raise CacheError(f"Unexpected cache storage error: {str(e)}")
+                raise CacheError(
+                    message=f"Unexpected cache storage error: {str(e)}",
+                    error_code=ErrorCode.CACHE_STORAGE_ERROR
+                )
     
     async def create_path_execution_log(
         self,
