@@ -426,7 +426,7 @@ async def mapping_executor():
     executor._calculate_confidence_score = MagicMock()
     executor._create_mapping_path_details = MagicMock()
     executor._determine_mapping_source = MagicMock()
-    executor._run_path_steps = AsyncMock()
+    # Don't mock _run_path_steps since MappingExecutor has a real implementation for test compatibility
     executor._execute_path = AsyncMock()
     # Mock the handler methods to return proper dictionary results
     executor._handle_convert_identifiers_local = AsyncMock(return_value={
