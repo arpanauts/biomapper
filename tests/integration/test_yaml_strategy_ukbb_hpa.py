@@ -84,7 +84,7 @@ class TestUKBBToHPAYAMLStrategy:
     @pytest.mark.asyncio
     async def test_strategy_loaded_in_database(self, mapping_executor):
         """Test that the basic_linear_strategy is loaded."""
-        async with mapping_executor.session_manager.create_async_metamapper_session() as session:
+        async with mapping_executor.session_manager.get_async_metamapper_session() as session:
             # Check strategy exists
             from sqlalchemy import select
             stmt = select(MappingStrategy).where(
