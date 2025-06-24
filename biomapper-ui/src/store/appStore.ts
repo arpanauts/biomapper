@@ -1,36 +1,54 @@
-import { create } from 'zustand';
+import { create } from 'zustand'
 
-type AppStep = 'upload' | 'columns' | 'mapping' | 'results';
+export type StepType = 'upload' | 'columns' | 'mapping' | 'results'
 
 interface AppState {
-  sessionId: string | null;
-  activeStep: AppStep;
-  selectedColumns: string[];
-  jobId: string | null;
-  
-  // Actions
-  setSessionId: (sessionId: string | null) => void;
-  setActiveStep: (step: AppStep) => void;
-  setSelectedColumns: (columns: string[]) => void;
-  setJobId: (jobId: string | null) => void;
-  reset: () => void;
+  activeStep: StepType
+  sessionId: string | null
+  filename: string | null
+  jobId: string | null
+  isLoading: boolean
+  error: string | null
 }
 
-export const useAppStore = create<AppState>((set) => ({
-  sessionId: null,
-  activeStep: 'upload',
-  selectedColumns: [],
-  jobId: null,
+interface AppActions {
+  setSession: (sessionId: string, filename: string) => void
+  setJobId: (jobId: string) => void
+  setActiveStep: (step: StepType) => void
+  reset: () => void
+  setLoading: (isLoading: boolean) => void
+  setError: (error: string | null) => void
+}
 
-  setSessionId: (sessionId) => set({ sessionId }),
-  setActiveStep: (step) => set({ activeStep: step }),
-  setSelectedColumns: (columns) => set({ selectedColumns: columns }),
-  setJobId: (jobId) => set({ jobId }),
+type AppStore = AppState & AppActions
+
+const initialState: AppState = {
+  activeStep: 'upload',
+  sessionId: null,
+  filename: null,
+  jobId: null,
+  isLoading: false,
+  error: null
+}
+
+export const useAppStore = create<AppStore>((set) => ({
+  ...initialState,
   
-  reset: () => set({
-    sessionId: null,
-    activeStep: 'upload',
-    selectedColumns: [],
-    jobId: null,
-  }),
-}));
+  setSession: (sessionId: string, filename: string) => 
+    set({ sessionId, filename }),
+  
+  setJobId: (jobId: string) => 
+    set({ jobId }),
+  
+  setActiveStep: (step: StepType) => 
+    set({ activeStep: step }),
+  
+  reset: () => 
+    set(initialState),
+  
+  setLoading: (isLoading: boolean) => 
+    set({ isLoading }),
+  
+  setError: (error: string | null) => 
+    set({ error })
+}))
