@@ -61,22 +61,34 @@ async def test_execute_strategy(mapping_executor):
 @pytest.mark.asyncio
 async def test_execute_yaml_strategy(mapping_executor):
     """Test execute_yaml_strategy delegates to strategy coordinator."""
-    yaml_content = """
-    name: test_strategy
-    steps:
-      - action: map
-    """
-    identifiers = ["id1", "id2"]
-    parameters = {"param": "value"}
+    strategy_name = "test_strategy"
+    source_endpoint_name = "source_endpoint"
+    target_endpoint_name = "target_endpoint"
+    input_identifiers = ["id1", "id2"]
     
-    mock_result = MagicMock(spec=MappingResultBundle)
+    mock_result = {"status": "success", "results": {}}
     mapping_executor.strategy_coordinator.execute_yaml_strategy.return_value = mock_result
     
-    result = await mapping_executor.execute_yaml_strategy(yaml_content, identifiers, parameters)
+    result = await mapping_executor.execute_yaml_strategy(
+        strategy_name=strategy_name,
+        source_endpoint_name=source_endpoint_name,
+        target_endpoint_name=target_endpoint_name,
+        input_identifiers=input_identifiers
+    )
     
     assert result == mock_result
     mapping_executor.strategy_coordinator.execute_yaml_strategy.assert_called_once_with(
-        yaml_content, identifiers, parameters
+        strategy_name=strategy_name,
+        source_endpoint_name=source_endpoint_name,
+        target_endpoint_name=target_endpoint_name,
+        input_identifiers=input_identifiers,
+        source_ontology_type=None,
+        target_ontology_type=None,
+        use_cache=True,
+        max_cache_age_days=None,
+        progress_callback=None,
+        batch_size=250,
+        min_confidence=0.0
     )
 
 

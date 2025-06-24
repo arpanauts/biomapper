@@ -46,7 +46,8 @@ class TestMappingExecutorBuilder:
     ):
         """Test that build method orchestrates component creation correctly"""
         # Arrange
-        builder.initialization_service.create_components = Mock(return_value=mock_components)
+        builder.initialization_service.create_components_from_config = Mock(return_value=mock_components)
+        builder.initialization_service.complete_initialization = Mock(return_value=mock_components)
         
         mock_lifecycle_coordinator = Mock()
         mock_mapping_coordinator = Mock()
@@ -62,7 +63,7 @@ class TestMappingExecutorBuilder:
         result = builder.build()
 
         # Assert - verify InitializationService was called
-        builder.initialization_service.create_components.assert_called_once_with(builder.config)
+        builder.initialization_service.create_components_from_config.assert_called_once_with(builder.config)
 
         # Assert - verify coordinators were instantiated correctly
         mock_lifecycle_coordinator_class.assert_called_once_with(
@@ -71,7 +72,15 @@ class TestMappingExecutorBuilder:
             resource_disposal_service=mock_components['resource_disposal_service']
         )
 
-        mock_mapping_coordinator_class.assert_called_once_with(
+        # MappingCoordinatorService is created twice - first with None, then with actual services
+        assert mock_mapping_coordinator_class.call_count == 2
+        # First call with None values
+        mock_mapping_coordinator_class.assert_any_call(
+            iterative_execution_service=None,
+            path_execution_service=None
+        )
+        # Second call with actual services
+        mock_mapping_coordinator_class.assert_any_call(
             iterative_execution_service=mock_components['iterative_execution_service'],
             path_execution_service=mock_components['path_execution_service']
         )
@@ -83,9 +92,10 @@ class TestMappingExecutorBuilder:
         )
 
         # Assert - verify MappingExecutor was instantiated correctly
+        # The executor is created with the first (temporary) mapping coordinator
         mock_mapping_executor_class.assert_called_once_with(
             lifecycle_coordinator=mock_lifecycle_coordinator,
-            mapping_coordinator=mock_mapping_coordinator,
+            mapping_coordinator=mock_mapping_coordinator_class.return_value,  # The first instance
             strategy_coordinator=mock_strategy_coordinator,
             session_manager=mock_components['session_manager'],
             metadata_query_service=mock_components['metadata_query_service']
@@ -97,7 +107,8 @@ class TestMappingExecutorBuilder:
     def test_post_build_reference_setting(self, builder, mock_components):
         """Test that _set_composite_handler_references is called correctly"""
         # Arrange
-        builder.initialization_service.create_components = Mock(return_value=mock_components)
+        builder.initialization_service.create_components_from_config = Mock(return_value=mock_components)
+        builder.initialization_service.complete_initialization = Mock(return_value=mock_components)
         mock_executor = Mock()
         
         # We need to spy on the _set_composite_handler_references method
@@ -116,10 +127,9 @@ class TestMappingExecutorBuilder:
             # Assert - verify the method was called
             builder._set_composite_handler_references.assert_called_once_with(mock_executor, mock_components)
 
-        # Also verify that set_composite_handler was called on the appropriate services
-        mock_components['strategy_orchestrator'].set_composite_handler.assert_called_once_with(mock_executor)
-        mock_components['iterative_execution_service'].set_composite_handler.assert_called_once_with(mock_executor)
-        mock_components['path_execution_service'].set_composite_handler.assert_called_once_with(mock_executor)
+        # The actual set_composite_handler calls are done in complete_initialization
+        # So we just verify that complete_initialization was called
+        builder.initialization_service.complete_initialization.assert_called_once_with(mock_executor, mock_components)
 
     @pytest.mark.asyncio
     @patch('biomapper.core.engine_components.mapping_executor_builder.DatabaseSetupService')

@@ -81,6 +81,8 @@ class TestInitializationService:
                                   mock_config_loader, mock_client_manager, mock_session_manager):
         """Test that create_components correctly passes custom configuration values."""
         # Arrange
+        import tempfile
+        temp_dir = tempfile.mkdtemp()
         custom_config = {
             'metamapper_db_url': 'postgresql://custom_user:pass@localhost/metamapper',
             'mapping_cache_db_url': 'postgresql://custom_user:pass@localhost/cache',
@@ -88,7 +90,7 @@ class TestInitializationService:
             'path_cache_size': 200,
             'path_cache_expiry_seconds': 600,
             'checkpoint_enabled': True,
-            'checkpoint_dir': '/custom/checkpoint/dir'
+            'checkpoint_dir': temp_dir
         }
         
         # Create mock instances
@@ -111,9 +113,13 @@ class TestInitializationService:
         )
         
         mock_checkpoint_manager.assert_called_once_with(
-            checkpoint_dir='/custom/checkpoint/dir',
+            checkpoint_dir=temp_dir,
             logger=self.initialization_service.logger
         )
+        
+        # Clean up
+        import shutil
+        shutil.rmtree(temp_dir)
         
         mock_client_manager.assert_called_once_with(logger=self.initialization_service.logger)
         mock_config_loader.assert_called_once_with(logger=self.initialization_service.logger)

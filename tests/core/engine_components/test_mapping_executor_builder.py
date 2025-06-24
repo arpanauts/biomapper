@@ -73,7 +73,8 @@ class TestMappingExecutorBuilder:
             'strategy_orchestrator': MagicMock(),
         }
         
-        mock_init_service.create_components.return_value = mock_components
+        mock_init_service.create_components_from_config.return_value = mock_components
+        mock_init_service.complete_initialization.return_value = mock_components
         
         # Mock the coordinators
         mock_strategy_coordinator = MagicMock()
@@ -95,7 +96,7 @@ class TestMappingExecutorBuilder:
         assert executor.lifecycle_coordinator == mock_lifecycle_coordinator
         
         # Verify initialization service was called
-        mock_init_service.create_components.assert_called_once()
+        mock_init_service.create_components_from_config.assert_called_once_with({})
         
         # Verify coordinators were created with correct dependencies
         mock_lifecycle_coordinator_class.assert_called_once_with(
@@ -110,7 +111,14 @@ class TestMappingExecutorBuilder:
             robust_execution_coordinator=mock_components['robust_execution_coordinator']
         )
         
-        mock_mapping_coordinator_class.assert_called_once_with(
+        # MappingCoordinatorService is created twice - first with None, then with actual services
+        assert mock_mapping_coordinator_class.call_count == 2
+        # Verify both calls
+        mock_mapping_coordinator_class.assert_any_call(
+            iterative_execution_service=None,
+            path_execution_service=None
+        )
+        mock_mapping_coordinator_class.assert_any_call(
             iterative_execution_service=mock_components['iterative_execution_service'],
             path_execution_service=mock_components['path_execution_service']
         )
