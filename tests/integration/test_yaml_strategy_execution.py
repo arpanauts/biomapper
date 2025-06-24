@@ -15,7 +15,9 @@ import yaml
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
 from biomapper.core.mapping_executor import MappingExecutor
+from biomapper.core.engine_components.mapping_executor_builder import MappingExecutorBuilder
 from biomapper.db.models import Base
+from biomapper.db.cache_models import Base as CacheBase
 from biomapper.core.exceptions import BiomapperError, StrategyNotFoundError, MappingExecutionError
 
 
@@ -42,15 +44,19 @@ async def setup_test_environment():
         await populate_test_data(session, config_data)
         await session.commit()
 
-    # 5. Create MappingExecutor instance
-    executor = MappingExecutor(
-        metamapper_db_url=f"sqlite+aiosqlite:///{metamapper_db_path}",
-        mapping_cache_db_url=f"sqlite+aiosqlite:///{cache_db_path}"
-    )
+    # 5. Create MappingExecutor instance using builder
+    config = {
+        "metamapper_db_url": f"sqlite+aiosqlite:///{metamapper_db_path}",
+        "mapping_cache_db_url": f"sqlite+aiosqlite:///{cache_db_path}",
+        "echo_sql": False
+    }
+    builder = MappingExecutorBuilder(config)
+    executor = await builder.build_async()
 
     yield executor
 
     # 6. Handle cleanup
+    await executor.async_dispose()
     await metamapper_engine.dispose()
     shutil.rmtree(temp_dir)
 
@@ -78,15 +84,19 @@ async def setup_optional_test_environment():
         await populate_test_data(session, config_data)
         await session.commit()
 
-    # 5. Create MappingExecutor instance
-    executor = MappingExecutor(
-        metamapper_db_url=f"sqlite+aiosqlite:///{metamapper_db_path}",
-        mapping_cache_db_url=f"sqlite+aiosqlite:///{cache_db_path}"
-    )
+    # 5. Create MappingExecutor instance using builder
+    config = {
+        "metamapper_db_url": f"sqlite+aiosqlite:///{metamapper_db_path}",
+        "mapping_cache_db_url": f"sqlite+aiosqlite:///{cache_db_path}",
+        "echo_sql": False
+    }
+    builder = MappingExecutorBuilder(config)
+    executor = await builder.build_async()
 
     yield executor
 
     # 6. Handle cleanup
+    await executor.async_dispose()
     await metamapper_engine.dispose()
     shutil.rmtree(temp_dir)
 

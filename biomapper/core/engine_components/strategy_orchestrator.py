@@ -157,7 +157,8 @@ class StrategyOrchestrator:
                 'strategy_name': strategy.name,
                 'source_endpoint': source_endpoint.name if source_endpoint else None,
                 'target_endpoint': target_endpoint.name if target_endpoint else None,
-                'initial_count': len(input_identifiers)
+                'initial_count': len(input_identifiers),
+                'mapping_executor': self.mapping_executor  # Add mapping executor to context
             })
             
             # Sort steps by order

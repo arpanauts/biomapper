@@ -39,6 +39,9 @@ from biomapper.core.services.execution_services import (
 )
 from biomapper.core.services.mapping_handler_service import MappingHandlerService
 from biomapper.core.services.session_metrics_service import SessionMetricsService
+from biomapper.core.services.execution_session_service import ExecutionSessionService
+from biomapper.core.services.checkpoint_service import CheckpointService
+from biomapper.core.services.resource_disposal_service import ResourceDisposalService
 
 # Import engine components
 from biomapper.core.engine_components.session_manager import SessionManager
@@ -221,7 +224,27 @@ class InitializationService:
             components['strategy_orchestrator']
         )
         
-        # Step 13: Store additional items
+        # Step 13: Create lifecycle support services
+        components['execution_session_service'] = self._create_execution_session_service(
+            components['lifecycle_service']
+        )
+        
+        components['checkpoint_service'] = self._create_checkpoint_service(
+            components['lifecycle_service'],
+            checkpoint_dir
+        )
+        
+        components['resource_disposal_service'] = self._create_resource_disposal_service(
+            components['session_manager'],
+            components['client_manager']
+        )
+        
+        # Step 14: Create placeholder services that need executor reference
+        # These will be replaced in complete_initialization
+        components['iterative_execution_service'] = None  # Placeholder
+        components['path_execution_service'] = None  # Placeholder
+        
+        # Step 15: Store additional items
         components['MappingResultBundle'] = MappingResultBundle
         components['_metrics_tracker'] = None  # Will be set later if needed
         
@@ -259,6 +282,8 @@ class InitializationService:
         # Update components that need mapping_executor reference
         components['strategy_handler'].mapping_executor = mapping_executor
         components['strategy_orchestrator'].mapping_executor = mapping_executor
+        # Also update the ActionExecutor inside StrategyOrchestrator
+        components['strategy_orchestrator'].action_executor.mapping_executor = mapping_executor
         
         # Create services that depend on mapping_executor
         components['path_execution_service'] = self._create_mapping_path_execution_service(
@@ -903,6 +928,40 @@ class InitializationService:
             logger=self.logger,
         )
     
+    def _create_execution_session_service(
+        self,
+        lifecycle_service: ExecutionLifecycleService
+    ) -> ExecutionSessionService:
+        """Create ExecutionSessionService instance."""
+        self.logger.debug("Creating ExecutionSessionService")
+        return ExecutionSessionService(
+            execution_lifecycle_service=lifecycle_service
+        )
+    
+    def _create_checkpoint_service(
+        self,
+        lifecycle_service: ExecutionLifecycleService,
+        checkpoint_dir: Optional[str] = None
+    ) -> CheckpointService:
+        """Create CheckpointService instance."""
+        self.logger.debug("Creating CheckpointService")
+        return CheckpointService(
+            execution_lifecycle_service=lifecycle_service,
+            checkpoint_dir=checkpoint_dir
+        )
+    
+    def _create_resource_disposal_service(
+        self,
+        session_manager: SessionManager,
+        client_manager: Optional[ClientManager] = None
+    ) -> ResourceDisposalService:
+        """Create ResourceDisposalService instance."""
+        self.logger.debug("Creating ResourceDisposalService")
+        return ResourceDisposalService(
+            session_manager=session_manager,
+            client_manager=client_manager
+        )
+    
     def set_executor_function_references(self, mapping_executor, path_execution_manager: PathExecutionManager):
         """Set function references on PathExecutionManager after MappingExecutor is fully initialized.
         
@@ -923,5 +982,5 @@ class InitializationService:
             path_execution_manager._determine_mapping_source = getattr(
                 mapping_executor, '_determine_mapping_source', path_execution_manager._determine_mapping_source
             )
-            if mapping_executor.enable_metrics:
+            if getattr(mapping_executor, 'enable_metrics', False):
                 path_execution_manager.track_mapping_metrics = getattr(mapping_executor, 'track_mapping_metrics', None)
