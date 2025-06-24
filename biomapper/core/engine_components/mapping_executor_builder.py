@@ -36,7 +36,7 @@ class MappingExecutorBuilder:
         self.logger.info("Building MappingExecutor instance.")
 
         # 1. Create all low-level components
-        components = self.initialization_service.create_components(self.config)
+        components = self.initialization_service.create_components_from_config(self.config)
 
         # 2. Create high-level coordinators
         lifecycle_coordinator = self._create_lifecycle_coordinator(components)
