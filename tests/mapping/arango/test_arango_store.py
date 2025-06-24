@@ -49,26 +49,40 @@ async def arango():
 @pytest.mark.asyncio
 async def test_connection():
     """Test connection management."""
-    store = ArangoStore()
-    assert not store.is_connected
+    with patch('biomapper.mapping.arango.arango_store.Connection') as mock_conn:
+        # Set up mock connection
+        mock_db = MagicMock()
+        mock_conn.return_value.__getitem__.return_value = mock_db
+        mock_conn.return_value.hasDatabase.return_value = True
+        mock_db.hasCollection.return_value = True
+        
+        store = ArangoStore()
+        assert not store.is_connected
 
-    await store.connect()
-    assert store.is_connected
-    assert store.db is not None
+        await store.connect()
+        assert store.is_connected
+        assert store.db is not None
 
-    await store.close()
-    assert not store.is_connected
-    assert store.db is None
+        await store.close()
+        assert not store.is_connected
+        assert store.db is None
 
 
 @pytest.mark.asyncio
 async def test_context_manager():
     """Test async context manager."""
-    async with ArangoStore() as store:
-        assert store.is_connected
-        assert store.db is not None
-    assert not store.is_connected
-    assert store.db is None
+    with patch('biomapper.mapping.arango.arango_store.Connection') as mock_conn:
+        # Set up mock connection
+        mock_db = MagicMock()
+        mock_conn.return_value.__getitem__.return_value = mock_db
+        mock_conn.return_value.hasDatabase.return_value = True
+        mock_db.hasCollection.return_value = True
+        
+        async with ArangoStore() as store:
+            assert store.is_connected
+            assert store.db is not None
+        assert not store.is_connected
+        assert store.db is None
 
 
 @pytest.mark.asyncio
