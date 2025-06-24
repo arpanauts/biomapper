@@ -1,4 +1,5 @@
 """Tests for the PathFinder service."""
+import time
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,13 +21,9 @@ def mock_session():
 
 
 @pytest.fixture
-def path_finder(mock_session):
+def path_finder():
     """Create a PathFinder instance with mocked dependencies."""
-    session_factory = AsyncMock()
-    session_factory.return_value.__aenter__.return_value = mock_session
-    
     return PathFinder(
-        session_factory=session_factory,
         cache_size=10,
         cache_expiry_seconds=300,
     )
@@ -54,7 +51,7 @@ async def test_find_direct_paths(path_finder, mock_session):
     
     # Mock the query result
     mock_result = MagicMock()
-    mock_result.unique.return_value.scalars.return_value.all.return_value = [mock_path]
+    mock_result.scalars.return_value.unique.return_value.all.return_value = [mock_path]
     mock_session.execute.return_value = mock_result
     
     # Call the method
@@ -88,6 +85,7 @@ async def test_find_mapping_paths_direct(path_finder, mock_session):
         
         # Call the method
         paths = await path_finder.find_mapping_paths(
+            mock_session,
             source_ontology="GENE_NAME",
             target_ontology="ENSEMBL_GENE",
             bidirectional=False
@@ -123,6 +121,7 @@ async def test_find_mapping_paths_bidirectional(path_finder, mock_session):
         
         # Call the method
         paths = await path_finder.find_mapping_paths(
+            mock_session,
             source_ontology="GENE_NAME",
             target_ontology="ENSEMBL_GENE",
             bidirectional=True
@@ -133,7 +132,7 @@ async def test_find_mapping_paths_bidirectional(path_finder, mock_session):
         # Forward path should be first (higher priority)
         assert paths[0].id == 1
         # Reverse path should be wrapped in ReversiblePath
-        assert hasattr(paths[1], 'is_reversed')
+        assert hasattr(paths[1], 'is_reverse')
         
         # Verify _find_direct_paths was called twice
         assert mock_find_direct.call_count == 2
@@ -159,8 +158,9 @@ async def test_find_best_path(path_finder, mock_session):
         
         # Call the method
         best_path = await path_finder.find_best_path(
-            source_ontology="GENE_NAME",
-            target_ontology="ENSEMBL_GENE"
+            mock_session,
+            "GENE_NAME",
+            "ENSEMBL_GENE"
         )
         
         # Assertions
@@ -170,10 +170,10 @@ async def test_find_best_path(path_finder, mock_session):
         
         # Verify find_mapping_paths was called
         mock_find.assert_called_once_with(
-            source_ontology="GENE_NAME",
-            target_ontology="ENSEMBL_GENE",
+            mock_session,
+            "GENE_NAME",
+            "ENSEMBL_GENE",
             bidirectional=False,
-            preferred_direction=None,
             source_endpoint=None,
             target_endpoint=None
         )
@@ -210,17 +210,18 @@ async def test_get_path_details(path_finder, mock_session):
     mock_session.execute.return_value = mock_result
     
     # Call the method
-    details = await path_finder.get_path_details(1)
+    details = await path_finder.get_path_details(mock_session, 1)
     
     # Assertions
     assert details is not None
-    assert details['path_id'] == 1
-    assert details['path_name'] == "TestPath"
-    assert len(details['steps']) == 2
-    assert details['steps'][0]['order'] == 1
-    assert details['steps'][0]['resource_name'] == "Resource1"
-    assert details['steps'][1]['order'] == 2
-    assert details['steps'][1]['resource_name'] == "Resource2"
+    assert 'step_1' in details
+    assert 'step_2' in details
+    assert details['step_1']['resource_name'] == "Resource1"
+    assert details['step_1']['input_ontology'] == "GENE_NAME"
+    assert details['step_1']['output_ontology'] == "GENE_ID"
+    assert details['step_2']['resource_name'] == "Resource2"
+    assert details['step_2']['input_ontology'] == "GENE_ID"
+    assert details['step_2']['output_ontology'] == "ENSEMBL_GENE"
 
 
 @pytest.mark.asyncio
@@ -238,6 +239,7 @@ async def test_cache_functionality(path_finder, mock_session):
         
         # First call - should hit the database
         paths1 = await path_finder.find_mapping_paths(
+            mock_session,
             source_ontology="GENE_NAME",
             target_ontology="ENSEMBL_GENE",
             bidirectional=False
@@ -245,6 +247,7 @@ async def test_cache_functionality(path_finder, mock_session):
         
         # Second call - should use cache
         paths2 = await path_finder.find_mapping_paths(
+            mock_session,
             source_ontology="GENE_NAME",
             target_ontology="ENSEMBL_GENE",
             bidirectional=False
@@ -263,10 +266,12 @@ async def test_cache_functionality(path_finder, mock_session):
 async def test_clear_cache(path_finder):
     """Test clear_cache method."""
     # Add some entries to cache
-    path_finder._cache["test_key"] = "test_value"
+    path_finder._path_cache["test_key"] = "test_value"
+    path_finder._path_cache_timestamps["test_key"] = time.time()
     
     # Clear cache
     path_finder.clear_cache()
     
     # Verify cache is empty
-    assert len(path_finder._cache) == 0
+    assert len(path_finder._path_cache) == 0
+    assert len(path_finder._path_cache_timestamps) == 0
