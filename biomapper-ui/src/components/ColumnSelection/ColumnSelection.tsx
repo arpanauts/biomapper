@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
   Button, 
   Card, 
@@ -7,17 +7,9 @@ import {
   Text, 
   Title,
   Stack,
-  Alert,
-  Loader,
-  Checkbox,
-  TextInput,
-  ScrollArea,
-  MultiSelect
+  Alert
 } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
-import { notifications } from '@mantine/notifications';
-import { useQuery } from '@tanstack/react-query';
-import { apiService } from '../../services/apiService';
 import { useAppStore } from '../../store/appStore';
 
 export default function ColumnSelection() {
