@@ -20,6 +20,8 @@ from .collect_matched_targets import CollectMatchedTargetsAction
 from .load_endpoint_identifiers_action import LoadEndpointIdentifiersAction
 from .reconcile_bidirectional_action import ReconcileBidirectionalAction
 from .save_bidirectional_results_action import SaveBidirectionalResultsAction
+from .composite_id_splitter import CompositeIdSplitter
+from .overlap_analyzer import DatasetOverlapAnalyzer
 
 __all__ = [
     "BidirectionalMatchAction",
@@ -36,5 +38,7 @@ __all__ = [
     "CollectMatchedTargetsAction",
     "LoadEndpointIdentifiersAction",
     "ReconcileBidirectionalAction",
-    "SaveBidirectionalResultsAction"
+    "SaveBidirectionalResultsAction",
+    "CompositeIdSplitter",
+    "DatasetOverlapAnalyzer"
 ]
