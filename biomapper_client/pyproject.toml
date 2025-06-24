@@ -1,0 +1,23 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "biomapper-client"
+version = "0.1.0"
+description = "Python client SDK for biomapper-api"
+authors = ["Biomapper Team"]
+readme = "README.md"
+packages = [{include = "biomapper_client"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+httpx = "^0.24.0"
+pydantic = "^2.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-asyncio = "^0.21.0"
+black = "^23.0.0"
+ruff = "^0.1.0"
+mypy = "^1.5.0"
