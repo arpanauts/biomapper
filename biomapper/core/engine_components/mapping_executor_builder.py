@@ -36,23 +36,37 @@ class MappingExecutorBuilder:
         self.logger.info("Building MappingExecutor instance.")
 
         # 1. Create all low-level components
-        components = self.initialization_service.create_components(self.config)
+        components = self.initialization_service.create_components_from_config(self.config)
 
-        # 2. Create high-level coordinators
+        # 2. Create a temporary mapping coordinator with None services
+        # This allows us to create the executor early
+        temp_mapping_coordinator = MappingCoordinatorService(
+            iterative_execution_service=None,
+            path_execution_service=None
+        )
+        
+        # 3. Create high-level coordinators
         lifecycle_coordinator = self._create_lifecycle_coordinator(components)
-        mapping_coordinator = self._create_mapping_coordinator(components)
         strategy_coordinator = self._create_strategy_coordinator(components)
-
-        # 3. Create the lean MappingExecutor facade
+        
+        # 4. Create the MappingExecutor with all required coordinators
         executor = MappingExecutor(
             lifecycle_coordinator=lifecycle_coordinator,
-            mapping_coordinator=mapping_coordinator,
+            mapping_coordinator=temp_mapping_coordinator,
             strategy_coordinator=strategy_coordinator,
             session_manager=components['session_manager'],
             metadata_query_service=components['metadata_query_service']
         )
+        
+        # 5. Complete initialization with executor reference
+        # This creates iterative_execution_service and path_execution_service
+        components = self.initialization_service.complete_initialization(executor, components)
+        
+        # 6. Now create the real mapping_coordinator with the required services
+        mapping_coordinator = self._create_mapping_coordinator(components)
+        executor.mapping_coordinator = mapping_coordinator
 
-        # 4. Resolve circular dependencies by setting executor reference
+        # 7. Resolve circular dependencies by setting executor reference
         self._set_composite_handler_references(executor, components)
 
         self.logger.info("MappingExecutor built successfully.")
@@ -104,6 +118,5 @@ class MappingExecutorBuilder:
         This is done post-construction to break circular dependencies.
         """
         self.logger.debug("Setting composite handler references on dependent services.")
-        components['strategy_orchestrator'].set_composite_handler(executor)
-        components['iterative_execution_service'].set_composite_handler(executor)
-        components['path_execution_service'].set_composite_handler(executor)
+        # The references are already set in complete_initialization
+        # This method is kept for potential future use or additional setup

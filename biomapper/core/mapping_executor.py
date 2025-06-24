@@ -53,7 +53,7 @@ class MappingExecutor(CompositeIdentifierMixin):
     
     async def async_dispose(self) -> None:
         """Dispose of all resources."""
-        await self.lifecycle_coordinator.dispose_resources()
+        await self.lifecycle_coordinator.async_dispose()
     
     async def save_checkpoint(
         self,
@@ -216,22 +216,51 @@ class MappingExecutor(CompositeIdentifierMixin):
     
     async def execute_yaml_strategy(
         self,
-        yaml_content: str,
-        identifiers: Union[str, List[str]],
-        parameters: Optional[Dict[str, Any]] = None
-    ) -> MappingResultBundle:
-        """Execute a strategy defined in YAML format.
+        strategy_name: str,
+        source_endpoint_name: str,
+        target_endpoint_name: str,
+        input_identifiers: List[str],
+        source_ontology_type: Optional[str] = None,
+        target_ontology_type: Optional[str] = None,
+        use_cache: bool = True,
+        max_cache_age_days: Optional[int] = None,
+        progress_callback: Optional[Any] = None,
+        batch_size: int = 250,
+        min_confidence: float = 0.0,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Execute a YAML-defined mapping strategy.
         
         Args:
-            yaml_content: YAML strategy definition
-            identifiers: Identifier(s) to process
-            parameters: Optional strategy parameters
+            strategy_name: Name of the strategy to execute
+            source_endpoint_name: Name of the source endpoint
+            target_endpoint_name: Name of the target endpoint
+            input_identifiers: List of identifiers to map
+            source_ontology_type: Optional source ontology type
+            target_ontology_type: Optional target ontology type
+            use_cache: Whether to use cached results
+            max_cache_age_days: Maximum age of cached results
+            progress_callback: Optional callback for progress updates
+            batch_size: Size of batches for processing
+            min_confidence: Minimum confidence threshold
+            **kwargs: Additional keyword arguments
             
         Returns:
-            Strategy execution results
+            Dictionary containing results and metadata
         """
         return await self.strategy_coordinator.execute_yaml_strategy(
-            yaml_content, identifiers, parameters
+            strategy_name=strategy_name,
+            source_endpoint_name=source_endpoint_name,
+            target_endpoint_name=target_endpoint_name,
+            input_identifiers=input_identifiers,
+            source_ontology_type=source_ontology_type,
+            target_ontology_type=target_ontology_type,
+            use_cache=use_cache,
+            max_cache_age_days=max_cache_age_days,
+            progress_callback=progress_callback,
+            batch_size=batch_size,
+            min_confidence=min_confidence,
+            **kwargs
         )
     
     async def execute_robust_yaml_strategy(

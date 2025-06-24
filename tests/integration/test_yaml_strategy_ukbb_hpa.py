@@ -4,6 +4,7 @@ import pytest
 import pytest_asyncio
 
 from biomapper.core.mapping_executor import MappingExecutor
+from biomapper.core.engine_components.mapping_executor_builder import MappingExecutorBuilder
 from biomapper.db.models import MappingStrategy, MappingStrategyStep
 
 
@@ -15,24 +16,17 @@ async def populated_db(tmp_path):
     test_cache_db = str(tmp_path / "test_cache.db")
     
     # Create a MappingExecutor to initialize the databases
-    executor = MappingExecutor(
-        metamapper_db_url=f"sqlite+aiosqlite:///{test_metamapper_db}",
-        mapping_cache_db_url=f"sqlite+aiosqlite:///{test_cache_db}",
-        echo_sql=False
-    )
+    config = {
+        "metamapper_db_url": f"sqlite+aiosqlite:///{test_metamapper_db}",
+        "mapping_cache_db_url": f"sqlite+aiosqlite:///{test_cache_db}",
+        "echo_sql": False
+    }
+    builder = MappingExecutorBuilder(config)
+    executor = await builder.build_async()
     
-    # Create tables by initializing the databases
-    # Tables are created automatically on first use
+    # Tables are already created by builder.build_async()
     from biomapper.db.models import Base as MetamapperBase
     from biomapper.db.cache_models import Base as CacheBase
-    
-    # Create metamapper tables
-    async with executor.async_metamapper_engine.begin() as conn:
-        await conn.run_sync(MetamapperBase.metadata.create_all)
-    
-    # Create cache tables
-    async with executor.async_cache_engine.begin() as conn:
-        await conn.run_sync(CacheBase.metadata.create_all)
     
     # Run populate script to load configurations
     from scripts.setup_and_configuration.populate_metamapper_db import populate_entity_type
@@ -42,7 +36,7 @@ async def populated_db(tmp_path):
     # Load test protein config which contains simpler test strategies
     test_config_path = Path(__file__).parent / "data" / "test_protein_strategy_config.yaml"
     
-    async with executor.async_metamapper_session() as session:
+    async with executor.session_manager.get_async_metamapper_session() as session:
         if test_config_path.exists():
             print(f"Loading test config from: {test_config_path}")
             with open(test_config_path, 'r') as f:
@@ -60,6 +54,9 @@ async def populated_db(tmp_path):
                 await session.commit()
     
     yield test_metamapper_db, test_cache_db
+    
+    # Cleanup
+    await executor.async_dispose()
 
 
 @pytest_asyncio.fixture
@@ -67,15 +64,18 @@ async def mapping_executor(populated_db):
     """Create a MappingExecutor with populated test database."""
     test_metamapper_db, test_cache_db = populated_db
     
-    executor = MappingExecutor(
-        metamapper_db_url=f"sqlite+aiosqlite:///{test_metamapper_db}",
-        mapping_cache_db_url=f"sqlite+aiosqlite:///{test_cache_db}",
-        echo_sql=False
-    )
+    config = {
+        "metamapper_db_url": f"sqlite+aiosqlite:///{test_metamapper_db}",
+        "mapping_cache_db_url": f"sqlite+aiosqlite:///{test_cache_db}",
+        "echo_sql": False
+    }
+    builder = MappingExecutorBuilder(config)
+    executor = await builder.build_async()
     
     yield executor
     
-    # No explicit cleanup needed - connections are cleaned up automatically
+    # Cleanup
+    await executor.async_dispose()
 
 
 class TestUKBBToHPAYAMLStrategy:
@@ -84,7 +84,7 @@ class TestUKBBToHPAYAMLStrategy:
     @pytest.mark.asyncio
     async def test_strategy_loaded_in_database(self, mapping_executor):
         """Test that the basic_linear_strategy is loaded."""
-        async with mapping_executor.async_metamapper_session() as session:
+        async with mapping_executor.session_manager.create_async_metamapper_session() as session:
             # Check strategy exists
             from sqlalchemy import select
             stmt = select(MappingStrategy).where(
@@ -232,11 +232,13 @@ async def test_full_yaml_strategy_workflow():
         # (No need for separate db_manager initialization)
         
         # Create MappingExecutor
-        executor = MappingExecutor(
-            metamapper_db_url=f"sqlite+aiosqlite:///{test_metamapper_db}",
-            mapping_cache_db_url=f"sqlite+aiosqlite:///{test_cache_db}",
-            echo_sql=False
-        )
+        config = {
+            "metamapper_db_url": f"sqlite+aiosqlite:///{test_metamapper_db}",
+            "mapping_cache_db_url": f"sqlite+aiosqlite:///{test_cache_db}",
+            "echo_sql": False
+        }
+        builder = MappingExecutorBuilder(config)
+        executor = await builder.build_async()
         
         try:
             # Test identifiers

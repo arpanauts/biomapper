@@ -1,6 +1,7 @@
 """Unit tests for YAML strategy provenance tracking fix."""
 
 from biomapper.core.mapping_executor import MappingExecutor
+from biomapper.core.engine_components.mapping_executor_builder import MappingExecutorBuilder
 
 
 class TestYAMLStrategyProvenanceTracking:
@@ -9,7 +10,8 @@ class TestYAMLStrategyProvenanceTracking:
     def test_trace_mapping_chain_simple(self):
         """Test simple mapping chain tracing."""
         # Create a mock executor with the trace_mapping_chain logic
-        executor = MappingExecutor()
+        # Note: MappingExecutor now requires specific service dependencies
+        # For this test we're just testing the trace_mapping_chain logic directly
         
         # Simulate provenance data
         provenance_list = [
