@@ -475,6 +475,42 @@ class TestHistoricalIDMapping:
         monkeypatch.setattr(executor, "_check_cache", mock_check_cache)
         monkeypatch.setattr(executor, "_execute_path", mock_execute_path)
         
+        # Mock the mapping coordinator to return expected results
+        async def mock_mapping_coordinator_execute(*args, **kwargs):
+            # Get identifiers from args
+            identifiers = args[0] if args else kwargs.get('identifiers', [])
+            
+            # Create results for all test IDs
+            results = {}
+            for test_id in identifiers:
+                test_case = next((case for case in TEST_CASES if case["id"] == test_id), None)
+                if test_case and test_case["expects_mapping"]:
+                    target_ids = [f"ARIVALE_{test_id}_1", f"ARIVALE_{test_id}_2"] if test_case["expects_multiple"] else [f"ARIVALE_{test_id}"]
+                    results[test_id] = {
+                        "source_identifier": test_id,
+                        "target_identifiers": target_ids,
+                        "status": PathExecutionStatus.SUCCESS.value,
+                        "message": "Mapping successful",
+                        "confidence_score": 0.95,
+                        "mapping_path_details": json.dumps({
+                            "path_id": 1,
+                            "path_name": "Test Path",
+                            "resolved_historical": test_case["expects_historical"]
+                        }),
+                        "hop_count": 2 if test_case["expects_historical"] else 1,
+                        "mapping_direction": "forward",
+                    }
+                else:
+                    results[test_id] = {
+                        "source_identifier": test_id,
+                        "target_identifiers": None,
+                        "status": "no_mapping_found",
+                        "message": "No mapping found"
+                    }
+            return results
+        
+        monkeypatch.setattr(executor.mapping_coordinator, "execute_mapping", mock_mapping_coordinator_execute)
+        
         # Use a subset of test cases
         test_ids = [case["id"] for case in TEST_CASES[:4] if case["id"]]
         

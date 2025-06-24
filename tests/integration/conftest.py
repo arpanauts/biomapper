@@ -12,12 +12,14 @@ from unittest.mock import AsyncMock, MagicMock
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from biomapper.core.mapping_executor import MappingExecutor
+from biomapper.core.engine_components.mapping_executor_builder import MappingExecutorBuilder
 from biomapper.db.models import (
     Endpoint, 
     EndpointPropertyConfig,
     MappingPath,
     MappingPathStep
 )
+from .test_fixtures import create_mock_mapping_executor
 
 
 @pytest.fixture
@@ -40,33 +42,7 @@ def mock_session():
 @pytest.fixture
 def mock_mapping_executor():
     """Create a MappingExecutor with mocked database sessions."""
-    executor = MappingExecutor()
-    
-    # Mock session context managers to return mock sessions
-    mock_meta_session = AsyncMock(spec=AsyncSession)
-    mock_cache_session = AsyncMock(spec=AsyncSession)
-    
-    # Create proper async context managers
-    mock_meta_context = AsyncMock()
-    mock_meta_context.__aenter__.return_value = mock_meta_session
-    mock_meta_context.__aexit__.return_value = None
-    
-    mock_cache_context = AsyncMock()
-    mock_cache_context.__aenter__.return_value = mock_cache_session
-    mock_cache_context.__aexit__.return_value = None
-    
-    # Mock the session factories to return context managers directly
-    executor.async_metamapper_session = MagicMock(return_value=mock_meta_context)
-    executor.async_cache_session = MagicMock(return_value=mock_cache_context)
-    
-    # Mock frequently used methods
-    executor._create_mapping_session_log = AsyncMock(return_value=1)  # Return a fake session ID
-    executor._update_mapping_session_log = AsyncMock()
-    executor._check_cache = AsyncMock(return_value={})  # Return empty cache results by default
-    executor._cache_results = AsyncMock()
-    
-    # Return the mocked executor
-    return executor, mock_meta_session, mock_cache_session
+    return create_mock_mapping_executor()
 
 
 @pytest.fixture
