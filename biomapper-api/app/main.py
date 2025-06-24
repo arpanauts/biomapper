@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import files, mapping, health
 from app.core.config import settings
+from app.services.mapper_service import MapperService
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -26,6 +27,14 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api/health", tags=["health"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(mapping.router, prefix="/api/mapping", tags=["mapping"])
+
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initializes the mapper service on application startup."""
+    app.state.mapper_service = MapperService()
+    print("MapperService initialized.")
 
 
 # Global exception handler

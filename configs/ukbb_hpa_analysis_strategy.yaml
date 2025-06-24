@@ -1,0 +1,23 @@
+name: UKBB_HPA_PROTEIN_OVERLAP_ANALYSIS
+description: "A strategy to analyze the overlap of protein identifiers between UK Biobank and Human Protein Atlas datasets."
+
+steps:
+  - name: SPLIT_UKBB_COMPOSITE_IDS
+    action:
+      type: COMPOSITE_ID_SPLITTER
+      params:
+        input_context_key: "ukbb_protein_ids"
+        output_context_key: "ukbb_protein_ids_split"
+        delimiter: "_"
+        track_provenance: True
+
+  - name: ANALYZE_OVERLAP
+    action:
+      type: DATASET_OVERLAP_ANALYZER
+      params:
+        dataset1_context_key: "ukbb_protein_ids_split"
+        dataset2_context_key: "hpa_protein_ids"
+        output_context_key: "overlap_results"
+        dataset1_name: "UKBB"
+        dataset2_name: "HPA"
+        generate_statistics: True

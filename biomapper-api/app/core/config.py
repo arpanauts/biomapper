@@ -47,6 +47,7 @@ class Settings(BaseModel):
 
     # Mapping settings
     MAPPING_RESULTS_DIR: Path = BASE_DIR / "data" / "results"
+    STRATEGIES_DIR: Path = BASE_DIR.parent / "configs"
 
     def __init__(self, **data):
         super().__init__(**data)
