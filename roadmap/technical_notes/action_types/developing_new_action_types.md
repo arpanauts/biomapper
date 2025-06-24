@@ -11,17 +11,18 @@ Action types are the building blocks of biomapper's mapping strategies. Each act
 biomapper/
 ├── core/
 │   └── strategy_actions/
-│       ├── __init__.py
-│       ├── base.py                        # StrategyAction abstract class and ActionContext
-│       ├── registry.py                    # The action registry and decorator
-│       ├── convert_identifiers_local.py   # Example action implementation
-│       └── ...                            # Other action implementations
+│       ├── __init__.py                    # Imports actions to trigger registration
+│       ├── base.py                        # Defines the BaseStrategyAction abstract class
+│       ├── registry.py                    # Defines the @register_action decorator and ACTION_REGISTRY
+│       └── ...                            # Individual action implementations
+└── services/
+    └── mapping_service.py             # Service that uses the MappingExecutor
+
 tests/
 └── unit/
     └── core/
         └── strategy_actions/
-            ├── test_convert_identifiers_local.py
-            └── ...
+            ├── test_...                     # Unit tests for each action
 ```
 
 
@@ -57,58 +58,73 @@ Before coding, answer these questions:
 
 ### Step 2: Create the Action Module
 
-Create a new file in `/biomapper/core/strategy_actions/`. The class must inherit from `StrategyAction` and be decorated with `@register_action`.
+Create a new file in `/biomapper/core/strategy_actions/`. The class must inherit from `BaseStrategyAction` and be decorated with `@register_action`.
 
 ```python
 # /biomapper/core/strategy_actions/bidirectional_match.py
 """Bidirectional matching with composite and M2M awareness."""
 
 import logging
-from .base import StrategyAction, ActionContext
+from typing import Dict, Any, List
+
+from biomapper.db.models import Endpoint
+from .base import BaseStrategyAction
 from .registry import register_action
 
 logger = logging.getLogger(__name__)
 
 @register_action("BIDIRECTIONAL_MATCH")
-class BidirectionalMatchAction(StrategyAction):
+class BidirectionalMatchAction(BaseStrategyAction):
     """
     Perform bidirectional matching between source and target endpoints.
     """
-    async def execute(self, context: ActionContext) -> ActionContext:
+    async def execute(
+        self,
+        current_identifiers: List[str],
+        current_ontology_type: str,
+        action_params: Dict[str, Any],
+        source_endpoint: Endpoint,
+        target_endpoint: Endpoint,
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Execute bidirectional matching.
 
-        Required parameters from context.action_params:
-            - source_ontology: Ontology type in source endpoint
-            - target_ontology: Ontology type in target endpoint
+        Required `action_params`:
+            - `target_ontology`: The ontology type to match against in the target endpoint.
         """
-        logger.info(
-            f"Executing BIDIRECTIONAL_MATCH for "
-            f"{len(context.current_identifiers)} identifiers."
-        )
+        logger.info(f"Executing BIDIRECTIONAL_MATCH for {len(current_identifiers)} identifiers.")
 
-        # 1. Validate and extract parameters from the context
-        action_params = context.action_params
-        source_ontology = action_params.get('source_ontology')
+        # 1. Validate and extract parameters
         target_ontology = action_params.get('target_ontology')
-        if not source_ontology or not target_ontology:
-            raise ValueError("source_ontology and target_ontology are required")
+        if not target_ontology:
+            raise ValueError("'target_ontology' is a required parameter for BIDIRECTIONAL_MATCH")
 
         # 2. Perform the action's logic...
-        #    (Accessing session via self.session)
-        #    (Accessing inputs via context.current_identifiers, etc.)
-        
-        matched_ids = [] # Placeholder for results
-        provenance_records = [] # Placeholder for provenance
+        #    (e.g., query databases, call APIs, etc.)
+        #    This is a placeholder for the actual matching logic.
+        output_identifiers = current_identifiers  # Simulate a 1-to-1 mapping
+        provenance = [
+            {
+                'action': 'BIDIRECTIONAL_MATCH',
+                'input_id': in_id,
+                'output_id': out_id,
+                'comment': 'Placeholder match'
+            }
+            for in_id, out_id in zip(current_identifiers, output_identifiers)
+        ]
 
-        # 3. Update the context with the results
-        context.current_identifiers = matched_ids
-        context.provenance.extend(provenance_records)
-        context.details['action'] = 'BIDIRECTIONAL_MATCH'
-        context.details['total_matched'] = len(matched_ids)
-        
-        # 4. Return the modified context
-        return context
+        # 3. Return the results dictionary
+        return {
+            'input_identifiers': current_identifiers,
+            'output_identifiers': output_identifiers,
+            'output_ontology_type': target_ontology,  # The ontology type of the output
+            'provenance': provenance,
+            'details': {
+                'action': 'BIDIRECTIONAL_MATCH',
+                'total_matched': len(output_identifiers)
+            }
+        }
 ```
 
 ### Step 3: Register the Action via Import
@@ -144,37 +160,52 @@ This step remains as crucial as ever. Create a corresponding test file in `/test
 ```python
 # /tests/unit/core/strategy_actions/test_bidirectional_match.py
 import pytest
-from unittest.mock import Mock
+from unittest.mock import Mock, MagicMock
 from biomapper.core.strategy_actions.bidirectional_match import BidirectionalMatchAction
-from biomapper.core.strategy_actions.base import ActionContext
 
-class TestBidirectionalMatchAction:
-    @pytest.fixture
-    def action(self, mock_session):
-        return BidirectionalMatchAction(session=mock_session)
+@pytest.fixture
+def action():
+    """Provides an instance of the BidirectionalMatchAction."""
+    return BidirectionalMatchAction()
 
-    async def test_simple_matching(self, action):
-        # Arrange
-        context = ActionContext(
+@pytest.mark.asyncio
+async def test_simple_matching(action):
+    # Arrange
+    mock_source_endpoint = MagicMock()
+    mock_target_endpoint = MagicMock()
+    
+    # Act
+    result = await action.execute(
+        current_identifiers=['P12345'],
+        current_ontology_type='uniprot',
+        action_params={'target_ontology': 'ensembl'},
+        source_endpoint=mock_source_endpoint,
+        target_endpoint=mock_target_endpoint,
+        context={}
+    )
+
+    # Assert
+    assert result['details'].get('action') == 'BIDIRECTIONAL_MATCH'
+    assert result['output_ontology_type'] == 'ensembl'
+    assert len(result['output_identifiers']) == 1
+    assert len(result['provenance']) == 1
+
+@pytest.mark.asyncio
+async def test_missing_parameter_raises_error(action):
+    # Arrange
+    mock_source_endpoint = MagicMock()
+    mock_target_endpoint = MagicMock()
+
+    # Act & Assert
+    with pytest.raises(ValueError, match="'target_ontology' is a required parameter"):
+        await action.execute(
             current_identifiers=['P12345'],
-            action_params={
-                'source_ontology': 'SRC_ONT',
-                'target_ontology': 'TGT_ONT',
-            },
-            provenance=[],
-            details={},
-            # ... other necessary context fields
-            source_endpoint=Mock(),
-            target_endpoint=Mock(),
-            cache_client=Mock()
+            current_ontology_type='uniprot',
+            action_params={},  # Missing target_ontology
+            source_endpoint=mock_source_endpoint,
+            target_endpoint=mock_target_endpoint,
+            context={}
         )
-
-        # Act
-        result_context = await action.execute(context)
-
-        # Assert
-        # assert len(result_context.current_identifiers) > 0
-        assert result_context.details.get('action') == 'BIDIRECTIONAL_MATCH'
 ```
 
 ### Step 5: Documentation
@@ -199,7 +230,7 @@ Update all relevant documentation with your new action's details.
 
 Before submitting:
 
-- [ ] Action inherits from `StrategyAction` and uses `@register_action`.
+- [ ] Action inherits from `BaseStrategyAction` and uses `@register_action`.
 - [ ] Action is imported in `strategy_actions/__init__.py`.
 - [ ] All parameters from `action_params` are validated.
 - [ ] Error handling is comprehensive.
@@ -228,11 +259,13 @@ def test_composite_handling_properties(identifiers, composite_prob):
 ```python
 # Example: Early exit
 if not current_identifiers:
+    logger.info("Skipping action due to empty input identifiers.")
     return {
         'input_identifiers': [],
         'output_identifiers': [],
+        'output_ontology_type': current_ontology_type, # No change in type
         'provenance': [],
-        'details': {'action': 'BIDIRECTIONAL_MATCH', 'skipped': 'empty_input'}
+        'details': {'action': 'BIDIRECTIONAL_MATCH', 'status': 'skipped', 'reason': 'empty_input'}
     }
 ```
 
