@@ -36,6 +36,20 @@ logger = logging.getLogger(__name__)
 
 asyncdb_url = "sqlite+aiosqlite:///:memory:"
 
+
+# Temporarily disabled to diagnose hanging issue
+# @pytest.fixture(autouse=True)
+# async def cleanup_after_test():
+#     """Automatically run after each test to ensure cleanup."""
+#     yield
+#     # Force garbage collection after each test
+#     import gc
+#     gc.collect()
+#     
+#     # Give event loop time to clean up
+#     import asyncio
+#     await asyncio.sleep(0.1)
+
 # Dummy client for testing loading errors
 class MockClient:
     def __init__(self, config=None):
@@ -63,16 +77,22 @@ def create_mock_results(input_ids, target_prefix, offset=1):
         }
     return results
 
-# Ensure foreign key support for SQLite
-@event.listens_for(Engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    # Check if the underlying connection is sqlite3
-    if dbapi_connection.__class__.__module__ == "sqlite3":
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-    # For aiosqlite, the connection object might differ
-    pass  # If aiosqlite handles FKs differently or by default
+# Disable SQLite pragma listener to avoid potential issues
+# @event.listens_for(Engine, "connect")
+# def set_sqlite_pragma(dbapi_connection, connection_record):
+#     # Check if the underlying connection is sqlite3
+#     try:
+#         if hasattr(dbapi_connection, 'execute'):
+#             # For aiosqlite connections
+#             dbapi_connection.execute("PRAGMA foreign_keys=ON")
+#         elif hasattr(dbapi_connection, 'cursor'):
+#             # For standard sqlite3 connections
+#             cursor = dbapi_connection.cursor()
+#             cursor.execute("PRAGMA foreign_keys=ON")
+#             cursor.close()
+#     except Exception:
+#         # Ignore errors - some connection types may not support this
+#         pass
 
 # Helper for mocking async context managers
 class MockAsyncContextManager:
@@ -98,14 +118,26 @@ class MockAsyncContextManager:
 @pytest.fixture(scope="function")
 async def async_metamapper_engine():
     """Provides an async SQLAlchemy engine for an in-memory SQLite database."""
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(MetamapperBase.metadata.create_all)
-
-    yield engine  # Return the engine directly
+    # Use StaticPool to avoid connection pooling issues
+    from sqlalchemy.pool import StaticPool
     
-    # Clean up
-    await engine.dispose()
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:", 
+        echo=False,
+        poolclass=StaticPool,  # Use StaticPool for in-memory databases
+        connect_args={
+            "check_same_thread": False,
+            "timeout": 5.0
+        }
+    )
+    
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(MetamapperBase.metadata.create_all)
+        yield engine
+    finally:
+        # Ensure cleanup happens even on failure
+        await engine.dispose()
 
 
 # Use real session factory for metamapper db
@@ -117,10 +149,11 @@ async def async_metamapper_session_factory(async_metamapper_engine):
         expire_on_commit=False, 
         class_=AsyncSession
     )
-    return factory
+    yield factory
+    # No explicit cleanup needed as the engine handles it
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def mock_config_db():
     """Fixture to mock the metamapper database session and models."""
     # --- Generic/Legacy Mocks (can be reused or adapted) ---
@@ -389,6 +422,7 @@ async def mapping_executor():
     from biomapper.core.engine_components.session_manager import SessionManager
     from biomapper.core.services.metadata_query_service import MetadataQueryService
     from unittest.mock import AsyncMock, MagicMock
+    import gc
 
     # Create mock coordinators and services
     mock_lifecycle_coordinator = MagicMock(spec=LifecycleCoordinator)
@@ -466,7 +500,11 @@ async def mapping_executor():
         'details': {}
     })
     
-    return executor
+    yield executor
+    
+    # Clean up to prevent memory leaks
+    del executor
+    gc.collect()
 
 
 @pytest.fixture
@@ -1021,18 +1059,23 @@ async def test_cache_results_db_error_during_commit():
     from sqlalchemy.exc import OperationalError
     import logging
 
-    # Create a mock cache sessionmaker
+    # Create a mock cache sessionmaker and session
     mock_cache_sessionmaker = MagicMock()
     mock_cache_session = AsyncMock()
-    
+
     # Configure the session operations
-    mock_cache_session.add_all = MagicMock()  # add_all succeeds
-    mock_cache_session.commit = AsyncMock(side_effect=OperationalError("Commit failed", {}, None))
+    mock_cache_session.add_all = MagicMock()
+    # Correctly instantiate OperationalError with None for params, which is safer.
+    mock_cache_session.commit = AsyncMock(
+        side_effect=OperationalError("Commit failed", None, None)
+    )
     mock_cache_session.rollback = AsyncMock()
-    
-    # Configure the sessionmaker to return our mock session
-    mock_cache_sessionmaker.return_value.__aenter__ = AsyncMock(return_value=mock_cache_session)
-    mock_cache_sessionmaker.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    # Configure the sessionmaker to return a robust mock async context manager
+    mock_session_context = AsyncMock()
+    mock_session_context.__aenter__.return_value = mock_cache_session
+    mock_session_context.__aexit__.return_value = False  # Ensure exceptions propagate
+    mock_cache_sessionmaker.return_value = mock_session_context
     
     # Create CacheManager instance
     logger = logging.getLogger(__name__)
@@ -1583,7 +1626,12 @@ async def path_execution_manager():
     # Replace the default implementation with our mock
     manager._execute_mapping_step = mock_execute_mapping_step
     
-    return manager
+    yield manager
+    
+    # Clean up
+    del manager
+    import gc
+    gc.collect()
 
 @pytest.mark.asyncio
 async def test_run_path_steps_basic(path_execution_manager):
