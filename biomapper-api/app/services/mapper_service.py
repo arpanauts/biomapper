@@ -433,3 +433,45 @@ class MapperService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error executing relationship mapping: {str(e)}",
             )
+
+    async def execute_strategy(
+        self, strategy_name: str, context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Execute a mapping strategy by name.
+        
+        Args:
+            strategy_name: Name of the strategy to execute.
+            context: Execution context for the strategy.
+            
+        Returns:
+            Dictionary containing the strategy execution results.
+            
+        Raises:
+            KeyError: If the strategy is not found.
+            Exception: If the strategy execution fails.
+        """
+        # Mock implementation for now
+        # In the future, this will integrate with the actual strategy registry
+        mock_strategies = {
+            "composite_id_split": {
+                "description": "Split composite IDs into individual components",
+                "status": "success",
+                "data": {"split_count": 5, "components": ["id1", "id2", "id3"]},
+            },
+            "dataset_overlap": {
+                "description": "Analyze dataset overlap",
+                "status": "success",
+                "data": {"overlap_percentage": 75.5, "common_items": 150},
+            },
+        }
+        
+        if strategy_name not in mock_strategies:
+            raise KeyError(f"Strategy '{strategy_name}' not found")
+            
+        # Simulate processing with context
+        result = mock_strategies[strategy_name].copy()
+        result["context"] = context
+        result["executed_at"] = pd.Timestamp.now().isoformat()
+        
+        return result

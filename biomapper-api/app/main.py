@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import files, mapping, health
+from app.api.routes import files, mapping, health, strategies
 from app.core.config import settings
 from app.services.mapper_service import MapperService
 
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api/health", tags=["health"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(mapping.router, prefix="/api/mapping", tags=["mapping"])
+app.include_router(strategies.router)
 
 
 
