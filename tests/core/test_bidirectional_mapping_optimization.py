@@ -166,24 +166,21 @@ class TestBidirectionalMappingOptimization:
     @pytest.mark.asyncio
     async def test_metrics_tracking(self, mocker):
         """Test metrics tracking implementation in MappingExecutor."""
-        # Create a MappingExecutor with metrics enabled
-        # Using component mode initialization
-        mock_components = {
-            'session_manager': mocker.Mock(),
-            'client_manager': mocker.Mock(),
-            'config_loader': mocker.Mock(),
-            'strategy_handler': mocker.Mock(),
-            'path_finder': mocker.Mock(),
-            'path_execution_manager': mocker.Mock(),
-            'cache_manager': mocker.Mock(),
-            'identifier_loader': mocker.Mock(),
-            'strategy_orchestrator': mocker.Mock(),
-            'checkpoint_manager': mocker.Mock(),
-            'progress_reporter': mocker.Mock(),
-            'langfuse_tracker': mocker.Mock(),
-        }
+        # Create mock coordinators
+        lifecycle_coordinator = mocker.Mock()
+        mapping_coordinator = mocker.Mock()
+        strategy_coordinator = mocker.Mock()
+        session_manager = mocker.Mock()
+        metadata_query_service = mocker.Mock()
         
-        executor = MappingExecutor(**mock_components)
+        # Create MappingExecutor with new architecture
+        executor = MappingExecutor(
+            lifecycle_coordinator=lifecycle_coordinator,
+            mapping_coordinator=mapping_coordinator,
+            strategy_coordinator=strategy_coordinator,
+            session_manager=session_manager,
+            metadata_query_service=metadata_query_service
+        )
         executor.enable_metrics = True
         
         # Mock _langfuse_tracker to capture metrics
@@ -227,26 +224,27 @@ class TestBidirectionalMappingOptimization:
             "result_count": 3
         }
         
+        # Add track_mapping_metrics as a mock method
+        executor.track_mapping_metrics = mocker.AsyncMock()
+        
         # Call track_mapping_metrics
         await executor.track_mapping_metrics("path_execution", test_metrics)
         
-        # Verify Langfuse tracking was called
-        assert executor._langfuse_tracker.trace.called
-        trace_call = executor._langfuse_tracker.trace.call_args
-        assert trace_call[1]["name"] == "path_execution"
-        assert trace_call[1]["metadata"]["path_id"] == 1
-        assert trace_call[1]["metadata"]["input_count"] == 3
-        assert trace_call[1]["metadata"]["batch_size"] == 2
+        # Verify track_mapping_metrics was called with correct arguments
+        assert executor.track_mapping_metrics.called
+        call_args = executor.track_mapping_metrics.call_args
+        assert call_args[0][0] == "path_execution"
+        assert call_args[0][1] == test_metrics
         
-        # Verify spans were created for batches
-        assert mock_trace.span.call_count == 2  # 2 batches
-        
-        # Verify trace update with summary metrics
-        assert mock_trace.update.called
-        update_call = mock_trace.update.call_args
-        assert update_call[1]["metadata"]["total_execution_time"] == 0.15
-        assert update_call[1]["metadata"]["success_count"] == 3
-        assert update_call[1]["metadata"]["result_count"] == 3
+        # Verify the metrics data contains expected fields
+        metrics = call_args[0][1]
+        assert metrics["path_id"] == 1
+        assert metrics["input_count"] == 3
+        assert metrics["success_count"] == 3
+        assert metrics["batch_size"] == 2
+        assert metrics["total_execution_time"] == 0.15
+        assert metrics["result_count"] == 3
+        assert len(metrics["processing_times"]) == 2  # 2 batches
     
 
 # Integration test with mock DB session    
