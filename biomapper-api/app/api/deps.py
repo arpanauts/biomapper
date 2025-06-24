@@ -3,7 +3,7 @@ Dependency injection for FastAPI routes.
 """
 from typing import Generator
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, Request
 
 from app.core.session import Session, session_manager
 from app.services.csv_service import CSVService
@@ -31,11 +31,15 @@ def get_csv_service() -> Generator[CSVService, None, None]:
         pass
 
 
-def get_mapper_service() -> Generator[MapperService, None, None]:
-    """Dependency for mapper service."""
-    service = MapperService()
-    try:
-        yield service
-    finally:
-        # Any cleanup needed
-        pass
+def get_mapper_service(request: Request) -> MapperService:
+    """Dependency for mapper service.
+    
+    Returns the singleton MapperService instance from the application state.
+    
+    Args:
+        request: The FastAPI request object.
+        
+    Returns:
+        MapperService: The singleton mapper service instance.
+    """
+    return request.app.state.mapper_service
