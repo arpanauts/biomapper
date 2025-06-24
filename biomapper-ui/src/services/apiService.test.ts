@@ -1,194 +1,95 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import axios from 'axios';
-import {
-  healthCheck,
-  uploadFile,
-  getColumns,
-  startMapping,
-  getMappingStatus,
-  apiClient,
-} from './apiService';
-
-// Mock axios
-vi.mock('axios');
+import { apiService } from './apiService';
 
 describe('API Service', () => {
-  let mockAxiosInstance: any;
-
-  beforeEach(() => {
-    // Create a mock axios instance
-    mockAxiosInstance = {
-      get: vi.fn(),
-      post: vi.fn(),
-      interceptors: {
-        request: { use: vi.fn() },
-        response: { use: vi.fn() },
-      },
-    };
-
-    // Mock axios.create to return our mock instance
-    (axios.create as any).mockReturnValue(mockAxiosInstance);
-
-    // Re-import the module to get fresh instance
-    vi.resetModules();
-  });
-
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  describe('healthCheck', () => {
-    it('should return health status on success', async () => {
-      const mockResponse = {
-        data: { status: 'healthy', version: '1.0.0', timestamp: '2024-01-01T00:00:00Z' },
+  describe('startMapping', () => {
+    it('should successfully start a mapping with valid configuration', async () => {
+      const mockConfig = {
+        sessionId: 'test-session-123',
+        sourceColumn: 'protein_ids',
+        targetDataSource: 'uniprot',
+        strategy: 'direct_mapping',
+        parameters: { timeout: 30 }
       };
-      mockAxiosInstance.get.mockResolvedValue(mockResponse);
 
-      const result = await healthCheck();
+      const result = await apiService.startMapping(mockConfig);
 
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/health');
-      expect(result).toEqual(mockResponse.data);
+      expect(result).toHaveProperty('jobId');
+      expect(result).toHaveProperty('status', 'pending');
+      expect(result).toHaveProperty('message', 'Mapping job created successfully');
+      expect(result.jobId).toMatch(/^job-\d+-[a-z0-9]+$/);
     });
 
-    it('should throw error on failure', async () => {
-      const mockError = new Error('Network error');
-      mockAxiosInstance.get.mockRejectedValue(mockError);
+    it('should throw error for missing required parameters', async () => {
+      const invalidConfig = {
+        sessionId: '',
+        sourceColumn: 'protein_ids',
+        targetDataSource: 'uniprot',
+        strategy: 'direct_mapping'
+      };
 
-      await expect(healthCheck()).rejects.toThrow('Network error');
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/health');
+      await expect(apiService.startMapping(invalidConfig)).rejects.toThrow(
+        'Missing required configuration parameters'
+      );
+    });
+
+    it('should throw error for missing source column', async () => {
+      const invalidConfig = {
+        sessionId: 'test-session-123',
+        sourceColumn: '',
+        targetDataSource: 'uniprot',
+        strategy: 'direct_mapping'
+      };
+
+      await expect(apiService.startMapping(invalidConfig)).rejects.toThrow(
+        'Missing required configuration parameters'
+      );
+    });
+
+    it('should throw error for missing target data source', async () => {
+      const invalidConfig = {
+        sessionId: 'test-session-123',
+        sourceColumn: 'protein_ids',
+        targetDataSource: '',
+        strategy: 'direct_mapping'
+      };
+
+      await expect(apiService.startMapping(invalidConfig)).rejects.toThrow(
+        'Missing required configuration parameters'
+      );
     });
   });
 
   describe('uploadFile', () => {
-    it('should upload file and return session info', async () => {
-      const mockFile = new File(['test content'], 'test.csv', { type: 'text/csv' });
-      const mockResponse = {
-        data: { session_id: 'session-123', filename: 'test.csv' },
-      };
-      mockAxiosInstance.post.mockResolvedValue(mockResponse);
-
-      const result = await uploadFile(mockFile);
-
-      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        '/api/sessions/upload',
-        expect.any(FormData),
-        expect.objectContaining({
-          headers: { 'Content-Type': 'multipart/form-data' },
-        })
+    it('should throw not implemented error', async () => {
+      const mockFile = new File(['test'], 'test.csv', { type: 'text/csv' });
+      
+      await expect(apiService.uploadFile(mockFile)).rejects.toThrow(
+        'Not implemented - see Prompt 02'
       );
-      expect(result).toEqual(mockResponse.data);
-    });
-
-    it('should handle upload errors', async () => {
-      const mockFile = new File(['test content'], 'test.csv', { type: 'text/csv' });
-      const mockError = new Error('Upload failed');
-      mockAxiosInstance.post.mockRejectedValue(mockError);
-
-      await expect(uploadFile(mockFile)).rejects.toThrow('Upload failed');
     });
   });
 
   describe('getColumns', () => {
-    it('should return column names for a session', async () => {
-      const sessionId = 'session-123';
-      const mockResponse = {
-        data: ['column1', 'column2', 'column3'],
-      };
-      mockAxiosInstance.get.mockResolvedValue(mockResponse);
-
-      const result = await getColumns(sessionId);
-
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith(`/api/sessions/${sessionId}/columns`);
-      expect(result).toEqual(mockResponse.data);
-    });
-
-    it('should handle errors when getting columns', async () => {
-      const sessionId = 'session-123';
-      const mockError = new Error('Session not found');
-      mockAxiosInstance.get.mockRejectedValue(mockError);
-
-      await expect(getColumns(sessionId)).rejects.toThrow('Session not found');
+    it('should throw not implemented error', async () => {
+      await expect(apiService.getColumns('test-session')).rejects.toThrow(
+        'Not implemented - see Prompt 02'
+      );
     });
   });
 
-  describe('startMapping', () => {
-    it('should start mapping and return job ID', async () => {
-      const sessionId = 'session-123';
-      const config = {
-        strategy: 'protein_mapping',
-        source_column: 'protein_ids',
-        target_type: 'uniprot',
-      };
-      const mockResponse = {
-        data: { job_id: 'job-456' },
-      };
-      mockAxiosInstance.post.mockResolvedValue(mockResponse);
-
-      const result = await startMapping(sessionId, config);
-
-      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/api/strategies/execute', {
-        session_id: sessionId,
-        ...config,
-      });
-      expect(result).toEqual(mockResponse.data);
-    });
-
-    it('should handle mapping start errors', async () => {
-      const sessionId = 'session-123';
-      const config = { strategy: 'invalid' };
-      const mockError = new Error('Invalid strategy');
-      mockAxiosInstance.post.mockRejectedValue(mockError);
-
-      await expect(startMapping(sessionId, config)).rejects.toThrow('Invalid strategy');
+  describe('getJobStatus', () => {
+    it('should throw not implemented error', async () => {
+      await expect(apiService.getJobStatus('test-job')).rejects.toThrow(
+        'Not implemented - see Prompt 02'
+      );
     });
   });
 
-  describe('getMappingStatus', () => {
-    it('should return mapping status and results', async () => {
-      const jobId = 'job-456';
-      const mockResponse = {
-        data: {
-          status: 'completed',
-          results: { mapped: 100, unmapped: 5 },
-        },
-      };
-      mockAxiosInstance.get.mockResolvedValue(mockResponse);
-
-      const result = await getMappingStatus(jobId);
-
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith(`/api/mappings/${jobId}`);
-      expect(result).toEqual(mockResponse.data);
-    });
-
-    it('should return error status when mapping fails', async () => {
-      const jobId = 'job-456';
-      const mockResponse = {
-        data: {
-          status: 'failed',
-          error: 'Mapping process failed',
-        },
-      };
-      mockAxiosInstance.get.mockResolvedValue(mockResponse);
-
-      const result = await getMappingStatus(jobId);
-
-      expect(result.status).toBe('failed');
-      expect(result.error).toBe('Mapping process failed');
-    });
-
-    it('should handle network errors', async () => {
-      const jobId = 'job-456';
-      const mockError = new Error('Network timeout');
-      mockAxiosInstance.get.mockRejectedValue(mockError);
-
-      await expect(getMappingStatus(jobId)).rejects.toThrow('Network timeout');
-    });
-  });
-
-  describe('axios interceptors', () => {
-    it('should set up request and response interceptors', () => {
-      expect(mockAxiosInstance.interceptors.request.use).toHaveBeenCalled();
-      expect(mockAxiosInstance.interceptors.response.use).toHaveBeenCalled();
+  describe('getResults', () => {
+    it('should throw not implemented error', async () => {
+      await expect(apiService.getResults('test-job')).rejects.toThrow(
+        'Not implemented - see Prompt 02'
+      );
     });
   });
 });

@@ -1,34 +1,69 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { AppShell, Burger, NavLink, Text, Title } from '@mantine/core'
+import { useDisclosure } from '@mantine/hooks'
+import {
+  IconFileUpload,
+  IconColumns,
+  IconRoute,
+  IconChartDots
+} from '@tabler/icons-react'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [opened, { toggle }] = useDisclosure()
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <AppShell
+      header={{ height: 60 }}
+      navbar={{
+        width: 300,
+        breakpoint: 'sm',
+        collapsed: { mobile: !opened }
+      }}
+      padding="md"
+    >
+      <AppShell.Header>
+        <div style={{ display: 'flex', alignItems: 'center', height: '100%', padding: '0 20px' }}>
+          <Burger
+            opened={opened}
+            onClick={toggle}
+            hiddenFrom="sm"
+            size="sm"
+          />
+          <Title order={3} style={{ marginLeft: '10px' }}>
+            BioMapper UI
+          </Title>
+        </div>
+      </AppShell.Header>
+
+      <AppShell.Navbar p="md">
+        <NavLink
+          label="Upload"
+          leftSection={<IconFileUpload size="1.2rem" stroke={1.5} />}
+          description="Upload your CSV file"
+        />
+        <NavLink
+          label="Column Selection"
+          leftSection={<IconColumns size="1.2rem" stroke={1.5} />}
+          description="Select identifier columns"
+        />
+        <NavLink
+          label="Mapping Configuration"
+          leftSection={<IconRoute size="1.2rem" stroke={1.5} />}
+          description="Configure mapping parameters"
+        />
+        <NavLink
+          label="Results"
+          leftSection={<IconChartDots size="1.2rem" stroke={1.5} />}
+          description="View mapping results"
+        />
+      </AppShell.Navbar>
+
+      <AppShell.Main>
+        <Text>Welcome to BioMapper UI</Text>
+        <Text c="dimmed" size="sm">
+          Select a workflow step from the sidebar to begin
+        </Text>
+      </AppShell.Main>
+    </AppShell>
   )
 }
 
