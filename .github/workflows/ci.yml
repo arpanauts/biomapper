@@ -1,0 +1,50 @@
+name: Biomapper CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: 1.8.2
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+        installer-parallel: true
+    
+    - name: Load cached dependencies
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Install dependencies for biomapper
+      run: |
+        poetry install --no-interaction --no-root
+        poetry install --no-interaction
+    
+    - name: Install dependencies for biomapper-api
+      working-directory: ./biomapper-api
+      run: |
+        poetry install --no-interaction --no-root
+        poetry install --no-interaction
+    
+    - name: Run tests
+      run: |
+        poetry run pytest
