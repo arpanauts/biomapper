@@ -1,10 +1,17 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routes import files, mapping, health
 from app.core.config import settings
+from app.core.logging_config import configure_logging
 from app.services.mapper_service import MapperService
+
+# Configure logging before creating the FastAPI app
+configure_logging()
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -33,13 +40,15 @@ app.include_router(mapping.router, prefix="/api/mapping", tags=["mapping"])
 @app.on_event("startup")
 async def startup_event():
     """Initializes the mapper service on application startup."""
+    logger.info("API starting up...")
     app.state.mapper_service = MapperService()
-    print("MapperService initialized.")
+    logger.info("MapperService initialized successfully")
 
 
 # Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled exception occurred", exc_info=exc, path=request.url.path, method=request.method)
     return JSONResponse(
         status_code=500,
         content={
