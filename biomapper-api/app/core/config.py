@@ -1,24 +1,19 @@
-import os
 import psutil
 from pathlib import Path
 from typing import List
 
-from pydantic import BaseModel
-from dotenv import load_dotenv
-
-# Load environment variables from .env file if it exists
-load_dotenv()
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Base directory of the project
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
-class Settings(BaseModel):
+class Settings(BaseSettings):
     """Application settings with defaults and environment variable integration."""
 
     # General settings
     PROJECT_NAME: str = "Biomapper API"
-    DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
+    DEBUG: bool = False
 
     # API settings
     API_V1_PREFIX: str = "/api"
@@ -48,6 +43,12 @@ class Settings(BaseModel):
     # Mapping settings
     MAPPING_RESULTS_DIR: Path = BASE_DIR / "data" / "results"
     STRATEGIES_DIR: Path = BASE_DIR.parent / "configs"
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False
+    )
 
     def __init__(self, **data):
         super().__init__(**data)
