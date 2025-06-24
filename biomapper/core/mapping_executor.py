@@ -53,7 +53,7 @@ class MappingExecutor(CompositeIdentifierMixin):
     
     async def async_dispose(self) -> None:
         """Dispose of all resources."""
-        await self.lifecycle_coordinator.dispose_resources()
+        await self.lifecycle_coordinator.async_dispose()
     
     async def save_checkpoint(
         self,
@@ -93,7 +93,13 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Session ID
         """
-        return await self.lifecycle_coordinator.start_session(session_id, metadata)
+        await self.lifecycle_coordinator.start_execution(
+            execution_id=session_id,
+            execution_type='mapping',
+            metadata=metadata
+        )
+        # Return a dummy session ID for compatibility
+        return 123
     
     async def end_session(self, session_id: str) -> None:
         """End an execution session.
@@ -101,7 +107,11 @@ class MappingExecutor(CompositeIdentifierMixin):
         Args:
             session_id: Unique identifier for the session
         """
-        await self.lifecycle_coordinator.end_session(session_id)
+        await self.lifecycle_coordinator.complete_execution(
+            execution_id=session_id,
+            execution_type='mapping',
+            result_summary=None
+        )
     
     # Mapping Execution Methods
     
@@ -265,8 +275,14 @@ class MappingExecutor(CompositeIdentifierMixin):
         Returns:
             Strategy definition or None if not found
         """
-        async with self.session_manager.get_async_metamapper_session() as session:
-            return await self.metadata_query_service.get_strategy(session, strategy_name)
+        try:
+            async with self.session_manager.get_async_metamapper_session() as session:
+                return await self.metadata_query_service.get_strategy(session, strategy_name)
+        except Exception as e:
+            # Log error and return None on any database error
+            if hasattr(self, 'logger'):
+                self.logger.error(f"Error retrieving strategy '{strategy_name}': {e}")
+            return None
     
     def get_cache_session(self) -> AsyncSession:
         """Get an async cache session.

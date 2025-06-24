@@ -79,6 +79,10 @@ class InitializationService:
         """Initialize the InitializationService."""
         self.logger = logging.getLogger(__name__)
     
+    def create_components(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Alias for create_components_from_config for backward compatibility."""
+        return self.create_components_from_config(config)
+    
     def create_components_from_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Create all components from a configuration dictionary.
         
