@@ -44,7 +44,7 @@ const DATA_SOURCE_OPTIONS = [
 
 export default function MappingConfig({}: MappingConfigProps) {
   // Get session info from global store
-  const { sessionId, selectedColumn, setJobId, setCurrentStep } = useAppStore();
+  const { sessionId, filename, setJobId, setActiveStep } = useAppStore();
   
   // Local state for form fields
   const [targetDataSource, setTargetDataSource] = useState<string>('');
@@ -52,7 +52,7 @@ export default function MappingConfig({}: MappingConfigProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Validate that we have the required session data
-  if (!sessionId || !selectedColumn) {
+  if (!sessionId || !filename) {
     return (
       <Paper p="xl" radius="md">
         <Alert 
@@ -82,7 +82,7 @@ export default function MappingConfig({}: MappingConfigProps) {
       // Construct the configuration object
       const mappingConfig = {
         sessionId,
-        sourceColumn: selectedColumn,
+        sourceColumn: 'compound_name', // Default column for now
         targetDataSource,
         strategy: mappingStrategy,
         parameters: {
@@ -107,7 +107,7 @@ export default function MappingConfig({}: MappingConfigProps) {
       });
 
       // Navigate to results step
-      setCurrentStep('results');
+      setActiveStep('results');
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -134,7 +134,7 @@ export default function MappingConfig({}: MappingConfigProps) {
             <Stack>
               <TextInput
                 label="Source Column"
-                value={selectedColumn}
+                value="compound_name"
                 readOnly
                 description="The column containing identifiers to map"
               />
@@ -169,7 +169,7 @@ export default function MappingConfig({}: MappingConfigProps) {
                   <strong>Session ID:</strong> {sessionId}
                 </Text>
                 <Text size="sm">
-                  <strong>Source Column:</strong> {selectedColumn}
+                  <strong>Source Column:</strong> compound_name
                 </Text>
                 <Text size="sm">
                   <strong>Target:</strong> {DATA_SOURCE_OPTIONS.find(opt => opt.value === targetDataSource)?.label || 'Not selected'}

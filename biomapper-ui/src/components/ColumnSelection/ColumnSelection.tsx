@@ -3,162 +3,87 @@ import {
   Button, 
   Card, 
   Group, 
-  Loader, 
   Paper, 
-  Select, 
   Text, 
-  TextInput,
   Title,
-  ScrollArea,
-  Checkbox,
   Stack,
+  Alert,
+  Loader,
+  Checkbox,
+  TextInput,
+  ScrollArea,
   MultiSelect
 } from '@mantine/core';
+import { IconAlertCircle } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
-import { apiService } from '../../services/api';
+import { apiService } from '../../services/apiService';
 import { useAppStore } from '../../store/appStore';
 
 export default function ColumnSelection() {
   const { sessionId, setActiveStep } = useAppStore();
-  const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedColumn, setSelectedColumn] = useState<string>('compound_name');
 
-  // Fetch columns from the API
-  const columnsQuery = useQuery({
-    queryKey: ['columns', sessionId],
-    queryFn: async () => {
-      if (!sessionId) {
-        throw new Error('No session ID available');
-      }
-      return await apiService.getColumns(sessionId);
-    },
-    enabled: !!sessionId,
-    retry: 3,
-    retryDelay: 1000,
-  });
+  if (!sessionId) {
+    return (
+      <Paper p="xl" radius="md">
+        <Alert 
+          icon={<IconAlertCircle size={16} />} 
+          title="No Session Found" 
+          color="orange"
+        >
+          Please upload a file first.
+        </Alert>
+      </Paper>
+    );
+  }
 
-  const columns = columnsQuery.data?.columns || [];
-  
-  // Filter columns based on search term
-  const filteredColumns = columns
-    .filter(col => col.toLowerCase().includes(searchTerm.toLowerCase()))
-    .slice(0, 200); // Limit for performance
-
-  // Handle submission
-  const handleSubmit = () => {
-    if (selectedColumns.length === 0) {
-      notifications.show({
-        title: 'Warning',
-        message: 'Please select at least one column to continue',
-        color: 'yellow',
-      });
-      return;
-    }
-
-    // Store selected columns for the next step
-    if (sessionId) {
-      sessionStorage.setItem(`biomapper_${sessionId}_selectedColumns`, JSON.stringify(selectedColumns));
-    }
-    
-    // Navigate to mapping step
+  const handleContinue = () => {
     setActiveStep('mapping');
   };
 
-  // Loading state
-  if (columnsQuery.isPending) {
-    return (
-      <Paper p="xl" radius="md" style={{ textAlign: 'center' }}>
-        <Loader size="lg" />
-        <Text mt="md">Loading columns...</Text>
-      </Paper>
-    );
-  }
-
-  // Error state
-  if (columnsQuery.isError) {
-    const error = columnsQuery.error;
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    
-    return (
-      <Paper p="xl" radius="md">
-        <Title order={2} mb="md" c="red">Error Loading Columns</Title>
-        <Text mb="md">{errorMessage}</Text>
-        <Group>
-          <Button color="blue" onClick={() => columnsQuery.refetch()}>
-            Try Again
-          </Button>
-        </Group>
-      </Paper>
-    );
-  }
-
   return (
     <Paper p="xl" radius="md">
-      <Title order={2} mb="md">Select Columns for Mapping</Title>
+      <Title order={2} mb="md">Select Column for Mapping</Title>
       <Text mb="lg" c="dimmed">
-        Choose the columns containing identifiers that you want to map.
+        Choose the column that contains the identifiers you want to map.
       </Text>
 
-      <TextInput
-        label="Search Columns"
-        placeholder="Type to filter columns..."
-        value={searchTerm}
-        onChange={(event) => setSearchTerm(event.currentTarget.value)}
-        mb="md"
-      />
-
-      <MultiSelect
-        label="Select Columns"
-        description="Choose one or more columns for mapping"
-        placeholder="Select columns"
-        data={columns}
-        value={selectedColumns}
-        onChange={setSelectedColumns}
-        searchable
-        clearable
-        mb="xl"
-      />
-
       <Card withBorder p="md" radius="md" mb="xl">
-        <Group justify="space-between" mb="md">
-          <Title order={4}>Available Columns</Title>
-          <Text size="sm">
-            {filteredColumns.length} of {columns.length} columns
-            {searchTerm && ` (filtered by "${searchTerm}")`}
-          </Text>
-        </Group>
-        
-        <ScrollArea h={300} offsetScrollbars scrollbarSize={6}>
-          <Stack gap="xs">
-            {filteredColumns.map((col) => (
-              <Checkbox
-                key={col}
-                label={col}
-                checked={selectedColumns.includes(col)}
-                onChange={(event) => {
-                  if (event.currentTarget.checked) {
-                    setSelectedColumns([...selectedColumns, col]);
-                  } else {
-                    setSelectedColumns(selectedColumns.filter(c => c !== col));
-                  }
-                }}
-              />
-            ))}
-          </Stack>
-        </ScrollArea>
+        <Stack>
+          <Text fw={500}>Available Columns:</Text>
+          <Group>
+            <Button 
+              variant={selectedColumn === 'compound_name' ? 'filled' : 'outline'}
+              onClick={() => setSelectedColumn('compound_name')}
+            >
+              compound_name
+            </Button>
+            <Button 
+              variant={selectedColumn === 'identifier' ? 'filled' : 'outline'}
+              onClick={() => setSelectedColumn('identifier')}
+            >
+              identifier
+            </Button>
+            <Button 
+              variant={selectedColumn === 'metabolite_id' ? 'filled' : 'outline'}
+              onClick={() => setSelectedColumn('metabolite_id')}
+            >
+              metabolite_id
+            </Button>
+          </Group>
+          
+          {selectedColumn && (
+            <Text size="sm" c="dimmed">
+              Selected: <strong>{selectedColumn}</strong>
+            </Text>
+          )}
+        </Stack>
       </Card>
 
-      <Group justify="space-between">
-        <Text size="sm" c="dimmed">
-          {selectedColumns.length} column{selectedColumns.length !== 1 ? 's' : ''} selected
-        </Text>
-        <Button 
-          size="lg" 
-          onClick={handleSubmit}
-          disabled={selectedColumns.length === 0}
-        >
-          Next
+      <Group justify="center">
+        <Button size="lg" onClick={handleContinue} disabled={!selectedColumn}>
+          Continue to Mapping Configuration
         </Button>
       </Group>
     </Paper>

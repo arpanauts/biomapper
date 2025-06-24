@@ -37,19 +37,32 @@ export const apiService = {
   },
   
   // Other API methods to be implemented in Prompt 02
-  uploadFile: async (file: File) => {
+  uploadFile: async (_file: File) => {
     throw new Error('Not implemented - see Prompt 02');
   },
   
   getColumns: async (sessionId: string) => {
+    console.log('Mock apiService.getColumns called with sessionId:', sessionId);
+    
+    // Simulate API call delay
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Mock validation
+    if (!sessionId) {
+      throw new Error('Session ID is required');
+    }
+    
+    // Return mock columns data
+    return {
+      columns: ['id', 'name', 'email', 'age', 'city', 'country', 'protein_id', 'gene_symbol', 'expression_level']
+    };
+  },
+  
+  getJobStatus: async (_jobId: string) => {
     throw new Error('Not implemented - see Prompt 02');
   },
   
-  getJobStatus: async (jobId: string) => {
-    throw new Error('Not implemented - see Prompt 02');
-  },
-  
-  getResults: async (jobId: string) => {
+  getResults: async (_jobId: string) => {
     throw new Error('Not implemented - see Prompt 02');
   }
 };
