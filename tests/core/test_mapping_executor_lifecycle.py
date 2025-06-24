@@ -40,7 +40,7 @@ async def mapping_executor():
 async def test_async_dispose(mapping_executor):
     """Test async_dispose delegates to lifecycle coordinator."""
     await mapping_executor.async_dispose()
-    mapping_executor.lifecycle_coordinator.dispose_resources.assert_called_once()
+    mapping_executor.lifecycle_coordinator.async_dispose.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -74,12 +74,15 @@ async def test_start_session(mapping_executor):
     session_id = "test_session"
     metadata = {"user": "test"}
     expected_id = 123
-    mapping_executor.lifecycle_coordinator.start_session.return_value = expected_id
     
     result = await mapping_executor.start_session(session_id, metadata)
     
     assert result == expected_id
-    mapping_executor.lifecycle_coordinator.start_session.assert_called_once_with(session_id, metadata)
+    mapping_executor.lifecycle_coordinator.start_execution.assert_called_once_with(
+        execution_id=session_id,
+        execution_type='mapping',
+        metadata=metadata
+    )
 
 
 @pytest.mark.asyncio
@@ -88,4 +91,8 @@ async def test_end_session(mapping_executor):
     session_id = "test_session"
     
     await mapping_executor.end_session(session_id)
-    mapping_executor.lifecycle_coordinator.end_session.assert_called_once_with(session_id)
+    mapping_executor.lifecycle_coordinator.complete_execution.assert_called_once_with(
+        execution_id=session_id,
+        execution_type='mapping',
+        result_summary=None
+    )
