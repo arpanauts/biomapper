@@ -8,9 +8,9 @@ from biomapper.core.engine_components.session_manager import SessionManager
 class TestSessionManager:
     """Test cases for the SessionManager class."""
     
-    @patch('biomapper.core.engine_components.session_manager.sessionmaker')
+    @patch('biomapper.core.engine_components.session_manager.async_sessionmaker')
     @patch('biomapper.core.engine_components.session_manager.create_async_engine')
-    def test_initialization(self, mock_create_engine, mock_sessionmaker):
+    def test_initialization(self, mock_create_engine, mock_async_sessionmaker):
         """Test SessionManager initialization."""
         # Arrange
         metamapper_url = "sqlite:///test_metamapper.db"
@@ -25,7 +25,7 @@ class TestSessionManager:
         # Create mock session factories
         mock_meta_factory = Mock()
         mock_cache_factory = Mock()
-        mock_sessionmaker.side_effect = [mock_meta_factory, mock_cache_factory]
+        mock_async_sessionmaker.side_effect = [mock_meta_factory, mock_cache_factory]
         
         # Act
         with patch.object(SessionManager, '_ensure_db_directories'):
@@ -47,12 +47,12 @@ class TestSessionManager:
         ]
         mock_create_engine.assert_has_calls(expected_calls)
         
-        # Verify sessionmaker was called twice with correct parameters
+        # Verify async_sessionmaker was called twice with correct parameters
         expected_session_calls = [
             call(mock_meta_engine, class_=AsyncSession, expire_on_commit=False),
             call(mock_cache_engine, class_=AsyncSession, expire_on_commit=False)
         ]
-        mock_sessionmaker.assert_has_calls(expected_session_calls)
+        mock_async_sessionmaker.assert_has_calls(expected_session_calls)
         
         # Verify the engines and factories are set correctly
         assert manager.async_metamapper_engine == mock_meta_engine
@@ -133,14 +133,14 @@ class TestSessionManager:
         # Path should not be called for non-SQLite URLs
         mock_path_class.assert_not_called()
     
-    @patch('biomapper.core.engine_components.session_manager.sessionmaker')
+    @patch('biomapper.core.engine_components.session_manager.async_sessionmaker')
     @patch('biomapper.core.engine_components.session_manager.create_async_engine')
-    def test_get_async_metamapper_session(self, mock_create_engine, mock_sessionmaker):
+    def test_get_async_metamapper_session(self, mock_create_engine, mock_async_sessionmaker):
         """Test get_async_metamapper_session method."""
         # Arrange
         mock_session = Mock(spec=AsyncSession)
         mock_factory = Mock(return_value=mock_session)
-        mock_sessionmaker.return_value = mock_factory
+        mock_async_sessionmaker.return_value = mock_factory
         
         with patch.object(SessionManager, '_ensure_db_directories'):
             manager = SessionManager(
@@ -156,14 +156,14 @@ class TestSessionManager:
         assert result == mock_session
         mock_factory.assert_called_once_with()
     
-    @patch('biomapper.core.engine_components.session_manager.sessionmaker')
+    @patch('biomapper.core.engine_components.session_manager.async_sessionmaker')
     @patch('biomapper.core.engine_components.session_manager.create_async_engine')
-    def test_get_async_cache_session(self, mock_create_engine, mock_sessionmaker):
+    def test_get_async_cache_session(self, mock_create_engine, mock_async_sessionmaker):
         """Test get_async_cache_session method."""
         # Arrange
         mock_session = Mock(spec=AsyncSession)
         mock_factory = Mock(return_value=mock_session)
-        mock_sessionmaker.return_value = mock_factory
+        mock_async_sessionmaker.return_value = mock_factory
         
         with patch.object(SessionManager, '_ensure_db_directories'):
             manager = SessionManager(
@@ -179,13 +179,13 @@ class TestSessionManager:
         assert result == mock_session
         mock_factory.assert_called_once_with()
     
-    @patch('biomapper.core.engine_components.session_manager.sessionmaker')
+    @patch('biomapper.core.engine_components.session_manager.async_sessionmaker')
     @patch('biomapper.core.engine_components.session_manager.create_async_engine')
-    def test_async_metamapper_session_property(self, mock_create_engine, mock_sessionmaker):
+    def test_async_metamapper_session_property(self, mock_create_engine, mock_async_sessionmaker):
         """Test async_metamapper_session compatibility property."""
         # Arrange
         mock_factory = Mock()
-        mock_sessionmaker.return_value = mock_factory
+        mock_async_sessionmaker.return_value = mock_factory
         
         with patch.object(SessionManager, '_ensure_db_directories'):
             manager = SessionManager(
@@ -200,13 +200,13 @@ class TestSessionManager:
         # Assert
         assert result == mock_factory
     
-    @patch('biomapper.core.engine_components.session_manager.sessionmaker')
+    @patch('biomapper.core.engine_components.session_manager.async_sessionmaker')
     @patch('biomapper.core.engine_components.session_manager.create_async_engine')
-    def test_async_cache_session_property(self, mock_create_engine, mock_sessionmaker):
+    def test_async_cache_session_property(self, mock_create_engine, mock_async_sessionmaker):
         """Test async_cache_session compatibility property."""
         # Arrange
         mock_factory = Mock()
-        mock_sessionmaker.return_value = mock_factory
+        mock_async_sessionmaker.return_value = mock_factory
         
         with patch.object(SessionManager, '_ensure_db_directories'):
             manager = SessionManager(
