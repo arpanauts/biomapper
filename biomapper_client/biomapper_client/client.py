@@ -77,7 +77,7 @@ class BiomapperClient:
         try:
             response = await self.client.post(
                 url,
-                json=context,
+                json={"context": context},
                 headers={"Content-Type": "application/json"}
             )
             

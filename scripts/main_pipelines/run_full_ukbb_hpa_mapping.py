@@ -1,279 +1,95 @@
 #!/usr/bin/env python
 """
-Full UKBB to HPA Protein Mapping Script
+Executes the UKBB-HPA protein overlap analysis pipeline via the Biomapper API.
 
-This script processes a full UKBB protein dataset through a
-mapping strategy (e.g., UKBB_TO_HPA_BIDIRECTIONAL_EFFICIENT) using the MappingExecutor
-with robust execution features.
+This script serves as a modern client for the Biomapper service. It uses the
+`biomapper-client` SDK to connect to the running API and trigger the execution
+of a predefined YAML strategy.
 
-Key features of the typical mapping process:
-- Direct UniProt matching
-- Historical UniProt ID resolution for comprehensive coverage
-- Context-based tracking of matched/unmatched identifiers
-- Composite identifier handling
-
-Enhanced script features:
-- Checkpointing for resumable execution
-- Retry logic for external API calls
-- Progress tracking and reporting
-- Batch processing with configurable sizes
+This approach replaces the old, monolithic script, decoupling the client
+from the core mapping logic and promoting a more robust, scalable, and
+maintainable service-oriented architecture.
 
 Usage:
-    1. Ensure metamapper.db is populated: python scripts/setup_and_configuration/populate_metamapper_db.py
-    2. Ensure the biomapper Poetry environment is active
-    3. Run: python scripts/main_pipelines/run_full_ukbb_hpa_mapping.py [options]
-    
-Options:
-    --checkpoint: Enable checkpoint saving (default: True)
-    --batch-size N: Number of identifiers per batch (default: 250)
-    --max-retries N: Maximum retries per operation (default: 3)
-    --no-progress: Disable progress reporting
-    
-The script will automatically:
-- Utilize a strategy to load UKBB protein data (UniProt IDs)
-- Execute the specified mapping strategy with robust features
-- Save comprehensive results to /home/ubuntu/biomapper/data/results/
+    1. Ensure the biomapper-api service is running.
+    2. Ensure the `biomapper_client` package is installed in the environment.
+       (e.g., `pip install -e biomapper_client` from the project root)
+    3. Run the script:
+       python scripts/main_pipelines/run_full_ukbb_hpa_mapping.py
 """
-
 import asyncio
 import logging
-import os
-import sys
-from pathlib import Path
-from typing import Dict, Any
-from datetime import datetime
+from pprint import pprint
 
-# Add project root to sys.path for module resolution
-BIOMAPPER_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(BIOMAPPER_ROOT))
-
-from biomapper.core.engine_components.mapping_executor_initializer import MappingExecutorInitializer
-from biomapper.config import settings
-
-# Configure logging
-log_dir = BIOMAPPER_ROOT / "logs"
-log_dir.mkdir(exist_ok=True)
-log_file_name = f"ukbb_hpa_pipeline_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-log_file_path = log_dir / log_file_name
-
-# Get the root logger and configure it directly for more robustness
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO) # Ensure level is set on the root logger
-
-# Remove any existing handlers from the root logger
-for handler in root_logger.handlers[:]:
-    root_logger.removeHandler(handler)
-    handler.close() # Close the handler to release resources
-
-# Define a common formatter
-log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-# Add a StreamHandler for console output
-stream_handler = logging.StreamHandler(sys.stdout)
-stream_handler.setFormatter(log_formatter)
-root_logger.addHandler(stream_handler)
-
-# Add a FileHandler for file output
+# It's assumed the biomapper_client package is installed in the environment.
+# If not, you might need to adjust sys.path or install it.
 try:
-    file_handler = logging.FileHandler(log_file_path)
-    file_handler.setFormatter(log_formatter)
-    root_logger.addHandler(file_handler)
-except Exception as e:
-    # If FileHandler fails, print to stderr and continue with StreamHandler only
-    print(f"Critical: Failed to initialize file logger at {log_file_path}: {e}", file=sys.stderr)
+    from biomapper_client import BiomapperClient, ApiError, NetworkError
+except ImportError:
+    print("Error: The 'biomapper-client' package is not installed.")
+    print("Please install it by running 'pip install -e biomapper_client' from the project root.")
+    exit(1)
+
+# Configure basic logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-logger = logging.getLogger(__name__) # Get a logger for this module (will use root config)
-logger.info(f"Logging initialized. Log file: {log_file_path}") # Test message
-
-# ============================================================================
-# CONFIGURATION VARIABLES
-# ============================================================================
-
-# The directory where results and summaries will be saved.
-# This is passed dynamically to the strategy.
-OUTPUT_RESULTS_DIR = "/home/ubuntu/biomapper/data/results/"
-
-# Checkpoint directory for robust execution
-CHECKPOINT_DIR = "/home/ubuntu/biomapper/data/checkpoints"
-
-# The name of the self-contained YAML strategy to execute.
-STRATEGY_NAME = "UKBB_TO_HPA_BIDIRECTIONAL_EFFICIENT"
-
-# ============================================================================
-# MAIN MAPPING FUNCTION
-# ============================================================================
-
-
-async def run_full_mapping(checkpoint_enabled: bool = True, batch_size: int = 250, max_retries: int = 3, enable_progress: bool = True):
+async def main():
     """
-    Main function to execute the full UKBB to HPA protein mapping using an enhanced strategy.
-    
-    Args:
-        checkpoint_enabled: Enable checkpoint saving for resumable execution
-        batch_size: Number of identifiers per batch for processing
-        max_retries: Maximum retry attempts for failed operations
-        enable_progress: Enable progress reporting callbacks
+    Main function to connect to the Biomapper API and execute the overlap analysis strategy.
     """
-    start_time = datetime.now()
-    execution_id = f"ukbb_hpa_bidirectional_{start_time.strftime('%Y%m%d_%H%M%S')}"
-    
-    logger.info(f"Starting ENHANCED BIDIRECTIONAL UKBB to HPA protein mapping at {start_time}")
-    logger.info("=" * 80)
-    logger.info(f"Executing strategy: {STRATEGY_NAME}")
-    logger.info("This script orchestrates a strategy that handles all logic internally:")
-    logger.info("- Loading initial identifiers")
-    logger.info("- Executing forward and reverse mapping paths")
-    logger.info("- Reconciling bidirectional results")
-    logger.info("- Saving results to CSV and a JSON summary")
-    logger.info("")
-    logger.info("Script features:")
-    logger.info(f"- Checkpointing: {'Enabled' if checkpoint_enabled else 'Disabled'}")
-    logger.info(f"- Batch size: {batch_size}")
-    logger.info(f"- Max retries: {max_retries}")
-    logger.info(f"- Progress tracking: {'Enabled' if enable_progress else 'Disabled'}")
-    logger.info(f"- Execution ID: {execution_id}")
-    logger.info("=" * 80)
-    
-    # Ensure output directory exists
-    os.makedirs(OUTPUT_RESULTS_DIR, exist_ok=True)
-    logger.info(f"Output will be saved in: {OUTPUT_RESULTS_DIR}")
-    
-    # Set environment variables for the strategy actions to use
-    os.environ['STRATEGY_OUTPUT_DIRECTORY'] = OUTPUT_RESULTS_DIR
-    os.environ['EXECUTION_ID'] = execution_id
-    os.environ['STRATEGY_NAME'] = STRATEGY_NAME
-    os.environ['START_TIME'] = start_time.isoformat()
-    logger.info(f"Set STRATEGY_OUTPUT_DIRECTORY for actions: {OUTPUT_RESULTS_DIR}")
+    # The API client, configured to connect to the default local service.
+    # The base_url can be changed to target a remote API instance.
+    client = BiomapperClient(base_url="http://localhost:8000")
 
-    executor = None
+    # Define the initial data context for the strategy.
+    # This provides the two lists of protein IDs to be analyzed.
+    initial_context = {
+        "ukbb_protein_ids": [
+            "P12345",  # Overlapping
+            "Q67890",  # Overlapping
+            "P98765",  # Unique to UKBB
+            "Q11111",  # Unique to UKBB
+            "P22222",  # Overlapping
+        ],
+        "hpa_protein_ids": [
+            "P12345",  # Overlapping
+            "Q67890",  # Overlapping
+            "P33333",  # Unique to HPA
+            "Q44444",  # Unique to HPA
+            "P22222",  # Overlapping
+            "P55555",  # Unique to HPA
+        ]
+    }
+
+    strategy_name = "UKBB_HPA_PROTEIN_OVERLAP_ANALYSIS"
+    logging.info(f"Executing strategy: '{strategy_name}' via the API...")
+
     try:
-        # Initialize MappingExecutor with robust features using MappingExecutorInitializer
-        logger.info("Initializing MappingExecutor...")
-        initializer = MappingExecutorInitializer(
-            metamapper_db_url=settings.metamapper_db_url,
-            mapping_cache_db_url=settings.cache_db_url,
-            echo_sql=False,
-            enable_metrics=True,
-            checkpoint_enabled=checkpoint_enabled,
-            checkpoint_dir=CHECKPOINT_DIR,
-            batch_size=batch_size,
-            max_retries=max_retries,
-            retry_delay=2
-        )
-        executor = await initializer.create_executor()
-        logger.info("MappingExecutor created successfully.")
-        
-        # Add progress tracking if enabled
-        if enable_progress:
-            def progress_callback(progress_data: Dict[str, Any]):
-                """Handle progress updates from the executor."""
-                if progress_data.get('type') == 'batch_complete':
-                    logger.info(
-                        f"Progress: {progress_data.get('total_processed', 0)}/"
-                        f"{progress_data.get('total_count', 0)} "
-                        f"({progress_data.get('progress_percent', 0):.1f}%) - "
-                        f"{progress_data.get('processor', 'N/A')}"
-                    )
-            
-            executor.add_progress_callback(progress_callback)
-            logger.info("Progress tracking enabled.")
-        
-        # The strategy is self-contained and loads its own identifiers.
-        # We just need to provide the output directory via the context.
-        initial_context = {
-            "output_dir": OUTPUT_RESULTS_DIR
-        }
+        # Use the client to execute the strategy. This sends a request to the API,
+        # which then runs the full workflow defined in the corresponding YAML file.
+        async with client:
+            final_context = await client.execute_strategy(
+                strategy_name=strategy_name,
+                context=initial_context
+            )
 
-        logger.info(f"Executing YAML strategy: '{STRATEGY_NAME}'")
-        logger.info(f"Results will be saved in: {OUTPUT_RESULTS_DIR}")
-        logger.info("This may take some time for large datasets...")
+        logging.info("Strategy execution complete. Final results:")
         
-        result = await executor.execute_yaml_strategy(
-            strategy_name=STRATEGY_NAME,
-            initial_context=initial_context,
-            execution_id=execution_id,
-            resume_from_checkpoint=checkpoint_enabled
-        )
-        
-        logger.info("Strategy execution completed.")
-        
-        # The SaveBidirectionalResultsAction handles all result saving and summary logging.
-        # We just confirm that the output files were created.
-        context = result.get('context', {})
-        csv_path = context.get('saved_csv_path')
-        json_path = context.get('saved_json_path')
-        
-        if csv_path and json_path:
-            logger.info("Successfully saved results to:")
-            logger.info(f"  - CSV: {csv_path}")
-            logger.info(f"  - JSON: {json_path}")
-        else:
-            logger.warning("Could not confirm that output files were saved. Check logs for details.")
+        # Pretty-print the final context returned from the API.
+        # The structure of this dictionary depends on the actions in the strategy.
+        pprint(final_context)
 
-        logger.info("=" * 80)
-        logger.info("Refactored script finished successfully.")
-        logger.info("All logic is now encapsulated within modular strategy actions.")
-        logger.info("=" * 80)
-
+    except ApiError as e:
+        logging.error(f"API Error: The server returned an error (Status: {e.status_code}).")
+        logging.error(f"Response: {e.response_body}")
+    except NetworkError as e:
+        logging.error(f"Network Error: Could not connect to the Biomapper API at {client.base_url}.")
+        logging.error(f"Please ensure the API service is running. Details: {e}")
     except Exception as e:
-        logger.error(f"An error occurred during the mapping process: {e}", exc_info=True)
-        raise
-    finally:
-        if executor:
-            logger.info("Disposing MappingExecutor...")
-            await executor.async_dispose()
-            logger.info("MappingExecutor disposed.")
+        logging.error(f"An unexpected error occurred: {e}", exc_info=True)
 
-
-# ============================================================================
-# MAIN EXECUTION
-# ============================================================================
 
 if __name__ == "__main__":
-    import argparse
-    
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(
-        description="Enhanced UKBB to HPA mapping with robust execution"
-    )
-    parser.add_argument(
-        "--no-checkpoint", 
-        action="store_true", 
-        help="Disable checkpoint saving"
-    )
-    parser.add_argument(
-        "--batch-size", 
-        type=int, 
-        default=250, 
-        help="Number of identifiers per batch (default: 250)"
-    )
-    parser.add_argument(
-        "--max-retries", 
-        type=int, 
-        default=3, 
-        help="Maximum retry attempts for failed operations (default: 3)"
-    )
-    parser.add_argument(
-        "--no-progress", 
-        action="store_true", 
-        help="Disable progress reporting"
-    )
-    
-    args = parser.parse_args()
-    
-    try:
-        # Run the main async function with parsed arguments
-        asyncio.run(run_full_mapping(
-            checkpoint_enabled=not args.no_checkpoint,
-            batch_size=args.batch_size,
-            max_retries=args.max_retries,
-            enable_progress=not args.no_progress
-        ))
-        logger.info("Script completed successfully")
-    except KeyboardInterrupt:
-        logger.warning("Script interrupted by user")
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"Script failed with error: {e}")
-        sys.exit(1)
+    # Run the asynchronous main function.
+    asyncio.run(main())

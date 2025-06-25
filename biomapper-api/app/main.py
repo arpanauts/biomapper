@@ -41,9 +41,36 @@ app.include_router(strategies.router)
 @app.on_event("startup")
 async def startup_event():
     """Initializes the mapper service on application startup."""
+    import traceback
+    import sys
+    
     logger.info("API starting up...")
-    app.state.mapper_service = MapperService()
-    logger.info("MapperService initialized successfully")
+    
+    try:
+        # Add detailed logging before initialization
+        logger.info("Attempting to initialize MapperService...")
+        print("DEBUG: About to create MapperService instance", flush=True)
+        
+        app.state.mapper_service = MapperService()
+        
+        logger.info("MapperService initialized successfully")
+        print("DEBUG: MapperService created successfully", flush=True)
+        
+    except Exception as e:
+        # Log the full exception details
+        error_msg = f"Failed to initialize MapperService: {type(e).__name__}: {str(e)}"
+        logger.error(error_msg)
+        print(f"CRITICAL ERROR: {error_msg}", flush=True)
+        
+        # Print the full traceback to console
+        traceback.print_exc()
+        
+        # Log the traceback
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+        
+        # Exit with error code to make the failure visible
+        print("EXITING DUE TO STARTUP FAILURE", flush=True)
+        sys.exit(1)
 
 
 # Global exception handler
@@ -65,7 +92,3 @@ async def root():
     return {"message": "Welcome to Biomapper API. Visit /api/docs for documentation."}
 
 
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

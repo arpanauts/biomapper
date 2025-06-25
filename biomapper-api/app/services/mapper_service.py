@@ -2,16 +2,23 @@
 Service for mapping operations with Biomapper.
 """
 import asyncio
+import logging
 import os
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 import pandas as pd
+import yaml
 from fastapi import HTTPException, status
+from pydantic import ValidationError
 from biomapper import load_tabular_file
 
-# Mock implementation for testing
-# from biomapper import MetaboliteNameMapper
+from biomapper.core.mapping_executor import MappingExecutor
+from biomapper.core.models.strategy import Strategy
+from app.core.config import settings
+from app.core.session import Session
+from app.models.job import Job
+from app.models.mapping import MappingStatus, MappingResult
 
 # Import the RelationshipMappingExecutor for endpoint-to-endpoint mapping
 try:
@@ -34,49 +41,32 @@ except ImportError:
                 }
             ]
 
-
-# This is a placeholder for testing the UI without the full biomapper package
-class MockMetaboliteNameMapper:
-    """Mock mapper for testing the UI without the biomapper package."""
-
-    def __init__(self):
-        pass
-
-    def map_single_name(self, name, **kwargs):
-        """Return mock mapping results for testing."""
-        return {
-            "query": name,
-            "matches": [
-                {"id": "CHEBI:12345", "name": name, "score": 0.95},
-                {"id": "HMDB:54321", "name": f"{name} derivative", "score": 0.85},
-            ],
-            "source": "mock_mapper",
-        }
-
-    def map_dataframe(self, df, id_col, **kwargs):
-        """Return mock dataframe mapping results."""
-        results = []
-        for name in df[id_col]:
-            results.append(self.map_single_name(name))
-        return results
-
-
-from app.core.config import settings
-from app.core.session import Session
-from app.models.job import Job
-from app.models.mapping import MappingStatus, MappingResult
+logger = logging.getLogger(__name__)
 
 
 class MapperService:
     """Service for mapping operations with Biomapper."""
 
     def __init__(self):
+        print("DEBUG: MapperService.__init__ starting", flush=True)
+        logger.info("Initializing MapperService...")
+        
         # Store jobs in memory (in production would use a persistent store)
         self.jobs: Dict[str, Job] = {}
+        print("DEBUG: Jobs dictionary created", flush=True)
+        
         # Initialize the mock mapper instance
-        self.mapper = MockMetaboliteNameMapper()
+        print("DEBUG: About to create MapperServiceForStrategies instance", flush=True)
+        try:
+            self.mapper_service = MapperServiceForStrategies()
+            print("DEBUG: MapperServiceForStrategies created successfully", flush=True)
+        except Exception as e:
+            print(f"DEBUG: Failed to create MapperServiceForStrategies: {type(e).__name__}: {str(e)}", flush=True)
+            raise
+        
         # Initialize the relationship mapping executor
         self.relationship_executor = None
+        print("DEBUG: MapperService.__init__ completed", flush=True)
 
     async def create_job(
         self,
@@ -196,8 +186,8 @@ class MapperService:
                         # For each target ontology, generate a mapping
                         result = {}
                         for ontology in target_ontologies:
-                            mapping_result = self.mapper.map_single_name(
-                                value, target_type=ontology
+                            mapping_result = await self.mapper_service.execute_strategy(
+                                "composite_id_split", {"value": value, "ontology": ontology}
                             )
                             if mapping_result:
                                 result[ontology] = mapping_result
@@ -451,27 +441,130 @@ class MapperService:
             KeyError: If the strategy is not found.
             Exception: If the strategy execution fails.
         """
-        # Mock implementation for now
-        # In the future, this will integrate with the actual strategy registry
-        mock_strategies = {
-            "composite_id_split": {
-                "description": "Split composite IDs into individual components",
-                "status": "success",
-                "data": {"split_count": 5, "components": ["id1", "id2", "id3"]},
-            },
-            "dataset_overlap": {
-                "description": "Analyze dataset overlap",
-                "status": "success",
-                "data": {"overlap_percentage": 75.5, "common_items": 150},
-            },
-        }
+        return await self.mapper_service.execute_strategy(strategy_name, context)
+
+
+class MapperServiceForStrategies:
+    """Service for loading and executing mapping strategies."""
+
+    def __init__(self):
+        """
+        Initializes the service by loading all available strategies from the configured directory.
+        """
+        print("DEBUG: MapperServiceForStrategies.__init__ starting", flush=True)
+        logger.info("Initializing MapperServiceForStrategies...")
         
-        if strategy_name not in mock_strategies:
-            raise KeyError(f"Strategy '{strategy_name}' not found")
+        try:
+            print("DEBUG: About to load strategies", flush=True)
+            self.strategies: Dict[str, Strategy] = self._load_strategies()
+            print(f"DEBUG: Loaded {len(self.strategies)} strategies", flush=True)
+        except Exception as e:
+            print(f"DEBUG: Failed to load strategies: {type(e).__name__}: {str(e)}", flush=True)
+            logger.error(f"Failed to load strategies: {type(e).__name__}: {str(e)}")
+            raise
+        
+        # Note: We'll use a simple mock executor for now since MappingExecutor 
+        # doesn't have the simple execute interface expected here
+        self.executor = None
+        print("DEBUG: MapperServiceForStrategies.__init__ completed", flush=True)
+
+    def _load_strategies(self) -> Dict[str, Strategy]:
+        """
+        Scans the strategies directory, loads each YAML file, and validates it against the Strategy model.
+
+        Returns:
+            A dictionary mapping strategy names to Strategy objects.
+        """
+        strategies: Dict[str, Strategy] = {}
+        
+        print(f"DEBUG: Attempting to get strategies directory from settings", flush=True)
+        try:
+            strategies_dir = Path(settings.STRATEGIES_DIR)
+            print(f"DEBUG: Strategies directory path: {strategies_dir}", flush=True)
+        except Exception as e:
+            print(f"DEBUG: Failed to get strategies directory: {type(e).__name__}: {str(e)}", flush=True)
+            raise
+
+        if not strategies_dir.is_dir():
+            logger.warning(f"Strategies directory not found: {strategies_dir}")
+            print(f"DEBUG: Strategies directory not found: {strategies_dir}", flush=True)
+            return strategies
+
+        logger.info(f"Loading strategies from: {strategies_dir}")
+        print(f"DEBUG: Starting to load strategies from: {strategies_dir}", flush=True)
+        yaml_files = list(strategies_dir.glob("*.yaml"))
+        print(f"DEBUG: Found {len(yaml_files)} YAML files", flush=True)
+        
+        for file_path in yaml_files:
+            print(f"DEBUG: Processing file: {file_path.name}", flush=True)
+            try:
+                with open(file_path, 'r') as f:
+                    print(f"DEBUG: Reading file content from {file_path.name}", flush=True)
+                    strategy_data = yaml.safe_load(f)
+                    if not strategy_data:
+                        logger.warning(f"Skipping empty YAML file: {file_path.name}")
+                        print(f"DEBUG: Skipping empty YAML file: {file_path.name}", flush=True)
+                        continue
+                    
+                    print(f"DEBUG: Creating Strategy object for {file_path.name}", flush=True)
+                    strategy = Strategy(**strategy_data)
+                    if strategy.name in strategies:
+                        logger.warning(f"Duplicate strategy name '{strategy.name}' found in {file_path.name}. Overwriting.")
+                        print(f"DEBUG: Duplicate strategy name '{strategy.name}' found in {file_path.name}", flush=True)
+                    strategies[strategy.name] = strategy
+                    logger.info(f"Successfully loaded strategy: '{strategy.name}' from {file_path.name}")
+                    print(f"DEBUG: Successfully loaded strategy: '{strategy.name}' from {file_path.name}", flush=True)
+            except yaml.YAMLError as e:
+                logger.error(f"Error parsing YAML file {file_path.name}: {e}")
+            except ValidationError as e:
+                logger.error(f"Invalid strategy format in {file_path.name}: {e}")
+            except Exception as e:
+                logger.error(f"Unexpected error loading strategy from {file_path.name}: {e}")
+
+        if not strategies:
+            logger.warning("No strategies were loaded.")
+        
+        return strategies
+
+    async def execute_strategy(self, strategy_name: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Executes a named strategy with the given context.
+
+        Args:
+            strategy_name: The name of the strategy to execute.
+            context: The initial context dictionary for the strategy.
+
+        Returns:
+            The final context dictionary after execution.
+
+        Raises:
+            HTTPException: If the strategy is not found or if execution fails.
+        """
+        strategy = self.strategies.get(strategy_name)
+        if not strategy:
+            logger.warning(f"Attempted to execute non-existent strategy: '{strategy_name}'")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Strategy '{strategy_name}' not found. Available strategies: {list(self.strategies.keys())}"
+            )
+
+        try:
+            logger.info(f"Executing strategy '{strategy_name}'...")
             
-        # Simulate processing with context
-        result = mock_strategies[strategy_name].copy()
-        result["context"] = context
-        result["executed_at"] = pd.Timestamp.now().isoformat()
-        
-        return result
+            # For now, return a mock result since we don't have a simple executor
+            # that matches the expected interface
+            result = {
+                "strategy": strategy_name,
+                "status": "completed",
+                "message": f"Mock execution of strategy '{strategy_name}' completed",
+                **context
+            }
+            
+            logger.info(f"Successfully executed strategy '{strategy_name}'.")
+            return result
+        except Exception as e:
+            logger.exception(f"An error occurred during execution of strategy '{strategy_name}': {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An internal error occurred while executing the strategy: {e}",
+            )
