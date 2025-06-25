@@ -41,36 +41,13 @@ app.include_router(strategies.router)
 @app.on_event("startup")
 async def startup_event():
     """Initializes the mapper service on application startup."""
-    import traceback
-    import sys
-    
     logger.info("API starting up...")
-    
     try:
-        # Add detailed logging before initialization
-        logger.info("Attempting to initialize MapperService...")
-        print("DEBUG: About to create MapperService instance", flush=True)
-        
         app.state.mapper_service = MapperService()
-        
-        logger.info("MapperService initialized successfully")
-        print("DEBUG: MapperService created successfully", flush=True)
-        
+        logger.info("MapperService initialized successfully.")
     except Exception as e:
-        # Log the full exception details
-        error_msg = f"Failed to initialize MapperService: {type(e).__name__}: {str(e)}"
-        logger.error(error_msg)
-        print(f"CRITICAL ERROR: {error_msg}", flush=True)
-        
-        # Print the full traceback to console
-        traceback.print_exc()
-        
-        # Log the traceback
-        logger.error(f"Full traceback:\n{traceback.format_exc()}")
-        
-        # Exit with error code to make the failure visible
-        print("EXITING DUE TO STARTUP FAILURE", flush=True)
-        sys.exit(1)
+        logger.critical(f"Failed to initialize MapperService during startup: {e}", exc_info=True)
+        raise
 
 
 # Global exception handler

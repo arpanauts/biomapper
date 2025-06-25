@@ -48,25 +48,21 @@ class MapperService:
     """Service for mapping operations with Biomapper."""
 
     def __init__(self):
-        print("DEBUG: MapperService.__init__ starting", flush=True)
         logger.info("Initializing MapperService...")
-        
+
         # Store jobs in memory (in production would use a persistent store)
         self.jobs: Dict[str, Job] = {}
-        print("DEBUG: Jobs dictionary created", flush=True)
-        
+
         # Initialize the mock mapper instance
-        print("DEBUG: About to create MapperServiceForStrategies instance", flush=True)
         try:
             self.mapper_service = MapperServiceForStrategies()
-            print("DEBUG: MapperServiceForStrategies created successfully", flush=True)
         except Exception as e:
-            print(f"DEBUG: Failed to create MapperServiceForStrategies: {type(e).__name__}: {str(e)}", flush=True)
+            logger.error(f"Failed to create MapperServiceForStrategies: {e}", exc_info=True)
             raise
-        
+
         # Initialize the relationship mapping executor
         self.relationship_executor = None
-        print("DEBUG: MapperService.__init__ completed", flush=True)
+        logger.info("MapperService initialized.")
 
     async def create_job(
         self,
@@ -475,55 +471,38 @@ class MapperServiceForStrategies:
         Returns:
             A dictionary mapping strategy names to Strategy objects.
         """
-        strategies: Dict[str, Strategy] = {}
-        
-        print(f"DEBUG: Attempting to get strategies directory from settings", flush=True)
-        try:
-            strategies_dir = Path(settings.STRATEGIES_DIR)
-            print(f"DEBUG: Strategies directory path: {strategies_dir}", flush=True)
-        except Exception as e:
-            print(f"DEBUG: Failed to get strategies directory: {type(e).__name__}: {str(e)}", flush=True)
-            raise
+        strategies = {}
+        strategies_dir = settings.STRATEGIES_DIR
 
-        if not strategies_dir.is_dir():
+        if not strategies_dir.exists():
             logger.warning(f"Strategies directory not found: {strategies_dir}")
-            print(f"DEBUG: Strategies directory not found: {strategies_dir}", flush=True)
             return strategies
 
         logger.info(f"Loading strategies from: {strategies_dir}")
-        print(f"DEBUG: Starting to load strategies from: {strategies_dir}", flush=True)
-        yaml_files = list(strategies_dir.glob("*.yaml"))
-        print(f"DEBUG: Found {len(yaml_files)} YAML files", flush=True)
-        
-        for file_path in yaml_files:
-            print(f"DEBUG: Processing file: {file_path.name}", flush=True)
+
+        for file_path in strategies_dir.glob("*.yaml"):
             try:
                 with open(file_path, 'r') as f:
-                    print(f"DEBUG: Reading file content from {file_path.name}", flush=True)
                     strategy_data = yaml.safe_load(f)
                     if not strategy_data:
                         logger.warning(f"Skipping empty YAML file: {file_path.name}")
-                        print(f"DEBUG: Skipping empty YAML file: {file_path.name}", flush=True)
                         continue
-                    
-                    print(f"DEBUG: Creating Strategy object for {file_path.name}", flush=True)
+
                     strategy = Strategy(**strategy_data)
                     if strategy.name in strategies:
                         logger.warning(f"Duplicate strategy name '{strategy.name}' found in {file_path.name}. Overwriting.")
-                        print(f"DEBUG: Duplicate strategy name '{strategy.name}' found in {file_path.name}", flush=True)
                     strategies[strategy.name] = strategy
                     logger.info(f"Successfully loaded strategy: '{strategy.name}' from {file_path.name}")
-                    print(f"DEBUG: Successfully loaded strategy: '{strategy.name}' from {file_path.name}", flush=True)
             except yaml.YAMLError as e:
                 logger.error(f"Error parsing YAML file {file_path.name}: {e}")
             except ValidationError as e:
                 logger.error(f"Invalid strategy format in {file_path.name}: {e}")
             except Exception as e:
-                logger.error(f"Unexpected error loading strategy from {file_path.name}: {e}")
+                logger.error(f"Unexpected error loading strategy from {file_path.name}: {e}", exc_info=True)
 
         if not strategies:
             logger.warning("No strategies were loaded.")
-        
+
         return strategies
 
     async def execute_strategy(self, strategy_name: str, context: Dict[str, Any]) -> Dict[str, Any]:
