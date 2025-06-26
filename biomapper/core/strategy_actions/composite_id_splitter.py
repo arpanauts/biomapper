@@ -22,13 +22,64 @@ class CompositeIdSplitter(BaseStrategyAction):
     """
     Splits composite protein identifiers into individual components.
     
+    This action is essential for handling composite identifiers in bioinformatics datasets,
+    particularly from sources like UKBB that concatenate multiple protein IDs using delimiters.
+    It preserves unique identifiers, tracks provenance, and optionally maintains lineage mapping.
+    
     Required parameters:
     - input_context_key: Key in context to read identifiers from
     - output_context_key: Key in context to store split identifiers
-    - delimiter: Character(s) to split on (default: '_')
     
     Optional parameters:
+    - delimiter: Character(s) to split on (default: '_')
     - track_metadata_lineage: Store mapping from composite to split IDs (default: False)
+    
+    Example YAML configuration:
+    ```yaml
+    strategies:
+      - name: ukbb_protein_splitter
+        actions:
+          - action_type: COMPOSITE_ID_SPLITTER
+            params:
+              input_context_key: ukbb_protein_ids
+              output_context_key: split_protein_ids
+              delimiter: "_"
+              track_metadata_lineage: true
+    ```
+    
+    Example usage in a larger pipeline:
+    ```yaml
+    strategies:
+      - name: ukbb_to_hpa_mapping
+        actions:
+          # Load UKBB identifiers
+          - action_type: LOAD_ENDPOINT_IDENTIFIERS
+            params:
+              endpoint_name: ukbb_proteins
+              context_key: ukbb_protein_ids
+          
+          # Split composite IDs
+          - action_type: COMPOSITE_ID_SPLITTER
+            params:
+              input_context_key: ukbb_protein_ids
+              output_context_key: split_protein_ids
+              delimiter: "_"
+              track_metadata_lineage: true
+          
+          # Convert to target type
+          - action_type: CONVERT_IDENTIFIERS_LOCAL
+            params:
+              input_context_key: split_protein_ids
+              output_context_key: converted_ids
+              target_ontology_type: HPA_GENE
+    ```
+    
+    Notes:
+    - Removes duplicates automatically (uses set internally)
+    - Handles None values gracefully by skipping them
+    - Preserves empty strings and whitespace
+    - Supports multi-character delimiters
+    - Lineage mapping stored at {output_context_key}_lineage when enabled
     """
     
     def __init__(self, session: AsyncSession):
@@ -85,26 +136,34 @@ class CompositeIdSplitter(BaseStrategyAction):
         provenance = []
         
         for identifier in identifiers:
-            if delimiter in identifier:
+            # Skip None values
+            if identifier is None:
+                self.logger.debug("Skipping None identifier")
+                continue
+                
+            # Convert to string to handle any non-string types
+            identifier_str = str(identifier)
+            
+            if delimiter in identifier_str:
                 # Split the composite ID
-                components = identifier.split(delimiter)
+                components = identifier_str.split(delimiter)
                 split_identifiers.update(components)
                 
                 if track_lineage:
-                    lineage_map[identifier] = components
+                    lineage_map[identifier_str] = components
                     
                 # Track provenance
                 provenance.append({
                     'action': 'composite_split',
-                    'input': identifier,
+                    'input': identifier_str,
                     'output': components,
                     'delimiter': delimiter
                 })
                 
-                self.logger.debug(f"Split '{identifier}' into {len(components)} components")
+                self.logger.debug(f"Split '{identifier_str}' into {len(components)} components")
             else:
                 # Keep non-composite IDs as-is
-                split_identifiers.add(identifier)
+                split_identifiers.add(identifier_str)
                 
         # Convert back to list
         output_identifiers = list(split_identifiers)
