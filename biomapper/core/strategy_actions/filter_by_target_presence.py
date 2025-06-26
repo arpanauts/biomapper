@@ -13,8 +13,51 @@ from biomapper.db.models import Endpoint
 @register_action("FILTER_IDENTIFIERS_BY_TARGET_PRESENCE")
 class FilterByTargetPresenceAction(StrategyAction):
     """
-    Filter a list of identifiers, retaining only those that are
-    present in the target endpoint's data.
+    Filter a list of identifiers, retaining only those that are present in the target endpoint's data.
+    
+    This action performs dataset filtering by checking if identifiers from the current list exist
+    in a specified column of the target endpoint. It's particularly useful for:
+    - Filtering source identifiers to only those that have corresponding entries in the target
+    - Reducing dataset size before expensive mapping operations
+    - Ensuring only relevant identifiers proceed through the pipeline
+    
+    Key Features:
+    - Supports direct filtering when identifiers are of the same type
+    - Supports conversion before filtering using mapping paths
+    - Optimized for large datasets with selective column loading
+    - Provides detailed provenance tracking for both passed and filtered identifiers
+    
+    Required Parameters:
+        endpoint_context (str): Must be "TARGET" (source filtering not yet implemented)
+        ontology_type_to_match (str): The ontology type to check in the target endpoint
+        
+    Optional Parameters:
+        conversion_path_to_match_ontology (str): Path name to convert identifiers before checking
+                                                 Used when current identifiers need to be converted
+                                                 to match the target's ontology type
+    
+    Returns:
+        Dict containing:
+        - input_identifiers: Original list of identifiers
+        - output_identifiers: Filtered list (only those present in target)
+        - output_ontology_type: Same as input (filtering doesn't change type)
+        - provenance: Detailed record of filtering decisions
+        - details: Summary statistics
+    
+    Example YAML Configuration:
+        ```yaml
+        - action_type: FILTER_IDENTIFIERS_BY_TARGET_PRESENCE
+          params:
+            endpoint_context: TARGET
+            ontology_type_to_match: PROTEIN_UNIPROT
+            # Optional: Convert identifiers before checking
+            # conversion_path_to_match_ontology: gene_to_protein
+        ```
+    
+    Performance Notes:
+    - Uses set-based lookups for O(1) checking per identifier
+    - Loads only the required column from target endpoint
+    - Efficient for filtering large identifier lists
     """
     
     def __init__(self, session: AsyncSession):
