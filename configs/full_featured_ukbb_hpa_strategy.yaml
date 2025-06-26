@@ -1,0 +1,205 @@
+# Full-Featured UKBB-HPA Mapping Strategy
+# This strategy replicates the complete functionality of the legacy UKBB_TO_HPA_PROTEIN_PIPELINE
+# with modern enhancements for bidirectional mapping and comprehensive reporting
+
+name: UKBB_HPA_FULL_PIPELINE
+description: "Complete bidirectional mapping pipeline between UKBB protein assays and HPA protein data with API resolution, filtering, and detailed reporting"
+
+# Parameters that can be customized when running the strategy
+parameters:
+  - name: "OUTPUT_DIR"
+    description: "Directory where results will be saved"
+    required: false
+    default: "./results"
+  - name: "ENABLE_VISUALIZATION"
+    description: "Whether to generate visualization of mapping flow"
+    required: false
+    default: true
+  - name: "INCLUDE_UNMATCHED"
+    description: "Whether to include unmatched identifiers in results"
+    required: false
+    default: true
+
+steps:
+  # Step 1: Load source identifiers from UKBB
+  - name: "LOAD_SOURCE_IDENTIFIERS"
+    description: "Load UKBB protein assay identifiers from the source endpoint"
+    action:
+      type: "LOAD_IDENTIFIERS_FROM_ENDPOINT"
+      params:
+        endpoint_context: "SOURCE"
+        output_context_key: "ukbb_native_ids"
+
+  # Step 2: Load target identifiers from HPA
+  - name: "LOAD_TARGET_IDENTIFIERS"
+    description: "Load HPA protein identifiers from the target endpoint"
+    action:
+      type: "LOAD_IDENTIFIERS_FROM_ENDPOINT"
+      params:
+        endpoint_context: "TARGET"
+        output_context_key: "hpa_native_ids"
+
+  # Step 3: Convert UKBB native IDs to UniProt ACs using local data
+  - name: "CONVERT_UKBB_TO_UNIPROT"
+    description: "Convert UKBB Assay IDs to UniProt Accession Numbers using local UKBB data"
+    action:
+      type: "CONVERT_IDENTIFIERS_LOCAL"
+      params:
+        endpoint_context: "SOURCE"
+        input_context_key: "ukbb_native_ids"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_context_key: "ukbb_uniprot_acs"
+
+  # Step 4: Convert HPA native IDs to UniProt ACs for bidirectional matching
+  - name: "CONVERT_HPA_TO_UNIPROT"
+    description: "Convert HPA OSP IDs to UniProt Accession Numbers using local HPA data"
+    action:
+      type: "CONVERT_IDENTIFIERS_LOCAL"
+      params:
+        endpoint_context: "TARGET"
+        input_context_key: "hpa_native_ids"
+        input_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_context_key: "hpa_uniprot_acs"
+
+  # Step 5: Split composite UniProt IDs if present (e.g., "Q14213_Q8NEV9")
+  - name: "SPLIT_COMPOSITE_IDS"
+    description: "Split any composite UniProt IDs into their component identifiers"
+    action:
+      type: "COMPOSITE_ID_SPLITTER"
+      params:
+        input_context_key: "ukbb_uniprot_acs"
+        output_context_key: "ukbb_uniprot_acs_split"
+        delimiter: "_"
+
+  # Step 6: Perform bidirectional matching between UKBB and HPA UniProt ACs
+  - name: "BIDIRECTIONAL_MATCH"
+    description: "Match UniProt ACs between UKBB and HPA datasets bidirectionally"
+    action:
+      type: "BIDIRECTIONAL_MATCH"
+      params:
+        source_ids_context_key: "ukbb_uniprot_acs_split"
+        target_ids_context_key: "hpa_uniprot_acs"
+        matched_pairs_output_key: "matched_uniprot_pairs"
+        unmatched_source_output_key: "unmatched_ukbb_uniprot"
+        unmatched_target_output_key: "unmatched_hpa_uniprot"
+
+  # Step 7: Resolve unmatched UKBB UniProt ACs via UniProt History API
+  - name: "RESOLVE_UKBB_HISTORY"
+    description: "Resolve historical changes for unmatched UKBB UniProt ACs using UniProt API"
+    is_required: false  # Skip if all IDs matched
+    action:
+      type: "RESOLVE_AND_MATCH_FORWARD"
+      params:
+        input_context_key: "unmatched_ukbb_uniprot"
+        target_ids_context_key: "hpa_uniprot_acs"
+        api_endpoint: "UNIPROT_HISTORY"
+        output_matched_key: "api_resolved_ukbb_matches"
+        output_unresolved_key: "unresolved_ukbb_uniprot"
+
+  # Step 8: Resolve unmatched HPA UniProt ACs via UniProt History API (reverse)
+  - name: "RESOLVE_HPA_HISTORY"
+    description: "Resolve historical changes for unmatched HPA UniProt ACs using UniProt API"
+    is_required: false  # Skip if all IDs matched
+    action:
+      type: "RESOLVE_AND_MATCH_REVERSE"
+      params:
+        input_context_key: "unmatched_hpa_uniprot"
+        target_ids_context_key: "ukbb_uniprot_acs_split"
+        api_endpoint: "UNIPROT_HISTORY"
+        output_matched_key: "api_resolved_hpa_matches"
+        output_unresolved_key: "unresolved_hpa_uniprot"
+
+  # Step 9: Combine all matched pairs
+  - name: "COMBINE_MATCHES"
+    description: "Merge all matched pairs from bidirectional and API resolution"
+    action:
+      type: "MERGE_CONTEXT_ITEMS"
+      params:
+        input_keys:
+          - "matched_uniprot_pairs"
+          - "api_resolved_ukbb_matches"
+          - "api_resolved_hpa_matches"
+        output_key: "all_matched_pairs"
+        merge_type: "union"
+
+  # Step 10: Filter by HPA presence (legacy compatibility)
+  - name: "FILTER_BY_HPA_PRESENCE"
+    description: "Filter matched pairs to keep only those with identifiers present in HPA dataset"
+    action:
+      type: "FILTER_BY_TARGET_PRESENCE"
+      params:
+        input_context_key: "all_matched_pairs"
+        endpoint_context: "TARGET"
+        ontology_type_to_match: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_context_key: "hpa_filtered_matches"
+
+  # Step 11: Convert matched UniProt ACs back to native IDs for final results
+  - name: "CONVERT_TO_NATIVE_IDS"
+    description: "Convert matched UniProt pairs back to UKBB and HPA native identifiers"
+    action:
+      action_class_path: "biomapper.core.strategy_actions.convert_matched_pairs_to_native.ConvertMatchedPairsToNativeAction"
+      params:
+        input_context_key: "hpa_filtered_matches"
+        source_endpoint: "SOURCE"
+        target_endpoint: "TARGET"
+        output_context_key: "final_native_matches"
+
+  # Step 12: Generate mapping statistics
+  - name: "GENERATE_STATISTICS"
+    description: "Calculate comprehensive statistics for the mapping results"
+    action:
+      type: "GENERATE_SUMMARY_STATS"
+      params:
+        matched_pairs_key: "final_native_matches"
+        source_total_key: "ukbb_native_ids"
+        target_total_key: "hpa_native_ids"
+        unmatched_source_key: "unresolved_ukbb_uniprot"
+        unmatched_target_key: "unresolved_hpa_uniprot"
+        output_key: "mapping_statistics"
+
+  # Step 13: Save results to CSV file
+  - name: "SAVE_RESULTS"
+    description: "Export mapping results to CSV file with native identifiers"
+    action:
+      action_class_path: "biomapper.core.strategy_actions.format_and_save_results_action.FormatAndSaveResultsAction"
+      params:
+        input_context_key: "final_native_matches"
+        output_directory: "${OUTPUT_DIR}"
+        output_filename_prefix: "ukbb_hpa_full_pipeline"
+        include_unmatched: "${INCLUDE_UNMATCHED}"
+        unmatched_source_key: "unresolved_ukbb_uniprot"
+        unmatched_target_key: "unresolved_hpa_uniprot"
+        statistics_key: "mapping_statistics"
+
+  # Step 14: Generate detailed markdown report
+  - name: "GENERATE_REPORT"
+    description: "Create comprehensive markdown report with mapping details and statistics"
+    action:
+      type: "GENERATE_MARKDOWN_REPORT"
+      params:
+        template_name: "full_mapping_report"
+        statistics_key: "mapping_statistics"
+        matched_pairs_key: "final_native_matches"
+        output_directory: "${OUTPUT_DIR}"
+        output_filename: "ukbb_hpa_mapping_report.md"
+        include_sections:
+          - "overview"
+          - "statistics"
+          - "resolution_details"
+          - "unmatched_analysis"
+          - "recommendations"
+
+  # Step 15: Visualize mapping flow (optional)
+  - name: "VISUALIZE_MAPPING"
+    description: "Generate visual representation of the mapping flow"
+    is_required: false
+    action:
+      type: "VISUALIZE_MAPPING_FLOW"
+      params:
+        enabled: "${ENABLE_VISUALIZATION}"
+        statistics_key: "mapping_statistics"
+        output_directory: "${OUTPUT_DIR}"
+        output_filename: "ukbb_hpa_mapping_flow.png"
+        include_unmatched: true
+        layout: "hierarchical"
