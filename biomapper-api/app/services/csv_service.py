@@ -9,7 +9,7 @@ from typing import Dict, List, Any, Tuple
 
 import pandas as pd
 from fastapi import UploadFile, HTTPException, status
-from biomapper import load_tabular_file
+from biomapper_mock import load_tabular_file
 
 from app.core.config import settings
 from app.core.session import session_manager, Session
