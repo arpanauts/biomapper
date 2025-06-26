@@ -23,6 +23,7 @@ from .composite_id_splitter import CompositeIdSplitter
 from .overlap_analyzer import DatasetOverlapAnalyzer
 from .api_resolver import ApiResolver
 from .local_id_converter import LocalIdConverter
+from .results_saver import ResultsSaver
 
 __all__ = [
     "BidirectionalMatchAction",
@@ -42,5 +43,6 @@ __all__ = [
     "CompositeIdSplitter",
     "DatasetOverlapAnalyzer",
     "ApiResolver",
-    "LocalIdConverter"
+    "LocalIdConverter",
+    "ResultsSaver"
 ]
