@@ -6,7 +6,6 @@ as a step in a mapping strategy.
 """
 
 from .bidirectional_match import BidirectionalMatchAction
-from .convert_identifiers_local import ConvertIdentifiersLocalAction
 from .execute_mapping_path import ExecuteMappingPathAction
 from .filter_by_target_presence import FilterByTargetPresenceAction
 from .resolve_and_match_forward import ResolveAndMatchForwardAction
@@ -22,10 +21,10 @@ from .reconcile_bidirectional_action import ReconcileBidirectionalAction
 from .save_bidirectional_results_action import SaveBidirectionalResultsAction
 from .composite_id_splitter import CompositeIdSplitter
 from .overlap_analyzer import DatasetOverlapAnalyzer
+from .local_id_converter import LocalIdConverter
 
 __all__ = [
     "BidirectionalMatchAction",
-    "ConvertIdentifiersLocalAction",
     "ExecuteMappingPathAction", 
     "FilterByTargetPresenceAction",
     "ResolveAndMatchForwardAction",
@@ -40,5 +39,6 @@ __all__ = [
     "ReconcileBidirectionalAction",
     "SaveBidirectionalResultsAction",
     "CompositeIdSplitter",
-    "DatasetOverlapAnalyzer"
+    "DatasetOverlapAnalyzer",
+    "LocalIdConverter"
 ]
