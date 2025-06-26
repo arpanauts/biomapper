@@ -23,7 +23,8 @@ python-dotenv = ">=1.0.0"
 uuid = ">=1.30"
 psutil = ">=7.0.0,<8.0.0"
 # Reference to local biomapper package in development mode
-biomapper = {path = "/home/ubuntu/biomapper", develop = true}
+# biomapper = {path = "../", develop = true}
+pyyaml = "^6.0.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=7.4.3"

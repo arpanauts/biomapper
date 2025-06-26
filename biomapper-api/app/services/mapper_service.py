@@ -11,10 +11,10 @@ import pandas as pd
 import yaml
 from fastapi import HTTPException, status
 from pydantic import ValidationError
-from biomapper import load_tabular_file
+from biomapper_mock import load_tabular_file
 
-from biomapper.core.mapping_executor import MappingExecutor
-from biomapper.core.models.strategy import Strategy
+from biomapper_mock.core.mapping_executor import MappingExecutor
+from biomapper_mock.core.models.strategy import Strategy
 from app.core.config import settings
 from app.core.session import Session
 from app.models.job import Job
@@ -22,7 +22,7 @@ from app.models.mapping import MappingStatus, MappingResult
 
 # Import the RelationshipMappingExecutor for endpoint-to-endpoint mapping
 try:
-    from biomapper.mapping.relationships.executor import RelationshipMappingExecutor
+    from biomapper_mock.mapping.relationships.executor import RelationshipMappingExecutor
 except ImportError:
     # Mock for development/testing if not available
     class RelationshipMappingExecutor:
