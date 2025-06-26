@@ -287,3 +287,191 @@ class TestCompositeIdSplitter:
         assert provenance[0]['input'] == 'Q14213_Q8NEV9'
         assert provenance[0]['output'] == ['Q14213', 'Q8NEV9']
         assert provenance[0]['delimiter'] == '_'
+    
+    async def test_empty_string_handling(self, action, mock_endpoints):
+        """Test handling of empty strings in input."""
+        source, target = mock_endpoints
+        context = {
+            'protein_ids': ['Q14213_Q8NEV9', '', 'P12345', '  ', None]
+        }
+        
+        action_params = {
+            'input_context_key': 'protein_ids',
+            'output_context_key': 'split_ids',
+            'delimiter': '_'
+        }
+        
+        # Should handle None values without crashing
+        result = await action.execute(
+            current_identifiers=[],
+            current_ontology_type='UniProt',
+            action_params=action_params,
+            source_endpoint=source,
+            target_endpoint=target,
+            context=context
+        )
+        
+        # Check that empty strings and None are handled gracefully
+        assert 'Q14213' in result['output_identifiers']
+        assert 'Q8NEV9' in result['output_identifiers']
+        assert 'P12345' in result['output_identifiers']
+        assert '' in result['output_identifiers']  # Empty string is kept
+        assert '  ' in result['output_identifiers']  # Whitespace string is kept
+        # None values should be skipped
+        assert None not in result['output_identifiers']
+    
+    async def test_multi_character_delimiter(self, action, mock_endpoints):
+        """Test splitting with multi-character delimiter."""
+        source, target = mock_endpoints
+        context = {
+            'protein_ids': ['Q14213::Q8NEV9', 'P12345', 'A1B2C3::D4E5F6::G7H8I9']
+        }
+        
+        action_params = {
+            'input_context_key': 'protein_ids',
+            'output_context_key': 'split_ids',
+            'delimiter': '::'
+        }
+        
+        result = await action.execute(
+            current_identifiers=[],
+            current_ontology_type='UniProt',
+            action_params=action_params,
+            source_endpoint=source,
+            target_endpoint=target,
+            context=context
+        )
+        
+        assert set(result['output_identifiers']) == {'Q14213', 'Q8NEV9', 'P12345', 'A1B2C3', 'D4E5F6', 'G7H8I9'}
+        assert result['details']['delimiter'] == '::'
+    
+    async def test_special_character_delimiters(self, action, mock_endpoints):
+        """Test splitting with various special character delimiters."""
+        source, target = mock_endpoints
+        
+        # Test with different special characters
+        test_cases = [
+            ('|', ['Q14213|Q8NEV9', 'P12345']),
+            ('-', ['Q14213-Q8NEV9', 'P12345']),
+            ('.', ['Q14213.Q8NEV9', 'P12345']),
+            ('/', ['Q14213/Q8NEV9', 'P12345']),
+            ('+', ['Q14213+Q8NEV9', 'P12345'])
+        ]
+        
+        for delimiter, protein_ids in test_cases:
+            context = {'protein_ids': protein_ids}
+            action_params = {
+                'input_context_key': 'protein_ids',
+                'output_context_key': 'split_ids',
+                'delimiter': delimiter
+            }
+            
+            result = await action.execute(
+                current_identifiers=[],
+                current_ontology_type='UniProt',
+                action_params=action_params,
+                source_endpoint=source,
+                target_endpoint=target,
+                context=context
+            )
+            
+            assert 'Q14213' in result['output_identifiers']
+            assert 'Q8NEV9' in result['output_identifiers']
+            assert 'P12345' in result['output_identifiers']
+    
+    async def test_edge_case_delimiter_at_boundaries(self, action, mock_endpoints):
+        """Test identifiers with delimiters at the beginning or end."""
+        source, target = mock_endpoints
+        context = {
+            'protein_ids': ['_Q14213', 'Q8NEV9_', '_P12345_', 'A1B2C3__D4E5F6']
+        }
+        
+        action_params = {
+            'input_context_key': 'protein_ids',
+            'output_context_key': 'split_ids',
+            'delimiter': '_'
+        }
+        
+        result = await action.execute(
+            current_identifiers=[],
+            current_ontology_type='UniProt',
+            action_params=action_params,
+            source_endpoint=source,
+            target_endpoint=target,
+            context=context
+        )
+        
+        # Should include empty strings from leading/trailing delimiters
+        assert '' in result['output_identifiers']
+        assert 'Q14213' in result['output_identifiers']
+        assert 'Q8NEV9' in result['output_identifiers']
+        assert 'P12345' in result['output_identifiers']
+        assert 'A1B2C3' in result['output_identifiers']
+        assert 'D4E5F6' in result['output_identifiers']
+    
+    async def test_very_long_composite_ids(self, action, mock_endpoints):
+        """Test handling of identifiers with many components."""
+        source, target = mock_endpoints
+        # Create a composite ID with 10 components
+        long_composite = '_'.join([f'ID{i:04d}' for i in range(10)])
+        context = {
+            'protein_ids': [long_composite, 'P12345']
+        }
+        
+        action_params = {
+            'input_context_key': 'protein_ids',
+            'output_context_key': 'split_ids',
+            'delimiter': '_'
+        }
+        
+        result = await action.execute(
+            current_identifiers=[],
+            current_ontology_type='UniProt',
+            action_params=action_params,
+            source_endpoint=source,
+            target_endpoint=target,
+            context=context
+        )
+        
+        # Should have all 10 components plus P12345
+        assert result['details']['output_count'] == 11
+        for i in range(10):
+            assert f'ID{i:04d}' in result['output_identifiers']
+        assert 'P12345' in result['output_identifiers']
+    
+    async def test_context_details_structure(self, action, mock_endpoints):
+        """Test that the details dictionary contains all expected keys."""
+        source, target = mock_endpoints
+        context = {
+            'protein_ids': ['Q14213_Q8NEV9', 'P12345']
+        }
+        
+        action_params = {
+            'input_context_key': 'protein_ids',
+            'output_context_key': 'split_ids',
+            'delimiter': '_',
+            'track_metadata_lineage': True
+        }
+        
+        result = await action.execute(
+            current_identifiers=[],
+            current_ontology_type='UniProt',
+            action_params=action_params,
+            source_endpoint=source,
+            target_endpoint=target,
+            context=context
+        )
+        
+        # Check all expected keys in details
+        details = result['details']
+        assert 'input_count' in details
+        assert 'output_count' in details
+        assert 'composite_count' in details
+        assert 'delimiter' in details
+        assert 'context_keys' in details
+        
+        # Check context_keys structure
+        context_keys = details['context_keys']
+        assert context_keys['input'] == 'protein_ids'
+        assert context_keys['output'] == 'split_ids'
+        assert context_keys['lineage'] == 'split_ids_lineage'
