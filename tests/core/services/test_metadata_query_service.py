@@ -298,7 +298,7 @@ class TestMetadataQueryService:
         assert hasattr(call_args, 'compile')  # SQLAlchemy statement
         
         # Test get_ontology_type query
-        mock_result.scalar_one_or_none = AsyncMock(return_value="test_type")
+        mock_result.scalar_one_or_none.return_value = "test_type"
         await service.get_ontology_type(mock_session, "test_endpoint", "test_property")
         
         # Verify execute was called again

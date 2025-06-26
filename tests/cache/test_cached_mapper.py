@@ -158,7 +158,7 @@ class CachedMapperTest(unittest.TestCase):
     def tearDown(self):
         """Clean up temporary files."""
         # Close database connection
-        self.db_manager.close()
+        asyncio.run(self.db_manager.close())
 
         # Remove temporary directory
         self.temp_dir.cleanup()

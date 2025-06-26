@@ -1,28 +1,28 @@
 # Suggested Next Work Session Prompt
 
 ## Context Brief
-We are in the final stages of debugging the refactored mapping pipeline. A series of `ModuleNotFoundError` exceptions have been systematically resolved, but the pipeline is still not operational. The immediate blocker is an import error for the `biomapper.utils.logging` module, which was removed during refactoring.
+The project is critically blocked. While the core `biomapper` library is stable with a fully passing test suite, the `biomapper-api` server fails to start with a `ModuleNotFoundError: No module named 'biomapper.api'`. This prevents any end-to-end testing and blocks all further progress on the service-oriented architecture and UI development.
 
 ## Initial Steps
-1.  **Review the Active Prompt:** Begin by reviewing the detailed instructions in the active prompt: `/home/ubuntu/Software-Engineer-AI-Agent-Atlas/biomapper/roadmap/_active_prompts/2025-06-18-115530-debug-modulenotfound-biomapper-utils.md`. This contains the full context and a step-by-step plan to resolve the final import error.
-2.  **Review the Session Summary:** Read the latest status update for a complete overview of our last session: `/home/ubuntu/Software-Engineer-AI-Agent-Atlas/biomapper/roadmap/_status_updates/2025-06-18-session-summary.md`.
+1.  **Review `CLAUDE.md`:** Start by reviewing `/home/trentleslie/github/biomapper/CLAUDE.md` for overall project context and goals.
+2.  **Review Offboarding Summary:** Read the latest status update for a complete overview of our last session and the current critical issue: `/home/trentleslie/github/biomapper/roadmap/_status_updates/2025-06-25-final-offboarding-summary.md`.
 
 ## Work Priorities
 
-### Priority 1: Resolve the Final Import Error
-- **This is the primary blocker.** The pipeline cannot run until this is fixed.
-- Execute the plan outlined in the active prompt to modify `/home/ubuntu/Software-Engineer-AI-Agent-Atlas/biomapper/biomapper/core/engine_components/path_execution_manager.py`.
-- This involves replacing the removed utility functions with standard Python libraries (`logging` and `datetime`).
+### Priority 1: Fix the API Server Startup
+- **This is the only priority.** Nothing else can proceed until the API server runs.
+- **Action:** Investigate and resolve the `ModuleNotFoundError: No module named 'biomapper.api'`.
+- **Suggested Investigation Steps:**
+    1.  Inspect the project structure: `ls -R /home/trentleslie/github/biomapper/biomapper`. Does an `api` directory with an `__init__.py` file exist inside it?
+    2.  Review `pyproject.toml` to see how packages and modules are defined. Is the `biomapper` package configured correctly to include submodules?
+    3.  Try running `poetry install` again to ensure the environment is set up correctly in editable mode.
+    4.  Once a fix is attempted, try running the server again: `poetry run uvicorn biomapper.api.main:app --host 0.0.0.0 --port 8000`.
 
-### Priority 2: Full Pipeline Validation
-- Once the import error is resolved, run the main pipeline script to ensure it executes from end-to-end without crashing:
-  - `python scripts/main_pipelines/run_full_ukbb_hpa_mapping.py`
-- Monitor the output for any new runtime errors or unexpected behavior.
+### Priority 2: Validate the Fix
+- Once the server starts successfully, run the client script to confirm end-to-end functionality:
+  - `python /home/trentleslie/github/biomapper/scripts/main_pipelines/run_full_ukbb_hpa_mapping.py`
 
 ## References
-- **Active Debugging Prompt:** `/home/ubuntu/Software-Engineer-AI-Agent-Atlas/biomapper/roadmap/_active_prompts/2025-06-18-115530-debug-modulenotfound-biomapper-utils.md`
-- **File to be Fixed:** `/home/ubuntu/Software-Engineer-AI-Agent-Atlas/biomapper/biomapper/core/engine_components/path_execution_manager.py`
-- **Main Pipeline Script:** `/home/ubuntu/Software-Engineer-AI-Agent-Atlas/biomapper/scripts/main_pipelines/run_full_ukbb_hpa_mapping.py`
-
-## Workflow Integration
-- The next session is a focused debugging and validation effort. The primary task is to execute the fix detailed in the active prompt. There is a known issue with the `claude` CLI tool (`error: unknown option '--non-interactive'`), so the fix may need to be applied manually or the CLI command adjusted.
+- **Offboarding Summary:** `/home/trentleslie/github/biomapper/roadmap/_status_updates/2025-06-25-final-offboarding-summary.md`
+- **Main API File:** `/home/trentleslie/github/biomapper/biomapper/api/main.py` (Assumed location, needs verification)
+- **Project Configuration:** `/home/trentleslie/github/biomapper/pyproject.toml`

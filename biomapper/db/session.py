@@ -138,10 +138,10 @@ class DatabaseManager:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Asynchronous database schema initialization completed.")
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Close database connections."""
         self.engine.dispose()
-        self.async_engine.dispose()
+        await self.async_engine.dispose()
 
 
 # Default database manager
@@ -175,15 +175,20 @@ def get_db_manager(
     elif _default_manager.db_url != target_db_url:
         logger.warning(
             f"Target cache DB URL changed, recreating manager. "
-            f"Old: {_default_manager.db_url}, New: {target_db_url}"
+            f"Old: {_default_manager.db_url}, New: {target_db_url}. "
+            "The old manager's connections will not be closed from this synchronous method. "
+            "Proper application shutdown should handle resource disposal."
         )
-        _default_manager.close()
+        # Cannot call async close() from this sync function.
         _default_manager = DatabaseManager(db_url=target_db_url, echo=echo)
     # Ensure echo setting is updated if manager exists but echo differs
     elif _default_manager.engine.echo != echo:
-         logger.info(f"Updating echo setting for existing manager to {echo}")
-         # Recreate engine with new echo setting (simplest way)
-         _default_manager.close()
+         logger.warning(
+             f"Updating echo setting for existing manager to {echo}. Recreating manager. "
+             "The old manager's connections will not be closed from this synchronous method. "
+             "Proper application shutdown should handle resource disposal."
+         )
+         # Cannot call async close() from this sync function.
          _default_manager = DatabaseManager(db_url=target_db_url, echo=echo)
 
     return _default_manager

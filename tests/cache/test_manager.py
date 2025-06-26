@@ -4,6 +4,7 @@ import datetime
 import os
 import tempfile
 import unittest
+import asyncio
 
 from biomapper.cache.manager import CacheManager
 from biomapper.db.models import CacheStats
@@ -57,7 +58,7 @@ class CacheManagerTest(unittest.TestCase):
     def tearDown(self):
         """Clean up temporary files."""
         # Close database connection
-        self.db_manager.close()
+        asyncio.run(self.db_manager.close())
 
         # Remove temporary directory
         self.temp_dir.cleanup()
