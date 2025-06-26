@@ -59,7 +59,7 @@ async def test_handle_convert_identifiers_local_success(mapping_executor):
     }
     
     # Mock the StrategyAction to succeed
-    with patch('biomapper.core.strategy_actions.convert_identifiers_local.ConvertIdentifiersLocalAction') as mock_action_class:
+    with patch('biomapper.core.strategy_actions.local_id_converter.LocalIdConverter') as mock_action_class:
         mock_action = AsyncMock()
         mock_action_class.return_value = mock_action
         mock_action.execute.return_value = {
@@ -68,7 +68,7 @@ async def test_handle_convert_identifiers_local_success(mapping_executor):
             'details': {'converted_count': 2}
         }
         
-        # Configure the executor's handler to use the real implementation
+        # The handler is already mocked in the fixture
         mapping_executor._handle_convert_identifiers_local.return_value = {
             'status': 'success',
             'output_identifiers': ['converted1', 'converted2'],

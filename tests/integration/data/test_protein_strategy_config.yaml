@@ -114,18 +114,16 @@ mapping_strategies:
       - step_id: "S1_CONVERT_TO_GENE"
         description: "Convert HGNC IDs to gene symbols"
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          endpoint_context: "SOURCE"
-          mapping_path_name: "hgnc_to_gene"
-          output_ontology_type: "hgnc"
+          type: "EXECUTE_MAPPING_PATH"
+          path_name: "hgnc_to_gene"
+          pass_unmapped: true
       
       - step_id: "S2_GENE_TO_UNIPROT"
         description: "Convert gene symbols to UniProt IDs"
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          endpoint_context: "TARGET"
-          mapping_path_name: "gene_to_uniprot"
-          output_ontology_type: "uniprot"
+          type: "EXECUTE_MAPPING_PATH"
+          path_name: "gene_to_uniprot"
+          pass_unmapped: true
   
   strategy_with_path_execution:
     description: "Strategy using EXECUTE_MAPPING_PATH"
@@ -156,10 +154,9 @@ mapping_strategies:
       - step_id: "S1_CONVERT_HGNC"
         description: "Convert HGNC IDs to gene symbols"
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          endpoint_context: "SOURCE"
-          mapping_path_name: "hgnc_to_gene"
-          output_ontology_type: "hgnc"
+          type: "EXECUTE_MAPPING_PATH"
+          path_name: "hgnc_to_gene"
+          pass_unmapped: true
       
       - step_id: "S2_EXECUTE_PATH"
         description: "Execute gene to UniProt mapping path"
@@ -183,10 +180,9 @@ mapping_strategies:
       - step_id: "S1_FAIL_CONVERT"
         description: "Attempt to convert with non-existent resource"
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          endpoint_context: "SOURCE"
-          mapping_path_name: "non_existent_path"
-          output_ontology_type: "uniprot"
+          type: "EXECUTE_MAPPING_PATH"
+          path_name: "non_existent_path"
+          pass_unmapped: false
   
   ontology_tracking_strategy:
     description: "Strategy for testing ontology type tracking"
@@ -194,18 +190,16 @@ mapping_strategies:
       - step_id: "S1_EXTRACT_GENE"
         description: "Extract gene symbol from HGNC ID"
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          endpoint_context: "SOURCE"
-          mapping_path_name: "hgnc_to_gene"
-          output_ontology_type: "hgnc"
+          type: "EXECUTE_MAPPING_PATH"
+          path_name: "hgnc_to_gene"
+          pass_unmapped: true
       
       - step_id: "S2_CONVERT_TO_UNIPROT"
         description: "Convert gene symbol to UniProt ID"
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          endpoint_context: "TARGET"
-          mapping_path_name: "gene_to_uniprot"
-          output_ontology_type: "uniprot"
+          type: "EXECUTE_MAPPING_PATH"
+          path_name: "gene_to_uniprot"
+          pass_unmapped: true
   
   filter_with_conversion:
     description: "Filter with conversion path to match ontology"

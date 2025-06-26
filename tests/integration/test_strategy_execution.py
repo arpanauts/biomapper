@@ -9,6 +9,7 @@ BASE_URL = "http://localhost:8000"
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(reason="Requires running server at localhost:8000")
 async def test_ukbb_hpa_overlap_strategy():
     """Test the UKBB_HPA_PROTEIN_OVERLAP_ANALYSIS strategy through the API."""
     
