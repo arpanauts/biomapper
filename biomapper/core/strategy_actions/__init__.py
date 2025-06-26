@@ -22,6 +22,7 @@ from .reconcile_bidirectional_action import ReconcileBidirectionalAction
 from .save_bidirectional_results_action import SaveBidirectionalResultsAction
 from .composite_id_splitter import CompositeIdSplitter
 from .overlap_analyzer import DatasetOverlapAnalyzer
+from .api_resolver import ApiResolver
 
 __all__ = [
     "BidirectionalMatchAction",
@@ -40,5 +41,6 @@ __all__ = [
     "ReconcileBidirectionalAction",
     "SaveBidirectionalResultsAction",
     "CompositeIdSplitter",
-    "DatasetOverlapAnalyzer"
+    "DatasetOverlapAnalyzer",
+    "ApiResolver"
 ]
