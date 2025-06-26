@@ -263,9 +263,8 @@ class CachedMapper(BaseMapper[T]):
         """
         # Track API call in stats if enabled
         if self.track_api_usage:
-            self.cache_manager._update_stats(
-                self.cache_manager._session_scope().__enter__(), api_call=True
-            )
+            with self.cache_manager._session_scope() as session:
+                self.cache_manager._update_stats(session, api_call=True)
 
         # Call underlying mapper
         result = await self.base_mapper.map_entity(text, context)

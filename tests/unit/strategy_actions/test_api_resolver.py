@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from biomapper.core.strategy_actions.api_resolver import ApiResolver
-from biomapper.models import Endpoint
+from biomapper.db.models import Endpoint
 
 
 @pytest.fixture

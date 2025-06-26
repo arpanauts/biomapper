@@ -103,7 +103,9 @@ class CachedMapperTest(unittest.TestCase):
         """Set up test database."""
         # Create temporary directory for test database
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.db_path = os.path.join(self.temp_dir.name, "test_mapper_cache.db")
+        # Use a unique database name for each test to avoid conflicts
+        test_name = self.id().split('.')[-1]
+        self.db_path = os.path.join(self.temp_dir.name, f"test_mapper_cache_{test_name}.db")
         self.db_url = f"sqlite:///{self.db_path}"
 
         # Initialize database with test manager that creates cache tables
@@ -120,9 +122,20 @@ class CachedMapperTest(unittest.TestCase):
         # Override database connection to use test database
         self.original_session_scope = self.cache_manager._session_scope
 
+        from contextlib import contextmanager
+        
+        @contextmanager
         def test_session_scope():
             """Create test session context manager."""
-            return self.db_manager.create_session()
+            session = self.db_manager.create_session()
+            try:
+                yield session
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+            finally:
+                session.close()
 
         self.cache_manager._session_scope = test_session_scope
 
@@ -181,7 +194,7 @@ class CachedMapperTest(unittest.TestCase):
         self.assertEqual(result1.input_text, "test_entity2")
         self.assertEqual(result2.input_text, "test_entity2")
         self.assertFalse(result1.metadata.get("cache_hit", False))
-        self.assertTrue(result2.metadata.get("cache_hit", True))
+        self.assertTrue(result2.metadata.get("cache_hit", False))
 
         # Check that the mock mapper was called only once
         self.assertEqual(len(self.mock_mapper.calls), 1)

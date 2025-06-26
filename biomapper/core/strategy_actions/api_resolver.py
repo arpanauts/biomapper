@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from biomapper.core.strategy_actions.base import BaseStrategyAction
 from biomapper.core.strategy_actions.registry import register_action
-from biomapper.models import Endpoint
+from biomapper.db.models import Endpoint
 
 
 @register_action("API_RESOLVER")
