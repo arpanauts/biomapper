@@ -106,10 +106,10 @@ class TestUKBBToHPAYAMLStrategy:
             steps = result.scalars().all()
             
             assert len(steps) == 2
-            assert steps[0].step_id == "S1_CONVERT_TO_GENE"
-            assert steps[0].action_type == "CONVERT_IDENTIFIERS_LOCAL"
-            assert steps[1].step_id == "S2_GENE_TO_UNIPROT"
-            assert steps[1].action_type == "CONVERT_IDENTIFIERS_LOCAL"
+            assert steps[0].step_id == "S1_CONVERT_TO_UNIPROT"
+            assert steps[0].action_type == "LOCAL_ID_CONVERTER"
+            assert steps[1].step_id == "S2_FILTER_RESULTS"
+            assert steps[1].action_type == "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
     
     @pytest.mark.asyncio
     async def test_execute_yaml_strategy_basic(self, mapping_executor):

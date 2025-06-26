@@ -106,21 +106,23 @@ mapping_strategies:
         description: "Optional conversion that should succeed"
         is_required: false
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          input_ontology_type: "hgnc"
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/test_uniprot.tsv"
+          source_column: "Gene Names"
+          target_column: "Entry"
           output_ontology_type: "uniprot"
-          endpoint_context: "TARGET"
-          mapping_path_name: "optional_gene_to_uniprot"
+          expand_composites: false
       
       - step_id: "S2_OPTIONAL_FAIL"
         description: "Optional conversion that will fail"
         is_required: false
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          input_ontology_type: "hgnc"
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/non_existent_file.tsv"
+          source_column: "gene"
+          target_column: "ensembl_id"
           output_ontology_type: "ensembl"
-          endpoint_context: "TARGET"
-          mapping_path_name: "optional_gene_to_ensembl_fail"
+          expand_composites: false
       
       - step_id: "S3_OPTIONAL_FILTER"
         description: "Optional filter step"
@@ -140,11 +142,12 @@ mapping_strategies:
         description: "Required step that should succeed"
         is_required: true
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          input_ontology_type: "hgnc"
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/test_uniprot.tsv"
+          source_column: "Gene Names"
+          target_column: "Entry"
           output_ontology_type: "uniprot"
-          endpoint_context: "TARGET"
-          mapping_path_name: "optional_gene_to_uniprot"
+          expand_composites: false
       
       - step_id: "S2_OPTIONAL_FAIL"
         description: "Optional step that will fail"
@@ -172,21 +175,23 @@ mapping_strategies:
         description: "First step is optional and will fail"
         is_required: false
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          input_ontology_type: "hgnc"
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/non_existent_file.tsv"
+          source_column: "gene"
+          target_column: "ensembl_id"
           output_ontology_type: "ensembl"
-          endpoint_context: "TARGET"
-          mapping_path_name: "non_existent_path"
+          expand_composites: false
       
       - step_id: "S2_REQUIRED_CONVERT"
         description: "Required step that should succeed"
         is_required: true
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          input_ontology_type: "hgnc"
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/test_uniprot.tsv"
+          source_column: "Gene Names"
+          target_column: "Entry"
           output_ontology_type: "uniprot"
-          endpoint_context: "TARGET"
-          mapping_path_name: "optional_gene_to_uniprot"
+          expand_composites: false
   
   # Strategy with optional step failing last
   optional_fail_last_strategy:
@@ -196,11 +201,12 @@ mapping_strategies:
         description: "Required step that succeeds"
         is_required: true
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          input_ontology_type: "hgnc"
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/test_uniprot.tsv"
+          source_column: "Gene Names"
+          target_column: "Entry"
           output_ontology_type: "uniprot"
-          endpoint_context: "TARGET"
-          mapping_path_name: "optional_gene_to_uniprot"
+          expand_composites: false
       
       - step_id: "S2_OPTIONAL_FAIL_LAST"
         description: "Last step is optional and will fail"
@@ -220,11 +226,12 @@ mapping_strategies:
         description: "First optional failure"
         is_required: false
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          input_ontology_type: "hgnc"
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/non_existent_file_1.tsv"
+          source_column: "gene"
+          target_column: "ensembl_id"
           output_ontology_type: "ensembl"
-          endpoint_context: "TARGET"
-          mapping_path_name: "non_existent_path_1"
+          expand_composites: false
       
       - step_id: "S2_OPTIONAL_FAIL_2"
         description: "Second optional failure"
@@ -238,11 +245,12 @@ mapping_strategies:
         description: "Required step that should succeed"
         is_required: true
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          input_ontology_type: "hgnc"
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/test_uniprot.tsv"
+          source_column: "Gene Names"
+          target_column: "Entry"
           output_ontology_type: "uniprot"
-          endpoint_context: "TARGET"
-          mapping_path_name: "optional_gene_to_uniprot"
+          expand_composites: false
       
       - step_id: "S4_OPTIONAL_FAIL_3"
         description: "Third optional failure"
@@ -262,11 +270,12 @@ mapping_strategies:
         description: "Optional step that succeeds"
         is_required: false
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          input_ontology_type: "hgnc"
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/test_uniprot.tsv"
+          source_column: "Gene Names"
+          target_column: "Entry"
           output_ontology_type: "uniprot"
-          endpoint_context: "TARGET"
-          mapping_path_name: "optional_gene_to_uniprot"
+          expand_composites: false
       
       - step_id: "S2_OPTIONAL_FAIL"
         description: "Optional step that fails"
@@ -282,11 +291,12 @@ mapping_strategies:
         description: "Required step that will fail"
         is_required: true
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          input_ontology_type: "hgnc"
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/non_existent_required.tsv"
+          source_column: "gene"
+          target_column: "ensembl_id"
           output_ontology_type: "ensembl"
-          endpoint_context: "TARGET"
-          mapping_path_name: "non_existent_required_path"
+          expand_composites: false
   
   # Edge case: All optional steps fail
   all_optional_fail_strategy:
@@ -296,11 +306,12 @@ mapping_strategies:
         description: "First optional failure"
         is_required: false
         action:
-          type: "CONVERT_IDENTIFIERS_LOCAL"
-          input_ontology_type: "hgnc"
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/fail_path_1.tsv"
+          source_column: "gene"
+          target_column: "ensembl_id"
           output_ontology_type: "ensembl"
-          endpoint_context: "TARGET"
-          mapping_path_name: "fail_path_1"
+          expand_composites: false
       
       - step_id: "S2_OPT_FAIL_2"
         description: "Second optional failure"

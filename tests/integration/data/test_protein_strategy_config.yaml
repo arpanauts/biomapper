@@ -111,19 +111,24 @@ mapping_strategies:
   basic_linear_strategy:
     description: "Simple linear conversion strategy"
     steps:
-      - step_id: "S1_CONVERT_TO_GENE"
-        description: "Convert HGNC IDs to gene symbols"
-        action:
-          type: "EXECUTE_MAPPING_PATH"
-          path_name: "hgnc_to_gene"
-          pass_unmapped: true
-      
-      - step_id: "S2_GENE_TO_UNIPROT"
+      - step_id: "S1_CONVERT_TO_UNIPROT"
         description: "Convert gene symbols to UniProt IDs"
         action:
-          type: "EXECUTE_MAPPING_PATH"
-          path_name: "gene_to_uniprot"
-          pass_unmapped: true
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/test_uniprot.tsv"
+          source_column: "Gene Names"
+          target_column: "Entry"
+          output_ontology_type: "uniprot"
+          expand_composites: false
+      
+      - step_id: "S2_FILTER_RESULTS"
+        description: "Filter valid UniProt IDs"
+        action:
+          type: "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
+          endpoint_context: "TARGET"
+          ontology_type_to_match: "uniprot"
+          resource_name_for_check: "test_uniprot_mapper"
+          include_if_present: true
   
   strategy_with_path_execution:
     description: "Strategy using EXECUTE_MAPPING_PATH"
@@ -151,19 +156,22 @@ mapping_strategies:
   complex_mixed_strategy:
     description: "Strategy combining multiple action types"
     steps:
-      - step_id: "S1_CONVERT_HGNC"
-        description: "Convert HGNC IDs to gene symbols"
+      - step_id: "S1_CONVERT_LOCAL"
+        description: "Convert gene symbols to UniProt IDs locally"
         action:
-          type: "EXECUTE_MAPPING_PATH"
-          path_name: "hgnc_to_gene"
-          pass_unmapped: true
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/test_uniprot.tsv"
+          source_column: "Gene Names"
+          target_column: "Entry"
+          output_ontology_type: "uniprot"
+          expand_composites: false
       
       - step_id: "S2_EXECUTE_PATH"
         description: "Execute gene to UniProt mapping path"
         action:
           type: "EXECUTE_MAPPING_PATH"
           path_name: "gene_to_uniprot"
-          pass_unmapped: false
+          pass_unmapped: true
       
       - step_id: "S3_FILTER_RESULTS"
         description: "Filter by target presence"
@@ -187,19 +195,24 @@ mapping_strategies:
   ontology_tracking_strategy:
     description: "Strategy for testing ontology type tracking"
     steps:
-      - step_id: "S1_EXTRACT_GENE"
-        description: "Extract gene symbol from HGNC ID"
-        action:
-          type: "EXECUTE_MAPPING_PATH"
-          path_name: "hgnc_to_gene"
-          pass_unmapped: true
-      
-      - step_id: "S2_CONVERT_TO_UNIPROT"
+      - step_id: "S1_CONVERT_TO_UNIPROT"
         description: "Convert gene symbol to UniProt ID"
         action:
-          type: "EXECUTE_MAPPING_PATH"
-          path_name: "gene_to_uniprot"
-          pass_unmapped: true
+          type: "LOCAL_ID_CONVERTER"
+          mapping_file: "tests/integration/data/mock_client_files/test_uniprot.tsv"
+          source_column: "Gene Names"
+          target_column: "Entry"
+          output_ontology_type: "uniprot"
+          expand_composites: false
+      
+      - step_id: "S2_FILTER_UNIPROT"
+        description: "Filter valid UniProt IDs"
+        action:
+          type: "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
+          endpoint_context: "TARGET"
+          ontology_type_to_match: "uniprot"
+          resource_name_for_check: "test_uniprot_mapper"
+          include_if_present: true
   
   filter_with_conversion:
     description: "Filter with conversion path to match ontology"

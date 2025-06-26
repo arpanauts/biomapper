@@ -220,7 +220,7 @@ class TestApiResolver:
         # Track get calls
         call_count = 0
         
-        async def side_effect(*args, **kwargs):
+        def side_effect(*args, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count < 3:

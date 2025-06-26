@@ -200,13 +200,14 @@ class TestYAMLStrategyExecution:
         
         # Check step results
         step_results = result.get("step_results", [])
-        assert len(step_results) == 2  # Two conversion steps
-        assert all(step.get("action_type") == "CONVERT_IDENTIFIERS_LOCAL" 
-                  for step in step_results)
+        assert len(step_results) == 2  # Two steps
+        # First step is LOCAL_ID_CONVERTER, second is FILTER_IDENTIFIERS_BY_TARGET_PRESENCE
+        assert step_results[0].get("action_type") == "LOCAL_ID_CONVERTER"
+        assert step_results[1].get("action_type") == "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
     
     async def test_strategy_with_execute_mapping_path(self, setup_test_environment, mock_client_files):
         """Test a strategy that uses EXECUTE_MAPPING_PATH action."""
-        initial_ids = ["P12345", "Q67890"]
+        initial_ids = ["TEST1", "TEST2"]  # Use gene symbols
         
         executor = setup_test_environment
         
@@ -214,7 +215,8 @@ class TestYAMLStrategyExecution:
             strategy_name="strategy_with_path_execution",
             source_endpoint_name="test_source",
             target_endpoint_name="test_target",
-            input_identifiers=initial_ids
+            input_identifiers=initial_ids,
+            source_ontology_type="hgnc"
         )
         
         assert "metadata" in result
@@ -271,7 +273,7 @@ class TestYAMLStrategyExecution:
         # Verify different action types were executed
         step_results = result.get("step_results", [])
         action_types = {step.get("action_type") for step in step_results}
-        assert "CONVERT_IDENTIFIERS_LOCAL" in action_types
+        assert "LOCAL_ID_CONVERTER" in action_types
         assert "EXECUTE_MAPPING_PATH" in action_types
         # Filter step might not execute if no identifiers remain after previous steps
         # This is expected behavior when pass_unmapped=false in the previous step
@@ -326,7 +328,7 @@ class TestYAMLStrategyExecution:
     
     async def test_ontology_type_tracking(self, setup_test_environment):
         """Test that current_source_ontology_type is properly tracked."""
-        initial_ids = ["HGNC:1234", "HGNC:5678"]
+        initial_ids = ["TEST1", "TEST2"]  # Use gene symbols
         
         executor = setup_test_environment
         
@@ -344,11 +346,11 @@ class TestYAMLStrategyExecution:
         
         # Check step results track ontology changes
         step_results = result.get("step_results", [])
-        assert len(step_results) > 0
+        assert len(step_results) == 2  # LOCAL_ID_CONVERTER and FILTER step
         
-        # Verify conversion steps exist
-        conversion_steps = [s for s in step_results if s.get("action_type") == "CONVERT_IDENTIFIERS_LOCAL"]
-        assert len(conversion_steps) > 0
+        # Verify conversion step exists
+        assert step_results[0].get("action_type") == "LOCAL_ID_CONVERTER"
+        assert step_results[1].get("action_type") == "FILTER_IDENTIFIERS_BY_TARGET_PRESENCE"
     
     async def test_filter_with_conversion_path(self, setup_test_environment, mock_client_files):
         """Test filter action with conversion_path_to_match_ontology."""
