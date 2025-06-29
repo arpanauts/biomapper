@@ -1,23 +1,44 @@
 name: UKBB_HPA_PROTEIN_OVERLAP_ANALYSIS
-description: "A strategy to analyze the overlap of protein identifiers between UK Biobank and Human Protein Atlas datasets."
+description: "Maps UKBB protein assay IDs to HPA gene names using local files."
 
 steps:
-  - name: SPLIT_UKBB_COMPOSITE_IDS
+  - name: CONVERT_UKBB_ASSAY_TO_UNIPROT
     action:
-      type: COMPOSITE_ID_SPLITTER
+      type: LOCAL_ID_CONVERTER
       params:
-        input_context_key: "ukbb_protein_ids"
-        output_context_key: "ukbb_protein_ids_split"
-        delimiter: "_"
-        track_provenance: True
+        input_context_key: "input_identifiers"
+        output_context_key: "ukbb_uniprot_ids"
+        mapping_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
+        source_column: "Assay"
+        target_column: "UniProt"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+
+  - name: LOAD_HPA_UNIPROT_IDS
+    action:
+      type: POPULATE_CONTEXT_FROM_FILE
+      params:
+        output_context_key: "hpa_uniprot_ids"
+        file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
+        column_name: "uniprot"
 
   - name: ANALYZE_OVERLAP
     action:
       type: DATASET_OVERLAP_ANALYZER
       params:
-        dataset1_context_key: "ukbb_protein_ids_split"
-        dataset2_context_key: "hpa_protein_ids"
-        output_context_key: "overlap_results"
+        input_context_key_1: "ukbb_uniprot_ids"
+        input_context_key_2: "hpa_uniprot_ids"
+        output_context_key: "overlapping_uniprot_ids"
         dataset1_name: "UKBB"
         dataset2_name: "HPA"
         generate_statistics: True
+
+  - name: CONVERT_UNIPROT_TO_HPA_GENE
+    action:
+      type: LOCAL_ID_CONVERTER
+      params:
+        input_context_key: "overlapping_uniprot_ids"
+        output_context_key: "final_hpa_genes"
+        mapping_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
+        source_column: "uniprot"
+        target_column: "gene"
+        output_ontology_type: "HPA_GENE_ONTOLOGY"

@@ -20,6 +20,7 @@ Usage:
 import asyncio
 import logging
 from pprint import pprint
+import pandas as pd
 
 # It's assumed the biomapper_client package is installed in the environment.
 # If not, you might need to adjust sys.path or install it.
@@ -42,24 +43,24 @@ async def main():
     # The base_url can be changed to target a remote API instance.
     client = BiomapperClient(base_url="http://localhost:8000")
 
+    # Load the initial list of UKBB protein assay IDs from the data file.
+    ukbb_file_path = "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
+    logging.info(f"Loading initial identifiers from {ukbb_file_path}")
+    try:
+        # Using pandas for robust CSV/TSV parsing
+        df = pd.read_csv(ukbb_file_path, sep='\t', engine='python')
+        input_ids = df['Assay'].dropna().unique().tolist()
+        logging.info(f"Loaded {len(input_ids)} unique assay IDs to be mapped.")
+    except FileNotFoundError:
+        logging.error(f"Input data file not found: {ukbb_file_path}")
+        return
+    except Exception as e:
+        logging.error(f"Failed to load or parse input data file: {e}")
+        return
+
     # Define the initial data context for the strategy.
-    # This provides the two lists of protein IDs to be analyzed.
     initial_context = {
-        "ukbb_protein_ids": [
-            "P12345",  # Overlapping
-            "Q67890",  # Overlapping
-            "P98765",  # Unique to UKBB
-            "Q11111",  # Unique to UKBB
-            "P22222",  # Overlapping
-        ],
-        "hpa_protein_ids": [
-            "P12345",  # Overlapping
-            "Q67890",  # Overlapping
-            "P33333",  # Unique to HPA
-            "Q44444",  # Unique to HPA
-            "P22222",  # Overlapping
-            "P55555",  # Unique to HPA
-        ]
+        "input_identifiers": input_ids
     }
 
     strategy_name = "UKBB_HPA_PROTEIN_OVERLAP_ANALYSIS"
