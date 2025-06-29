@@ -146,6 +146,7 @@ class StrategyOrchestrator:
             # Initialize strategy context
             strategy_context = initial_context or {}
             strategy_context.update({
+                'input_identifiers': input_identifiers.copy(),  # Add this for LOCAL_ID_CONVERTER
                 'initial_identifiers': input_identifiers.copy(),
                 'current_identifiers': current_identifiers.copy(),
                 'current_ontology_type': current_ontology_type,
