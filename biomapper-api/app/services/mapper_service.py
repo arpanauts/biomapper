@@ -403,14 +403,22 @@ class MapperService:
             )
 
     async def execute_strategy(
-        self, strategy_name: str, context: Dict[str, Any]
+        self, 
+        strategy_name: str, 
+        source_endpoint_name: str,
+        target_endpoint_name: str,
+        input_identifiers: List[str],
+        context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Execute a mapping strategy by name.
         
         Args:
             strategy_name: Name of the strategy to execute.
-            context: Execution context for the strategy.
+            source_endpoint_name: The name of the source data endpoint.
+            target_endpoint_name: The name of the target data endpoint.
+            input_identifiers: A list of identifiers to be mapped.
+            context: Optional execution context for the strategy.
             
         Returns:
             Dictionary containing the strategy execution results.
@@ -419,7 +427,13 @@ class MapperService:
             KeyError: If the strategy is not found.
             Exception: If the strategy execution fails.
         """
-        return await self.mapper_service.execute_strategy(strategy_name, context)
+        return await self.mapper_service.execute_strategy(
+            strategy_name=strategy_name,
+            source_endpoint_name=source_endpoint_name,
+            target_endpoint_name=target_endpoint_name,
+            input_identifiers=input_identifiers,
+            context=context
+        )
 
 
 class MapperServiceForStrategies:
@@ -499,79 +513,44 @@ class MapperServiceForStrategies:
 
         return strategies
 
-    async def execute_yaml_strategy_direct(self, strategy: Strategy, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Execute a YAML strategy directly by simulating its actions.
-        
-        This is a simplified approach that directly executes the strategy actions
-        based on the YAML configuration without going through the full database pipeline.
-        """
-        await self.ensure_executor_initialized()
-        
-        # Initialize the result context
-        result_context = context.copy()
-        
-        # Simple mock execution for the UKBB HPA strategy
-        # In a real implementation, this would execute the actual actions
-        logger.info(f"Executing strategy '{strategy.name}' with {len(context.get('input_identifiers', []))} identifiers")
-        
-        # For now, return a success response with the context
-        # This demonstrates that the API is correctly wired up
-        result_context['status'] = 'success'
-        result_context['strategy_executed'] = strategy.name
-        result_context['message'] = f"Successfully executed strategy {strategy.name} with real biomapper engine"
-        result_context['identifier_count'] = len(context.get('input_identifiers', []))
-        
-        # Add some mock results to show the pipeline works
-        result_context['results'] = {
-            'step_count': len(strategy.steps),
-            'final_context': {
-                'ukbb_uniprot_ids': ['P12345', 'Q67890'],  # Mock data
-                'hpa_uniprot_ids': ['P12345', 'P54321'],   # Mock data  
-                'overlapping_uniprot_ids': ['P12345'],      # Mock overlap
-                'overlap_percentage': 50.0
-            }
-        }
-        
-        return result_context
-
-    async def execute_strategy(self, strategy_name: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute_strategy(
+        self, 
+        strategy_name: str, 
+        source_endpoint_name: str,
+        target_endpoint_name: str,
+        input_identifiers: List[str],
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Executes a named strategy with the given context using the real MappingExecutor.
-
-        Args:
-            strategy_name: The name of the strategy to execute.
-            context: The initial context dictionary for the strategy.
-
-        Returns:
-            The final context dictionary after execution.
-
-        Raises:
-            HTTPException: If the strategy is not found or if execution fails.
         """
-        strategy_model = self.strategies.get(strategy_name)
-        if not strategy_model:
-            logger.warning(f"Attempted to execute non-existent strategy: '{strategy_name}'")
+        await self.ensure_executor_initialized()
+
+        if not self.strategies.get(strategy_name):
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Strategy '{strategy_name}' not found. Available strategies: {list(self.strategies.keys())}"
+                status_code=404,
+                detail=f"Strategy '{strategy_name}' not found."
             )
 
         try:
-            logger.info(f"Executing strategy '{strategy_name}' with direct YAML execution...")
+            logger.info(f"Executing strategy '{strategy_name}' with real executor...")
             
-            # Execute the strategy directly using our loaded YAML strategy
-            result = await self.execute_yaml_strategy_direct(
-                strategy=strategy_model,
-                context=context
+            # Execute the strategy using the MappingExecutor's execute_yaml_strategy method
+            # which doesn't require the strategy to be in the database
+            final_context = await self.executor.execute_yaml_strategy(
+                strategy_name=strategy_name,
+                source_endpoint_name=source_endpoint_name,
+                target_endpoint_name=target_endpoint_name,
+                input_identifiers=input_identifiers,
+                initial_context=context
             )
             
-            logger.info(f"Successfully executed strategy '{strategy_name}'")
-            return result
+            logger.info(f"Successfully executed strategy '{strategy_name}'.")
+            return final_context
 
         except Exception as e:
             logger.exception(f"An error occurred during execution of strategy '{strategy_name}': {e}")
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=500,
                 detail=f"An internal error occurred while executing the strategy: {e}",
             )

@@ -58,9 +58,14 @@ async def main():
         logging.error(f"Failed to load or parse input data file: {e}")
         return
 
-    # Define the initial data context for the strategy.
-    initial_context = {
-        "input_identifiers": input_ids
+    # Construct the request payload
+    json_payload = {
+        "source_endpoint_name": "UKBB_PROTEIN_ASSAY_ID",
+        "target_endpoint_name": "HPA_GENE_NAME",
+        "input_identifiers": input_ids,
+        "options": {
+            "some_option": "value"
+        }
     }
 
     strategy_name = "UKBB_HPA_PROTEIN_OVERLAP_ANALYSIS"
@@ -72,7 +77,7 @@ async def main():
         async with client:
             final_context = await client.execute_strategy(
                 strategy_name=strategy_name,
-                context=initial_context
+                context=json_payload
             )
 
         logging.info("Strategy execution complete. Final results:")
