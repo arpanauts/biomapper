@@ -19,6 +19,8 @@ from app.core.config import settings
 from app.core.session import Session
 from app.models.job import Job
 from app.models.mapping import MappingStatus, MappingResult
+from biomapper.db.models import Endpoint
+from sqlalchemy import select
 
 # Import the RelationshipMappingExecutor for endpoint-to-endpoint mapping
 from biomapper.mapping.relationships.executor import RelationshipMappingExecutor
@@ -345,6 +347,11 @@ class MapperService:
                 detail=f"Error reading result file: {str(e)}",
             )
 
+    async def get_endpoints(self) -> List[Endpoint]:
+        """Retrieve all available endpoints from the database."""
+        # Delegate to the underlying service that has DB access
+        return await self.mapper_service.get_endpoints()
+
     async def map_relationship(
         self, relationship_id: int, source_data: Dict[str, Any]
     ) -> List[MappingResult]:
@@ -554,3 +561,15 @@ class MapperServiceForStrategies:
                 status_code=500,
                 detail=f"An internal error occurred while executing the strategy: {e}",
             )
+    
+    async def get_endpoints(self) -> List[Endpoint]:
+        """Retrieve all available endpoints from the database."""
+        await self.ensure_executor_initialized()
+        # Access the session manager from the executor's components
+        session_manager = self.executor.session_manager
+        async with session_manager.get_async_metamapper_session() as session:
+            stmt = select(Endpoint)
+            result = await session.execute(stmt)
+            endpoints = result.scalars().all()
+            logger.info(f"Retrieved {len(endpoints)} endpoints from the database.")
+            return list(endpoints)

@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from biomapper.db.models import Endpoint, EndpointPropertyConfig
 from biomapper.mapping.adapters.csv_adapter import CSVAdapter
 from biomapper.core.strategy_actions.base import BaseStrategyAction
+from biomapper.core.strategy_actions.registry import register_action
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@register_action("LOAD_ENDPOINT_IDENTIFIERS")
 class LoadEndpointIdentifiersAction(BaseStrategyAction):
     """
     Action that loads all identifiers from a specified endpoint.

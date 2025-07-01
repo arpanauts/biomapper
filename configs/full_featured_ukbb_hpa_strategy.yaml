@@ -138,7 +138,7 @@ steps:
   - name: "CONVERT_TO_NATIVE_IDS"
     description: "Convert matched UniProt pairs back to UKBB and HPA native identifiers"
     action:
-      action_class_path: "biomapper.core.strategy_actions.convert_matched_pairs_to_native.ConvertMatchedPairsToNativeAction"
+      type: "CONVERT_MATCHED_PAIRS_TO_NATIVE"
       params:
         input_context_key: "hpa_filtered_matches"
         source_endpoint: "SOURCE"
@@ -162,7 +162,7 @@ steps:
   - name: "SAVE_RESULTS"
     description: "Export mapping results to CSV file with native identifiers"
     action:
-      action_class_path: "biomapper.core.strategy_actions.format_and_save_results_action.FormatAndSaveResultsAction"
+      type: "FORMAT_AND_SAVE_RESULTS"
       params:
         input_context_key: "final_native_matches"
         output_directory: "${OUTPUT_DIR}"

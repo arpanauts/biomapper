@@ -29,6 +29,13 @@ async def populate_endpoints():
             'connection_details': '{"file_path": "/procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"}',
             'type': 'file',
             'primary_property_name': 'gene'
+        },
+        {
+            'name': 'HPA_PROTEIN_DATA',
+            'description': 'Human Protein Atlas protein data with UniProt IDs',
+            'connection_details': '{"file_path": "/procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"}',
+            'type': 'file',
+            'primary_property_name': 'uniprot'
         }
     ]
     

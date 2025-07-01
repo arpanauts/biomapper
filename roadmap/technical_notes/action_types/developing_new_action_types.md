@@ -13,7 +13,7 @@ Action types are the building blocks of biomapper's mapping strategies. Each act
 3.  **Zero `MappingExecutor` Modification**: Adding a new action **does not** require any changes to `MappingExecutor`.
 4.  **Consistent Interface**: All actions inherit from `BaseStrategyAction` and implement the `execute` method.
 5.  **Comprehensive Testing**: Each action has dedicated unit tests.
-6.  **Context-Driven**: Actions are designed to be chained together. They read inputs from and write outputs to a shared `ActionContext` dictionary, allowing for flexible and powerful pipeline construction.
+6.  **Context-Driven**: Actions are designed to be chained together. They read inputs from and write outputs to a shared context dictionary (`Dict[str, Any]`), allowing for flexible and powerful pipeline construction.
 
 ## Step-by-Step Development Process
 
@@ -24,17 +24,19 @@ Before coding, answer these questions:
 1.  **What problem does this action solve?**
     - Example: "Convert identifiers using a local, file-based mapping."
 2.  **What are the inputs and outputs?**
-    - **Inputs**: What keys does it expect to find in the `ActionContext`? (e.g., a list of identifiers from a previous step).
-    - **Outputs**: What keys will it add to the `ActionContext`? (e.g., a new list of mapped identifiers, statistics, provenance records).
+    - **Inputs**: What keys does it expect to find in the context dictionary? (e.g., a list of identifiers from a previous step).
+    - **Outputs**: What keys will it add to the context dictionary? (e.g., a new list of mapped identifiers, statistics, provenance records).
 3.  **What parameters will it need from the YAML strategy?**
     - This includes data sources (e.g., file paths), operational flags (e.g., `track_unmatched: true`), and, most importantly, context keys.
     ```yaml
-    parameters:
-      mapping_file_path: "/path/to/mapping.csv"
-      input_context_key: "uniprot_ids"
-      output_context_key: "ensembl_ids"
-      source_column: "uniprot"
-      target_column: "ensembl"
+    action:
+      type: LOCAL_ID_CONVERTER
+      params:
+        mapping_file_path: "/path/to/mapping.csv"
+        input_context_key: "uniprot_ids"
+        output_context_key: "ensembl_ids"
+        source_column: "uniprot"
+        target_column: "ensembl"
     ```
 4.  **How does it handle edge cases?** (Empty inputs, composite identifiers, etc.)
 
@@ -49,10 +51,10 @@ A best-practice implementation includes a comprehensive docstring with a YAML ex
 import logging
 from typing import Dict, Any, List
 
-from .base import BaseStrategyAction, ActionContext
+from .base import BaseStrategyAction
 from .registry import register_action
 # Assume a utility for reading files exists
-from ...utils.file_io import read_mapping_file 
+from ...utils.file_io import read_mapping_file
 
 logger = logging.getLogger(__name__)
 
@@ -68,32 +70,32 @@ class LocalIdConverterAction(BaseStrategyAction):
 
     ```yaml
     - name: Map UniProt to Ensembl
-      type: LOCAL_ID_CONVERTER
-      parameters:
-        mapping_file_path: "${BIOMAPPER_DATA}/mappings/uniprot_to_ensembl.tsv"
-        input_context_key: "uniprot_ids"
-        output_context_key: "ensembl_ids_from_local_file"
-        source_column: "uniprot_id"
-        target_column: "ensembl_id"
+      action:
+        type: LOCAL_ID_CONVERTER
+        params:
+          mapping_file_path: "${BIOMAPPER_DATA}/mappings/uniprot_to_ensembl.tsv"
+          input_context_key: "uniprot_ids"
+          output_context_key: "ensembl_ids_from_local_file"
+          source_column: "uniprot_id"
+          target_column: "ensembl_id"
     ```
     """
-    async def execute(self, context: ActionContext) -> ActionContext:
+    async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Executes the identifier conversion based on parameters in the context.
+        Executes the identifier conversion based on parameters stored in the action instance.
         """
-        params = context.get('current_action_params', {})
-        
-        # 1. Validate and extract parameters
-        mapping_file = params.get('mapping_file_path')
-        input_key = params.get('input_context_key')
-        output_key = params.get('output_context_key')
-        source_col = params.get('source_column')
-        target_col = params.get('target_column')
+        # 1. Validate and extract parameters from self.params
+        # The 'params' are injected into the action instance by the strategy executor.
+        mapping_file = self.params.get('mapping_file_path')
+        input_key = self.params.get('input_context_key')
+        output_key = self.params.get('output_context_key')
+        source_col = self.params.get('source_column')
+        target_col = self.params.get('target_column')
 
         if not all([mapping_file, input_key, output_key, source_col, target_col]):
             raise ValueError("Missing required parameters for LOCAL_ID_CONVERTER.")
 
-        # 2. Extract input data from context
+        # 2. Extract input data from the context dictionary
         input_identifiers = context.get(input_key, [])
         if not input_identifiers:
             logger.warning(f"Input key '{input_key}' is empty or not in context. Skipping action.")

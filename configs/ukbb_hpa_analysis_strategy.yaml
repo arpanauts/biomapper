@@ -15,18 +15,17 @@ steps:
 
   - name: LOAD_HPA_UNIPROT_IDS
     action:
-      type: POPULATE_CONTEXT_FROM_FILE
+      type: LOAD_ENDPOINT_IDENTIFIERS
       params:
+        endpoint_name: "HPA_PROTEIN_DATA"
         output_context_key: "hpa_uniprot_ids"
-        file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
-        column_name: "uniprot"
 
   - name: ANALYZE_OVERLAP
     action:
       type: DATASET_OVERLAP_ANALYZER
       params:
-        input_context_key_1: "ukbb_uniprot_ids"
-        input_context_key_2: "hpa_uniprot_ids"
+        dataset1_context_key: "ukbb_uniprot_ids"
+        dataset2_context_key: "hpa_uniprot_ids"
         output_context_key: "overlapping_uniprot_ids"
         dataset1_name: "UKBB"
         dataset2_name: "HPA"
