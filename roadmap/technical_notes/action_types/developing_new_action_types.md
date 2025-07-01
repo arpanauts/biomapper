@@ -2,18 +2,17 @@
 
 ## Overview
 
-Action types are the building blocks of biomapper's mapping strategies. Each action represents a specific, self-contained operation in a pipeline. This guide provides a systematic approach to developing new action types, reflecting the latest best practices and design patterns.
+Action types are the building blocks of biomapper's mapping strategies. Each action represents a specific, self-contained operation in a pipeline. This guide provides a systematic approach to developing new action types based on the actual implementation in the codebase.
 
 ## Architecture Overview
 
 ### Key Design Principles
 
-1.  **Modular Design**: Each action type is a self-contained module.
-2.  **Decorator-Based Registration**: Actions self-register using the `@register_action` decorator, eliminating the need for manual registration in a central file.
-3.  **Zero `MappingExecutor` Modification**: Adding a new action **does not** require any changes to `MappingExecutor`.
-4.  **Consistent Interface**: All actions inherit from `BaseStrategyAction` and implement the `execute` method.
-5.  **Comprehensive Testing**: Each action has dedicated unit tests.
-6.  **Context-Driven**: Actions are designed to be chained together. They read inputs from and write outputs to a shared context dictionary (`Dict[str, Any]`), allowing for flexible and powerful pipeline construction.
+1. **Modular Design**: Each action type is a self-contained module
+2. **Decorator-Based Registration**: Actions self-register using the `@register_action` decorator
+3. **Consistent Interface**: All actions implement a standard `execute` method
+4. **Context-Driven**: Actions communicate via a shared context dictionary
+5. **Database Integration**: Actions can access database sessions for complex operations
 
 ## Step-by-Step Development Process
 
@@ -21,345 +20,446 @@ Action types are the building blocks of biomapper's mapping strategies. Each act
 
 Before coding, answer these questions:
 
-1.  **What problem does this action solve?**
-    - Example: "Convert identifiers using a local, file-based mapping."
-2.  **What are the inputs and outputs?**
-    - **Inputs**: What keys does it expect to find in the context dictionary? (e.g., a list of identifiers from a previous step).
-    - **Outputs**: What keys will it add to the context dictionary? (e.g., a new list of mapped identifiers, statistics, provenance records).
-3.  **What parameters will it need from the YAML strategy?**
-    - This includes data sources (e.g., file paths), operational flags (e.g., `track_unmatched: true`), and, most importantly, context keys.
-    ```yaml
-    action:
-      type: LOCAL_ID_CONVERTER
-      params:
-        mapping_file_path: "/path/to/mapping.csv"
-        input_context_key: "uniprot_ids"
-        output_context_key: "ensembl_ids"
-        source_column: "uniprot"
-        target_column: "ensembl"
-    ```
-4.  **How does it handle edge cases?** (Empty inputs, composite identifiers, etc.)
+1. **What problem does this action solve?**
+   - Example: "Load all identifiers from a configured endpoint"
+   
+2. **What are the inputs and outputs?**
+   - **Standard Inputs**: 
+     - `current_identifiers`: List of identifiers from previous step
+     - `current_ontology_type`: Current ontology type of identifiers
+     - `action_params`: Parameters from YAML configuration
+     - `source_endpoint`: Source endpoint object
+     - `target_endpoint`: Target endpoint object
+     - `context`: Shared context dictionary
+   - **Outputs**: Must return a dictionary with:
+     - `input_identifiers`: Original input list
+     - `output_identifiers`: Processed identifier list
+     - `output_ontology_type`: Ontology type after processing
+     - `provenance`: List of tracking records
+     - `details`: Action-specific metadata
+
+3. **What parameters will it need from the YAML strategy?**
+   ```yaml
+   action:
+     type: YOUR_ACTION_TYPE
+     params:
+       input_context_key: "source_ids"      # Read from context
+       output_context_key: "processed_ids"  # Write to context
+       other_param: "value"
+   ```
 
 ### Step 2: Create the Action Module
 
-Create a new file in `biomapper/core/strategy_actions/`. The class must inherit from `BaseStrategyAction` and be decorated with `@register_action`.
-
-A best-practice implementation includes a comprehensive docstring with a YAML example.
+Create a new file in `biomapper/core/strategy_actions/`:
 
 ```python
-# /biomapper/core/strategy_actions/local_id_converter.py
+"""
+YourAction: Brief description of what this action does.
+
+This action performs [detailed description of the operation].
+"""
+
 import logging
 from typing import Dict, Any, List
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from .base import BaseStrategyAction
-from .registry import register_action
-# Assume a utility for reading files exists
-from ...utils.file_io import read_mapping_file
+from biomapper.core.strategy_actions.base import BaseStrategyAction
+from biomapper.core.strategy_actions.registry import register_action
+from biomapper.db.models import Endpoint
 
 logger = logging.getLogger(__name__)
 
-@register_action("LOCAL_ID_CONVERTER")
-class LocalIdConverterAction(BaseStrategyAction):
+
+@register_action("YOUR_ACTION_TYPE")
+class YourAction(BaseStrategyAction):
     """
-    Maps identifiers using a local CSV/TSV file.
-
-    This action reads a local mapping file, and for a given list of source
-    identifiers, finds the corresponding target identifiers.
-
-    **YAML Configuration Example:**
-
-    ```yaml
-    - name: Map UniProt to Ensembl
-      action:
-        type: LOCAL_ID_CONVERTER
-        params:
-          mapping_file_path: "${BIOMAPPER_DATA}/mappings/uniprot_to_ensembl.tsv"
-          input_context_key: "uniprot_ids"
-          output_context_key: "ensembl_ids_from_local_file"
-          source_column: "uniprot_id"
-          target_column: "ensembl_id"
-    ```
+    Action that [does something specific].
+    
+    This action:
+    - Point 1 about what it does
+    - Point 2 about what it does
+    - Point 3 about what it does
+    
+    Required parameters:
+    - param1: Description
+    - param2: Description
+    
+    Optional parameters:
+    - param3: Description (default: value)
     """
-    async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    
+    def __init__(self, session: AsyncSession):
         """
-        Executes the identifier conversion based on parameters stored in the action instance.
+        Initialize the action with a database session.
+        
+        Args:
+            session: AsyncSession for database operations
         """
-        # 1. Validate and extract parameters from self.params
-        # The 'params' are injected into the action instance by the strategy executor.
-        mapping_file = self.params.get('mapping_file_path')
-        input_key = self.params.get('input_context_key')
-        output_key = self.params.get('output_context_key')
-        source_col = self.params.get('source_column')
-        target_col = self.params.get('target_column')
-
-        if not all([mapping_file, input_key, output_key, source_col, target_col]):
-            raise ValueError("Missing required parameters for LOCAL_ID_CONVERTER.")
-
-        # 2. Extract input data from the context dictionary
-        input_identifiers = context.get(input_key, [])
-        if not input_identifiers:
-            logger.warning(f"Input key '{input_key}' is empty or not in context. Skipping action.")
-            context[output_key] = []
-            return context
-
-        # 3. Core logic: read mapping and convert IDs
-        # (Assuming a utility function reads the file into a dict)
-        mapping_dict = read_mapping_file(mapping_file, source_col, target_col)
+        self.session = session
+        self.logger = logging.getLogger(__name__)
+    
+    async def execute(
+        self,
+        current_identifiers: List[str],
+        current_ontology_type: str,
+        action_params: Dict[str, Any],
+        source_endpoint: Endpoint,
+        target_endpoint: Endpoint,
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Execute the action.
         
-        output_identifiers = [
-            mapping_dict.get(str(identifier))
-            for identifier in input_identifiers
-            if mapping_dict.get(str(identifier)) is not None
-        ]
-
-        # 4. Update context with results
-        context[output_key] = output_identifiers
+        Args:
+            current_identifiers: List of identifiers to process
+            current_ontology_type: Current ontology type
+            action_params: Parameters from YAML configuration
+            source_endpoint: Source endpoint object
+            target_endpoint: Target endpoint object
+            context: Shared execution context
+            
+        Returns:
+            Dictionary containing:
+            - input_identifiers: Original input
+            - output_identifiers: Processed output
+            - output_ontology_type: Output ontology type
+            - provenance: Tracking information
+            - details: Additional metadata
+            
+        Raises:
+            ValueError: If required parameters are missing
+        """
+        # 1. Validate required parameters
+        param1 = action_params.get('param1')
+        if not param1:
+            raise ValueError("param1 is required for YOUR_ACTION_TYPE")
         
-        # 5. Add provenance and stats
-        provenance_detail = f"Action '{self.__class__.__name__}' mapped {len(input_identifiers)} input IDs to {len(output_identifiers)} output IDs using '{mapping_file}'."
-        context.setdefault('provenance', []).append(provenance_detail)
-        context.setdefault('stats', {}).update({
-            self.__class__.__name__: {
-                'inputs': len(input_identifiers),
-                'outputs': len(output_identifiers)
+        # 2. Handle context-based input if specified
+        input_key = action_params.get('input_context_key')
+        if input_key:
+            # Override current_identifiers with context data
+            current_identifiers = context.get(input_key, [])
+        
+        # 3. Early exit for empty input
+        if not current_identifiers:
+            self.logger.info("No identifiers to process, returning empty result")
+            return {
+                'input_identifiers': [],
+                'output_identifiers': [],
+                'output_ontology_type': current_ontology_type,
+                'provenance': [],
+                'details': {
+                    'action': 'YOUR_ACTION_TYPE',
+                    'status': 'skipped',
+                    'reason': 'empty_input'
+                }
             }
-        })
-
-        logger.info(f"Successfully mapped {len(output_identifiers)} identifiers.")
-        return context
+        
+        # 4. Core processing logic
+        output_identifiers = []
+        provenance_records = []
+        
+        try:
+            # Your processing logic here
+            for identifier in current_identifiers:
+                # Process each identifier
+                processed = self._process_identifier(identifier, param1)
+                if processed:
+                    output_identifiers.append(processed)
+                    provenance_records.append({
+                        'action': 'YOUR_ACTION_TYPE',
+                        'source_id': identifier,
+                        'target_id': processed,
+                        'confidence': 1.0,
+                        'method': 'your_method'
+                    })
+            
+            # 5. Update context if output key specified
+            output_key = action_params.get('output_context_key')
+            if output_key:
+                context[output_key] = output_identifiers
+                self.logger.info(f"Stored {len(output_identifiers)} identifiers in context['{output_key}']")
+            
+            # 6. Prepare result
+            return {
+                'input_identifiers': current_identifiers,
+                'output_identifiers': output_identifiers,
+                'output_ontology_type': action_params.get('output_ontology_type', current_ontology_type),
+                'provenance': provenance_records,
+                'details': {
+                    'action': 'YOUR_ACTION_TYPE',
+                    'parameters': action_params,
+                    'input_count': len(current_identifiers),
+                    'output_count': len(output_identifiers),
+                    'success_rate': len(output_identifiers) / len(current_identifiers) if current_identifiers else 0
+                }
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error in YOUR_ACTION_TYPE: {str(e)}")
+            raise
+    
+    def _process_identifier(self, identifier: str, param1: str) -> str:
+        """Helper method for processing individual identifiers."""
+        # Implementation here
+        return identifier  # Placeholder
 ```
 
-### Step 3: Write Comprehensive Unit Tests
+### Step 3: Common Implementation Patterns
 
-Testing is a critical part of action development. Create a corresponding test file in `tests/unit/core/strategy_actions/`.
-
-**Key Testing Principles:**
-
-1.  **Isolate the Action**: Your tests should focus solely on the action's logic. Mock any external dependencies like file reads or database calls.
-2.  **Test Parameter Validation**: Ensure your action raises appropriate errors for missing or invalid parameters.
-3.  **Cover Edge Cases**: This is crucial for robust bioinformatics pipelines. Your tests should cover:
-    *   Empty input lists (`context[input_key] = []`)
-    *   Inputs with no matches in the mapping file.
-    *   `None` values or empty strings in the input list.
-    *   Mappings with special characters or different cases.
-    *   Composite identifiers (e.g., `ID1;ID2`).
-4.  **Verify the Entire Context**: Don't just check the `output_context_key`. Assert that provenance and statistics are being added to the context correctly.
-5.  **Use `pytest` Fixtures**: Use fixtures to create reusable `ActionContext` objects for your tests.
-
-**Example Test Structure:**
+#### Loading Data from Endpoints
 
 ```python
-# tests/unit/core/strategy_actions/test_local_id_converter.py
+from biomapper.mapping.adapters.csv_adapter import CSVAdapter
+
+# In execute method:
+endpoint_name = action_params.get('endpoint_name')
+if endpoint_name == 'SOURCE':
+    endpoint = source_endpoint
+elif endpoint_name == 'TARGET':
+    endpoint = target_endpoint
+else:
+    # Query endpoint by name from database
+    pass
+
+# Load data using adapter
+adapter = CSVAdapter(endpoint=endpoint)
+df = await adapter.load_data(columns_to_load=['column_name'])
+```
+
+#### Handling Composite Identifiers
+
+```python
+# Split composite IDs (e.g., "ID1;ID2;ID3")
+delimiter = action_params.get('delimiter', ';')
+expanded_ids = []
+for identifier in current_identifiers:
+    if delimiter in identifier:
+        expanded_ids.extend(identifier.split(delimiter))
+    else:
+        expanded_ids.append(identifier)
+```
+
+#### Database Queries
+
+```python
+from sqlalchemy import select
+from biomapper.db.models import SomeModel
+
+# Query using the session
+stmt = select(SomeModel).where(SomeModel.field == value)
+result = await self.session.execute(stmt)
+records = result.scalars().all()
+```
+
+### Step 4: Write Comprehensive Unit Tests
+
+Create test file in `tests/unit/core/strategy_actions/`:
+
+```python
 import pytest
-from unittest.mock import patch
-from biomapper.core.strategy_actions.local_id_converter import LocalIdConverterAction
+from unittest.mock import Mock, AsyncMock
+from biomapper.core.strategy_actions.your_action import YourAction
 
 @pytest.fixture
-def base_context():
-    """Provides a basic action context for tests."""
-    return {
-        'current_action_params': {
-            'mapping_file_path': 'fake/path/map.csv',
-            'input_context_key': 'input_ids',
-            'output_context_key': 'output_ids',
-            'source_column': 'src',
-            'target_column': 'tgt'
-        },
-        'input_ids': ['A', 'B', 'C']
+def mock_session():
+    """Mock database session."""
+    session = AsyncMock()
+    return session
+
+@pytest.fixture
+def mock_endpoints():
+    """Mock source and target endpoints."""
+    source = Mock()
+    source.name = "SOURCE_ENDPOINT"
+    target = Mock()
+    target.name = "TARGET_ENDPOINT"
+    return source, target
+
+@pytest.mark.asyncio
+async def test_successful_execution(mock_session, mock_endpoints):
+    """Test successful action execution."""
+    # Arrange
+    action = YourAction(mock_session)
+    source_endpoint, target_endpoint = mock_endpoints
+    
+    current_identifiers = ['ID1', 'ID2', 'ID3']
+    action_params = {
+        'param1': 'value1',
+        'output_context_key': 'results'
     }
+    context = {}
+    
+    # Act
+    result = await action.execute(
+        current_identifiers=current_identifiers,
+        current_ontology_type='ORIGINAL_TYPE',
+        action_params=action_params,
+        source_endpoint=source_endpoint,
+        target_endpoint=target_endpoint,
+        context=context
+    )
+    
+    # Assert
+    assert result['input_identifiers'] == current_identifiers
+    assert len(result['output_identifiers']) > 0
+    assert result['output_ontology_type'] == 'ORIGINAL_TYPE'
+    assert len(result['provenance']) > 0
+    assert result['details']['action'] == 'YOUR_ACTION_TYPE'
+    assert 'results' in context
+    assert context['results'] == result['output_identifiers']
 
 @pytest.mark.asyncio
-@patch('biomapper.core.strategy_actions.local_id_converter.read_mapping_file')
-async def test_successful_mapping(mock_read_file, base_context):
+async def test_empty_input_handling(mock_session, mock_endpoints):
+    """Test handling of empty input."""
     # Arrange
-    action = LocalIdConverterAction()
-    mock_read_file.return_value = {'A': 'X', 'B': 'Y', 'D': 'Z'} # Mock file read
-
+    action = YourAction(mock_session)
+    source_endpoint, target_endpoint = mock_endpoints
+    
     # Act
-    result_context = await action.execute(base_context)
-
+    result = await action.execute(
+        current_identifiers=[],
+        current_ontology_type='TYPE',
+        action_params={'param1': 'value'},
+        source_endpoint=source_endpoint,
+        target_endpoint=target_endpoint,
+        context={}
+    )
+    
     # Assert
-    assert 'output_ids' in result_context
-    assert result_context['output_ids'] == ['X', 'Y']
-    assert 'stats' in result_context
-    assert result_context['stats']['LocalIdConverterAction']['outputs'] == 2
-    assert len(result_context['provenance']) == 1
+    assert result['output_identifiers'] == []
+    assert result['details']['status'] == 'skipped'
+    assert result['details']['reason'] == 'empty_input'
 
 @pytest.mark.asyncio
-async def test_empty_input_list(base_context):
+async def test_missing_required_parameter(mock_session, mock_endpoints):
+    """Test validation of required parameters."""
     # Arrange
-    action = LocalIdConverterAction()
-    base_context['input_ids'] = []
+    action = YourAction(mock_session)
+    source_endpoint, target_endpoint = mock_endpoints
+    
+    # Act & Assert
+    with pytest.raises(ValueError, match="param1 is required"):
+        await action.execute(
+            current_identifiers=['ID1'],
+            current_ontology_type='TYPE',
+            action_params={},  # Missing param1
+            source_endpoint=source_endpoint,
+            target_endpoint=target_endpoint,
+            context={}
+        )
 
+@pytest.mark.asyncio
+async def test_context_input_override(mock_session, mock_endpoints):
+    """Test reading input from context."""
+    # Arrange
+    action = YourAction(mock_session)
+    source_endpoint, target_endpoint = mock_endpoints
+    
+    context = {
+        'other_ids': ['CTX1', 'CTX2']
+    }
+    
+    action_params = {
+        'param1': 'value',
+        'input_context_key': 'other_ids'
+    }
+    
     # Act
-    result_context = await action.execute(base_context)
-
+    result = await action.execute(
+        current_identifiers=['IGNORED'],  # Should be overridden
+        current_ontology_type='TYPE',
+        action_params=action_params,
+        source_endpoint=source_endpoint,
+        target_endpoint=target_endpoint,
+        context=context
+    )
+    
     # Assert
-    assert result_context['output_ids'] == []
-    assert 'stats' not in result_context # No stats updated if no work done
+    assert result['input_identifiers'] == ['CTX1', 'CTX2']
 ```
 
-### Step 4: Register the Action
+### Step 5: Register the Action
 
-To make the action available to the strategy engine, it must be imported in `biomapper/core/strategy_actions/__init__.py`. The act of importing it triggers the `@register_action` decorator.
+The action self-registers via the decorator, but you may need to ensure it's imported:
 
 ```python
-# /biomapper/core/strategy_actions/__init__.py
-
-# ... other imports
-from .local_id_converter import LocalIdConverterAction
+# In biomapper/core/strategy_actions/__init__.py (if needed for discovery)
+from .your_action import YourAction
 
 __all__ = [
-    # ... other actions
-    "LocalIdConverterAction",
+    # ... existing actions
+    "YourAction",
 ]
 ```
 
 ## Best Practices
 
-- **Logging**: Use `logger.info()` and `logger.debug()` to provide insight into the action's execution. This is invaluable for debugging complex pipelines.
-- **Error Handling**: Validate all incoming parameters from the YAML configuration and raise descriptive `ValueError` exceptions for missing or invalid parameters.
-- **Docstrings**: Write a comprehensive docstring for your action class that includes a real-world YAML usage example. This is the primary source of documentation for users of your action.
-- **Provenance**: Whenever possible, add detailed provenance records to the context. This allows for full traceability of how identifiers were transformed.
-    # Arrange
-    mock_source_endpoint = MagicMock()
-    mock_target_endpoint = MagicMock()
-    
-    # Act
-    result = await action.execute(
-        current_identifiers=['P12345'],
-        current_ontology_type='uniprot',
-        action_params={'target_ontology': 'ensembl'},
-        source_endpoint=mock_source_endpoint,
-        target_endpoint=mock_target_endpoint,
-        context={}
-    )
-
-    # Assert
-    assert result['details'].get('action') == 'BIDIRECTIONAL_MATCH'
-    assert result['output_ontology_type'] == 'ensembl'
-    assert len(result['output_identifiers']) == 1
-    assert len(result['provenance']) == 1
-
-@pytest.mark.asyncio
-async def test_missing_parameter_raises_error(action):
-    # Arrange
-    mock_source_endpoint = MagicMock()
-    mock_target_endpoint = MagicMock()
-
-    # Act & Assert
-    with pytest.raises(ValueError, match="'target_ontology' is a required parameter"):
-        await action.execute(
-            current_identifiers=['P12345'],
-            current_ontology_type='uniprot',
-            action_params={},  # Missing target_ontology
-            source_endpoint=mock_source_endpoint,
-            target_endpoint=mock_target_endpoint,
-            context={}
-        )
-```
-
-### Step 5: Documentation
-
-Update all relevant documentation with your new action's details.
-
-1. **Add to `ACTION_TYPES_REFERENCE.md`** (or similar doc):
-   ```markdown
-   ## BIDIRECTIONAL_MATCH
-   
-   Performs intelligent bidirectional matching between endpoints.
-   
-   **Parameters:**
-   - `source_ontology` (required): Ontology type in source
-   - `target_ontology` (required): Ontology type in target
-   - `match_mode`: "many_to_many" or "one_to_one"
-   ```
-
-2. **Update strategy examples** in `configs/` to show usage.
-
-### Step 6: Code Review Checklist
-
-Before submitting:
-
-- [ ] Action inherits from `BaseStrategyAction` and uses `@register_action`.
-- [ ] Action is imported in `strategy_actions/__init__.py`.
-- [ ] All parameters from `action_params` are validated.
-- [ ] Error handling is comprehensive.
-- [ ] Logging is informative but not excessive.
-- [ ] Tests cover happy path and edge cases.
-- [ ] Documentation is complete.
-- [ ] Code follows project style guidelines.
-@given(
-    identifiers=st.lists(st.text(min_size=1), min_size=1),
-    composite_prob=st.floats(0, 1)
-)
-def test_composite_handling_properties(identifiers, composite_prob):
-    """Test that composite handling preserves certain properties."""
-    # Property: Expansion never loses identifiers
-    # Property: Original IDs always included
-    pass
-```
-
-## Performance Considerations
-
-1. **Lazy Loading** - Only load data columns you need
-2. **Batch Processing** - Process identifiers in batches
-3. **Caching** - Use context to cache expensive operations
-4. **Early Exit** - Return early if no work to do
-
+### Logging
 ```python
-# Example: Early exit
-if not current_identifiers:
-    logger.info("Skipping action due to empty input identifiers.")
-    return {
-        'input_identifiers': [],
-        'output_identifiers': [],
-        'output_ontology_type': current_ontology_type, # No change in type
-        'provenance': [],
-        'details': {'action': 'BIDIRECTIONAL_MATCH', 'status': 'skipped', 'reason': 'empty_input'}
-    }
+self.logger.debug(f"Processing {len(identifiers)} identifiers")
+self.logger.info(f"Successfully processed {len(output)} identifiers")
+self.logger.warning(f"No matches found for {unmatched_count} identifiers")
+self.logger.error(f"Failed to process: {error_message}")
 ```
 
-## Debugging Tips
+### Error Handling
+```python
+# Validate parameters early
+if not action_params.get('required_param'):
+    raise ValueError("required_param is required for ACTION_TYPE")
 
-1. **Comprehensive Logging**:
-   ```python
-   logger.debug(f"Processing {len(identifiers)} identifiers")
-   logger.info(f"Matched {matched_count}/{total_count} identifiers")
-   logger.warning(f"No matches found for {unmatched_count} identifiers")
-   ```
+# Provide context in errors
+try:
+    result = process_data(data)
+except Exception as e:
+    raise ValueError(f"Failed to process data: {str(e)}") from e
+```
 
-2. **Detailed Provenance**:
-   ```python
-   provenance.append({
-       'action': 'BIDIRECTIONAL_MATCH',
-       'timestamp': datetime.utcnow().isoformat(),
-       'input_id': source_id,
-       'output_ids': target_ids,
-       'confidence': confidence_score,
-       'method': 'direct_match',
-       'parameters': action_params
-   })
-   ```
-
-3. **Test Data Files** - Create small test datasets that exhibit the behavior you're testing
+### Provenance Tracking
+```python
+provenance_records.append({
+    'action': 'YOUR_ACTION_TYPE',
+    'source_id': source_id,
+    'target_id': target_id,
+    'confidence': confidence_score,
+    'method': 'direct_match',
+    'source_ontology': current_ontology_type,
+    'target_ontology': output_ontology_type,
+    'timestamp': datetime.utcnow().isoformat()
+})
+```
 
 ## Common Pitfalls to Avoid
 
-1. **Modifying Input Lists** - Always work with copies
-2. **Assuming 1:1 Mappings** - Always handle M:M
-3. **Ignoring Composites** - Check for delimiters
-4. **Poor Error Messages** - Be specific about what's wrong
-5. **Missing Provenance** - Track everything for debugging
+1. **Incorrect Return Structure** - Always return all required fields
+2. **Ignoring Context Flow** - Remember to read from and write to context
+3. **Missing Parameter Validation** - Validate early and fail with clear messages
+4. **Not Handling Empty Input** - Always check for empty lists
+5. **Forgetting Provenance** - Track all transformations for debugging
+
+## Performance Considerations
+
+1. **Batch Processing** - Process identifiers in batches for large datasets
+2. **Async Operations** - Use async/await for I/O operations
+3. **Memory Management** - Stream large files instead of loading entirely
+4. **Caching** - Use context to cache expensive operations
+
+## Debugging Tips
+
+1. **Use Detailed Logging** - Log at each major step
+2. **Include Context in Errors** - Show what data caused the failure
+3. **Test with Small Datasets** - Start with minimal test cases
+4. **Check Context Flow** - Log what's read from and written to context
 
 ## Next Steps
 
 After developing your action:
 
-1. **Peer Review** - Have someone review the code
-2. **Performance Test** - Test with realistic data sizes
-3. **Documentation** - Update all relevant docs
-4. **Example Strategy** - Create an example using your action
-5. **Migration Guide** - If replacing an existing pattern
+1. **Integration Test** - Test the action in a real strategy
+2. **Documentation** - Update action reference documentation
+3. **Example Strategy** - Create a sample YAML showing usage
+4. **Performance Test** - Verify it handles production data sizes
+5. **Code Review** - Have peers review the implementation
 
-Remember: Action types are the building blocks of biomapper. Make them robust, well-tested, and easy to understand!
+Remember: Actions are the workhorses of biomapper. Make them robust, well-tested, and easy to understand!

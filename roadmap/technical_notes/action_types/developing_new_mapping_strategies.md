@@ -4,147 +4,349 @@ This guide provides a comprehensive overview of how to create new mapping strate
 
 ## 1. Introduction to Mapping Strategies
 
-A mapping strategy is a declarative workflow defined in a YAML file. It specifies a sequence of steps, where each step invokes a specific `StrategyAction` to perform a task. Strategies are designed to be modular, reusable, and easy to understand.
-
-They orchestrate the flow of data through various actions, managing a shared `ActionContext` that allows steps to communicate and share results.
+A mapping strategy is a declarative workflow defined in a YAML file. It specifies a sequence of steps, where each step invokes a specific registered action to perform a task. Strategies are designed to be modular, reusable, and easy to understand.
 
 ## 2. Anatomy of a Strategy YAML File
 
-A strategy YAML file has the following top-level structure:
+Based on the actual implementation, a strategy YAML file has the following structure:
 
 ```yaml
 name: UNIQUE_STRATEGY_NAME
-version: "1.0.0"
-description: "A brief but clear description of what this strategy accomplishes."
-author: "Your Name"
-requirements:
-  - biomapper_version: ">=0.1.0"
-  - specific_package: "==1.2.3" # Optional package requirements
-context:
-  # Initial context values required to run the strategy
-  initial_inputs:
-    - name: input_data_key
-      description: "Description of this input."
-      required: true
-      type: "list[str]" # Expected data type
+description: "A clear description of what this strategy accomplishes"
+
+# Optional: User-configurable parameters
+parameters:
+  - name: "PARAMETER_NAME"
+    description: "What this parameter controls"
+    required: false
+    default: "default_value"
+
+# The sequence of actions to execute
 steps:
-  # A list of action steps to execute in sequence
-  - ...
+  - name: STEP_NAME
+    description: "What this step does"
+    action:
+      type: ACTION_TYPE  # Must match a registered action
+      params:
+        # Parameters specific to this action
+        param_name: "value"
+    is_required: true  # Optional: whether step failure stops execution
 ```
 
 ### Key Fields:
 
--   `name`: A unique identifier for the strategy. This is used to retrieve and execute the strategy via the API.
--   `version`: The version of the strategy, following semantic versioning.
--   `description`: A human-readable summary of the strategy's purpose.
--   `author`: The author of the strategy.
--   `requirements`: (Optional) A list of dependencies required for the strategy to run, such as a minimum Biomapper version or other Python packages.
--   `context`: Defines the initial data required by the strategy.
-    -   `initial_inputs`: A list of required input keys that must be present in the `ActionContext` when the strategy execution begins. Each input has a `name`, `description`, `required` flag, and expected `type`.
--   `steps`: A list of dictionaries, where each dictionary defines a single step in the workflow.
-
-## 3. Defining Strategy Steps
-
-Each step in the `steps` list defines an action to be executed. It has the following structure:
-
-```yaml
-steps:
-  - name: descriptive_step_name
-    action: ActionClassName
-    description: "What this step does."
-    parameters:
-      # Action-specific parameters
-      param_1: value_1
-      param_2: "value_2"
-    on_error: "fail" # or "continue"
-    optional: false
-```
+- **`name`**: A unique identifier for the strategy (required)
+- **`description`**: Human-readable explanation of the strategy's purpose (required)
+- **`parameters`**: Optional list of user-configurable parameters that can be referenced in steps
+- **`steps`**: List of actions to execute in sequence (required)
 
 ### Step Fields:
 
--   `name`: A unique, descriptive name for the step within the strategy.
--   `action`: The class name of the `StrategyAction` to execute (e.g., `LocalIdConverter`, `ApiResolver`).
--   `description`: A brief explanation of the step's purpose.
--   `parameters`: A dictionary of parameters passed to the action's `execute` method. These are specific to each action. You can use context variables here.
--   `on_error`: (Optional, default: `fail`) Defines the behavior if the action raises an error.
-    -   `fail`: The strategy execution stops immediately.
-    -   `continue`: The strategy logs the error and proceeds to the next step.
--   `optional`: (Optional, default: `false`) If `true`, this step can be skipped if its required input parameters are not available in the context.
+- **`name`**: Unique name for the step within the strategy
+- **`description`**: Explanation of what this step accomplishes
+- **`action`**: The action configuration
+  - **`type`**: The registered action type to execute (e.g., `LOCAL_ID_CONVERTER`)
+  - **`params`**: Dictionary of parameters passed to the action
+- **`is_required`**: Optional boolean (default: true) - if false, step failure won't stop execution
 
-## 4. Data Flow and the Action Context
+## 3. Data Flow and Context
 
-The `ActionContext` is a Python dictionary that is passed through the entire sequence of steps. It acts as a shared state, allowing actions to pass data to subsequent actions.
+### The Execution Context
 
-### Using Context Variables
+All steps in a strategy share a context dictionary that flows through the execution. This allows steps to:
+- Access results from previous steps
+- Store data for subsequent steps
+- Share state across the workflow
 
-You can reference values from the `ActionContext` in your step parameters using a special syntax: `${context.key_name}`.
+### Initial Context
 
-**Example:**
+When a strategy is executed via the API, the initial context includes:
+- `input_identifiers`: List of identifiers provided in the request
+- `SOURCE`: Name of the source endpoint
+- `TARGET`: Name of the target endpoint
+- Any additional parameters from the API request
 
-An action might place a list of identifiers in the context under the key `uniprot_ids`. A subsequent action can then use these identifiers:
+### Context Key Conventions
 
+Actions typically use these parameter patterns:
+- `input_context_key`: Key to read input data from context
+- `output_context_key`: Key to store output data in context
+- `endpoint_context`: "SOURCE" or "TARGET" to reference endpoints
+- `dataset1_context_key`, `dataset2_context_key`: For comparison actions
+
+Example:
 ```yaml
 steps:
-  - name: get_initial_ids
-    action: LoadFromFileAction
-    parameters:
-      filepath: "/path/to/data.csv"
-      output_context_key: "initial_ids"
-
-  - name: convert_ids
-    action: LocalIdConverter
-    parameters:
-      input_identifiers: "${context.initial_ids}"
-      output_context_key: "converted_ids"
+  - name: load_data
+    action:
+      type: LOAD_ENDPOINT_IDENTIFIERS
+      params:
+        endpoint_name: "HPA_PROTEIN_DATA"
+        output_context_key: "hpa_proteins"  # Stores result here
+  
+  - name: analyze_data
+    action:
+      type: DATASET_OVERLAP_ANALYZER
+      params:
+        dataset1_context_key: "input_identifiers"  # From initial context
+        dataset2_context_key: "hpa_proteins"       # From previous step
+        output_context_key: "overlap_results"
 ```
 
-In this example, `LoadFromFileAction` reads data and saves it to `context['initial_ids']`. The `LocalIdConverter` then accesses this data using `${context.initial_ids}`.
+## 4. Using Strategy Parameters
 
-## 5. Example Strategy: UKBB-HPA Protein Overlap
+Strategy parameters allow users to customize behavior without modifying the YAML:
 
-Here is a simplified version of a strategy that finds overlapping proteins between UKBB and HPA datasets.
+```yaml
+parameters:
+  - name: "OUTPUT_DIR"
+    description: "Directory for saving results"
+    required: false
+    default: "./results"
+  
+  - name: "MIN_CONFIDENCE"
+    description: "Minimum confidence threshold"
+    required: false
+    default: 0.8
+
+steps:
+  - name: save_results
+    action:
+      type: SAVE_RESULTS
+      params:
+        output_directory: "${OUTPUT_DIR}"  # Reference parameter
+        confidence_threshold: "${MIN_CONFIDENCE}"
+```
+
+## 5. Available Action Types
+
+### Data Loading Actions
+- **`LOAD_ENDPOINT_IDENTIFIERS`**: Load all identifiers from a named endpoint
+- **`LOAD_IDENTIFIERS_FROM_ENDPOINT`**: Load from SOURCE/TARGET context
+
+### ID Conversion Actions
+- **`LOCAL_ID_CONVERTER`**: Convert IDs using local mapping files
+- **`CONVERT_IDENTIFIERS_LOCAL`**: Convert with endpoint context
+- **`COMPOSITE_ID_SPLITTER`**: Split composite identifiers (e.g., "ID1;ID2")
+
+### Analysis Actions
+- **`DATASET_OVERLAP_ANALYZER`**: Compare two identifier sets
+- **`BIDIRECTIONAL_MATCH`**: Match identifiers between datasets
+- **`FILTER_BY_TARGET_PRESENCE`**: Filter by presence in target dataset
+
+### API Resolution Actions
+- **`RESOLVE_AND_MATCH_FORWARD`**: Resolve unmatched IDs via external API
+- **`RESOLVE_AND_MATCH_REVERSE`**: Reverse resolution via API
+
+### Output Actions
+- **`GENERATE_SUMMARY_STATS`**: Create mapping statistics
+- **`FORMAT_AND_SAVE_RESULTS`**: Save results to files
+- **`GENERATE_MARKDOWN_REPORT`**: Create detailed reports
+
+## 6. Real-World Example: UKBB-HPA Analysis
+
+Here's a complete example that demonstrates key concepts:
 
 ```yaml
 name: UKBB_HPA_PROTEIN_OVERLAP_ANALYSIS
-version: "1.0.0"
-description: "Identifies overlapping proteins between UKBB and HPA datasets."
-author: "Biomapper Team"
-
-context:
-  initial_inputs:
-    - name: ukbb_protein_ids
-      description: "A list of protein identifiers from the UKBB dataset."
-      required: true
-      type: "list[str]"
-    - name: hpa_protein_ids
-      description: "A list of protein identifiers from the HPA dataset."
-      required: true
-      type: "list[str]"
+description: "Maps UKBB protein assay IDs to HPA gene names using local files"
 
 steps:
-  - name: find_common_proteins
-    action: BidirectionalMatchAction
-    description: "Finds common identifiers between the two protein lists."
-    parameters:
-      endpoint1_identifiers: "${context.ukbb_protein_ids}"
-      endpoint2_identifiers: "${context.hpa_protein_ids}"
-      match_type: "intersection"
-      output_context_key: "overlapping_proteins"
+  # Step 1: Convert UKBB assay IDs to UniProt
+  - name: CONVERT_UKBB_ASSAY_TO_UNIPROT
+    action:
+      type: LOCAL_ID_CONVERTER
+      params:
+        input_context_key: "input_identifiers"  # From API request
+        output_context_key: "ukbb_uniprot_ids"
+        mapping_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
+        source_column: "Assay"
+        target_column: "UniProt"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
 
-  - name: generate_summary_report
-    action: GenerateMappingSummaryAction
-    description: "Generates a summary of the overlap results."
-    parameters:
-      input_data: "${context.overlapping_proteins}"
-      output_format: "console"
+  # Step 2: Load HPA protein data
+  - name: LOAD_HPA_UNIPROT_IDS
+    action:
+      type: LOAD_ENDPOINT_IDENTIFIERS
+      params:
+        endpoint_name: "HPA_PROTEIN_DATA"
+        output_context_key: "hpa_uniprot_ids"
+
+  # Step 3: Find overlapping proteins
+  - name: ANALYZE_OVERLAP
+    action:
+      type: DATASET_OVERLAP_ANALYZER
+      params:
+        dataset1_context_key: "ukbb_uniprot_ids"
+        dataset2_context_key: "hpa_uniprot_ids"
+        output_context_key: "overlapping_uniprot_ids"
+        dataset1_name: "UKBB"
+        dataset2_name: "HPA"
+        generate_statistics: true
+
+  # Step 4: Convert overlapping UniProt IDs to HPA genes
+  - name: CONVERT_UNIPROT_TO_HPA_GENE
+    action:
+      type: LOCAL_ID_CONVERTER
+      params:
+        input_context_key: "overlapping_uniprot_ids"
+        output_context_key: "final_hpa_genes"
+        mapping_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
+        source_column: "uniprot"
+        target_column: "gene"
+        output_ontology_type: "HPA_GENE_ONTOLOGY"
 ```
 
-## 6. Best Practices
+## 7. Testing Your Strategy
 
--   **Modularity:** Keep strategies focused on a single, well-defined goal. For complex workflows, consider breaking them into smaller, chainable strategies.
--   **Clear Naming:** Use descriptive names for strategies, steps, and context keys. This makes the workflow easier to understand and debug.
--   **Documentation:** Write clear descriptions for the strategy and each step. Document the expected inputs and outputs in the `context` section.
--   **Error Handling:** Use `on_error` and `optional` fields judiciously to create robust and resilient workflows.
--   **Versioning:** Increment the strategy version when you make significant changes to its logic or parameters.
+### Via the API
 
-By following these guidelines, you can create powerful, flexible, and maintainable mapping strategies to drive your data analysis pipelines in Biomapper.
+1. Start the API server:
+```bash
+cd /home/ubuntu/biomapper/biomapper-api
+poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+2. Execute the strategy:
+```bash
+curl -X POST http://localhost:8000/api/strategies/YOUR_STRATEGY_NAME/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_endpoint_name": "SOURCE_ENDPOINT",
+    "target_endpoint_name": "TARGET_ENDPOINT",
+    "input_identifiers": ["ID1", "ID2", "ID3"],
+    "options": {
+      "OUTPUT_DIR": "/custom/output/path"
+    }
+  }'
+```
+
+### Updating Database Strategies
+
+If your strategy needs to be stored in the database:
+
+```python
+# Create a script to update the database
+poetry run python scripts/update_strategy.py
+```
+
+## 8. Best Practices
+
+### Strategy Design
+- **Single Responsibility**: Each strategy should solve one biological question
+- **Clear Naming**: Use descriptive names for strategies and steps
+- **Modular Steps**: Break complex operations into multiple steps
+- **Error Handling**: Use `is_required: false` for optional steps
+
+### Context Management
+- **Document Context Keys**: Comment what each key contains
+- **Consistent Naming**: Use clear, consistent key names
+- **Avoid Collisions**: Use unique keys for each step's output
+
+### Parameter Usage
+- **Sensible Defaults**: Provide reasonable default values
+- **Clear Descriptions**: Explain what each parameter controls
+- **Validation**: Actions should validate parameter values
+
+## 9. Common Patterns
+
+### Loading and Converting Pattern
+```yaml
+- name: load_source
+  action:
+    type: LOAD_IDENTIFIERS_FROM_ENDPOINT
+    params:
+      endpoint_context: "SOURCE"
+      output_context_key: "source_ids"
+
+- name: convert_ids
+  action:
+    type: CONVERT_IDENTIFIERS_LOCAL
+    params:
+      input_context_key: "source_ids"
+      output_ontology_type: "TARGET_ONTOLOGY"
+      output_context_key: "converted_ids"
+```
+
+### Bidirectional Analysis Pattern
+```yaml
+- name: forward_match
+  action:
+    type: BIDIRECTIONAL_MATCH
+    params:
+      source_ids_context_key: "dataset_a"
+      target_ids_context_key: "dataset_b"
+      matched_pairs_output_key: "matches"
+      unmatched_source_output_key: "unmatched_a"
+      unmatched_target_output_key: "unmatched_b"
+
+- name: resolve_unmatched
+  action:
+    type: RESOLVE_AND_MATCH_FORWARD
+    params:
+      input_context_key: "unmatched_a"
+      target_ids_context_key: "dataset_b"
+      api_endpoint: "UNIPROT_HISTORY"
+      output_matched_key: "resolved_matches"
+```
+
+## 10. Troubleshooting
+
+### Common Issues
+
+1. **"Unknown action type"**
+   - Verify the action type is registered
+   - Check spelling and case sensitivity
+
+2. **"Parameter X is required"**
+   - Check the action's documentation for required params
+   - Ensure parameter names match exactly
+
+3. **Empty Results**
+   - Check context key names are consistent
+   - Verify data is being passed between steps
+   - Add logging to trace data flow
+
+### Debugging Tips
+
+1. **Check API Logs**: 
+   ```bash
+   tail -f /tmp/api_server.log
+   ```
+
+2. **Validate YAML Syntax**:
+   ```bash
+   python -c "import yaml; yaml.safe_load(open('your_strategy.yaml'))"
+   ```
+
+3. **Test Steps Individually**: Create minimal strategies to test each step
+
+## 11. Advanced Features
+
+### Conditional Execution
+Use `is_required: false` for steps that might fail:
+```yaml
+- name: try_api_resolution
+  action:
+    type: API_RESOLVER
+    params:
+      # ... parameters
+  is_required: false  # Continue even if this fails
+```
+
+### Complex Context Manipulation
+Some actions can merge or transform context data:
+```yaml
+- name: merge_results
+  action:
+    type: MERGE_CONTEXT_ITEMS
+    params:
+      input_keys:
+        - "results_1"
+        - "results_2"
+        - "results_3"
+      output_key: "all_results"
+      merge_type: "union"
+```
+
+Remember: The power of Biomapper comes from combining simple, well-tested actions into sophisticated mapping workflows!
