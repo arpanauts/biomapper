@@ -1,0 +1,99 @@
+name: UKBB_HPA_WITH_HISTORICAL_RESOLUTION
+description: |
+  Enhanced UKBB-HPA overlap analysis with UniProt historical ID resolution.
+  
+  This strategy:
+  1. Loads UKBB UniProt IDs directly
+  2. Resolves any historical/secondary IDs to current primary accessions
+  3. Loads HPA UniProt IDs
+  4. Resolves HPA historical IDs as well
+  5. Performs overlap analysis on current IDs
+  6. Converts results to gene names
+
+steps:
+  # Step 1: Load UKBB UniProt IDs
+  - name: LOAD_UKBB_UNIPROT_IDS
+    action:
+      type: LOAD_ENDPOINT_IDENTIFIERS
+      params:
+        endpoint_name: "UKBB_PROTEIN"
+        output_context_key: "ukbb_raw_uniprot_ids"
+
+  # Step 2: Resolve UKBB historical IDs to current
+  - name: RESOLVE_UKBB_HISTORICAL_IDS
+    action:
+      type: UNIPROT_HISTORICAL_RESOLVER
+      params:
+        input_context_key: "ukbb_raw_uniprot_ids"
+        output_context_key: "ukbb_current_uniprot_ids"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        batch_size: 200
+        include_obsolete: false
+        expand_composites: true
+
+  # Step 3: Load HPA UniProt IDs from file
+  - name: EXTRACT_HPA_UNIPROT_IDS
+    action:
+      type: LOCAL_ID_CONVERTER
+      params:
+        mapping_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
+        source_column: "gene"
+        target_column: "uniprot"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_context_key: "hpa_raw_uniprot_ids"
+
+  # Step 4: Resolve HPA historical IDs to current
+  - name: RESOLVE_HPA_HISTORICAL_IDS
+    action:
+      type: UNIPROT_HISTORICAL_RESOLVER
+      params:
+        input_context_key: "hpa_raw_uniprot_ids"
+        output_context_key: "hpa_current_uniprot_ids"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        batch_size: 200
+        include_obsolete: false
+
+  # Step 5: Analyze overlap between current IDs only
+  - name: ANALYZE_CURRENT_ID_OVERLAP
+    action:
+      type: DATASET_OVERLAP_ANALYZER
+      params:
+        dataset1_context_key: "ukbb_current_uniprot_ids"
+        dataset2_context_key: "hpa_current_uniprot_ids"
+        output_context_key: "overlap_results"
+        dataset1_name: "UKBB_Current"
+        dataset2_name: "HPA_Current"
+        generate_statistics: true
+
+  # Step 6: Convert overlapping UniProt IDs to gene names
+  - name: CONVERT_TO_GENE_NAMES
+    action:
+      type: LOCAL_ID_CONVERTER
+      params:
+        input_context_key: "overlap_results"
+        output_context_key: "overlapping_gene_names"
+        mapping_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
+        source_column: "uniprot"
+        target_column: "gene"
+        output_ontology_type: "HPA_OSP_PROTEIN_ID_ONTOLOGY"
+
+  # Step 7: Generate comprehensive report
+  - name: GENERATE_RESOLUTION_REPORT
+    action:
+      type: GENERATE_DETAILED_REPORT
+      params:
+        output_file: "${OUTPUT_DIR}/ukbb_hpa_historical_resolution_report.json"
+        include_sections:
+          - summary
+          - statistics
+          - resolution_details
+          - overlap_analysis
+        custom_data:
+          ukbb_resolution_stats: "context.ukbb_resolution_stats"
+          hpa_resolution_stats: "context.hpa_resolution_stats"
+
+# Benefits of historical resolution:
+# - Ensures we're comparing current UniProt IDs, not outdated ones
+# - Catches cases where UKBB or HPA data contains secondary/retired IDs
+# - Provides better overlap accuracy by resolving demerged proteins
+# - Tracks provenance of all ID resolutions for audit trail

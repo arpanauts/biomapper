@@ -1,5 +1,5 @@
 name: UKBB_HPA_PROTEIN_OVERLAP_ANALYSIS
-description: "Maps UKBB protein assay IDs to HPA gene names using local files."
+description: "Maps UKBB protein assay IDs to HPA gene names using local files with historical ID resolution."
 
 steps:
   - name: CONVERT_UKBB_ASSAY_TO_UNIPROT
@@ -7,18 +7,38 @@ steps:
       type: LOCAL_ID_CONVERTER
       params:
         input_context_key: "input_identifiers"
-        output_context_key: "ukbb_uniprot_ids"
+        output_context_key: "ukbb_raw_uniprot_ids"
         mapping_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
         source_column: "Assay"
         target_column: "UniProt"
         output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+
+  - name: RESOLVE_UKBB_HISTORICAL_IDS
+    action:
+      type: UNIPROT_HISTORICAL_RESOLVER
+      params:
+        input_context_key: "ukbb_raw_uniprot_ids"
+        output_context_key: "ukbb_uniprot_ids"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        batch_size: 200
+        include_obsolete: false
 
   - name: LOAD_HPA_UNIPROT_IDS
     action:
       type: LOAD_ENDPOINT_IDENTIFIERS
       params:
         endpoint_name: "HPA_PROTEIN_DATA"
+        output_context_key: "hpa_raw_uniprot_ids"
+
+  - name: RESOLVE_HPA_HISTORICAL_IDS
+    action:
+      type: UNIPROT_HISTORICAL_RESOLVER
+      params:
+        input_context_key: "hpa_raw_uniprot_ids"
         output_context_key: "hpa_uniprot_ids"
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        batch_size: 200
+        include_obsolete: false
 
   - name: ANALYZE_OVERLAP
     action:

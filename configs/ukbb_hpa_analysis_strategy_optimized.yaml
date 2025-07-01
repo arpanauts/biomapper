@@ -1,0 +1,45 @@
+name: UKBB_HPA_PROTEIN_OVERLAP_ANALYSIS_OPTIMIZED
+description: "Optimized strategy that directly compares UKBB and HPA UniProt IDs without unnecessary conversions"
+
+steps:
+  - name: LOAD_UKBB_UNIPROT_IDS
+    action:
+      type: LOAD_ENDPOINT_IDENTIFIERS
+      params:
+        endpoint_name: "UKBB_PROTEIN"
+        output_context_key: "ukbb_uniprot_ids"
+        # This will load the UniProt column directly since it's the primary identifier
+
+  - name: LOAD_HPA_UNIPROT_IDS_FROM_FILE
+    action:
+      type: LOCAL_ID_CONVERTER
+      params:
+        mapping_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
+        source_column: "uniprot"
+        target_column: "uniprot"  # Identity mapping to just load UniProt IDs
+        output_ontology_type: "PROTEIN_UNIPROTKB_AC_ONTOLOGY"
+        output_context_key: "hpa_uniprot_ids"
+        input_context_key: "_dummy"  # Won't be used since current_identifiers will be empty
+
+  - name: ANALYZE_UNIPROT_OVERLAP
+    action:
+      type: DATASET_OVERLAP_ANALYZER
+      params:
+        dataset1_context_key: "ukbb_uniprot_ids"
+        dataset2_context_key: "hpa_uniprot_ids"
+        output_context_key: "overlapping_uniprot_ids"
+        dataset1_name: "UKBB"
+        dataset2_name: "HPA"
+        generate_statistics: True
+
+  # Optional: Convert overlapping UniProt IDs to HPA gene names
+  - name: CONVERT_UNIPROT_TO_HPA_GENE
+    action:
+      type: LOCAL_ID_CONVERTER
+      params:
+        input_context_key: "overlapping_uniprot_ids"
+        output_context_key: "final_hpa_genes"
+        mapping_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv"
+        source_column: "uniprot"
+        target_column: "gene"
+        output_ontology_type: "HPA_GENE_ONTOLOGY"
