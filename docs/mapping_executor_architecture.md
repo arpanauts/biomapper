@@ -1,99 +1,227 @@
-# Mapping Executor Architecture
+# Biomapper Architecture Guide
 
-## 1. Overview
+## Overview
 
-The `MappingExecutor` is the central component of the Biomapper system responsible for orchestrating the process of mapping identifiers between different biological ontologies or databases. It leverages a configuration-driven approach, reading mapping paths and resource details from the `metamapper.db` database and executing the necessary steps using pluggable client modules.
+Biomapper uses a modern facade-based architecture that provides a clean, simple interface while delegating complex operations to specialized coordinator services. This design promotes separation of concerns, maintainability, and extensibility.
 
-The primary goal is to provide a flexible and extensible framework for defining and executing complex, multi-step mapping workflows.
+## Core Architecture Pattern
 
-## 2. Core Components
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         MappingExecutor                          │
+│                          (Facade)                                │
+├─────────────────────────────────────────────────────────────────┤
+│  Simple public interface:                                        │
+│  - initialize()                                                  │
+│  - execute_yaml_strategy()                                       │
+│  - execute_composite_strategy()                                  │
+│  - execute_db_strategy()                                         │
+│  - execute()                                                     │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Coordinator Services                          │
+├─────────────────────────┬─────────────────┬────────────────────┤
+│ StrategyCoordinator     │ SessionManager   │ LifecycleCoord.    │
+│ ExecutionCoordinator    │ ActionExecutor   │ CompositeCoord.    │
+│ IterativeMappingService │ ActionLoader     │ CheckpointManager  │
+└─────────────────────────┴─────────────────┴────────────────────┘
+```
 
-### 2.1. `MappingExecutor` (`biomapper.core.mapping_executor.py`)
+## Key Components
 
-- **Role:** The main orchestrator.
-- **Functionality:**
-    - Initializes connections to `metamapper.db` (configuration) and `mapping_cache.db` (results).
-    - Receives mapping requests specifying source/target endpoints and properties.
-    - Queries `metamapper.db` to find the most suitable `MappingPath` based on the request and path priorities.
-    - Iterates through the steps defined in the selected `MappingPath`.
-    - Instantiates the appropriate mapping client for each step using the `client_class_path` defined in the `MappingResource`.
-    - Invokes the `map_identifiers` method on the client instance, passing necessary configuration from the `MappingResource`'s `config_template`.
-    - Collects results from each step, potentially using the output of one step as the input for the next.
-    - Handles errors during path finding or step execution.
-    - Caches the final mapping results and logs the execution details (path taken, status, timestamps) in `mapping_cache.db`.
+### 1. MappingExecutor (Facade)
 
-### 2.2. Mapping Clients (e.g., `biomapper.mapping.clients.*`)
+The `MappingExecutor` class serves as the main entry point for all mapping operations. It follows the facade pattern, providing a simple interface while delegating all actual work to specialized services.
 
-- **Role:** Implement the actual logic for interacting with external APIs or local data sources to perform a specific mapping task (e.g., Gene Name -> UniProt AC, UniProt AC -> Arivale ID lookup).
-- **Design:** Clients are designed as adapters. They must implement:
-    - An `__init__(self, config: Optional[Dict[str, Any]] = None)` method that accepts configuration (often unused if config is passed to `map_identifiers`).
-    - An `async def map_identifiers(self, identifiers: List[str], config: Optional[Dict[str, Any]] = None) -> Dict[str, List[str]]` method. This method takes a list of input identifiers and the specific configuration for that mapping step (from the `MappingResource.config_template`). It returns a dictionary mapping input identifiers to a *list* of corresponding output identifiers.
-- **Instantiation:** The `MappingExecutor` dynamically imports and instantiates the client class specified in the `MappingResource.client_class_path`.
+```python
+from biomapper.core import MappingExecutor, MappingExecutorBuilder
 
-### 2.3. `metamapper.db` (Configuration Database)
+# Create executor using builder pattern
+executor = MappingExecutorBuilder.create(
+    db_config=db_config,
+    cache_config=cache_config,
+    rag_config=rag_config,
+    llm_config=llm_config
+)
 
-- **Role:** Stores the static configuration defining how mappings *can* be performed.
-- **Key Tables (defined in `biomapper.db.models`):**
-    - `Endpoint`: Represents data sources or contexts (e.g., `UKBB_Protein`, `Arivale_Protein`).
-    - `MappingResource`: Defines tools/APIs/lookups available for mapping (e.g., `UniProt_NameSearch`, `Arivale_Metadata_Lookup`). Includes the client class path and configuration template.
-    - `MappingPath`: Defines a specific sequence of steps (using `MappingResource`s) to get from a source ontology type to a target ontology type (e.g., `UKBB_GeneName_to_Arivale_Protein`). Includes source/target types and priority.
-    - `MappingPathStep`: Defines a single step within a `MappingPath`, linking to a `MappingResource`.
-    - `PropertyExtractionConfig`: Defines how to extract specific properties (identified by an `ontology_type`) from an `Endpoint`.
-    - `EndpointPropertyConfig`: Links `Endpoint`s to `PropertyExtractionConfig`s, defining the available properties for each endpoint (e.g., `UKBB_Protein` has `PrimaryIdentifier` which is `GENE_NAME`).
-- **Population:** Typically populated by the `scripts/populate_metamapper_db.py` script.
-- **Further Details:** See `data/README_db_config.md` for more detailed schema information.
+# Initialize (async)
+await executor.initialize()
 
-### 2.4. `mapping_cache.db` (Results Database)
+# Execute a strategy
+result = await executor.execute_yaml_strategy(
+    strategy_file="path/to/strategy.yaml",
+    input_data=data,
+    options={}
+)
+```
 
-- **Role:** Stores the results of mapping executions and associated logs.
-- **Key Tables (defined in `biomapper.db.cache_models`):**
-    - `EntityMapping`: Stores the successful mappings between individual source and target identifiers for a given path execution.
-    - `PathExecutionLog`: Records details about each run of the `MappingExecutor`, including the path taken, input identifiers, status (success/failure), and timestamps.
-- **Purpose:** Avoids redundant computation/API calls for previously mapped identifiers and provides provenance.
-- **Further Details:** See `data/README_db_config.md` for more detailed schema information.
+### 2. MappingExecutorBuilder
 
-## 3. Configuration (`scripts/populate_metamapper_db.py`)
+The builder pattern is used to construct the MappingExecutor with all its dependencies:
 
-Configuration is primarily managed by defining instances of the SQLAlchemy models mentioned above in the `populate_metamapper_db.py` script.
+- Validates configurations
+- Creates database connections
+- Initializes cache systems
+- Sets up RAG components
+- Configures LLM clients
+- Wires together all coordinator services
 
-- **Endpoints:** Define your data sources/contexts.
-- **Properties:** Define properties using `PropertyExtractionConfig` (specifying `ontology_type`) and link them to Endpoints via `EndpointPropertyConfig`.
-- **Mapping Resources:** Define the tools/clients available. Crucially, specify the `client_class_path` and any necessary `config_template` (as a JSON string) that will be passed to the client's `map_identifiers` method.
-- **Mapping Paths:** Define the allowed routes between ontology types by creating `MappingPath` instances, specifying `source_type`, `target_type`, `priority`, and a list of `MappingPathStep`s that link to the required `MappingResource`s in the correct order.
+### 3. Coordinator Services
 
-**Important:** Ontology terms (`source_type`, `target_type`, `input_ontology_term`, `output_ontology_term`, `ontology_type`) MUST use consistent casing (currently uppercase, e.g., `GENE_NAME`) as database lookups are case-sensitive.
+#### StrategyCoordinatorService
+- Loads strategies from YAML files or database
+- Validates strategy structure
+- Manages strategy metadata
+- Handles strategy caching
 
-## 4. Execution Flow
+#### ExecutionCoordinatorService
+- Orchestrates the execution of strategy actions
+- Manages execution context flow
+- Handles error recovery
+- Coordinates checkpoint/resume functionality
 
-1.  **Request:** `MappingExecutor.execute_mapping` is called with `source_endpoint_name`, `target_endpoint_name`, `input_identifiers`, `source_property_name`, and `target_property_name`.
-2.  **Property Lookup:** The executor queries `metamapper.db` to find the `ontology_type` corresponding to the source and target properties for the given endpoints.
-3.  **Path Finding:** It queries `metamapper.db` for `MappingPath`s that match the determined source and target `ontology_type`s, ordering them by `priority`.
-4.  **Path Selection:** The highest priority valid path is selected.
-5.  **Step Execution Loop:**
-    a. For each `MappingPathStep` in the selected path:
-    b. Identify the required `MappingResource`.
-    c. Instantiate the client specified by `resource.client_class_path`.
-    d. Call `client.map_identifiers`, passing the input identifiers for this step (initially the request's `input_identifiers`, subsequently the output of the previous step) and the parsed `resource.config_template`.
-    e. Collect the results.
-6.  **Result Aggregation:** Map the final output identifiers back to the original input identifiers.
-7.  **Caching:** Store the successful `(original_input_id, final_output_id)` pairs in the `EntityMapping` table and log the overall execution in `PathExecutionLog`.
-8.  **Return:** Return a dictionary containing the status and the aggregated results.
+#### SessionManager
+- Manages database sessions
+- Handles transaction boundaries
+- Ensures proper session lifecycle
+- Provides session to services that need it
 
-## 5. Extensibility
+#### LifecycleCoordinator
+- Manages initialization of all services
+- Handles graceful shutdown
+- Coordinates resource cleanup
+- Manages service dependencies
 
-Adding new mapping capabilities involves:
+#### ActionExecutor
+- Executes individual strategy actions
+- Manages action context
+- Handles action-level error recovery
+- Collects execution metrics
 
-1.  **Create a New Client:**
-    - Implement a new Python class in `biomapper.mapping.clients`.
-    - Ensure it has the required `__init__` and `async def map_identifiers` methods.
-    - The `map_identifiers` method should handle the specific API interaction or data lookup required.
-2.  **Define a New `MappingResource`:**
-    - In `scripts/populate_metamapper_db.py`, add a new entry to the `resources` dictionary.
-    - Specify a unique name, description, the `client_class_path` pointing to your new client, `input_ontology_term`, `output_ontology_term`, and any necessary `config_template`.
-3.  **Define a New `MappingPath` (Optional):**
-    - If the new resource enables a completely new path between ontology types, define a new `MappingPath` in `scripts/populate_metamapper_db.py`.
-    - Add `MappingPathStep`s, including one that references your new `MappingResource`.
-    - **OR:** If the new resource provides an alternative step within an *existing* conceptual path, you might create a new `MappingPath` with a different priority that utilizes the new resource.
-4.  **Update Endpoints/Properties (If Necessary):**
-    - If the new mapping involves new data sources or identifier types, define new `Endpoint`s and/or `PropertyExtractionConfig`s / `EndpointPropertyConfig`s.
-5.  **Regenerate `metamapper.db`:** Run `poetry run python scripts/populate_metamapper_db.py`.
+#### ActionLoader
+- Dynamically loads action classes
+- Maintains action registry
+- Validates action interfaces
+- Handles action instantiation
+
+### 4. Strategy Actions
+
+Strategy actions are the building blocks of mapping operations. Each action:
+- Inherits from `BaseStrategyAction`
+- Implements an `execute()` method
+- Registered via `@register_action` decorator
+- Can access shared context and services
+
+```python
+from biomapper.core.strategy_actions import BaseStrategyAction, register_action
+
+@register_action("MY_CUSTOM_ACTION")
+class MyCustomAction(BaseStrategyAction):
+    async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        # Action implementation
+        return {"result": processed_data}
+```
+
+## Data Flow
+
+1. **Strategy Loading**: YAML file → StrategyCoordinator → Strategy object
+2. **Execution Planning**: Strategy → ExecutionCoordinator → Execution plan
+3. **Action Execution**: ActionLoader → ActionExecutor → Individual actions
+4. **Context Flow**: Each action receives context, modifies it, passes to next
+5. **Result Collection**: Final context → Result formatting → User
+
+## Service Dependencies
+
+```
+MappingExecutor
+    ├── StrategyCoordinatorService
+    │   └── SessionManager
+    ├── ExecutionCoordinatorService
+    │   ├── ActionExecutor
+    │   │   └── ActionLoader
+    │   └── CheckpointManager
+    ├── CompositeCoordinatorService
+    │   └── ExecutionCoordinatorService
+    ├── IterativeMappingService
+    │   └── ExecutionCoordinatorService
+    └── LifecycleCoordinator
+        └── All services
+```
+
+## Configuration Management
+
+The system uses Pydantic models for all configuration:
+
+```python
+class DatabaseConfig(BaseModel):
+    url: str
+    pool_size: int = 5
+    echo: bool = False
+
+class CacheConfig(BaseModel):
+    backend: Literal["redis", "memory", "disk"]
+    ttl: int = 3600
+    max_size: Optional[int] = None
+
+class MappingExecutorConfig(BaseModel):
+    database: DatabaseConfig
+    cache: CacheConfig
+    rag: Optional[RAGConfig] = None
+    llm: Optional[LLMConfig] = None
+```
+
+## Extension Points
+
+### Adding New Actions
+
+1. Create a new class inheriting from `BaseStrategyAction`
+2. Implement the `execute()` method
+3. Use `@register_action` decorator
+4. Place in `biomapper/core/strategy_actions/`
+
+### Adding New Coordinators
+
+1. Create service implementing coordinator interface
+2. Add to MappingExecutorBuilder
+3. Register with LifecycleCoordinator
+4. Update executor facade if new public methods needed
+
+### Custom Cache Backends
+
+1. Implement cache interface
+2. Register in cache factory
+3. Update CacheConfig options
+
+### LLM Providers
+
+1. Implement LLM client interface
+2. Add to LLM factory
+3. Update LLMConfig options
+
+## Best Practices
+
+1. **Always use the facade**: Don't directly access coordinator services
+2. **Async all the way**: All operations are async for consistency
+3. **Context immutability**: Actions should not modify input context directly
+4. **Error handling**: Use custom exceptions from `biomapper.core.exceptions`
+5. **Configuration validation**: Use Pydantic models for all configs
+6. **Testing**: Mock at the coordinator level, not individual services
+
+## Migration from Legacy Architecture
+
+If migrating from the old database-driven mapping paths:
+
+1. Convert mapping paths to YAML strategies
+2. Replace direct client usage with strategy actions
+3. Update initialization to use MappingExecutorBuilder
+4. Convert synchronous code to async
+5. Update error handling to use new exception hierarchy
+
+## See Also
+
+- [Strategy Action Development Guide](./strategy_action_development.md)
+- [YAML Strategy Schema](./source/architecture/yaml_strategy_schema.md)
+- [Configuration Reference](./CONFIG_TYPE_FIELD_REFERENCE.md)
+- [API Documentation](./api/README.md)

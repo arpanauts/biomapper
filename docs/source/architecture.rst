@@ -68,14 +68,14 @@ Execution Services
 
 These services handle different execution strategies for mapping operations:
 
-**IterativeExecutionService**
+**IterativeMappingService**
   Handles iterative mapping approaches where mappings are attempted through multiple providers or strategies sequentially.
 
-**DbStrategyExecutionService**
-  Executes mapping strategies that are stored in the database, allowing for dynamic strategy management.
+**StrategyCoordinatorService**
+  Loads and manages mapping strategies from both YAML files and database, providing a unified interface for strategy management.
 
-**YamlStrategyExecutionService**
-  Executes mapping workflows defined in YAML configuration files. This is the primary method for defining complex, multi-step mapping pipelines.
+**ExecutionCoordinatorService**
+  Orchestrates the execution of strategy actions, managing context flow, error handling, and checkpoint/resume functionality.
 
 Handler Services
 ~~~~~~~~~~~~~~~~
@@ -133,18 +133,19 @@ One of the most powerful features of the new architecture is the YAML-based stra
 Service Dependencies
 --------------------
 
-The services are composed together using dependency injection, typically handled by the ``MappingExecutorInitializer``:
+The services are composed together using dependency injection, typically handled by the ``MappingExecutorBuilder``:
 
 .. code-block:: text
 
-    MappingExecutorInitializer
+    MappingExecutorBuilder
             │
-            ├─→ Creates ClientManager
-            ├─→ Creates PathFinder
-            ├─→ Creates DirectMappingService(ClientManager)
-            ├─→ Creates MappingHandlerService(DirectMappingService, PathFinder)
-            ├─→ Creates ExecutionServices(MappingHandlerService, ...)
-            └─→ Creates MappingExecutor(ExecutionServices, ...)
+            ├─→ Creates SessionManager
+            ├─→ Creates ActionLoader
+            ├─→ Creates ActionExecutor(ActionLoader)
+            ├─→ Creates StrategyCoordinatorService(SessionManager)
+            ├─→ Creates ExecutionCoordinatorService(ActionExecutor)
+            ├─→ Creates LifecycleCoordinator(All Services)
+            └─→ Creates MappingExecutor(All Coordinators)
 
 Benefits of the Architecture
 ----------------------------
