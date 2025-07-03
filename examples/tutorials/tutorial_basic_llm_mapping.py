@@ -2,7 +2,7 @@
 
 from dotenv import load_dotenv
 
-from biomapper.mapping.llm_mapper import LLMMapper
+from biomapper.mvp0_pipeline.llm_mapper import LLMMapper
 
 # Load environment variables
 load_dotenv()
