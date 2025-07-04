@@ -418,24 +418,16 @@ class TestExecuteMappingPathTypedAction:
         
         action = ExecuteMappingPathTypedAction(mock_session)
         
-        # Should return error in standard format in legacy mode
-        result = await action.execute(
-            current_identifiers=['P12345'],
-            current_ontology_type='PROTEIN_UNIPROT',
-            action_params={'path_name': 'uniprot_to_ensembl'},
-            source_endpoint=source_endpoint,
-            target_endpoint=target_endpoint,
-            context={'mapping_executor': mock_mapping_executor}
-        )
-        
-        assert result['input_identifiers'] == ['P12345']
-        assert result['output_identifiers'] == []
-        assert result['output_ontology_type'] == 'PROTEIN_UNIPROT'
-        assert result['provenance'] == []
-        assert 'error' in result['details']
-        assert 'error_type' in result['details']
-        assert result['details']['error'] == "Database connection failed"
-        assert result['details']['error_type'] == "RuntimeError"
+        # Should re-raise the exception
+        with pytest.raises(RuntimeError, match="Database connection failed"):
+            await action.execute(
+                current_identifiers=['P12345'],
+                current_ontology_type='PROTEIN_UNIPROT',
+                action_params={'path_name': 'uniprot_to_ensembl'},
+                source_endpoint=source_endpoint,
+                target_endpoint=target_endpoint,
+                context={'mapping_executor': mock_mapping_executor}
+            )
     
     @pytest.mark.asyncio
     async def test_missing_mapping_path_typed(self, mock_session, mock_endpoints, sample_context):

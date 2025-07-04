@@ -167,17 +167,8 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
             
         except Exception as e:
             self.logger.error(f"Error executing action: {e}", exc_info=True)
-            # Return error result in standard format
-            return {
-                'input_identifiers': current_identifiers,
-                'output_identifiers': [],
-                'output_ontology_type': current_ontology_type,
-                'provenance': [],
-                'details': {
-                    'error': str(e),
-                    'error_type': type(e).__name__
-                }
-            }
+            # Re-raise the exception to allow proper error handling by the strategy orchestrator
+            raise
     
     def _convert_context(self, context_dict: Dict[str, Any], identifiers: List[str], ontology_type: str) -> StrategyExecutionContext:
         """
@@ -215,12 +206,22 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
         elif 'DISEASE' in ontology_type.upper():
             mapped_ontology_type = "disease"
         
+        # Handle step_results conversion from legacy list format to dict format
+        raw_step_results = context_dict.get('step_results', [])
+        if isinstance(raw_step_results, list):
+            # Convert list format to dict format for backward compatibility
+            # For now, just use empty dict since we don't need to validate the structure
+            # The typed actions can still access the raw data via custom_action_data
+            step_results_dict = {}
+        else:
+            step_results_dict = raw_step_results
+        
         # Create execution context
         typed_context = StrategyExecutionContext(
             initial_identifier=initial_identifier,
             current_identifier=current_identifier,
             ontology_type=cast(Any, mapped_ontology_type),  # Cast to satisfy type checker
-            step_results=context_dict.get('step_results', {}),
+            step_results=step_results_dict,
             provenance=context_dict.get('provenance', []),
             custom_action_data=context_dict.get('custom_action_data', {})
         )
@@ -230,6 +231,10 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
             if key not in ['initial_identifier', 'current_identifier', 'ontology_type', 
                           'step_results', 'provenance', 'custom_action_data']:
                 typed_context.set_action_data(key, value)
+        
+        # Store legacy step_results in custom_action_data for backward compatibility
+        if isinstance(raw_step_results, list):
+            typed_context.set_action_data('legacy_step_results', raw_step_results)
         
         return typed_context
     

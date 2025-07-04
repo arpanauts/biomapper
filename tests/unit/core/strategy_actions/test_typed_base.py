@@ -149,7 +149,7 @@ class TestTypedStrategyAction:
         assert 'validation_errors' in result['details']
     
     async def test_execution_error_handling(self, action, mock_endpoints):
-        """Test that execution errors are handled gracefully."""
+        """Test that execution errors are properly re-raised."""
         source, target = mock_endpoints
         
         # Override execute_typed to raise an error
@@ -158,20 +158,16 @@ class TestTypedStrategyAction:
         
         action.execute_typed = failing_execute
         
-        result = await action.execute(
-            current_identifiers=["ID1"],
-            current_ontology_type="PROTEIN_ONTOLOGY",
-            action_params={"batch_size": 100},
-            source_endpoint=source,
-            target_endpoint=target,
-            context={}
-        )
-        
-        # Should return error result
-        assert result['input_identifiers'] == ["ID1"]
-        assert result['output_identifiers'] == []
-        assert result['details']['error'] == "Test error"
-        assert result['details']['error_type'] == "ValueError"
+        # Should re-raise the exception
+        with pytest.raises(ValueError, match="Test error"):
+            await action.execute(
+                current_identifiers=["ID1"],
+                current_ontology_type="PROTEIN_ONTOLOGY",
+                action_params={"batch_size": 100},
+                source_endpoint=source,
+                target_endpoint=target,
+                context={}
+            )
     
     async def test_context_conversion(self, action, mock_endpoints):
         """Test that context is properly converted between dict and typed."""
