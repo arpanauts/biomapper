@@ -1,0 +1,53 @@
+name: INVALID_PARAMETERS_STRATEGY
+description: |
+  This strategy contains valid action types but with invalid parameters.
+  Some steps have missing required parameters, others have unknown parameters.
+
+steps:
+  # Step 1: Missing required parameters
+  - name: MISSING_REQUIRED_PARAMS
+    action:
+      type: LOAD_ENDPOINT_IDENTIFIERS
+      params:
+        # Missing required: endpoint_context
+        # Missing required: input_ids_context_key
+        unknown_param: should_not_exist
+  
+  # Step 2: Wrong parameter names
+  - name: WRONG_PARAM_NAMES
+    action:
+      type: LOCAL_ID_CONVERTER
+      params:
+        file_path: "/path/to/file.csv"  # Should be 'mapping_file'
+        source: "col1"                  # Should be 'source_column'
+        target: "col2"                  # Should be 'target_column'
+        extra_param: "not_allowed"
+  
+  # Step 3: Invalid parameter types
+  - name: INVALID_PARAM_TYPES
+    action:
+      type: UNIPROT_HISTORICAL_RESOLVER
+      params:
+        batch_size: "two hundred"  # Should be integer
+        include_obsolete: "yes"    # Should be boolean
+        expand_composites: 1       # Should be boolean
+  
+  # Step 4: Missing all parameters for action that requires them
+  - name: NO_PARAMS_WHEN_REQUIRED
+    action:
+      type: API_RESOLVER
+      # Missing params entirely - but API_RESOLVER requires several
+  
+  # Step 5: Extra parameters that don't exist
+  - name: TOO_MANY_PARAMS
+    action:
+      type: DATASET_OVERLAP_ANALYZER
+      params:
+        dataset1_context_key: "dataset1"
+        dataset2_context_key: "dataset2"
+        # Valid so far, but adding many invalid ones:
+        merge_strategy: "inner"
+        deduplication_mode: "strict"
+        parallel_processing: true
+        cache_results: false
+        notification_webhook: "https://example.com/webhook"

@@ -1,0 +1,56 @@
+name: VALID_TEST_STRATEGY
+description: |
+  A valid test strategy that demonstrates proper YAML structure
+  and valid action types with correct parameters.
+
+steps:
+  # Step 1: Load identifiers from source endpoint
+  - name: LOAD_SOURCE_IDS
+    action:
+      type: LOAD_ENDPOINT_IDENTIFIERS
+      params:
+        endpoint_context: SOURCE
+        input_ids_context_key: source_identifiers
+    
+  # Step 2: Convert local IDs using mapping file
+  - name: CONVERT_IDS
+    action:
+      type: LOCAL_ID_CONVERTER
+      params:
+        mapping_file: "${DATA_DIR}/test_mapping.csv"
+        source_column: uniprot_id
+        target_column: gene_symbol
+        output_ontology_type: GENE_SYMBOL_ONTOLOGY
+        output_context_key: converted_genes
+  
+  # Step 3: Resolve historical UniProt IDs
+  - name: RESOLVE_HISTORICAL
+    action:
+      type: UNIPROT_HISTORICAL_RESOLVER
+      params:
+        input_context_key: source_identifiers
+        output_context_key: resolved_identifiers
+        batch_size: 200
+        include_obsolete: false
+        expand_composites: true
+  
+  # Step 4: Analyze overlap between datasets
+  - name: ANALYZE_OVERLAP
+    action:
+      type: DATASET_OVERLAP_ANALYZER
+      params:
+        dataset1_context_key: resolved_identifiers
+        dataset2_context_key: converted_genes
+        output_context_key: overlap_results
+        dataset1_name: Resolved_UniProt
+        dataset2_name: Gene_Symbols
+        generate_statistics: true
+  
+  # Step 5: Save results
+  - name: SAVE_RESULTS
+    action:
+      type: RESULTS_SAVER
+      params:
+        output_file: "${OUTPUT_DIR}/mapping_results.json"
+        include_provenance: true
+        format: json
