@@ -99,6 +99,33 @@ Biomapper is a modular biological data harmonization toolkit with three main com
 - Use pytest fixtures for common test data
 - Mock external services in unit tests
 - Integration tests should use test databases/APIs
+- Follow Test-Driven Development (TDD) for new features and refactoring
+- Write failing tests first, then implement minimal code to pass
+
+### Test-Driven Development (TDD) Workflow
+
+When adding new features or refactoring (especially for type safety):
+
+1. **Red Phase**: Write failing tests that define the desired behavior
+2. **Green Phase**: Implement minimal code to make tests pass
+3. **Refactor Phase**: Improve code quality while keeping tests green
+
+Example TDD cycle for adding Pydantic models:
+```python
+# 1. RED: Write failing test
+def test_action_params_validation():
+    params = ExecuteMappingPathParams(path_name="test")
+    assert params.path_name == "test"
+    
+    with pytest.raises(ValidationError):
+        ExecuteMappingPathParams()  # Missing required field
+
+# 2. GREEN: Implement model
+class ExecuteMappingPathParams(BaseModel):
+    path_name: str = Field(..., min_length=1)
+
+# 3. REFACTOR: Add more validation, docs, etc.
+```
 
 ### Common Development Tasks
 
@@ -110,11 +137,14 @@ Biomapper is a modular biological data harmonization toolkit with three main com
 5. Update strategy configuration schema if needed
 
 **Creating a New Strategy Action:**
-1. Add action class in `biomapper/core/actions/`
-2. Inherit from `BaseAction`
-3. Implement `execute()` method
-4. Register in `ActionType` enum
-5. Add tests and update documentation
+1. Write failing tests for the new action (TDD approach)
+2. Add action class in `biomapper/core/strategy_actions/`
+3. Inherit from `BaseStrategyAction` (or `TypedStrategyAction` for new actions)
+4. Define Pydantic models for parameters and results
+5. Implement `execute()` method with type safety
+6. Use `@register_action("ACTION_NAME")` decorator for auto-registration
+7. Add action to strategy validation registry
+8. Update documentation
 
 **Working with Configurations:**
 - Strategy configs go in `configs/strategies/`
@@ -138,6 +168,44 @@ When working on biomapper-api:
 - Index frequently queried fields
 - Follow naming conventions: snake_case for tables/columns
 
+## Type Safety and Pydantic Integration
+
+### Current Type Safety Initiative
+
+Biomapper is transitioning to full type safety using Pydantic models:
+
+1. **Strategy Actions**: Moving from `Dict[str, Any]` to typed Pydantic models
+2. **Execution Context**: Replacing untyped context dictionaries with `StrategyExecutionContext`
+3. **YAML Validation**: Strategy configurations validated at load time
+4. **Backward Compatibility**: Maintaining dict interfaces during migration
+
+### Implementing Type-Safe Actions
+
+**For new actions:**
+```python
+from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
+from biomapper.core.models import ActionParams, ActionResult
+
+class MyActionParams(BaseModel):
+    required_field: str
+    optional_field: int = 100
+
+@register_action("MY_ACTION")
+class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
+    def get_params_model(self) -> type[MyActionParams]:
+        return MyActionParams
+    
+    async def execute_typed(self, params: MyActionParams, ...) -> ActionResult:
+        # Type-safe implementation
+        pass
+```
+
+**For migrating existing actions:**
+1. Create Pydantic models for params and results
+2. Add `execute_typed()` method alongside existing `execute()`
+3. Implement compatibility wrapper in base class
+4. Gradually deprecate dict-based interface
+
 ## Important Notes
 
 - ALWAYS USE POETRY ENVIRONMENT - Never use pip directly
@@ -146,3 +214,5 @@ When working on biomapper-api:
 - The project uses strict MyPy settings - resolve all type errors
 - ChromaDB requires specific system dependencies on some platforms
 - Integration tests may require external services (document in PR)
+- Follow TDD approach for all new features and refactoring
+- Maintain backward compatibility during type safety migration

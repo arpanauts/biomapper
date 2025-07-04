@@ -1,28 +1,96 @@
 # Suggested Next Work Session Prompt
 
 ## Context Brief
-The project is critically blocked. While the core `biomapper` library is stable with a fully passing test suite, the `biomapper-api` server fails to start with a `ModuleNotFoundError: No module named 'biomapper.api'`. This prevents any end-to-end testing and blocks all further progress on the service-oriented architecture and UI development.
+
+Biomapper has just completed a major type safety enhancement using Test-Driven Development (TDD), implementing comprehensive Pydantic models for strategy actions while maintaining 100% backward compatibility. The core library now features typed interfaces (`TypedStrategyAction[TParams, TResult]`) alongside legacy dictionary-based interfaces, with YAML strategy validation and a proven migration pattern.
 
 ## Initial Steps
-1.  **Review `CLAUDE.md`:** Start by reviewing `/home/trentleslie/github/biomapper/CLAUDE.md` for overall project context and goals.
-2.  **Review Offboarding Summary:** Read the latest status update for a complete overview of our last session and the current critical issue: `/home/trentleslie/github/biomapper/roadmap/_status_updates/2025-06-25-final-offboarding-summary.md`.
+
+1. **Review Project Context:** Begin by reviewing `/home/ubuntu/biomapper/CLAUDE.md` for overall project architecture and the newly added TDD workflows and type safety guidelines.
+
+2. **Review Recent Implementation:** Examine the recent status update at `/home/ubuntu/biomapper/roadmap/_status_updates/2025-07-04-pydantic-type-safety-implementation.md` to understand the comprehensive type safety work that was just completed.
+
+3. **Understand Current State:** Review the TDD implementation summary at `/home/ubuntu/biomapper/TDD_IMPLEMENTATION_SUMMARY.md` for technical details of what was accomplished.
 
 ## Work Priorities
 
-### Priority 1: Fix the API Server Startup
-- **This is the only priority.** Nothing else can proceed until the API server runs.
-- **Action:** Investigate and resolve the `ModuleNotFoundError: No module named 'biomapper.api'`.
-- **Suggested Investigation Steps:**
-    1.  Inspect the project structure: `ls -R /home/trentleslie/github/biomapper/biomapper`. Does an `api` directory with an `__init__.py` file exist inside it?
-    2.  Review `pyproject.toml` to see how packages and modules are defined. Is the `biomapper` package configured correctly to include submodules?
-    3.  Try running `poetry install` again to ensure the environment is set up correctly in editable mode.
-    4.  Once a fix is attempted, try running the server again: `poetry run uvicorn biomapper.api.main:app --host 0.0.0.0 --port 8000`.
+### Priority 1: Migrate Core Actions to Typed Interface
+Based on usage frequency and importance, migrate high-priority strategy actions to the new `TypedStrategyAction` pattern:
 
-### Priority 2: Validate the Fix
-- Once the server starts successfully, run the client script to confirm end-to-end functionality:
-  - `python /home/trentleslie/github/biomapper/scripts/main_pipelines/run_full_ukbb_hpa_mapping.py`
+- **Target Actions:** Identify actions used in production YAML strategies (check `/home/ubuntu/biomapper/configs/strategies/`)
+- **Migration Pattern:** Follow the example in `/home/ubuntu/biomapper/biomapper/core/strategy_actions/execute_mapping_path_typed.py`
+- **Testing:** Ensure comprehensive test coverage for both typed and legacy interfaces
+
+### Priority 2: API Integration Enhancement
+Integrate the type safety improvements with the biomapper-api service:
+
+- **Verify API Status:** Confirm the API server is still functional (last known working on June 25, 2025)
+- **Schema Generation:** Leverage Pydantic models for automatic OpenAPI schema generation
+- **Endpoint Updates:** Ensure API endpoints properly handle both legacy and typed action parameters
+
+### Priority 3: Production Validation
+Validate the type safety implementation in production-like scenarios:
+
+- **Strategy Validation:** Test YAML strategy loading with the new `StrategyValidator`
+- **Performance Testing:** Benchmark Pydantic validation overhead vs. dictionary access
+- **Integration Testing:** Run full end-to-end pipelines using typed actions
 
 ## References
-- **Offboarding Summary:** `/home/trentleslie/github/biomapper/roadmap/_status_updates/2025-06-25-final-offboarding-summary.md`
-- **Main API File:** `/home/trentleslie/github/biomapper/biomapper/api/main.py` (Assumed location, needs verification)
-- **Project Configuration:** `/home/trentleslie/github/biomapper/pyproject.toml`
+
+- **Type Safety Models:** `/home/ubuntu/biomapper/biomapper/core/models/`
+- **TypedStrategyAction Base:** `/home/ubuntu/biomapper/biomapper/core/strategy_actions/typed_base.py`
+- **Migration Example:** `/home/ubuntu/biomapper/biomapper/core/strategy_actions/execute_mapping_path_typed.py`
+- **YAML Validator:** `/home/ubuntu/biomapper/biomapper/core/validators/strategy_validator.py`
+- **Test Examples:** `/home/ubuntu/biomapper/tests/unit/core/models/` and `/home/ubuntu/biomapper/tests/unit/core/strategy_actions/test_execute_mapping_path_typed.py`
+
+## Workflow Integration
+
+### Recommended Claude Prompts
+
+**For Action Migration:**
+```
+I need to migrate strategy actions to the new TypedStrategyAction pattern. Please:
+
+1. Examine the existing action at biomapper/core/strategy_actions/[action_name].py
+2. Follow the pattern in execute_mapping_path_typed.py to create typed version
+3. Define Pydantic models for parameters and results
+4. Implement backward compatibility
+5. Create comprehensive tests following TDD approach
+6. Ensure all existing YAML strategies continue to work
+
+Focus on maintaining 100% backward compatibility while adding type safety benefits.
+```
+
+**For API Integration:**
+```
+I need to integrate the new Pydantic type safety with the biomapper-api. Please:
+
+1. Review the current API implementation in biomapper-api/
+2. Ensure strategy execution endpoints work with both typed and legacy actions
+3. Implement automatic OpenAPI schema generation from Pydantic models
+4. Add validation endpoints for YAML strategies
+5. Test integration with the biomapper_client
+
+Maintain backward compatibility while exposing type safety benefits through the API.
+```
+
+**For Production Validation:**
+```
+I need to validate the type safety implementation in production scenarios. Please:
+
+1. Run comprehensive tests using poetry run pytest
+2. Test YAML strategy validation with various configurations
+3. Benchmark performance impact of Pydantic vs dictionary access
+4. Execute full end-to-end pipelines with mixed typed/legacy actions
+5. Verify no regressions in existing functionality
+
+Document any performance considerations or integration issues discovered.
+```
+
+## Success Criteria
+
+- All existing YAML strategies continue to work without modification
+- New typed actions provide better IDE support and validation
+- API endpoints support both legacy and typed interfaces seamlessly  
+- Performance impact of type safety is acceptable for production use
+- Clear migration documentation exists for future action development
