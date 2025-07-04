@@ -5,8 +5,11 @@ Each action handler implements a specific operation that can be used
 as a step in a mapping strategy.
 """
 
+from .base import BaseStrategyAction, StrategyAction, ActionContext
+from .typed_base import TypedStrategyAction, StandardActionResult
 from .bidirectional_match import BidirectionalMatchAction
 from .execute_mapping_path import ExecuteMappingPathAction
+from .execute_mapping_path_typed import ExecuteMappingPathTypedAction, ExecuteMappingPathParams, ExecuteMappingPathResult
 from .filter_by_target_presence import FilterByTargetPresenceAction
 from .resolve_and_match_forward import ResolveAndMatchForwardAction
 from .resolve_and_match_reverse import ResolveAndMatchReverse
@@ -27,8 +30,18 @@ from .results_saver import ResultsSaver
 from .uniprot_historical_resolver import UniProtHistoricalResolver
 
 __all__ = [
+    # Base classes
+    "BaseStrategyAction",
+    "StrategyAction",
+    "ActionContext",
+    "TypedStrategyAction",
+    "StandardActionResult",
+    # Action implementations
     "BidirectionalMatchAction",
-    "ExecuteMappingPathAction", 
+    "ExecuteMappingPathAction",
+    "ExecuteMappingPathTypedAction",
+    "ExecuteMappingPathParams",
+    "ExecuteMappingPathResult", 
     "FilterByTargetPresenceAction",
     "ResolveAndMatchForwardAction",
     "ResolveAndMatchReverse",
