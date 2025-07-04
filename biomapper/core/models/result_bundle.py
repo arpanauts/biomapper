@@ -7,7 +7,13 @@ from biomapper.core.utils.time_utils import get_current_utc_time
 class MappingResultBundle:
     """Comprehensive result object for strategy execution tracking."""
 
-    def __init__(self, strategy_name: str, initial_identifiers: List[str], source_ontology_type: Optional[str] = None, target_ontology_type: Optional[str] = None):
+    def __init__(
+        self,
+        strategy_name: str,
+        initial_identifiers: List[str],
+        source_ontology_type: Optional[str] = None,
+        target_ontology_type: Optional[str] = None,
+    ):
         """Initialize the result bundle for a strategy execution.
 
         Args:
@@ -40,10 +46,18 @@ class MappingResultBundle:
         self.completed_steps = 0
         self.failed_steps = 0
 
-    def add_step_result(self, step_id: str, step_description: str, action_type: str,
-                        input_identifiers: List[str], output_identifiers: List[str],
-                        status: str, details: Dict[str, Any], error: Optional[str] = None,
-                        output_ontology_type: Optional[str] = None):
+    def add_step_result(
+        self,
+        step_id: str,
+        step_description: str,
+        action_type: str,
+        input_identifiers: List[str],
+        output_identifiers: List[str],
+        status: str,
+        details: Dict[str, Any],
+        error: Optional[str] = None,
+        output_ontology_type: Optional[str] = None,
+    ) -> None:
         """Add the result of a step execution.
 
         Args:
@@ -66,7 +80,7 @@ class MappingResultBundle:
             "status": status,
             "details": details,
             "timestamp": get_current_utc_time(),
-            "error": error
+            "error": error,
         }
 
         # Add provenance information
@@ -78,7 +92,7 @@ class MappingResultBundle:
             "input_ontology_type": self.current_ontology_type,
             "output_ontology_type": output_ontology_type or self.current_ontology_type,
             "resources_used": details.get("resources_used", []),
-            "timestamp": get_current_utc_time()
+            "timestamp": get_current_utc_time(),
         }
 
         self.step_results.append(step_result)
@@ -95,7 +109,7 @@ class MappingResultBundle:
         elif status in ["failed", "error"]:
             self.failed_steps += 1
 
-    def finalize(self, status: str = "completed", error: Optional[str] = None):
+    def finalize(self, status: str = "completed", error: Optional[str] = None) -> None:
         """Finalize the result bundle.
 
         Args:
@@ -123,11 +137,15 @@ class MappingResultBundle:
             "current_ontology_type": self.current_ontology_type,
             "start_time": self.start_time.isoformat() if self.start_time else None,
             "end_time": self.end_time.isoformat() if self.end_time else None,
-            "duration_seconds": (self.end_time - self.start_time).total_seconds() if self.end_time else None,
+            "duration_seconds": (self.end_time - self.start_time).total_seconds()
+            if self.end_time
+            else None,
             "total_steps": self.total_steps,
             "completed_steps": self.completed_steps,
             "failed_steps": self.failed_steps,
             "step_results": self.step_results,
             "provenance": self.provenance,
-            "final_identifiers": self.current_identifiers[:100]  # Sample of final identifiers
+            "final_identifiers": self.current_identifiers[
+                :100
+            ],  # Sample of final identifiers
         }

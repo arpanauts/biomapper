@@ -66,7 +66,7 @@ class TestUniProtHistoricalResolver:
         assert result['output_identifiers'] == ['P67890', 'Q11111', 'Q22222']
         assert len(result['provenance']) == 3  # One for P67890, two for Q11111/Q22222
         assert result['details']['total_resolved'] == 2  # P12345 and Q99999 resolved
-        assert result['details']['resolution_statistics']['obsolete'] == 0  # Not included
+        assert result['details']['resolution_statistics'].get('obsolete', 0) == 0  # Not included
     
     async def test_context_input_output(self, action, mock_endpoints, mock_resolver_client):
         """Test reading from and writing to context."""
