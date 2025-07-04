@@ -8999,10 +8999,10 @@ test = ["coverage[toml]", "zope.event", "zope.testing"]
 testing = ["coverage[toml]", "zope.event", "zope.testing"]
 
 [extras]
-api = []
-full = []
+api = ["fastapi", "uvicorn"]
+full = ["fastapi", "uvicorn"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "2a505b1cfec38888d78bf3c21505b71086b3102a257cc306ea0a1e362244a34b"
+content-hash = "46ea1189cc989e6786173b5ca505090b89996559bc8f06e67247cf866fd8b37c"
