@@ -46,13 +46,13 @@ Each step requires:
   Step identifier within the strategy.
 
 **action.type**
-  One of the three MVP action types.
+  One of the three core action types.
 
 **action.params**
   Parameters specific to that action type.
 
-MVP Action Configuration
-------------------------
+Action Configuration
+--------------------
 
 LOAD_DATASET_IDENTIFIERS
 ~~~~~~~~~~~~~~~~~~~~~~~~~

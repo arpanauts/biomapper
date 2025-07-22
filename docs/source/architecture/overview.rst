@@ -1,7 +1,7 @@
 Architecture Overview
 ====================
 
-Biomapper is built around a streamlined architecture focused on YAML-based strategies and MVP action types.
+Biomapper is built around a streamlined architecture focused on YAML-based strategies and core action types.
 
 Core Components
 ---------------
@@ -9,7 +9,7 @@ Core Components
 **YAML Strategy System**
   Configuration-driven workflow definition using simple YAML files.
 
-**MVP Action Types**
+**Core Action Types**
   Three core actions that handle most biological data mapping scenarios:
   
   * LOAD_DATASET_IDENTIFIERS

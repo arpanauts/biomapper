@@ -95,8 +95,8 @@ Create a file ``my_strategy.yaml``:
 Core Concepts
 -------------
 
-MVP Actions
-~~~~~~~~~~~
+Core Actions
+~~~~~~~~~~~~
 
 Biomapper provides three core action types that handle most mapping scenarios:
 

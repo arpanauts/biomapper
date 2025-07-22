@@ -3,8 +3,8 @@ Action System Architecture
 
 The action system provides the core functionality for biological data processing in Biomapper.
 
-MVP Actions
------------
+Core Actions
+------------
 
 Three action types handle the majority of biological data mapping scenarios:
 

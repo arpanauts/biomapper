@@ -5,7 +5,7 @@
 
 ## Overview
 
-**Biomapper** is a streamlined Python framework for biological data harmonization and ontology mapping. Built around YAML-based strategies and MVP action types, it provides flexible workflows for mapping biological entities like proteins, metabolites, and genes.
+**Biomapper** is a streamlined Python framework for biological data harmonization and ontology mapping. Built around YAML-based strategies and core action types, it provides flexible workflows for mapping biological entities like proteins, metabolites, and genes.
 
 ### Problem it Solves
 
@@ -18,7 +18,7 @@ Biological research often faces significant challenges in data integration:
 ## Key Features
 
 - **🔧 YAML Strategy Configuration**: Define mapping workflows using simple YAML files
-- **🎯 MVP Action Types**: Three core actions handle most mapping scenarios
+- **🎯 Core Action Types**: Three essential actions handle most mapping scenarios
 - **🌐 API-First Design**: REST API for executing strategies remotely  
 - **📊 Multi-Dataset Support**: Load and compare data from multiple biological sources
 - **🔒 Type Safety**: Pydantic models ensure data validation throughout
@@ -79,7 +79,7 @@ async def main():
 asyncio.run(main())
 ```
 
-## MVP Actions
+## Core Actions
 
 Biomapper provides three core action types:
 
@@ -115,7 +115,7 @@ Calculate overlap statistics and generate Venn diagrams.
                     │
                     ▼
           ┌─────────────────┐
-          │ MVP Actions     │
+          │ Core Actions    │
           │ Registry        │
           └─────────────────┘
 ```
@@ -251,7 +251,7 @@ Comprehensive documentation is available at [ReadTheDocs](https://biomapper.read
 - **Getting Started**: Installation and first mapping tutorial
 - **User Guide**: Detailed usage patterns and examples  
 - **API Reference**: Complete REST endpoint documentation
-- **Action Reference**: Detailed parameter documentation for each MVP action
+- **Action Reference**: Detailed parameter documentation for each core action
 - **Architecture**: System design and component overview
 
 ## Contributing
