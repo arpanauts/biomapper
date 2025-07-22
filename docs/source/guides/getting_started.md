@@ -21,137 +21,200 @@ poetry shell
 
 ## Basic Usage
 
-Biomapper uses an asynchronous API. Here's a quick example of mapping biological entities:
+Biomapper uses YAML-based strategies executed through a REST API. Here's the basic workflow:
+
+### 1. Start the API Server
+
+```bash
+cd biomapper-api
+poetry run uvicorn main:app --reload
+```
+
+The API will be available at http://localhost:8000
+
+### 2. Create a Strategy
+
+Create a YAML file `my_strategy.yaml`:
+
+```yaml
+name: "PROTEIN_ANALYSIS"
+description: "Load and analyze protein data"
+
+steps:
+  - name: load_data
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/path/to/proteins.csv"
+        identifier_column: "uniprot"
+        output_key: "proteins"
+        dataset_name: "My Proteins"
+```
+
+### 3. Execute the Strategy
+
+Using the Python client:
 
 ```python
 import asyncio
-from biomapper.core import MappingExecutor, MappingExecutorBuilder
-from biomapper.core.models import DatabaseConfig, CacheConfig
+from biomapper_client import BiomapperClient
 
 async def main():
-    # Configure the executor
-    db_config = DatabaseConfig(url="sqlite+aiosqlite:///data/mapping.db")
-    cache_config = CacheConfig(backend="memory")
-    
-    # Build and initialize the executor
-    executor = MappingExecutorBuilder.create(
-        db_config=db_config,
-        cache_config=cache_config
-    )
-    await executor.initialize()
-    
-    try:
-        # Map metabolite names
-        metabolites = ["glucose", "ATP", "NADH"]
-        result = await executor.execute(
-            entity_names=metabolites,
-            entity_type="metabolite"
-        )
-        
-        # Print results
-        for mapping in result.mappings:
-            print(f"{mapping.query_id} -> {mapping.mapped_id}")
-            
-    finally:
-        # Clean up resources
-        await executor.shutdown()
+    async with BiomapperClient() as client:
+        result = await client.execute_strategy_file("my_strategy.yaml")
+        print(f"Status: {result['status']}")
+        print(f"Results: {result['results']}")
 
-# Run the async function
-if __name__ == "__main__":
-    asyncio.run(main())
+asyncio.run(main())
 ```
 
-## Using YAML Strategies
-
-The recommended way to use Biomapper is with YAML-defined mapping strategies:
-
-```python
-async def use_yaml_strategy():
-    # Initialize executor (as shown above)
-    executor = await create_executor()
-    
-    # Execute a predefined strategy
-    result = await executor.execute_yaml_strategy(
-        strategy_file="configs/strategies/metabolite_mapping.yaml",
-        input_data={
-            "entities": ["glucose", "fructose", "sucrose"],
-            "entity_type": "metabolite"
-        }
-    )
-    
-    # Process results
-    if result.success:
-        for item in result.data:
-            print(f"Mapped: {item}")
-```
-
-## Example YAML Strategy
-
-Create a file `configs/strategies/metabolite_mapping.yaml`:
-
-```yaml
-name: metabolite_comprehensive_mapping
-description: Map metabolite names using multiple databases
-version: "1.0"
-entity_type: metabolite
-
-actions:
-  - type: LOAD_INPUT_DATA
-    name: load_metabolites
-    config:
-      source_field: entities
-      
-  - type: API_RESOLVER
-    name: chebi_lookup
-    config:
-      api_endpoint: chebi
-      search_fields: ["name", "synonym"]
-      confidence_threshold: 0.8
-      
-  - type: API_RESOLVER
-    name: pubchem_fallback
-    config:
-      api_endpoint: pubchem
-      search_fields: ["name"]
-      only_unmapped: true
-      
-  - type: SAVE_RESULTS
-    name: save_mappings
-    config:
-      output_format: json
-      include_metadata: true
-```
-
-## Command Line Interface
-
-Biomapper also provides a CLI for common operations:
+Or use curl:
 
 ```bash
-# Check system health
-poetry run biomapper health
+curl -X POST http://localhost:8000/api/strategies/PROTEIN_ANALYSIS/execute
+```
+
+## Core Concepts
+
+### Actions
+
+Biomapper currently ships with three foundational actions, with the architecture designed to support additional specialized actions:
+
+- **LOAD_DATASET_IDENTIFIERS**: Load data from CSV/TSV files
+- **MERGE_WITH_UNIPROT_RESOLUTION**: Merge datasets with UniProt resolution  
+- **CALCULATE_SET_OVERLAP**: Calculate overlap statistics and Venn diagrams
+
+The extensible action system allows for easy development of new actions to support more sophisticated mapping approaches as requirements evolve.
+
+### YAML Strategies
+
+Strategies define workflows as sequences of actions:
+
+```yaml
+name: "DATASET_COMPARISON"
+description: "Compare two protein datasets"
+
+steps:
+  - name: load_first
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/data/proteins_a.csv"
+        identifier_column: "uniprot"
+        output_key: "proteins_a"
+
+  - name: load_second
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/data/proteins_b.csv"
+        identifier_column: "uniprot"
+        output_key: "proteins_b"
+
+  - name: merge_datasets
+    action:
+      type: MERGE_WITH_UNIPROT_RESOLUTION
+      params:
+        source_dataset_key: "proteins_a"
+        target_dataset_key: "proteins_b"
+        source_id_column: "uniprot"
+        target_id_column: "uniprot"
+        output_key: "merged_data"
+
+  - name: calculate_overlap
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        merged_dataset_key: "merged_data"
+        source_name: "Dataset A"
+        target_name: "Dataset B"
+        output_key: "overlap_analysis"
+```
+
+### Data Flow
+
+Data flows between actions through a shared context:
+
+1. Actions store results using their `output_key`
+2. Subsequent actions reference previous results by key
+3. Context persists throughout strategy execution
+
+## Example Use Cases
+
+### Simple Data Loading
+
+```yaml
+name: "LOAD_PROTEINS"
+steps:
+  - name: load_data
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/data/my_proteins.tsv"
+        identifier_column: "UniProt"
+        output_key: "my_proteins"
+```
+
+### Dataset Comparison
+
+```yaml
+name: "COMPARE_STUDIES"
+steps:
+  - name: load_study_a
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/data/study_a.csv"
+        identifier_column: "protein_id"
+        output_key: "study_a"
+        
+  - name: load_study_b
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/data/study_b.csv"
+        identifier_column: "protein_id"
+        output_key: "study_b"
+        
+  - name: merge_studies
+    action:
+      type: MERGE_WITH_UNIPROT_RESOLUTION
+      params:
+        source_dataset_key: "study_a"
+        target_dataset_key: "study_b"
+        source_id_column: "protein_id"
+        target_id_column: "protein_id"
+        output_key: "merged_studies"
+        
+  - name: analyze_overlap
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        merged_dataset_key: "merged_studies"
+        source_name: "Study A"
+        target_name: "Study B"
+        output_key: "overlap_stats"
+        output_directory: "results/"
+```
+
+## Testing Your Setup
+
+Verify your installation works:
+
+```bash
+# Check API health
+curl http://localhost:8000/api/health
 
 # List available strategies
-poetry run biomapper metadata list
+curl http://localhost:8000/api/strategies/
 
-# View strategy details
-poetry run biomapper metadata show metabolite_mapping
-
-# Execute a mapping from CSV file
-poetry run biomapper metamapper execute \
-    --strategy metabolite_mapping \
-    --input metabolites.csv \
-    --output results.json
+# Run tests
+poetry run pytest tests/unit/
 ```
 
 ## Next Steps
 
-- Review the [Usage Guide](../usage.rst) for more detailed examples
-- Learn about [YAML Mapping Strategies](../tutorials/yaml_mapping_strategies.md)
-- Explore available [Mapping Clients](../tutorials/name_resolution_clients.md)
-- Check the [API Documentation](../api/README.md) for building web services
-
-## Getting Help
-
-- Check the [Documentation](https://biomapper.readthedocs.io)
-- Report issues on [GitHub](https://github.com/your-org/biomapper/issues)
-- Join the community discussions
+- See [Configuration Guide](../configuration.rst) for detailed strategy syntax
+- Check [Action Reference](../actions/) for complete parameter documentation
+- View [API Documentation](../api/) for REST endpoint details
+- Try the [First Mapping Tutorial](first_mapping.rst) for a complete example

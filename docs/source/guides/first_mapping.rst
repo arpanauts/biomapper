@@ -155,9 +155,15 @@ Example with overlap calculation:
             dataset_b_key: "proteins_b"
             output_key: "overlap_analysis"
 
+Extensible Architecture
+-----------------------
+
+The actions used in this tutorial (LOAD_DATASET_IDENTIFIERS, MERGE_WITH_UNIPROT_RESOLUTION, CALCULATE_SET_OVERLAP) are the three foundational actions that ship with Biomapper. However, the architecture is designed to be extensible - new specialized actions can be easily added to support more sophisticated mapping approaches as requirements evolve.
+
 Continue Learning
 -----------------
 
-* :doc:`../usage` - Comprehensive usage patterns
+* :doc:`../usage` - Comprehensive usage patterns  
 * :doc:`../configuration` - Advanced strategy configuration
+* :doc:`../architecture/action_system` - Learn how to develop new actions
 * :doc:`../actions/load_dataset_identifiers` - Detailed action reference

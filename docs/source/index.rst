@@ -1,13 +1,13 @@
 Welcome to biomapper's documentation!
 =====================================
 
-biomapper is a streamlined Python framework for biological data harmonization and ontology mapping. Built around YAML-based strategies and core action types, biomapper provides flexible workflows for mapping biological entities like proteins, metabolites, and genes.
+biomapper is an extensible Python framework for biological data harmonization and ontology mapping. Built around YAML-based strategies and a registry of specialized actions, biomapper provides flexible workflows for mapping biological entities like proteins, metabolites, and genes.
 
 Key Features
 ------------
 
 * **YAML Strategy Configuration**: Define mapping workflows using simple YAML files
-* **Core Action Types**: Three essential actions handle most mapping scenarios
+* **Extensible Action System**: Foundational actions with architecture designed for easy expansion
 * **API-First Design**: REST API for executing strategies remotely
 * **Multi-Dataset Support**: Load and compare data from multiple biological sources
 * **Type Safety**: Pydantic models ensure data validation throughout

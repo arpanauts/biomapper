@@ -2,17 +2,17 @@
 
 ## Overview
 
-Biomapper is a streamlined Python framework for biological data harmonization and ontology mapping. Built around YAML-based strategies and core action types, it provides flexible workflows for mapping biological entities like proteins, metabolites, and genes.
+Biomapper is an extensible Python framework for biological data harmonization and ontology mapping. Built around YAML-based strategies and a registry of specialized actions, it provides flexible workflows for mapping biological entities like proteins, metabolites, and genes.
 
-The architecture prioritizes simplicity and maintainability over complexity, focusing on the most common biological data mapping scenarios.
+The architecture prioritizes simplicity and maintainability while enabling sophisticated mapping approaches through an extensible action system that can grow to meet evolving requirements.
 
 ## Core Components
 
 ### YAML Strategy System
 Configuration-driven workflow definition using simple YAML files. Strategies define sequences of actions to be executed on biological data.
 
-### Core Action Types
-Three essential actions that handle most biological data mapping scenarios:
+### Foundational Action Types
+The system currently ships with three foundational actions that handle common biological data mapping scenarios, with the architecture designed to support additional specialized actions:
 
 - **LOAD_DATASET_IDENTIFIERS**: Load identifiers from CSV/TSV files with flexible column mapping
 - **MERGE_WITH_UNIPROT_RESOLUTION**: Merge datasets with historical UniProt identifier resolution  
@@ -154,11 +154,17 @@ The system runs as a containerized FastAPI service with:
 
 ## Future Considerations
 
-### Planned Enhancements
-- Additional action types for specialized use cases
+### Action System Expansion
+The extensible action architecture enables:
+- Easy addition of specialized action types for advanced mapping approaches
+- Integration with additional biological databases and APIs
+- Development of domain-specific mapping strategies
+- Community contributions of new action types
+
+### Other Planned Enhancements
 - Performance optimizations for large datasets
 - Enhanced error reporting and debugging
-- Integration with more biological databases
+- Real-time progress tracking
 
 ### Scalability
 The current architecture supports horizontal scaling by:
