@@ -224,7 +224,7 @@ class CalculateSetOverlapAction(
         jaccard_index = matched_rows / union_total if union_total > 0 else 0.0
         dice_coefficient = (2 * matched_rows) / (source_total + target_total) if (source_total + target_total) > 0 else 0.0
         
-        return {
+        statistics = {
             "mapping_combo_id": params.mapping_combo_id,
             "source_name": params.source_name,
             "target_name": params.target_name,
@@ -248,7 +248,7 @@ class CalculateSetOverlapAction(
         # Add timing information if available
         import time
         if action_start_time is not None:
-            result["analysis_time_seconds"] = round(time.time() - action_start_time, 2)
+            statistics["analysis_time_seconds"] = round(time.time() - action_start_time, 2)
         
         # Try to get merge timing from context (set by MERGE_WITH_UNIPROT_RESOLUTION)
         if context:
@@ -256,15 +256,15 @@ class CalculateSetOverlapAction(
             # Look for timing from the most recent merge operation
             for key in metadata:
                 if key.endswith("_merged") and "processing_time_seconds" in metadata[key]:
-                    result["merge_time_seconds"] = metadata[key]["processing_time_seconds"]
+                    statistics["merge_time_seconds"] = metadata[key]["processing_time_seconds"]
                     # Calculate total mapping time (merge + analysis)
                     if action_start_time is not None:
-                        result["total_mapping_time_seconds"] = round(
-                            result.get("merge_time_seconds", 0) + result.get("analysis_time_seconds", 0), 2
+                        statistics["total_mapping_time_seconds"] = round(
+                            statistics.get("merge_time_seconds", 0) + statistics.get("analysis_time_seconds", 0), 2
                         )
                     break
         
-        return result
+        return statistics
 
     def _create_output_files(
         self,
