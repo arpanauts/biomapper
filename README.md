@@ -3,263 +3,285 @@
 [![Python Version](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 
-## Overview / Introduction
+## Overview
 
-**Biomapper** is a unified Python toolkit for biological data harmonization and ontology mapping. It provides a flexible, configuration-driven framework for mapping and integrating diverse biological entity identifiers from various data sources.
+**Biomapper** is a streamlined Python framework for biological data harmonization and ontology mapping. Built around YAML-based strategies and MVP action types, it provides flexible workflows for mapping biological entities like proteins, metabolites, and genes.
 
 ### Problem it Solves
 
 Biological research often faces significant challenges in data integration:
 - **Data Silos**: Biological data is scattered across numerous databases with different identifier systems
 - **Identifier Ambiguity**: The same biological entity may have multiple identifiers across different databases
-- **Lack of Standardized Tools**: Few tools exist that provide a comprehensive, extensible framework for biological entity mapping
-- **Reproducibility Issues**: Manual mapping processes are error-prone and difficult to reproduce
-
-### Key Goals
-
-- **Standardize and automate** the mapping of biological entities across different databases and ontologies
-- **Provide a flexible and extensible system** for defining complex mapping strategies through configuration
-- **Enable robust and reproducible** mapping pipelines with features like checkpointing and retry logic
-- **Facilitate integration** of disparate biological datasets for comprehensive analysis
+- **Manual Mapping**: Time-consuming and error-prone manual mapping processes
+- **Reproducibility Issues**: Difficulty reproducing and sharing mapping workflows
 
 ## Key Features
 
-- **🔧 Configuration-Driven**: Define data sources, ontologies, clients, and mapping strategies using intuitive YAML configurations
-- **🏗️ Modular Architecture**: Built on core components like `MappingExecutor`, `StrategyHandler`, `ActionLoader`, and customizable `StrategyAction`s
-- **🔌 Extensible**: Easily add custom data sources, clients, and mapping actions to support new biological databases
-- **💪 Robustness**: Built-in checkpointing, retry logic, and batch processing for handling large-scale mapping operations
-- **🗄️ Database Integration**: Uses `metamapper.db` for storing configurations, metadata, and mapping relationships
-- **🧬 Multiple Entity Types**: Support for various biological entities including:
-  - Proteins (UniProt, HPA, UKBB)
-  - Metabolites (ChEBI, PubChem)
-  - Genes (HGNC, Ensembl)
-  - And more through extensible architecture
-- **🤖 AI-Enhanced Mapping**: Integration with LLMs (OpenAI, Anthropic) and RAG systems for intelligent entity resolution
-- **🔍 Semantic Search**: Vector database integration (ChromaDB, Qdrant, FAISS) for similarity-based mapping
+- **🔧 YAML Strategy Configuration**: Define mapping workflows using simple YAML files
+- **🎯 MVP Action Types**: Three core actions handle most mapping scenarios
+- **🌐 API-First Design**: REST API for executing strategies remotely  
+- **📊 Multi-Dataset Support**: Load and compare data from multiple biological sources
+- **🔒 Type Safety**: Pydantic models ensure data validation throughout
+- **⏱️ Performance Tracking**: Built-in timing metrics for benchmarking
 
-## Getting Started
-
-### Prerequisites
-
-- **Python 3.11 or higher**
-- **Poetry** (for dependency management)
-- **Git** (for cloning the repository)
+## Quick Start
 
 ### Installation
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/arpanauts/biomapper.git
-   cd biomapper
-   ```
-
-2. **Set up a virtual environment** (recommended):
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies using Poetry**:
-   ```bash
-   pip install poetry
-   poetry install
-   ```
-
-   Or install with optional API extras:
-   ```bash
-   poetry install --extras api
-   ```
-
-### Initial Configuration
-
-1. **Set up environment variables**:
-   ```bash
-   cp .env.example .env  # If example exists, or create a new .env file
-   ```
-
-   Add essential environment variables:
-   ```bash
-   # Data directories
-   DATA_DIR=/home/ubuntu/biomapper/data
-   OUTPUT_DIR=/home/ubuntu/biomapper/output
-   
-   # API Keys (if using AI-enhanced mapping)
-   OPENAI_API_KEY=your_openai_key
-   ANTHROPIC_API_KEY=your_anthropic_key
-   ```
-
-2. **Initialize the metadata database**:
-   ```bash
-   python scripts/setup_and_configuration/populate_metamapper_db.py
-   ```
-   This command reads all configuration files from `configs/*.yaml` and populates the metadata database.
-
-### Running an Example Pipeline
-
-Run the UKBB to HPA protein mapping pipeline:
 ```bash
-python scripts/main_pipelines/run_full_ukbb_hpa_mapping.py
+# Clone the repository
+git clone https://github.com/your-org/biomapper.git
+cd biomapper
+
+# Install dependencies
+poetry install --with dev,docs,api
+
+# Activate the environment
+poetry shell
 ```
 
-This example:
-- Maps proteins from the UK Biobank (UKBB) dataset to Human Protein Atlas (HPA) identifiers
-- Demonstrates checkpointing and batch processing capabilities
-- Saves results to `data/results/ukbb_hpa_mapping_results_YYYYMMDD_HHMMSS.csv`
+### Start the API Server
 
-## Project Structure
-
-```
-biomapper/
-├── biomapper/              # Core library code
-│   ├── core/              # Main executor, handlers, and actions
-│   │   ├── mapping_executor.py
-│   │   ├── strategy_handler.py
-│   │   └── strategy_actions/
-│   ├── config_loader/     # YAML parsing and validation
-│   ├── db/               # Database models and session management
-│   ├── mapping_clients/  # Clients for accessing data sources
-│   ├── rag/             # RAG (Retrieval Augmented Generation) components
-│   └── utils/           # Utility functions
-├── configs/             # YAML configuration files
-│   ├── protein_config.yaml
-│   └── mapping_strategies_config.yaml
-├── data/               # Input data files (not tracked in git)
-├── docs/               # Project documentation
-├── notebooks/          # Jupyter notebooks for examples and analysis
-├── output/             # Pipeline output directory (not tracked in git)
-├── scripts/            # Helper and pipeline scripts
-│   ├── main_pipelines/
-│   └── setup_and_configuration/
-├── tests/              # Unit and integration tests
-├── roadmap/            # Project planning and development notes
-├── pyproject.toml      # Project dependencies and metadata
-└── LICENSE            # Apache 2.0 license
+```bash
+cd biomapper-api
+poetry run uvicorn main:app --reload
 ```
 
-## Usage
+### Your First Mapping
 
-### Configuring Data Sources
-
-Add new data sources by creating YAML configuration files in the `configs/` directory:
+1. Create a strategy file `my_mapping.yaml`:
 
 ```yaml
-# Example: configs/my_protein_db_config.yaml
-protein:
-  my_protein_db:
-    name: "My Protein Database"
-    url: "https://api.myproteindb.org"
-    id_types:
-      - my_protein_id
-      - my_accession
+name: "BASIC_PROTEIN_MAPPING"
+description: "Load and analyze protein data"
+
+steps:
+  - name: load_proteins
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/path/to/proteins.csv"
+        identifier_column: "uniprot"
+        output_key: "proteins"
 ```
 
-### Defining Mapping Strategies
-
-Create mapping strategies in `configs/mapping_strategies_config.yaml`:
-
-```yaml
-strategies:
-  my_mapping_strategy:
-    description: "Maps identifiers from source to target database"
-    actions:
-      - action_type: "FetchFromSource"
-        params:
-          source: "my_protein_db"
-      - action_type: "MapIdentifiers"
-        params:
-          target: "uniprot"
-      - action_type: "ValidateResults"
-```
-
-### Running Pipelines
-
-Execute mapping strategies using the main pipeline scripts:
+2. Execute using Python:
 
 ```python
-# Example pipeline script
-from biomapper.core import MappingExecutor
+import asyncio
+from biomapper_client import BiomapperClient
 
-executor = MappingExecutor()
-results = executor.execute_strategy(
-    strategy_name="my_mapping_strategy",
-    input_data=my_data,
-    checkpoint_enabled=True
-)
+async def main():
+    async with BiomapperClient() as client:
+        result = await client.execute_strategy_file("my_mapping.yaml")
+        print(f"Loaded {result['results']['proteins']['count']} proteins")
+
+asyncio.run(main())
 ```
 
-### Using the CLI
+## MVP Actions
 
-After installation, use the `biomapper` CLI tool:
+Biomapper provides three core action types:
+
+### LOAD_DATASET_IDENTIFIERS
+Load identifiers from CSV/TSV files with flexible column mapping.
+
+### MERGE_WITH_UNIPROT_RESOLUTION  
+Merge datasets with historical UniProt identifier resolution.
+
+### CALCULATE_SET_OVERLAP
+Calculate overlap statistics and generate Venn diagrams.
+
+## Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐
+│  Client Script  │    │  Python Client  │
+└─────────┬───────┘    └─────────┬───────┘
+          │                      │
+          └──────┬───────────────┘
+                 │ HTTP requests
+                 ▼
+          ┌─────────────────┐
+          │   REST API      │
+          │   (FastAPI)     │
+          └─────────┬───────┘
+                    │
+                    ▼
+          ┌─────────────────┐
+          │ YAML Strategy   │
+          │ Execution       │  
+          └─────────┬───────┘
+                    │
+                    ▼
+          ┌─────────────────┐
+          │ MVP Actions     │
+          │ Registry        │
+          └─────────────────┘
+```
+
+## Example Use Cases
+
+### Protein Dataset Comparison
+Compare protein coverage between UK Biobank and Human Protein Atlas:
+
+```yaml
+name: "UKBB_HPA_COMPARISON"
+description: "Compare UKBB and HPA protein datasets"
+
+steps:
+  - name: load_ukbb
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/data/UKBB_Protein_Meta.tsv" 
+        identifier_column: "UniProt"
+        output_key: "ukbb_proteins"
+  
+  - name: load_hpa
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/data/hpa_osps.csv"
+        identifier_column: "uniprot" 
+        output_key: "hpa_proteins"
+  
+  - name: calculate_overlap
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        dataset_a_key: "ukbb_proteins"
+        dataset_b_key: "hpa_proteins"
+        output_key: "overlap_analysis"
+```
+
+### Multi-Dataset Analysis
+Analyze overlaps across multiple biological databases:
+
+```yaml
+name: "MULTI_DATASET_ANALYSIS"
+description: "Compare proteins across Arivale, QIN, and KG2C"
+
+steps:
+  - name: load_arivale
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/data/arivale/proteomics_metadata.tsv"
+        identifier_column: "uniprot"
+        output_key: "arivale_proteins"
+  
+  - name: load_qin
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/data/qin_osps.csv" 
+        identifier_column: "uniprot"
+        output_key: "qin_proteins"
+        
+  - name: arivale_vs_qin
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        dataset_a_key: "arivale_proteins"
+        dataset_b_key: "qin_proteins"
+        output_key: "arivale_qin_overlap"
+```
+
+## Development
+
+### Running Tests
 
 ```bash
-# Check system health
-biomapper health check
+# Run all tests
+poetry run pytest
 
-# Populate metadata database
-biomapper metamapper populate
+# Run specific test file
+poetry run pytest tests/unit/core/strategy_actions/test_load_dataset_identifiers.py
 
-# List available strategies
-biomapper metadata list-strategies
+# Run with coverage
+poetry run pytest --cov=biomapper
 ```
+
+### Code Quality
+
+```bash
+# Linting
+poetry run ruff check .
+poetry run ruff format .
+
+# Type checking  
+poetry run mypy biomapper biomapper-api biomapper_client
+```
+
+### API Development
+
+```bash
+# Start API server with auto-reload
+cd biomapper-api
+poetry run uvicorn main:app --reload
+
+# Access interactive docs
+# http://localhost:8000/docs
+```
+
+## Configuration
+
+### Strategy Files
+Strategies are defined in YAML files in the `configs/` directory:
+
+```
+configs/
+├── ukbb_hpa_mapping.yaml
+├── arivale_qin_mapping.yaml  
+├── kg2c_spoke_mapping.yaml
+└── multi_dataset_analysis.yaml
+```
+
+### Data Requirements
+- CSV/TSV files with headers
+- Identifier columns (UniProt, gene symbols, etc.)
+- UTF-8 encoding
+- Absolute file paths in strategy configurations
+
+## Documentation
+
+Comprehensive documentation is available at [ReadTheDocs](https://biomapper.readthedocs.io/):
+
+- **Getting Started**: Installation and first mapping tutorial
+- **User Guide**: Detailed usage patterns and examples  
+- **API Reference**: Complete REST endpoint documentation
+- **Action Reference**: Detailed parameter documentation for each MVP action
+- **Architecture**: System design and component overview
 
 ## Contributing
 
-We welcome contributions to the Biomapper project! Here's how you can help:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes with tests
+4. Run the test suite: `poetry run pytest`
+5. Submit a pull request
 
-### Contribution Guidelines
+### Development Setup
 
-1. **Report bugs or suggest features**:
-   - Use [GitHub Issues](https://github.com/arpanauts/biomapper/issues) to report bugs or request features
-   - Provide clear descriptions and reproducible examples
+```bash
+# Clone your fork
+git clone https://github.com/your-username/biomapper.git
+cd biomapper
 
-2. **Code contributions**:
-   - Fork the repository and create a feature branch
-   - Follow PEP 8 coding standards
-   - Add docstrings to all functions and classes
-   - Include type hints for better code clarity
-   - Write tests for all new functionality
-   - Submit a pull request with a clear description of changes
+# Install with development dependencies
+poetry install --with dev,docs,api
 
-3. **Development setup**:
-   ```bash
-   # Install development dependencies
-   poetry install --with dev
-   
-   # Run tests
-   pytest
-   
-   # Run linting
-   flake8 biomapper/
-   black biomapper/ --check
-   ```
-
-### Areas for Contribution
-
-- **New StrategyActions**: Implement actions for additional mapping logic
-- **Database Clients**: Add support for new biological databases
-- **Documentation**: Improve documentation and add tutorials
-- **Test Coverage**: Expand test cases for existing functionality
-- **Performance**: Optimize mapping algorithms for large datasets
-- **Visualization**: Create tools for visualizing mapping results
+# Install pre-commit hooks (optional)
+pre-commit install
+```
 
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-## Acknowledgements
+## Support
 
-Biomapper builds upon the collective efforts of the biological data community and integrates with numerous public databases including:
-- UniProt
-- Human Protein Atlas (HPA)
-- ChEBI
-- PubChem
-- HGNC
-- And many others
-
-Special thanks to all contributors and the open-source community for making this project possible.
-
-## Contact / Support
-
-- **Issues**: [GitHub Issues](https://github.com/arpanauts/biomapper/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/arpanauts/biomapper/discussions)
-- **Email**: [Contact maintainers](mailto:biomapper@arpanauts.com)
+- **Documentation**: https://biomapper.readthedocs.io/
+- **Issues**: https://github.com/your-org/biomapper/issues
+- **Discussions**: https://github.com/your-org/biomapper/discussions

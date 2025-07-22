@@ -1,458 +1,318 @@
 Configuration Guide
 ===================
 
-Biomapper's flexible configuration system allows you to customize mapping behavior through YAML files. This guide covers the main configuration files and how to create custom mapping strategies.
+Biomapper uses YAML strategy files to define mapping workflows. This guide covers strategy configuration, action parameters, and best practices.
 
-Configuration Files Overview
------------------------------
+Strategy File Structure
+-----------------------
 
-Biomapper uses several configuration files:
-
-1. **protein_config.yaml** - Core protein mapping configuration
-2. **mapping_strategies_config.yaml** - YAML strategy definitions
-3. **client_config.yaml** - External client configuration
-4. **cache_config.yaml** - Caching system configuration
-
-protein_config.yaml
---------------------
-
-This file contains the core configuration for protein mapping operations:
+Every strategy file follows this basic structure:
 
 .. code-block:: yaml
 
-    # Database configuration
-    database:
-      url: "sqlite:///mapping_cache.db"
-      echo: false
-      pool_size: 10
-      max_overflow: 20
+    name: "STRATEGY_NAME" 
+    description: "What this strategy does"
     
-    # Default mapping providers
-    providers:
-      primary: uniprot
-      secondary: ncbi
-      fallback: similarity_search
-    
-    # Confidence thresholds
-    confidence:
-      high_threshold: 0.9
-      medium_threshold: 0.7
-      low_threshold: 0.5
-    
-    # Timeout settings (in seconds)
-    timeouts:
-      api_request: 30
-      total_mapping: 300
-      batch_operation: 600
-    
-    # Retry configuration
-    retry:
-      max_attempts: 3
-      backoff_factor: 2.0
-      retry_status_codes: [500, 502, 503, 504]
-
-mapping_strategies_config.yaml
--------------------------------
-
-This is the heart of biomapper's configuration system. It defines reusable mapping strategies that can be executed by name.
-
-Basic Strategy Structure
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-Each strategy is defined with the following structure:
-
-.. code-block:: yaml
-
-    strategy_name:
-      description: "Brief description of what this strategy does"
-      steps:
-        - action: action_name
-          name: "Step description"
-          parameters:
+    steps:
+      - name: step1
+        action:
+          type: ACTION_TYPE
+          params:
             parameter1: value1
             parameter2: value2
+      
+      - name: step2  
+        action:
+          type: ACTION_TYPE
+          params:
+            input_key: step1_output
+            output_key: final_result
 
-Complete Example
-~~~~~~~~~~~~~~~~
-
-Here's a comprehensive example showing various strategy types:
-
-.. code-block:: yaml
-
-    # Simple direct mapping strategy
-    simple_protein_mapping:
-      description: "Basic protein mapping using UniProt"
-      steps:
-        - action: direct_mapping
-          name: "Map to UniProt"
-          parameters:
-            provider: uniprot
-            timeout: 30
-            min_confidence: 0.8
-    
-    # Comprehensive multi-step strategy
-    comprehensive_protein_mapping:
-      description: "Multi-step protein mapping with fallbacks"
-      steps:
-        - action: direct_mapping
-          name: "Primary UniProt mapping"
-          parameters:
-            provider: uniprot
-            timeout: 30
-            min_confidence: 0.9
-            
-        - action: synonym_expansion
-          name: "Expand using protein synonyms"
-          parameters:
-            sources: [protein_synonyms, gene_aliases]
-            max_synonyms: 10
-            
-        - action: direct_mapping
-          name: "Retry with synonyms"
-          parameters:
-            provider: ncbi
-            timeout: 45
-            min_confidence: 0.8
-            
-        - action: similarity_search
-          name: "Fuzzy matching fallback"
-          parameters:
-            algorithm: levenshtein
-            threshold: 0.85
-            max_results: 5
-    
-    # Species-specific mapping
-    human_gene_mapping:
-      description: "Human gene mapping with HGNC validation"
-      steps:
-        - action: species_filter
-          name: "Ensure human context"
-          parameters:
-            species: "Homo sapiens"
-            ncbi_taxon_id: 9606
-            
-        - action: direct_mapping
-          name: "Map to HGNC"
-          parameters:
-            provider: hgnc
-            validate_species: true
-            timeout: 30
-            
-        - action: cross_reference
-          name: "Cross-reference with Ensembl"
-          parameters:
-            target_db: ensembl
-            relationship_type: gene_id
-    
-    # Batch processing strategy
-    high_throughput_mapping:
-      description: "Optimized for large-scale batch operations"
-      steps:
-        - action: batch_prepare
-          name: "Prepare batch processing"
-          parameters:
-            batch_size: 100
-            parallel_workers: 4
-            
-        - action: cache_lookup
-          name: "Check existing mappings"
-          parameters:
-            cache_key_format: "{entity_type}:{query_id}"
-            
-        - action: batch_mapping
-          name: "Process unmapped entities"
-          parameters:
-            provider: uniprot
-            concurrent_requests: 10
-            rate_limit: 100  # requests per minute
-
-Available Actions
------------------
-
-The following actions are available for use in strategies:
-
-Core Mapping Actions
-~~~~~~~~~~~~~~~~~~~~
-
-**direct_mapping**
-  Performs direct mapping using a specified provider.
-  
-  Parameters:
-    - ``provider`` (required): The mapping provider to use
-    - ``timeout``: Request timeout in seconds (default: 30)
-    - ``min_confidence``: Minimum confidence threshold (default: 0.5)
-    - ``max_results``: Maximum number of results to return
-
-**batch_mapping**
-  Optimized batch processing for multiple entities.
-  
-  Parameters:
-    - ``provider`` (required): The mapping provider to use
-    - ``batch_size``: Number of entities per batch (default: 50)
-    - ``concurrent_requests``: Number of concurrent API requests
-    - ``rate_limit``: Maximum requests per minute
-
-**similarity_search**
-  Fuzzy matching for entities that don't have exact matches.
-  
-  Parameters:
-    - ``algorithm``: Similarity algorithm (levenshtein, jaccard, etc.)
-    - ``threshold``: Minimum similarity score (0.0 to 1.0)
-    - ``max_results``: Maximum number of similar matches to return
-
-Enhancement Actions
-~~~~~~~~~~~~~~~~~~~
-
-**synonym_expansion**
-  Expands entity names using known synonyms.
-  
-  Parameters:
-    - ``sources``: List of synonym sources to use
-    - ``max_synonyms``: Maximum number of synonyms per entity
-    - ``include_abbreviations``: Include abbreviated forms
-
-**species_filter**
-  Filters or validates entities based on species information.
-  
-  Parameters:
-    - ``species``: Species name (e.g., "Homo sapiens")
-    - ``ncbi_taxon_id``: NCBI taxonomy ID
-    - ``strict_mode``: Reject entities that don't match species
-
-**cross_reference**
-  Cross-references mappings with additional databases.
-  
-  Parameters:
-    - ``target_db``: Target database for cross-referencing
-    - ``relationship_type``: Type of relationship to establish
-    - ``validate_mapping``: Validate cross-references
-
-Utility Actions
+Required Fields
 ~~~~~~~~~~~~~~~
 
-**cache_lookup**
-  Checks for existing mappings in the cache.
-  
-  Parameters:
-    - ``cache_key_format``: Format string for cache keys
-    - ``ttl``: Time-to-live for cached results (seconds)
+**name**
+  Unique identifier for the strategy. Use UPPERCASE_WITH_UNDERSCORES.
 
-**batch_prepare**
-  Prepares data for batch processing.
-  
-  Parameters:
-    - ``batch_size``: Size of each batch
-    - ``parallel_workers``: Number of parallel processing workers
-    - ``sort_by``: Sort entities before batching
+**description** 
+  Human-readable description of what the strategy accomplishes.
 
-**validation**
-  Validates mapping results against specified criteria.
-  
-  Parameters:
-    - ``min_confidence``: Minimum confidence required
-    - ``required_fields``: List of required result fields
-    - ``custom_validators``: Custom validation functions
+**steps**
+  List of actions to execute in order.
 
-Creating Custom Strategies
----------------------------
+Each step requires:
 
-Step-by-Step Guide
-~~~~~~~~~~~~~~~~~~
+**name**
+  Step identifier within the strategy.
 
-1. **Identify the mapping workflow**: Determine what steps are needed for your specific use case.
+**action.type**
+  One of the three MVP action types.
 
-2. **Choose appropriate actions**: Select from the available actions or identify if new actions are needed.
+**action.params**
+  Parameters specific to that action type.
 
-3. **Define the strategy**: Create a YAML definition following the structure above.
+MVP Action Configuration
+------------------------
 
-4. **Test the strategy**: Execute the strategy with test data to verify it works correctly.
+LOAD_DATASET_IDENTIFIERS
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-5. **Add to configuration**: Add your strategy to the ``mapping_strategies_config.yaml`` file.
+Loads identifiers from CSV/TSV files.
 
-Example: Custom Metabolite Mapping
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Required Parameters:
+* ``file_path``: Absolute path to data file
+* ``identifier_column``: Column name containing identifiers  
+* ``output_key``: Key to store results in context
+
+Optional Parameters:
+* ``dataset_name``: Human-readable name for logging
 
 .. code-block:: yaml
 
-    metabolite_pubchem_mapping:
-      description: "Metabolite mapping prioritizing PubChem with ChEBI fallback"
-      steps:
-        - action: name_standardization
-          name: "Standardize metabolite names"
-          parameters:
-            remove_prefixes: ["L-", "D-", "DL-"]
-            normalize_case: true
-            remove_special_chars: ["(", ")", "[", "]"]
-            
-        - action: direct_mapping
-          name: "Map to PubChem"
-          parameters:
-            provider: pubchem
-            search_type: name
-            timeout: 45
-            min_confidence: 0.85
-            
-        - action: direct_mapping
-          name: "Fallback to ChEBI"
-          parameters:
-            provider: chebi
-            search_type: synonym
-            timeout: 30
-            min_confidence: 0.75
-            only_if_previous_failed: true
-            
-        - action: inchi_validation
-          name: "Validate using InChI keys"
-          parameters:
-            require_inchi: true
-            validate_structure: true
+    - name: load_proteins
+      action:
+        type: LOAD_DATASET_IDENTIFIERS
+        params:
+          file_path: "/data/proteins.csv"
+          identifier_column: "uniprot_id"
+          output_key: "protein_list"
+          dataset_name: "My Protein Dataset"
 
-Strategy Execution Context
---------------------------
+MERGE_WITH_UNIPROT_RESOLUTION
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Strategies can access and modify execution context during runtime:
+Merges two datasets with historical UniProt identifier resolution.
 
-Context Variables
-~~~~~~~~~~~~~~~~~
+Required Parameters:
+* ``source_dataset_key``: Context key of source dataset
+* ``target_dataset_key``: Context key of target dataset  
+* ``source_id_column``: Column name in source data
+* ``target_id_column``: Column name in target data
+* ``output_key``: Key to store merged results
 
-The following variables are available in all strategies:
+.. code-block:: yaml
 
-- ``entity_names``: List of entities being mapped
-- ``entity_type``: Type of entities (protein, gene, metabolite, etc.)
-- ``timestamp``: Strategy execution timestamp
-- ``user_id``: User identifier (if available)
-- ``batch_id``: Unique identifier for the batch operation
+    - name: merge_data
+      action:
+        type: MERGE_WITH_UNIPROT_RESOLUTION  
+        params:
+          source_dataset_key: "dataset_a"
+          target_dataset_key: "dataset_b"
+          source_id_column: "UniProt"
+          target_id_column: "uniprot"
+          output_key: "merged_dataset"
 
-Custom Context
-~~~~~~~~~~~~~~
+CALCULATE_SET_OVERLAP
+~~~~~~~~~~~~~~~~~~~~~
 
-You can pass custom context when executing strategies:
+Calculates overlap statistics between two datasets.
 
-.. code-block:: python
+Required Parameters:
+* ``dataset_a_key``: Context key of first dataset
+* ``dataset_b_key``: Context key of second dataset  
+* ``output_key``: Key to store overlap results
 
-    # Pass custom context
-    context = {
-        "species": "human",
-        "experimental_context": "proteomics",
-        "confidence_threshold": 0.9,
-        "max_processing_time": 300
-    }
+.. code-block:: yaml
+
+    - name: find_overlap
+      action:
+        type: CALCULATE_SET_OVERLAP
+        params:
+          dataset_a_key: "proteins_a"
+          dataset_b_key: "proteins_b" 
+          output_key: "overlap_stats"
+
+Example Configurations
+----------------------
+
+Basic Protein Mapping
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: yaml
+
+    name: "BASIC_PROTEIN_MAPPING"
+    description: "Load and analyze protein overlap"
     
-    results = executor.execute_yaml_strategy(
-        "comprehensive_protein_mapping",
-        entity_names,
-        initial_context=context
-    )
+    steps:
+      - name: load_source
+        action:
+          type: LOAD_DATASET_IDENTIFIERS
+          params:
+            file_path: "/data/source_proteins.csv"
+            identifier_column: "protein_id"
+            output_key: "source_proteins"
+      
+      - name: load_target
+        action:
+          type: LOAD_DATASET_IDENTIFIERS
+          params:
+            file_path: "/data/target_proteins.csv"  
+            identifier_column: "uniprot_ac"
+            output_key: "target_proteins"
+      
+      - name: calculate_overlap
+        action:
+          type: CALCULATE_SET_OVERLAP
+          params:
+            dataset_a_key: "source_proteins"
+            dataset_b_key: "target_proteins"
+            output_key: "analysis_results"
 
-Context Access in Strategies
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Actions can access context variables using the ``${}`` syntax:
-
-.. code-block:: yaml
-
-    context_aware_mapping:
-      description: "Strategy that adapts based on context"
-      steps:
-        - action: direct_mapping
-          name: "Context-aware mapping"
-          parameters:
-            provider: uniprot
-            species: "${species}"
-            confidence_threshold: "${confidence_threshold}"
-            timeout: "${max_processing_time}"
-
-Strategy Validation
--------------------
-
-Schema Validation
-~~~~~~~~~~~~~~~~~
-
-All strategies are validated against a JSON schema to ensure correctness:
+Multi-Dataset Comparison
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: yaml
 
-    # This will be validated automatically
-    invalid_strategy:
-      description: "This strategy has validation errors"
-      steps:
-        - action: direct_mapping
-          # Missing required 'name' field - validation error
-          parameters:
-            provider: uniprot
+    name: "MULTI_DATASET_COMPARISON"
+    description: "Compare multiple protein datasets with UniProt resolution"
+    
+    steps:
+      - name: load_arivale
+        action:
+          type: LOAD_DATASET_IDENTIFIERS
+          params:
+            file_path: "/data/arivale/proteomics_metadata.tsv"
+            identifier_column: "uniprot"
+            output_key: "arivale_proteins"
+            dataset_name: "Arivale Proteomics"
+      
+      - name: load_hpa
+        action:
+          type: LOAD_DATASET_IDENTIFIERS  
+          params:
+            file_path: "/data/hpa_osps.csv"
+            identifier_column: "uniprot"
+            output_key: "hpa_proteins"
+            dataset_name: "Human Protein Atlas"
+      
+      - name: merge_arivale_hpa
+        action:
+          type: MERGE_WITH_UNIPROT_RESOLUTION
+          params:
+            source_dataset_key: "arivale_proteins"
+            target_dataset_key: "hpa_proteins"
+            source_id_column: "uniprot" 
+            target_id_column: "uniprot"
+            output_key: "arivale_hpa_merged"
+      
+      - name: analyze_overlap
+        action:
+          type: CALCULATE_SET_OVERLAP
+          params:
+            dataset_a_key: "arivale_hpa_merged"
+            dataset_b_key: "hpa_proteins"
+            output_key: "final_analysis"
 
-Runtime Validation
-~~~~~~~~~~~~~~~~~~
+Strategy Organization
+---------------------
 
-Strategies are also validated at runtime:
+File Naming
+~~~~~~~~~~~
 
-- Required parameters are checked
-- Parameter types are validated
-- Provider availability is verified
-- Context variables are resolved
+Use descriptive names that indicate the datasets and purpose:
 
-Error Handling in Strategies
------------------------------
+* ``ukbb_hpa_mapping.yaml`` - Maps UKBB to HPA
+* ``multi_protein_comparison.yaml`` - Compares multiple sources  
+* ``arivale_qin_overlap.yaml`` - Analyzes Arivale vs QIN overlap
 
-Strategies support various error handling approaches:
+Directory Structure
+~~~~~~~~~~~~~~~~~~~
+
+Organize strategies in the ``configs/`` directory:
+
+.. code-block:: text
+
+    configs/
+    ├── ukbb_hpa_mapping.yaml
+    ├── arivale_hpa_mapping.yaml  
+    ├── qin_hpa_mapping.yaml
+    ├── kg2c_hpa_mapping.yaml
+    └── spoke_hpa_mapping.yaml
+
+Data Requirements
+-----------------
+
+File Formats
+~~~~~~~~~~~~
+
+Strategies work with CSV and TSV files. Ensure your data files:
+
+* Have headers in the first row
+* Use consistent delimiter (comma for CSV, tab for TSV)
+* Contain the identifier columns referenced in strategies
+* Use UTF-8 encoding
+
+File Paths
+~~~~~~~~~~
+
+Always use **absolute paths** in strategy files:
 
 .. code-block:: yaml
 
-    robust_mapping_strategy:
-      description: "Strategy with comprehensive error handling"
-      steps:
-        - action: direct_mapping
-          name: "Primary mapping attempt"
-          parameters:
-            provider: uniprot
-            timeout: 30
-          error_handling:
-            on_timeout: continue
-            on_provider_error: continue
-            on_network_error: retry
-            max_retries: 3
-            
-        - action: direct_mapping
-          name: "Fallback mapping"
-          parameters:
-            provider: ncbi
-            timeout: 45
-          conditions:
-            execute_if: previous_step_failed
-            
-        - action: manual_review_flag
-          name: "Flag for manual review"
-          parameters:
-            reason: "Automated mapping failed"
-          conditions:
-            execute_if: all_previous_failed
+    # Good - absolute path
+    file_path: "/data/proteins/ukbb_data.csv"
+    
+    # Bad - relative path (may fail) 
+    file_path: "../data/ukbb_data.csv"
+
+Column Names  
+~~~~~~~~~~~~
+
+Ensure the ``identifier_column`` exactly matches your CSV headers:
+
+.. code-block:: yaml
+
+    # If your CSV header is "UniProt_ID"
+    identifier_column: "UniProt_ID"
+    
+    # Not "uniprot_id" or "UniProt"
 
 Best Practices
 --------------
 
-1. **Use descriptive names**: Both strategy names and step names should clearly indicate their purpose
-2. **Include descriptions**: Always provide clear descriptions for strategies and complex steps
-3. **Set appropriate timeouts**: Balance performance with reliability
-4. **Handle errors gracefully**: Include fallback steps for when primary methods fail
-5. **Test thoroughly**: Test strategies with various input types and edge cases
-6. **Version your strategies**: Keep track of changes to strategies over time
-7. **Document custom actions**: If you create custom actions, document their parameters
-8. **Use context appropriately**: Leverage context for dynamic behavior without hardcoding values
+1. **Use descriptive names** for steps and output keys
+2. **Test with small datasets** before running on large files  
+3. **Keep strategies focused** on specific comparisons
+4. **Document complex strategies** with clear descriptions
+5. **Validate file paths** before execution
+6. **Use consistent naming** across related strategies
 
-Strategy Performance Monitoring
--------------------------------
+Troubleshooting
+---------------
 
-Monitor strategy performance to optimize mapping operations:
+Common Configuration Errors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: python
+**YAML syntax errors**
+  Validate YAML syntax with an online checker.
 
-    from biomapper.monitoring import StrategyMetrics
-    
-    # Get performance metrics for a strategy
-    metrics = StrategyMetrics.get_strategy_performance("comprehensive_protein_mapping")
-    
-    print(f"Average execution time: {metrics.avg_execution_time}s")
-    print(f"Success rate: {metrics.success_rate:.2%}")
-    print(f"Most common failure point: {metrics.common_failure_step}")
+**Missing required parameters**  
+  Check that all required params are provided for each action.
 
-This monitoring helps identify bottlenecks and opportunities for optimization in your mapping strategies.
+**File path issues**
+  Use absolute paths and verify files exist.
+
+**Column name mismatches**
+  Ensure identifier_column matches CSV headers exactly.
+
+**Key conflicts**
+  Use unique output_key names within each strategy.
+
+Validation
+~~~~~~~~~~
+
+Before deploying strategies:
+
+1. Check YAML syntax is valid
+2. Verify all file paths exist and are readable
+3. Confirm column names match data files  
+4. Test with small sample datasets first
+5. Review logs for any warnings or errors
+
+Next Steps
+----------
+
+* See :doc:`usage` for executing strategies
+* Check :doc:`actions/load_dataset_identifiers` for detailed parameter reference
+* Review example strategies in the ``configs/`` directory
+* Learn about the :doc:`api/rest_endpoints` for programmatic execution

@@ -13,11 +13,9 @@ from biomapper.core.strategy_actions.typed_base import (
 )
 from biomapper.core.strategy_actions.registry import register_action
 from biomapper.core.models import ActionResult
-from biomapper.core.models.execution_context import StrategyExecutionContext
-from biomapper.db.models import Endpoint
+# StrategyExecutionContext not used in MVP mode
 
 logger = logging.getLogger(__name__)
-
 
 class LoadDatasetIdentifiersParams(BaseModel):
     """Parameters for LOAD_DATASET_IDENTIFIERS action."""
@@ -55,7 +53,6 @@ class LoadDatasetIdentifiersParams(BaseModel):
         True, description="Remove rows where identifier column is empty"
     )
 
-
 @register_action("LOAD_DATASET_IDENTIFIERS")
 class LoadDatasetIdentifiersAction(
     TypedStrategyAction[LoadDatasetIdentifiersParams, StandardActionResult]
@@ -82,9 +79,9 @@ class LoadDatasetIdentifiersAction(
         current_identifiers: List[str],
         current_ontology_type: str,
         params: LoadDatasetIdentifiersParams,
-        source_endpoint: Endpoint,
-        target_endpoint: Endpoint,
-        context: StrategyExecutionContext,
+        source_endpoint: Any,
+        target_endpoint: Any,
+        context: Any,
     ) -> StandardActionResult:
         """Execute the action to load dataset identifiers."""
 

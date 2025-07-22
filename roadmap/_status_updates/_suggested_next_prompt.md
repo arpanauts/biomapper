@@ -2,95 +2,117 @@
 
 ## Context Brief
 
-Biomapper has just completed a major type safety enhancement using Test-Driven Development (TDD), implementing comprehensive Pydantic models for strategy actions while maintaining 100% backward compatibility. The core library now features typed interfaces (`TypedStrategyAction[TParams, TResult]`) alongside legacy dictionary-based interfaces, with YAML strategy validation and a proven migration pattern.
+Biomapper has completed a major architecture simplification, removing ~75% of the codebase and streamlining to 3 MVP actions with YAML-based strategies. Documentation has been completely overhauled for ReadTheDocs, and the project structure cleaned from 28 to 13 essential files. The system is now much simpler while retaining all core biological mapping functionality.
 
 ## Initial Steps
 
-1. **Review Project Context:** Begin by reviewing `/home/ubuntu/biomapper/CLAUDE.md` for overall project architecture and the newly added TDD workflows and type safety guidelines.
+1. **Review Project Context:** Begin by reviewing `/home/ubuntu/biomapper/CLAUDE.md` for current development guidelines and the new MVP architecture overview.
 
-2. **Review Recent Implementation:** Examine the recent status update at `/home/ubuntu/biomapper/roadmap/_status_updates/2025-07-04-pydantic-type-safety-implementation.md` to understand the comprehensive type safety work that was just completed.
+2. **Review Recent Status:** Examine the status update at `/home/ubuntu/biomapper/roadmap/_status_updates/2025-07-22-mvp-architecture-documentation-cleanup.md` to understand the major cleanup work just completed.
 
-3. **Understand Current State:** Review the TDD implementation summary at `/home/ubuntu/biomapper/TDD_IMPLEMENTATION_SUMMARY.md` for technical details of what was accomplished.
+3. **Understand Current State:** The project is in a "ready to commit" state with extensive changes staged for git commits.
 
 ## Work Priorities
 
-### Priority 1: Migrate Core Actions to Typed Interface
-Based on usage frequency and importance, migrate high-priority strategy actions to the new `TypedStrategyAction` pattern:
+### Priority 1: Complete Git Commit Organization
+The project has extensive unstaged changes that need to be organized into logical commits:
 
-- **Target Actions:** Identify actions used in production YAML strategies (check `/home/ubuntu/biomapper/configs/strategies/`)
-- **Migration Pattern:** Follow the example in `/home/ubuntu/biomapper/biomapper/core/strategy_actions/execute_mapping_path_typed.py`
-- **Testing:** Ensure comprehensive test coverage for both typed and legacy interfaces
+- **Legacy Code Removal**: ~200+ deleted files from removed components (UI, database, cache, etc.)
+- **Documentation Updates**: Complete ReadTheDocs restructure and content updates
+- **Project Cleanup**: Root directory organization and configuration updates
+- **Core Code Updates**: MVP action refinements and MinimalStrategyService
 
-### Priority 2: API Integration Enhancement
-Integrate the type safety improvements with the biomapper-api service:
+### Priority 2: Test Suite Validation
+Address remaining test issues and validate system functionality:
 
-- **Verify API Status:** Confirm the API server is still functional (last known working on June 25, 2025)
-- **Schema Generation:** Leverage Pydantic models for automatic OpenAPI schema generation
-- **Endpoint Updates:** Ensure API endpoints properly handle both legacy and typed action parameters
+- **Fix Test Failures**: 2 failing tests related to CSV column format expectations (timing metrics)
+- **Integration Testing**: Run full end-to-end mapping scenarios with real biological data
+- **Performance Validation**: Ensure simplified architecture meets performance requirements
 
-### Priority 3: Production Validation
-Validate the type safety implementation in production-like scenarios:
+### Priority 3: Documentation Deployment
+Ensure the new documentation structure works properly:
 
-- **Strategy Validation:** Test YAML strategy loading with the new `StrategyValidator`
-- **Performance Testing:** Benchmark Pydantic validation overhead vs. dictionary access
-- **Integration Testing:** Run full end-to-end pipelines using typed actions
+- **ReadTheDocs Build**: Verify documentation builds without errors
+- **Cross-Reference Cleanup**: Address remaining warnings about legacy references
+- **User Experience Testing**: Validate that new user guides work for onboarding
+
+### Priority 4: Production Readiness
+Prepare the simplified architecture for production use:
+
+- **API Validation**: Ensure REST API works correctly with MinimalStrategyService
+- **Client Testing**: Validate biomapper_client works with simplified backend
+- **Strategy Examples**: Test all example strategies in `/home/ubuntu/biomapper/configs/`
 
 ## References
 
-- **Type Safety Models:** `/home/ubuntu/biomapper/biomapper/core/models/`
-- **TypedStrategyAction Base:** `/home/ubuntu/biomapper/biomapper/core/strategy_actions/typed_base.py`
-- **Migration Example:** `/home/ubuntu/biomapper/biomapper/core/strategy_actions/execute_mapping_path_typed.py`
-- **YAML Validator:** `/home/ubuntu/biomapper/biomapper/core/validators/strategy_validator.py`
-- **Test Examples:** `/home/ubuntu/biomapper/tests/unit/core/models/` and `/home/ubuntu/biomapper/tests/unit/core/strategy_actions/test_execute_mapping_path_typed.py`
+- **MVP Actions**: `/home/ubuntu/biomapper/biomapper/core/strategy_actions/` (3 core actions)
+- **Strategy Service**: `/home/ubuntu/biomapper/biomapper/core/minimal_strategy_service.py`
+- **Documentation**: `/home/ubuntu/biomapper/docs/source/` (complete restructure)
+- **Configuration**: `/home/ubuntu/biomapper/configs/` (YAML strategy examples)
+- **Tests**: `/home/ubuntu/biomapper/tests/unit/core/strategy_actions/` (restored MVP tests)
 
 ## Workflow Integration
 
 ### Recommended Claude Prompts
 
-**For Action Migration:**
+**For Git Commit Organization:**
 ```
-I need to migrate strategy actions to the new TypedStrategyAction pattern. Please:
+I have extensive changes ready to commit after a major architecture cleanup. Please:
 
-1. Examine the existing action at biomapper/core/strategy_actions/[action_name].py
-2. Follow the pattern in execute_mapping_path_typed.py to create typed version
-3. Define Pydantic models for parameters and results
-4. Implement backward compatibility
-5. Create comprehensive tests following TDD approach
-6. Ensure all existing YAML strategies continue to work
+1. Analyze all git diffs (staged and unstaged)
+2. Group related changes into logical commits
+3. Suggest appropriate commit messages for each group
+4. Help organize the commits in proper sequence
+5. Execute the commits and push to remote
 
-Focus on maintaining 100% backward compatibility while adding type safety benefits.
-```
-
-**For API Integration:**
-```
-I need to integrate the new Pydantic type safety with the biomapper-api. Please:
-
-1. Review the current API implementation in biomapper-api/
-2. Ensure strategy execution endpoints work with both typed and legacy actions
-3. Implement automatic OpenAPI schema generation from Pydantic models
-4. Add validation endpoints for YAML strategies
-5. Test integration with the biomapper_client
-
-Maintain backward compatibility while exposing type safety benefits through the API.
+The changes include legacy code removal, documentation updates, and project cleanup.
 ```
 
-**For Production Validation:**
+**For Test Suite Fixes:**
 ```
-I need to validate the type safety implementation in production scenarios. Please:
+I need to address test failures and validate the simplified system. Please:
 
-1. Run comprehensive tests using poetry run pytest
-2. Test YAML strategy validation with various configurations
-3. Benchmark performance impact of Pydantic vs dictionary access
-4. Execute full end-to-end pipelines with mixed typed/legacy actions
-5. Verify no regressions in existing functionality
+1. Run pytest and analyze the 2 failing tests
+2. Update test expectations to match new CSV timing metrics columns
+3. Verify all MVP actions work correctly
+4. Run integration tests with real biological data
+5. Document any performance considerations discovered
 
-Document any performance considerations or integration issues discovered.
+Focus on ensuring the simplified architecture maintains functionality.
+```
+
+**For Documentation Validation:**
+```
+I need to validate the new ReadTheDocs documentation structure. Please:
+
+1. Build the documentation and check for errors
+2. Address any remaining legacy cross-reference warnings
+3. Test user workflows from quickstart through advanced usage
+4. Verify all code examples work with current architecture
+5. Check that MVP action documentation is comprehensive
+
+Ensure documentation accurately reflects the simplified MVP architecture.
+```
+
+**For Production Readiness:**
+```
+I need to prepare the simplified biomapper for production use. Please:
+
+1. Test the REST API with MinimalStrategyService backend
+2. Validate biomapper_client works with all MVP actions
+3. Run all example strategies from configs/ directory
+4. Test with large datasets to validate performance
+5. Document any limitations or considerations for production use
+
+Focus on ensuring reliability and performance of the streamlined system.
 ```
 
 ## Success Criteria
 
-- All existing YAML strategies continue to work without modification
-- New typed actions provide better IDE support and validation
-- API endpoints support both legacy and typed interfaces seamlessly  
-- Performance impact of type safety is acceptable for production use
-- Clear migration documentation exists for future action development
+- All changes committed in logical, well-organized commits
+- Test suite passes with 100% success rate
+- Documentation builds and deploys without errors
+- All example strategies execute successfully
+- API and client work seamlessly with simplified backend
+- Performance is acceptable for production biological data sets
+- Clear migration path documented for users of previous complex version

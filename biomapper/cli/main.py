@@ -9,11 +9,7 @@ import click
 import logging
 
 # Import registration functions from command modules
-from biomapper.cli import health_commands
 from biomapper.cli import metadata_commands
-from biomapper.cli import metamapper_commands
-from biomapper.cli import metamapper_db_cli
-from biomapper.cli import relationship_commands
 
 # Configure basic logging for CLI
 logging.basicConfig(
@@ -29,11 +25,7 @@ def cli():
 
 
 # Register command groups from modules
-health_commands.register_commands(cli)
 metadata_commands.register_commands(cli)
-metamapper_commands.register_commands(cli)
-metamapper_db_cli.register_commands(cli)
-relationship_commands.register_commands(cli)
 
 if __name__ == "__main__":
     cli()

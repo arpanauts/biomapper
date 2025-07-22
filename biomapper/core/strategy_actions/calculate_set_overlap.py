@@ -17,11 +17,9 @@ from biomapper.core.strategy_actions.typed_base import (
     StandardActionResult,
 )
 from biomapper.core.strategy_actions.registry import register_action
-from biomapper.core.models.execution_context import StrategyExecutionContext
-from biomapper.db.models import Endpoint
+# StrategyExecutionContext not used in MVP mode
 
 logger = logging.getLogger(__name__)
-
 
 class CalculateSetOverlapParams(BaseModel):
     """Parameters for CALCULATE_SET_OVERLAP action."""
@@ -40,7 +38,6 @@ class CalculateSetOverlapParams(BaseModel):
     # Output
     output_dir: str = Field("results", description="Base output directory")
     output_key: str = Field(..., description="Context key for statistics")
-
 
 @register_action("CALCULATE_SET_OVERLAP")
 class CalculateSetOverlapAction(
@@ -70,9 +67,9 @@ class CalculateSetOverlapAction(
         current_identifiers: List[str],
         current_ontology_type: str,
         params: CalculateSetOverlapParams,
-        source_endpoint: Endpoint,
-        target_endpoint: Endpoint,
-        context: StrategyExecutionContext,
+        source_endpoint: Any,
+        target_endpoint: Any,
+        context: Any,
     ) -> StandardActionResult:
         """Execute the action to calculate set overlap statistics."""
         
@@ -194,7 +191,7 @@ class CalculateSetOverlapAction(
             "total_mapping_time_seconds": 0.0,
         }
 
-    def _calculate_statistics(self, df: pd.DataFrame, params: CalculateSetOverlapParams, action_start_time: float = None, context: StrategyExecutionContext = None) -> Dict[str, Any]:
+    def _calculate_statistics(self, df: pd.DataFrame, params: CalculateSetOverlapParams, action_start_time: float = None, context: Any = None) -> Dict[str, Any]:
         """Calculate comprehensive overlap statistics with timing information."""
         
         # Core statistics
@@ -274,7 +271,7 @@ class CalculateSetOverlapAction(
         merged_data: List[Dict[str, Any]],
         statistics: Dict[str, Any],
         params: CalculateSetOverlapParams,
-        context: StrategyExecutionContext,
+        context: Any,
     ) -> None:
         """Create all 5 output files."""
         

@@ -1,7 +1,7 @@
 Usage Guide
 ===========
 
-This guide demonstrates how to use Biomapper's service-oriented architecture for biological entity mapping. All operations in Biomapper are asynchronous, requiring the use of ``async/await`` patterns.
+This guide demonstrates how to use Biomapper's YAML strategy system for biological entity mapping through the REST API.
 
 Installation
 ------------
@@ -10,402 +10,258 @@ Install Biomapper using Poetry:
 
 .. code-block:: bash
 
-    poetry add biomapper
-
-Or clone the repository and install in development mode:
-
-.. code-block:: bash
-
+    # Clone the repository
     git clone https://github.com/your-org/biomapper.git
     cd biomapper
+    
+    # Install dependencies
     poetry install --with dev,docs,api
+    
+    # Activate the environment
+    poetry shell
 
 Quick Start
 -----------
 
-Biomapper uses an async API. Here's a simple example:
+Biomapper uses YAML strategies executed through a REST API. Here's the basic workflow:
+
+1. **Start the API Server**
+
+.. code-block:: bash
+
+    cd biomapper-api
+    poetry run uvicorn main:app --reload
+
+2. **Create a Strategy YAML**
+
+Create a file ``my_strategy.yaml``:
+
+.. code-block:: yaml
+
+    name: "BASIC_PROTEIN_MAPPING"
+    description: "Map proteins between datasets"
+    
+    steps:
+      - name: load_data
+        action:
+          type: LOAD_DATASET_IDENTIFIERS
+          params:
+            file_path: "/path/to/proteins.csv"
+            identifier_column: "uniprot"
+            output_key: "proteins"
+      
+      - name: merge_uniprot
+        action:
+          type: MERGE_WITH_UNIPROT_RESOLUTION
+          params:
+            source_dataset_key: "proteins"
+            target_dataset_key: "proteins"
+            output_key: "merged_proteins"
+      
+      - name: calculate_overlap
+        action:
+          type: CALCULATE_SET_OVERLAP
+          params:
+            dataset_a_key: "proteins" 
+            dataset_b_key: "merged_proteins"
+            output_key: "overlap_stats"
+
+3. **Execute via Python Client**
 
 .. code-block:: python
 
     import asyncio
-    from biomapper.core import MappingExecutor, MappingExecutorBuilder
-    from biomapper.core.models import DatabaseConfig, CacheConfig
+    from biomapper_client import BiomapperClient
     
     async def main():
-        # Configure the executor
-        db_config = DatabaseConfig(url="sqlite+aiosqlite:///data/mapping.db")
-        cache_config = CacheConfig(backend="memory")
-        
-        # Build the executor
-        executor = MappingExecutorBuilder.create(
-            db_config=db_config,
-            cache_config=cache_config
-        )
-        
-        # Initialize
-        await executor.initialize()
-        
-        try:
-            # Execute a mapping
-            result = await executor.execute(
-                entity_names=["BRCA1", "TP53", "EGFR"],
-                entity_type="protein"
-            )
+        async with BiomapperClient("http://localhost:8000") as client:
+            # Execute strategy
+            result = await client.execute_strategy_file("my_strategy.yaml")
             
-            # Process results
-            for mapping in result.mappings:
-                print(f"{mapping.query_id} -> {mapping.mapped_id}")
-                
-        finally:
-            # Clean up
-            await executor.shutdown()
+            # Check results
+            print(f"Status: {result['status']}")
+            print(f"Overlap: {result['results']['overlap_stats']['overlap_percentage']}")
     
     # Run the async function
     asyncio.run(main())
 
-Basic Usage Examples
---------------------
+4. **Execute via CLI**
 
-Using YAML Strategies
-~~~~~~~~~~~~~~~~~~~~~
+.. code-block:: bash
 
-The most common way to use Biomapper is with predefined YAML strategies:
+    # Execute strategy using CLI
+    poetry run python scripts/client_scripts/execute_strategy.py my_strategy.yaml
 
-.. code-block:: python
+Core Concepts
+-------------
 
-    async def map_with_strategy():
-        # Initialize executor as shown above
-        executor = await create_executor()
-        
-        # Execute a YAML strategy
-        result = await executor.execute_yaml_strategy(
-            strategy_file="configs/strategies/protein_mapping.yaml",
-            input_data={
-                "entities": ["BRCA1", "TP53", "EGFR"],
-                "entity_type": "protein"
-            },
-            options={}
-        )
-        
-        # Access results
-        if result.success:
-            for item in result.data:
-                print(f"Mapped: {item}")
-        else:
-            print(f"Error: {result.error}")
+MVP Actions
+~~~~~~~~~~~
 
-Handling Different Entity Types
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Biomapper provides three core action types that handle most mapping scenarios:
 
-Biomapper supports various biological entity types:
+**LOAD_DATASET_IDENTIFIERS**
+  Load identifiers from CSV/TSV files with flexible column mapping.
 
-.. code-block:: python
+**MERGE_WITH_UNIPROT_RESOLUTION** 
+  Merge datasets with historical UniProt identifier resolution.
 
-    async def map_different_entities(executor):
-        # Gene mapping
-        gene_result = await executor.execute(
-            entity_names=["BRCA1", "BRCA2", "MLH1"],
-            entity_type="gene"
-        )
-        
-        # Metabolite mapping
-        metabolite_result = await executor.execute(
-            entity_names=["glucose", "ATP", "NADH"],
-            entity_type="metabolite"
-        )
-        
-        # Disease mapping
-        disease_result = await executor.execute(
-            entity_names=["diabetes", "hypertension"],
-            entity_type="disease"
-        )
+**CALCULATE_SET_OVERLAP**
+  Calculate overlap statistics between two datasets.
 
-Advanced Usage
---------------
+Strategy Configuration
+~~~~~~~~~~~~~~~~~~~~~~
 
-Composite Strategies
-~~~~~~~~~~~~~~~~~~~~
+Strategies are defined in YAML files with these key sections:
 
-Execute multiple strategies in a single operation:
+* **name**: Strategy identifier
+* **description**: Human-readable description  
+* **steps**: Ordered list of actions to execute
 
-.. code-block:: python
+Each step contains:
 
-    async def composite_mapping(executor):
-        strategies = [
-            {
-                "name": "primary_mapping",
-                "file": "configs/strategies/uniprot_direct.yaml"
-            },
-            {
-                "name": "fallback_mapping", 
-                "file": "configs/strategies/synonym_search.yaml"
-            }
-        ]
-        
-        result = await executor.execute_composite_strategy(
-            strategies=strategies,
-            input_data={"entities": protein_list},
-            merge_strategy="confidence_based"
-        )
+* **name**: Step identifier
+* **action**: Action configuration with type and parameters
 
-Database-Stored Strategies
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Data Flow
+~~~~~~~~~
 
-Load and execute strategies from the database:
+1. Data is loaded into a shared context dictionary
+2. Each action reads from and writes to this context
+3. Actions use ``output_key`` to store results
+4. Subsequent actions reference data using these keys
+5. Final results include all context data plus execution metadata
 
-.. code-block:: python
+Working with Real Data
+----------------------
 
-    async def database_strategy(executor):
-        # Execute a strategy stored in the database
-        result = await executor.execute_db_strategy(
-            strategy_name="comprehensive_protein_mapping",
-            input_data={"entities": protein_names},
-            version="latest"  # or specific version
-        )
+Protein Mapping Example
+~~~~~~~~~~~~~~~~~~~~~~~
 
-Context Management
-~~~~~~~~~~~~~~~~~~
+Here's a complete example mapping UKBB proteins to HPA:
 
-Pass custom context through the execution pipeline:
+.. code-block:: yaml
 
-.. code-block:: python
+    name: "UKBB_HPA_PROTEIN_MAPPING"
+    description: "Map UK Biobank proteins to Human Protein Atlas"
+    
+    steps:
+      - name: load_ukbb_data
+        action:
+          type: LOAD_DATASET_IDENTIFIERS
+          params:
+            file_path: "/data/UKBB_Protein_Meta.tsv"
+            identifier_column: "UniProt"
+            output_key: "ukbb_proteins"
+      
+      - name: load_hpa_data  
+        action:
+          type: LOAD_DATASET_IDENTIFIERS
+          params:
+            file_path: "/data/hpa_osps.csv"
+            identifier_column: "uniprot"
+            output_key: "hpa_proteins"
+      
+      - name: merge_ukbb_uniprot
+        action:
+          type: MERGE_WITH_UNIPROT_RESOLUTION
+          params:
+            source_dataset_key: "ukbb_proteins"
+            target_dataset_key: "hpa_proteins" 
+            source_id_column: "UniProt"
+            target_id_column: "uniprot"
+            output_key: "ukbb_merged"
+      
+      - name: calculate_overlap
+        action:
+          type: CALCULATE_SET_OVERLAP
+          params:
+            dataset_a_key: "ukbb_merged"
+            dataset_b_key: "hpa_proteins"
+            output_key: "overlap_analysis"
 
-    async def custom_context_execution(executor):
-        # Define custom context
-        context = {
-            "species": "human",
-            "confidence_threshold": 0.85,
-            "include_synonyms": True,
-            "max_results_per_entity": 5
-        }
-        
-        # Execute with context
-        result = await executor.execute_yaml_strategy(
-            strategy_file="configs/strategies/species_specific.yaml",
-            input_data={"entities": gene_list},
-            options=context
-        )
+Multi-Dataset Analysis
+~~~~~~~~~~~~~~~~~~~~~~
+
+Compare multiple datasets by loading each one and calculating pairwise overlaps:
+
+.. code-block:: yaml
+
+    name: "MULTI_DATASET_ANALYSIS"
+    description: "Compare proteins across multiple sources"
+    
+    steps:
+      # Load all datasets
+      - name: load_arivale
+        action:
+          type: LOAD_DATASET_IDENTIFIERS
+          params:
+            file_path: "/data/arivale/proteomics_metadata.tsv"
+            identifier_column: "uniprot"
+            output_key: "arivale_proteins"
+      
+      - name: load_qin
+        action:
+          type: LOAD_DATASET_IDENTIFIERS
+          params:
+            file_path: "/data/qin_osps.csv"
+            identifier_column: "uniprot"
+            output_key: "qin_proteins"
+            
+      # Calculate overlaps
+      - name: arivale_vs_qin
+        action:
+          type: CALCULATE_SET_OVERLAP
+          params:
+            dataset_a_key: "arivale_proteins"
+            dataset_b_key: "qin_proteins"
+            output_key: "arivale_qin_overlap"
 
 Error Handling
 --------------
 
-Comprehensive error handling for production use:
+Common Issues and Solutions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**File not found errors**
+  Check file paths are absolute and files exist.
+
+**Column not found errors**
+  Verify the ``identifier_column`` matches your CSV headers exactly.
+
+**Timeout errors**
+  Large datasets may take time. The client has a 3-hour timeout by default.
+
+**Validation errors**
+  Ensure YAML syntax is correct and all required parameters are provided.
+
+Debugging
+~~~~~~~~~
+
+Enable detailed logging:
 
 .. code-block:: python
 
-    from biomapper.core.exceptions import (
-        MappingExecutorError,
-        StrategyNotFoundError,
-        ValidationError,
-        ExecutionError
-    )
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
     
-    async def robust_mapping(executor, entities):
-        try:
-            result = await executor.execute_yaml_strategy(
-                strategy_file="configs/strategies/mapping.yaml",
-                input_data={"entities": entities}
-            )
-            return result
-            
-        except StrategyNotFoundError as e:
-            print(f"Strategy not found: {e}")
-            # Fall back to default strategy
-            return await executor.execute(entities, "protein")
-            
-        except ValidationError as e:
-            print(f"Invalid input: {e}")
-            raise
-            
-        except ExecutionError as e:
-            print(f"Execution failed: {e}")
-            # Check if partial results are available
-            if hasattr(e, 'partial_results'):
-                return e.partial_results
-            raise
-            
-        except MappingExecutorError as e:
-            print(f"General executor error: {e}")
-            raise
+    async with BiomapperClient("http://localhost:8000") as client:
+        result = await client.execute_strategy_file("strategy.yaml")
 
-Batch Processing
+Check API server logs for detailed error messages and execution progress.
+
+Performance Tips
 ----------------
 
-Process large datasets efficiently:
-
-.. code-block:: python
-
-    async def batch_processing(executor, csv_file):
-        import pandas as pd
-        
-        # Load data
-        df = pd.read_csv(csv_file)
-        
-        # Process in batches
-        batch_size = 1000
-        all_results = []
-        
-        for i in range(0, len(df), batch_size):
-            batch = df.iloc[i:i+batch_size]
-            entities = batch['entity_name'].tolist()
-            
-            # Execute batch
-            result = await executor.execute(
-                entity_names=entities,
-                entity_type="protein"
-            )
-            
-            all_results.extend(result.mappings)
-            
-            # Progress update
-            print(f"Processed {i+len(batch)}/{len(df)} entities")
-        
-        return all_results
-
-Integration Examples
---------------------
-
-FastAPI Integration
-~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-    from fastapi import FastAPI, HTTPException
-    from biomapper.core import MappingExecutor, MappingExecutorBuilder
-    
-    app = FastAPI()
-    executor = None
-    
-    @app.on_event("startup")
-    async def startup_event():
-        global executor
-        executor = MappingExecutorBuilder.create(
-            db_config=DatabaseConfig(url="sqlite+aiosqlite:///data/api.db"),
-            cache_config=CacheConfig(backend="redis")
-        )
-        await executor.initialize()
-    
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        if executor:
-            await executor.shutdown()
-    
-    @app.post("/map")
-    async def map_entities(entities: list[str], entity_type: str = "protein"):
-        try:
-            result = await executor.execute(
-                entity_names=entities,
-                entity_type=entity_type
-            )
-            return {"mappings": result.dict()}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-Jupyter Notebook Usage
-~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-    # In Jupyter notebooks, use nest_asyncio for async support
-    import nest_asyncio
-    nest_asyncio.apply()
-    
-    # Create and use executor
-    executor = MappingExecutorBuilder.create(
-        db_config=DatabaseConfig(url="sqlite+aiosqlite:///data/notebook.db"),
-        cache_config=CacheConfig(backend="memory")
-    )
-    
-    await executor.initialize()
-    
-    # Now you can use await directly in notebook cells
-    result = await executor.execute(["BRCA1", "TP53"], "protein")
-
-Performance Optimization
-------------------------
-
-Concurrent Execution
-~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-    import asyncio
-    
-    async def concurrent_mapping(executor, entity_groups):
-        # Create tasks for concurrent execution
-        tasks = []
-        for group_name, entities in entity_groups.items():
-            task = executor.execute(
-                entity_names=entities,
-                entity_type="protein"
-            )
-            tasks.append((group_name, task))
-        
-        # Execute concurrently
-        results = {}
-        for group_name, task in tasks:
-            try:
-                result = await task
-                results[group_name] = result
-            except Exception as e:
-                results[group_name] = {"error": str(e)}
-        
-        return results
-
-Caching Configuration
-~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-    from biomapper.core.models import CacheConfig
-    
-    # Redis cache for production
-    cache_config = CacheConfig(
-        backend="redis",
-        redis_url="redis://localhost:6379",
-        ttl=3600,  # 1 hour
-        max_size=10000
-    )
-    
-    # Memory cache for development
-    cache_config = CacheConfig(
-        backend="memory",
-        max_size=1000,
-        ttl=600  # 10 minutes
-    )
-
-Best Practices
---------------
-
-1. **Always use async/await**: All Biomapper operations are asynchronous
-2. **Initialize properly**: Always call ``executor.initialize()`` before use
-3. **Clean up resources**: Call ``executor.shutdown()`` when done
-4. **Handle errors gracefully**: Use specific exception types for better error handling
-5. **Use context managers**: When available, use async context managers
-6. **Configure caching**: Choose appropriate cache backend for your use case
-7. **Monitor performance**: Use built-in metrics for production monitoring
-8. **Batch large operations**: Process large datasets in manageable chunks
-
-CLI Usage
----------
-
-Biomapper also provides a command-line interface:
-
-.. code-block:: bash
-
-    # Check system health
-    poetry run biomapper health
-    
-    # List available strategies
-    poetry run biomapper metadata list
-    
-    # Execute a mapping
-    poetry run biomapper metamapper execute --strategy protein_mapping --input proteins.csv
+* Use absolute file paths to avoid path resolution issues
+* For large datasets, ensure adequate memory and timeout settings  
+* Monitor API server resources during execution
+* Consider breaking large strategies into smaller steps for debugging
 
 Next Steps
 ----------
 
-- Explore :doc:`tutorials/yaml_mapping_strategies` for creating custom strategies
-- Read :doc:`architecture` to understand the service architecture
-- Check :doc:`api/README` for REST API documentation
-- See :doc:`configuration` for detailed configuration options
+* See :doc:`configuration` for advanced YAML strategy options
+* Check :doc:`api/rest_endpoints` for complete API reference  
+* Review :doc:`actions/load_dataset_identifiers` for detailed parameter options
+* Explore example strategies in the ``configs/`` directory

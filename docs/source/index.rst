@@ -1,58 +1,53 @@
 Welcome to biomapper's documentation!
 =====================================
 
-biomapper is a modular, extensible Python framework for biological data harmonization and ontology mapping. Built on a service-oriented architecture, biomapper provides flexible configuration-driven workflows for mapping biological entities across different naming systems and ontologies.
+biomapper is a streamlined Python framework for biological data harmonization and ontology mapping. Built around YAML-based strategies and MVP action types, biomapper provides flexible workflows for mapping biological entities like proteins, metabolites, and genes.
 
 Key Features
 ------------
 
-* **Service-Oriented Architecture**: Modular design with specialized services for different aspects of mapping execution
-* **Configuration-Driven**: Define complex mapping pipelines using YAML-based strategies
-* **Extensible**: Easy to add new mapping services, strategies, and data sources
-* **Multi-Provider Support**: Integrate with various biological databases and name resolution services
-* **Efficient Caching**: Built-in caching mechanisms for improved performance
-* **Comprehensive Monitoring**: Track and analyze mapping operations with detailed metrics
+* **YAML Strategy Configuration**: Define mapping workflows using simple YAML files
+* **MVP Action Types**: Three core actions handle most mapping scenarios
+* **API-First Design**: REST API for executing strategies remotely
+* **Multi-Dataset Support**: Load and compare data from multiple biological sources
+* **Type Safety**: Pydantic models ensure data validation throughout
+* **Performance Tracking**: Built-in timing metrics for benchmarking
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Getting Started
+   
+   guides/quickstart
+   guides/installation
+   guides/first_mapping
 
 .. toctree::
    :maxdepth: 2
    :caption: User Guide
    
-   guides/getting_started
    usage
    configuration
+   api_client
 
 .. toctree::
    :maxdepth: 2
-   :caption: Tutorials
+   :caption: MVP Actions Reference
    
-   tutorials/llm_mapper
-   tutorials/multi_provider
-   tutorials/protein
-   tutorials/examples
+   actions/load_dataset_identifiers
+   actions/merge_with_uniprot_resolution
+   actions/calculate_set_overlap
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API Documentation
+   
+   api/rest_endpoints
+   api/strategy_execution
 
 .. toctree::
    :maxdepth: 2
    :caption: Architecture
    
-   architecture
    architecture/overview
-   architecture/resource_metadata_system
-   architecture/testing
-
-.. toctree::
-   :maxdepth: 2
-   :caption: UI Documentation
-   
-   ui/index
-
-.. toctree::
-   :maxdepth: 2
-   :caption: API Reference
-   
-   api/services
-   api/core
-   api/mapping
-   api/monitoring
-   api/standardization
-   api/utils
-   api/schemas
+   architecture/yaml_strategies
+   architecture/action_system

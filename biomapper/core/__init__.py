@@ -1,6 +1,6 @@
 """Core functionality and base classes for the BioMapper package."""
 
 from .set_analysis import SetAnalyzer
-from .mapping_executor import MappingExecutor
+from .minimal_strategy_service import MinimalStrategyService
 
-__all__ = ["SetAnalyzer", "MappingExecutor"]
+__all__ = ["SetAnalyzer", "MinimalStrategyService"]

@@ -8,12 +8,11 @@ from pydantic import BaseModel, Field
 
 from biomapper.core.strategy_actions.typed_base import TypedStrategyAction, StandardActionResult
 from biomapper.core.strategy_actions.registry import register_action
-from biomapper.core.models.execution_context import StrategyExecutionContext
-from biomapper.db.models import Endpoint
+# StrategyExecutionContext not used in MVP mode
+
 from biomapper.mapping.clients.uniprot_historical_resolver_client import UniProtHistoricalResolverClient
 
 logger = logging.getLogger(__name__)
-
 
 class MergeWithUniprotResolutionParams(BaseModel):
     """Parameters for MERGE_WITH_UNIPROT_RESOLUTION action."""
@@ -39,7 +38,6 @@ class MergeWithUniprotResolutionParams(BaseModel):
     
     # Options
     confidence_threshold: float = Field(0.0, description="Minimum confidence to keep", ge=0.0, le=1.0)
-
 
 @register_action("MERGE_WITH_UNIPROT_RESOLUTION")
 class MergeWithUniprotResolutionAction(TypedStrategyAction[MergeWithUniprotResolutionParams, StandardActionResult]):
@@ -79,9 +77,9 @@ class MergeWithUniprotResolutionAction(TypedStrategyAction[MergeWithUniprotResol
         current_identifiers: List[str],
         current_ontology_type: str,
         params: MergeWithUniprotResolutionParams,
-        source_endpoint: Endpoint,
-        target_endpoint: Endpoint,
-        context: StrategyExecutionContext,
+        source_endpoint: Any,
+        target_endpoint: Any,
+        context: Any,
     ) -> StandardActionResult:
         """Execute the three-phase merging process."""
         

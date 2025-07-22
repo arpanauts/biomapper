@@ -5,15 +5,12 @@ from typing import Dict, Any, List, TypeVar, Generic, Type, Optional, cast
 from pydantic import BaseModel, ValidationError
 import logging
 
-from biomapper.db.models import Endpoint
 from biomapper.core.models.execution_context import StrategyExecutionContext
 from biomapper.core.strategy_actions.base import BaseStrategyAction
-
 
 # Type variables for generic parameters and results
 TParams = TypeVar('TParams', bound=BaseModel)
 TResult = TypeVar('TResult', bound=BaseModel)
-
 
 class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
     """
@@ -77,8 +74,8 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
         current_identifiers: List[str],
         current_ontology_type: str,
         params: TParams,
-        source_endpoint: Endpoint,
-        target_endpoint: Endpoint,
+        source_endpoint: Any,
+        target_endpoint: Any,
         context: StrategyExecutionContext
     ) -> TResult:
         """
@@ -102,8 +99,8 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
         current_identifiers: List[str],
         current_ontology_type: str,
         action_params: Dict[str, Any],
-        source_endpoint: Endpoint,
-        target_endpoint: Endpoint,
+        source_endpoint: Any,
+        target_endpoint: Any,
         context: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
@@ -144,8 +141,54 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
                 }
             }
         
-        # Convert context to StrategyExecutionContext
-        typed_context = self._convert_context(context, current_identifiers, current_ontology_type)
+        # For MVP actions, use dict context directly
+        # Check if this is an MVP action (doesn't require StrategyExecutionContext)
+        is_mvp_action = self.__class__.__name__ in [
+            'LoadDatasetIdentifiersAction',
+            'MergeWithUniprotResolutionAction', 
+            'CalculateSetOverlapAction'
+        ]
+        
+        if is_mvp_action:
+            # Create a mock context that behaves like StrategyExecutionContext for MVP actions
+            class MockContext:
+                """Mock context that acts like StrategyExecutionContext for MVP actions."""
+                def __init__(self, context_dict):
+                    self._dict = context_dict
+                    if 'custom_action_data' not in self._dict:
+                        self._dict['custom_action_data'] = {}
+                
+                def set_action_data(self, key: str, value: Any) -> None:
+                    if 'custom_action_data' not in self._dict:
+                        self._dict['custom_action_data'] = {}
+                    self._dict['custom_action_data'][key] = value
+                
+                def get_action_data(self, key: str, default: Any = None) -> Any:
+                    return self._dict.get('custom_action_data', {}).get(key, default)
+                
+                @property
+                def custom_action_data(self):
+                    if 'custom_action_data' not in self._dict:
+                        self._dict['custom_action_data'] = {}
+                    return self._dict['custom_action_data']
+                
+                # Proxy dict-like access to the underlying dict
+                def get(self, key, default=None):
+                    return self._dict.get(key, default)
+                
+                def __getitem__(self, key):
+                    return self._dict[key]
+                
+                def __setitem__(self, key, value):
+                    self._dict[key] = value
+                
+                def __contains__(self, key):
+                    return key in self._dict
+            
+            typed_context = MockContext(context)
+        else:
+            # Convert context to StrategyExecutionContext for other actions
+            typed_context = self._convert_context(context, current_identifiers, current_ontology_type)
         
         try:
             # Execute with typed parameters
@@ -162,7 +205,8 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
             result_dict = self._convert_result_to_dict(typed_result, current_identifiers, current_ontology_type)
             
             # Update the original context dict with any changes from typed context
-            self._update_context_dict(context, typed_context)
+            if not is_mvp_action:
+                self._update_context_dict(context, typed_context)
             
             return result_dict
             
@@ -171,7 +215,7 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
             # Re-raise the exception to allow proper error handling by the strategy orchestrator
             raise
     
-    def _convert_context(self, context_dict: Dict[str, Any], identifiers: List[str], ontology_type: str) -> StrategyExecutionContext:
+    def _convert_context(self, context_dict: Dict[str, Any], identifiers: List[str], ontology_type: str) -> Any:
         """
         Convert a context dictionary to StrategyExecutionContext.
         
@@ -287,7 +331,6 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
         # Update custom action data
         for key, value in typed_context.custom_action_data.items():
             context_dict[key] = value
-
 
 # Optional: Provide a simple result model for common use cases
 class StandardActionResult(BaseModel):

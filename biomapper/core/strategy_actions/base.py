@@ -2,8 +2,6 @@
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List
-from biomapper.db.models import Endpoint
-
 
 class BaseStrategyAction(ABC):
     """Abstract base class for all strategy actions."""
@@ -14,8 +12,8 @@ class BaseStrategyAction(ABC):
         current_identifiers: List[str],
         current_ontology_type: str,
         action_params: Dict[str, Any],
-        source_endpoint: Endpoint,
-        target_endpoint: Endpoint,
+        source_endpoint: Any,
+        target_endpoint: Any,
         context: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
@@ -38,7 +36,6 @@ class BaseStrategyAction(ABC):
                 - details: Additional details about the execution
         """
         pass
-
 
 # Alias for backward compatibility
 StrategyAction = BaseStrategyAction

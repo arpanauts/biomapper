@@ -13,17 +13,13 @@ from fastapi import HTTPException, status
 from pydantic import ValidationError
 from biomapper.utils.io_utils import load_tabular_file
 from biomapper.core.models.strategy import Strategy
-from biomapper.core.engine_components.mapping_executor_builder import MappingExecutorBuilder
+from biomapper.core.minimal_strategy_service import MinimalStrategyService
 # BiomapperContext import removed - using dict directly
 from app.core.config import settings
 from app.core.session import Session
 from app.models.job import Job
 from app.models.mapping import MappingStatus, MappingResult
-from biomapper.db.models import Endpoint
-from sqlalchemy import select
-
-# Import the RelationshipMappingExecutor for endpoint-to-endpoint mapping
-from biomapper.mapping.relationships.executor import RelationshipMappingExecutor
+# Removed database and legacy imports
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +40,7 @@ class MapperService:
             logger.error(f"Failed to create MapperServiceForStrategies: {e}", exc_info=True)
             raise
 
-        # Initialize the relationship mapping executor
-        self.relationship_executor = None
+        # No longer using relationship executor
         logger.info("MapperService initialized.")
 
     async def create_job(
@@ -347,67 +342,9 @@ class MapperService:
                 detail=f"Error reading result file: {str(e)}",
             )
 
-    async def get_endpoints(self) -> List[Endpoint]:
-        """Retrieve all available endpoints from the database."""
-        # Delegate to the underlying service that has DB access
-        return await self.mapper_service.get_endpoints()
-
-    async def map_relationship(
-        self, relationship_id: int, source_data: Dict[str, Any]
-    ) -> List[MappingResult]:
-        """
-        Map data using a relationship and the endpoint adapter extraction mechanism.
-
-        Args:
-            relationship_id: ID of the relationship to use
-            source_data: Source data dictionary (e.g., {'HMDB': 'HMDB0000123', 'NAME': 'Glucose'})
-
-        Returns:
-            List of mapping results
-
-        Raises:
-            HTTPException: If relationship not found or mapping fails
-        """
-        # Initialize the relationship executor if not already done
-        if self.relationship_executor is None:
-            try:
-                self.relationship_executor = RelationshipMappingExecutor()
-            except Exception as e:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Failed to initialize relationship mapping executor: {str(e)}",
-                )
-
-        try:
-            # Execute the mapping using the RelationshipMappingExecutor
-            results = await self.relationship_executor.map_from_endpoint_data(
-                relationship_id=relationship_id, source_data=source_data
-            )
-
-            if not results:
-                return []
-
-            # Convert to MappingResult objects
-            mapping_results = []
-            for result in results:
-                mapping_results.append(
-                    MappingResult(
-                        source_id=result.get("source_id", ""),
-                        source_type=result.get("source_type", ""),
-                        target_id=result.get("target_id", ""),
-                        target_type=result.get("target_type", ""),
-                        confidence=result.get("confidence", 0.0),
-                        path_id=result.get("path_id") or result.get("path"),
-                    )
-                )
-
-            return mapping_results
-
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error executing relationship mapping: {str(e)}",
-            )
+    async def get_endpoints(self) -> List[Any]:
+        """Return empty list since we're not using database endpoints anymore."""
+        return []
 
     async def execute_strategy(
         self, 
@@ -448,24 +385,18 @@ class MapperServiceForStrategies:
 
     def __init__(self):
         """
-        Initializes the service by loading all available strategies and building the MappingExecutor.
+        Initializes the service by loading strategies using MinimalStrategyService.
         """
         print("DEBUG: MapperServiceForStrategies.__init__ starting", flush=True)
         logger.info("Initializing MapperServiceForStrategies...")
         
         try:
-            print("DEBUG: About to load strategies", flush=True)
-            self.strategies: Dict[str, Strategy] = self._load_strategies()
+            print("DEBUG: About to initialize MinimalStrategyService", flush=True)
+            self.strategy_service = MinimalStrategyService(settings.STRATEGIES_DIR)
+            self.strategies = self.strategy_service.strategies
             print(f"DEBUG: Loaded {len(self.strategies)} strategies", flush=True)
             
-            logger.info("Building MappingExecutor...")
-            builder = MappingExecutorBuilder()
-            # Since we're in FastAPI's async context, we need to use await
-            # This will be handled in a separate async method
-            self.executor = None
-            self._builder = builder
-                
-            logger.info("MappingExecutor built successfully.")
+            logger.info("MinimalStrategyService initialized successfully.")
 
         except Exception as e:
             print(f"DEBUG: Failed to initialize MapperServiceForStrategies: {type(e).__name__}: {str(e)}", flush=True)
@@ -473,12 +404,6 @@ class MapperServiceForStrategies:
             raise
         print("DEBUG: MapperServiceForStrategies.__init__ completed", flush=True)
     
-    async def ensure_executor_initialized(self):
-        """Ensure the executor is initialized, building it if necessary."""
-        if self.executor is None:
-            self.executor = await self._builder.build_async()
-            logger.info("MappingExecutor initialized on first use.")
-
     def _load_strategies(self) -> Dict[str, Strategy]:
         """
         Scans the strategies directory, loads each YAML file, and validates it against the Strategy model.
@@ -529,10 +454,8 @@ class MapperServiceForStrategies:
         context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Executes a named strategy with the given context using the real MappingExecutor.
+        Executes a named strategy with the given context using MinimalStrategyService.
         """
-        await self.ensure_executor_initialized()
-
         if not self.strategies.get(strategy_name):
             raise HTTPException(
                 status_code=404,
@@ -540,16 +463,15 @@ class MapperServiceForStrategies:
             )
 
         try:
-            logger.info(f"Executing strategy '{strategy_name}' with real executor...")
+            logger.info(f"Executing strategy '{strategy_name}' with minimal service...")
             
-            # Execute the strategy using the MappingExecutor's execute_yaml_strategy method
-            # which doesn't require the strategy to be in the database
-            final_context = await self.executor.execute_yaml_strategy(
+            # Execute the strategy using MinimalStrategyService
+            final_context = await self.strategy_service.execute_strategy(
                 strategy_name=strategy_name,
                 source_endpoint_name=source_endpoint_name,
                 target_endpoint_name=target_endpoint_name,
                 input_identifiers=input_identifiers,
-                initial_context=context
+                context=context
             )
             
             logger.info(f"Successfully executed strategy '{strategy_name}'.")
@@ -562,14 +484,7 @@ class MapperServiceForStrategies:
                 detail=f"An internal error occurred while executing the strategy: {e}",
             )
     
-    async def get_endpoints(self) -> List[Endpoint]:
-        """Retrieve all available endpoints from the database."""
-        await self.ensure_executor_initialized()
-        # Access the session manager from the executor's components
-        session_manager = self.executor.session_manager
-        async with session_manager.get_async_metamapper_session() as session:
-            stmt = select(Endpoint)
-            result = await session.execute(stmt)
-            endpoints = result.scalars().all()
-            logger.info(f"Retrieved {len(endpoints)} endpoints from the database.")
-            return list(endpoints)
+    async def get_endpoints(self) -> List[Any]:
+        """Return empty list since we're not using database endpoints anymore."""
+        logger.info("Returning empty endpoints list (database-free mode)")
+        return []

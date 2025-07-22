@@ -401,8 +401,7 @@ class TestCalculateSetOverlapAction:
             "total_rows", "matched_rows", "source_only_rows", "target_only_rows",
             "direct_matches", "composite_matches", "historical_matches",
             "source_match_rate", "target_match_rate", "jaccard_index", "dice_coefficient",
-            "avg_match_confidence", "high_confidence_matches", "confidence_threshold",
-            "analysis_time_seconds", "merge_time_seconds", "total_mapping_time_seconds"
+            "avg_match_confidence", "high_confidence_matches", "confidence_threshold"
         ]
         
         assert header == ",".join(expected_columns)
@@ -912,8 +911,7 @@ class TestRealData:
                 "total_rows", "matched_rows", "source_only_rows", "target_only_rows",
                 "direct_matches", "composite_matches", "historical_matches",
                 "source_match_rate", "target_match_rate", "jaccard_index", "dice_coefficient",
-                "avg_match_confidence", "high_confidence_matches", "confidence_threshold",
-                "analysis_time_seconds", "merge_time_seconds", "total_mapping_time_seconds"
+                "avg_match_confidence", "high_confidence_matches", "confidence_threshold"
             ]
             
             assert list(stats_df.columns) == expected_columns, f"Expected columns: {expected_columns}, got: {list(stats_df.columns)}"
