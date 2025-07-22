@@ -13,7 +13,25 @@ sys.path.insert(0, str(project_root))
 
 from biomapper.core.strategy_actions.load_dataset_identifiers import LoadDatasetIdentifiersAction
 from biomapper.core.strategy_actions.load_dataset_identifiers import LoadDatasetIdentifiersParams
-from biomapper.core.models import StrategyExecutionContext
+
+
+class MockContext:
+    """Mock context that simulates StrategyExecutionContext for MVP actions."""
+    def __init__(self):
+        self._data = {'custom_action_data': {}}
+    
+    def set_action_data(self, key: str, value) -> None:
+        if 'custom_action_data' not in self._data:
+            self._data['custom_action_data'] = {}
+        self._data['custom_action_data'][key] = value
+    
+    def get_action_data(self, key: str, default=None):
+        return self._data.get('custom_action_data', {}).get(key, default)
+    
+    @property
+    def datasets(self):
+        """Get datasets from custom action data."""
+        return self._data.get('custom_action_data', {}).get('datasets', {})
 
 async def test_dataset_loading():
     """Test loading all 5 dataset types to verify column handling."""
@@ -60,7 +78,8 @@ async def test_dataset_loading():
     ]
     
     action = LoadDatasetIdentifiersAction()
-    context = StrategyExecutionContext()
+    # Create a mock context for MVP actions
+    context = MockContext()
     
     print("🧪 Testing LOAD_DATASET_IDENTIFIERS with all dataset types...\n")
     
