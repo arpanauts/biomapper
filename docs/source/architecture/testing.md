@@ -1,182 +1,280 @@
-# BioMapper Test Architecture
+# Biomapper Test Architecture
 
 ## Overview
-The test suite follows a domain-driven structure that mirrors the main codebase organization. Each domain has its own test directory with comprehensive unit tests for mappers, pipelines, and domain-specific logic.
+
+The test suite for Biomapper follows a focused approach that mirrors the simplified architecture. Tests are primarily concentrated on the core action system and API functionality, with comprehensive unit tests for the three core actions.
 
 ## Directory Structure
+
 ```
 tests/
-├── core/                      # Tests for core abstractions
-│   ├── test_base_client.py   # API client tests
-│   ├── test_base_mapper.py   # Mapper interface tests
-│   ├── test_base_pipeline.py # Pipeline interface tests
-│   ├── test_base_rag.py     # RAG component tests
-│   └── test_base_store.py   # Store interface tests
-│
-├── pipelines/                # Domain-specific tests
-│   ├── compounds/           # Compound mapping tests
-│   │   ├── test_compound_mapper.py
-│   │   └── test_compound_pipeline.py
-│   ├── proteins/            # Protein mapping tests
-│   │   ├── test_protein_mapper.py
-│   │   └── test_protein_pipeline.py
-│   └── labs/                # Lab test mapping tests
-│
-├── monitoring/              # Monitoring tests
-├── schemas/                # Schema validation tests
-└── conftest.py            # Shared test fixtures
+├── unit/                           # Unit tests
+│   └── core/
+│       ├── models/                 # Pydantic model tests
+│       │   ├── test_action_models.py
+│       │   ├── test_action_results.py
+│       │   └── test_execution_context.py
+│       └── strategy_actions/       # Core action tests
+│           ├── test_load_dataset_identifiers.py
+│           ├── test_merge_with_uniprot_resolution.py
+│           └── test_calculate_set_overlap.py
+├── manual/                         # Manual integration tests
+│   ├── test_data_loading.py       # Test data loading scenarios
+│   ├── test_simple_ukbb_hpa.py    # Simple strategy test
+│   └── test_timing.py             # Timing metrics test
+├── monitoring/                     # System monitoring tests
+├── utils/                         # Utility function tests
+└── conftest.py                    # Test configuration and fixtures
 ```
 
 ## Test Categories
 
 ### Unit Tests
-1. Base Class Tests
-   - Interface contract validation
-   - Abstract method behavior
+
+1. **Core Action Tests**
+   - Parameter validation (Pydantic models)
+   - Execution logic
    - Error handling
+   - Data processing
+   - Context management
+
+2. **Model Tests**
+   - Pydantic model validation
    - Type checking
+   - Serialization/deserialization
+   - Field requirements
 
-2. Domain Implementation Tests
-   - Mapper functionality
-   - Pipeline workflow
-   - Domain-specific logic
-   - Error cases
+3. **Service Tests**
+   - Strategy loading
+   - Action registry
+   - Context handling
 
-3. Integration Tests
-   - API client integration
-   - RAG system integration
-   - Pipeline end-to-end flow
+### Integration Tests
 
-### Test Fixtures
-1. Common Fixtures (`conftest.py`)
-   ```python
-   @pytest.fixture
-   def mock_api_client():
-       """Mock API client for testing."""
-       return Mock(spec=BaseAPIClient)
+1. **Manual Tests**
+   - Strategy execution via API
+   - Client-server interaction
+   - End-to-end workflows
 
-   @pytest.fixture
-   def mock_vector_store():
-       """Mock vector store for testing."""
-       return Mock(spec=BaseVectorStore)
-   ```
+2. **API Tests** 
+   - HTTP endpoint functionality
+   - Request/response handling
+   - Error scenarios
 
-2. Domain-Specific Fixtures
-   ```python
-   @pytest.fixture
-   def sample_compound_doc():
-       """Sample compound document for testing."""
-       return CompoundDocument(...)
+## Core Action Test Patterns
 
-   @pytest.fixture
-   def sample_protein_doc():
-       """Sample protein document for testing."""
-       return ProteinDocument(...)
-   ```
+### Parameter Validation Tests
 
-## Testing Patterns
-
-### Mapper Tests
 ```python
-def test_map_entity(mock_api_client):
-    """Test basic entity mapping."""
-    mapper = DomainMapper(mock_api_client)
-    result = await mapper.map_entity("test")
-    assert result.confidence > 0
+class TestLoadDatasetIdentifiersParams:
+    def test_valid_params(self):
+        """Test valid parameter combinations."""
+        params = LoadDatasetIdentifiersParams(
+            file_path="/path/to/file.csv",
+            identifier_column="id",
+            output_key="dataset"
+        )
+        assert params.file_path == "/path/to/file.csv"
+        assert params.identifier_column == "id"
 
-def test_map_entity_error(mock_api_client):
-    """Test error handling in mapping."""
-    mock_api_client.search.side_effect = Exception()
-    mapper = DomainMapper(mock_api_client)
-    result = await mapper.map_entity("test")
-    assert result.mapped_entity is None
+    def test_missing_required_params(self):
+        """Test validation of required parameters."""
+        with pytest.raises(ValidationError):
+            LoadDatasetIdentifiersParams()
 ```
 
-### Pipeline Tests
-```python
-def test_process_names(mock_pipeline):
-    """Test full pipeline processing."""
-    result = await mock_pipeline.process_names(["test1", "test2"])
-    assert len(result.mappings) == 2
-    assert result.unmatched_count == 0
+### Action Execution Tests
 
-def test_rag_fallback(mock_pipeline):
-    """Test RAG fallback for unmatched entities."""
-    result = await mock_pipeline.process_names(["unknown"])
-    assert result.rag_mapped_count == 1
+```python
+class TestLoadDatasetIdentifiersAction:
+    async def test_load_simple_csv(self, temp_csv_file, mock_context):
+        """Test loading a simple CSV file."""
+        action = LoadDatasetIdentifiersAction()
+        params = LoadDatasetIdentifiersParams(
+            file_path=str(temp_csv_file),
+            identifier_column="id",
+            output_key="test_data"
+        )
+        
+        result = await action.execute(params, mock_context)
+        
+        assert result.success
+        assert "test_data" in mock_context.get_action_data("datasets", {})
 ```
 
-## Mocking Strategy
+### Error Handling Tests
 
-### API Mocking
 ```python
-@pytest.fixture
-def mock_api_responses(requests_mock):
-    """Mock API responses for testing."""
-    requests_mock.get(
-        "http://api.example.com/search",
-        json={"results": [...]}
+async def test_file_not_found(self, mock_context):
+    """Test handling of missing files."""
+    action = LoadDatasetIdentifiersAction()
+    params = LoadDatasetIdentifiersParams(
+        file_path="/nonexistent/file.csv",
+        identifier_column="id", 
+        output_key="test"
     )
+    
+    with pytest.raises(FileNotFoundError):
+        await action.execute(params, mock_context)
 ```
 
-### RAG Mocking
+## Test Fixtures
+
+### Common Fixtures (conftest.py)
+
 ```python
 @pytest.fixture
-def mock_rag_system():
-    """Mock RAG system components."""
-    return {
-        "embedder": Mock(spec=BaseEmbedder),
-        "store": Mock(spec=BaseVectorStore),
-        "llm": Mock(spec=BaseLLM)
-    }
+def mock_context():
+    """Mock context for action testing."""
+    class MockContext:
+        def __init__(self):
+            self._data = {'custom_action_data': {}}
+        
+        def set_action_data(self, key: str, value):
+            self._data['custom_action_data'][key] = value
+        
+        def get_action_data(self, key: str, default=None):
+            return self._data.get('custom_action_data', {}).get(key, default)
+    
+    return MockContext()
+
+@pytest.fixture
+def temp_csv_file(tmp_path):
+    """Create temporary CSV file for testing."""
+    csv_file = tmp_path / "test_data.csv"
+    csv_file.write_text("id,name\nP12345,Protein1\nQ67890,Protein2\n")
+    return csv_file
 ```
 
-## Test Coverage Requirements
+### Action-Specific Fixtures
 
-### Core Components
-- 100% coverage for base classes
-- All abstract methods tested
-- Error handling paths verified
+```python
+@pytest.fixture
+def sample_merged_data():
+    """Sample merged data for overlap calculations."""
+    return [
+        {
+            "source_id": "P12345",
+            "target_id": "ENSP000123",
+            "match_type": "direct",
+            "match_confidence": 1.0
+        }
+    ]
+```
 
-### Domain Implementation
-- 90%+ coverage for domain logic
-- Edge cases tested
-- Error handling verified
+## Testing Strategy
 
-### Integration Points
-- API client integration tested
-- RAG system integration verified
-- Pipeline workflows validated
+### MockContext Pattern
 
-## Migration Guide
+Since the current architecture uses a simple dictionary-like context instead of the full StrategyExecutionContext, tests use a MockContext class that simulates the required interface:
 
-### From Legacy Tests
-1. Identify domain-specific tests
-2. Create new test directory in appropriate domain
-3. Update imports to use new structure
-4. Add missing test cases
-5. Verify coverage
-6. Remove legacy tests
-
-### Best Practices
-1. Use descriptive test names
-2. Follow AAA pattern (Arrange, Act, Assert)
-3. Mock external dependencies
-4. Test error cases
-5. Use appropriate fixtures
-6. Maintain test isolation
-
-## Future Considerations
-
-### Planned Improvements
-1. Property-based testing for edge cases
-2. Performance testing suite
-3. Integration test automation
-4. Coverage reporting improvements
-5. Test data generation tools
+```python
+class MockContext:
+    """Mock context that simulates StrategyExecutionContext for actions."""
+    def __init__(self):
+        self._data = {'custom_action_data': {}}
+    
+    def set_action_data(self, key: str, value) -> None:
+        self._data['custom_action_data'][key] = value
+    
+    def get_action_data(self, key: str, default=None):
+        return self._data.get('custom_action_data', {}).get(key, default)
+```
 
 ### CI/CD Integration
-1. Automated test runs
-2. Coverage reports
-3. Performance benchmarks
-4. Integration test gates
+
+Tests are configured to work in CI environments:
+
+- Manual tests skip automatically when `CI=true` or `GITHUB_ACTIONS=true`
+- Integration tests that require the API server are marked and skipped appropriately
+- Unit tests run independently without external dependencies
+
+### Test Configuration
+
+The `pytest.ini` file includes:
+
+```ini
+[pytest]
+asyncio_mode = auto
+markers =
+    requires_api: marks tests that require the API server to be running
+```
+
+## Coverage Requirements
+
+### Core Actions
+- **100% coverage** for action parameter models
+- **95%+ coverage** for action execution logic
+- All error paths tested
+- Edge cases verified
+
+### Models
+- **100% coverage** for Pydantic model validation
+- All field combinations tested
+- Type checking verified
+
+### Integration Points
+- API endpoint functionality verified
+- Client-server communication tested
+- Strategy execution validated
+
+## Running Tests
+
+### Full Test Suite
+```bash
+poetry run pytest
+```
+
+### Unit Tests Only  
+```bash
+poetry run pytest tests/unit/
+```
+
+### Specific Action Tests
+```bash
+poetry run pytest tests/unit/core/strategy_actions/test_load_dataset_identifiers.py -v
+```
+
+### Skip Manual Tests (CI Mode)
+```bash
+CI=true poetry run pytest
+```
+
+## Performance Testing
+
+The test suite includes performance considerations:
+
+- Large dataset tests with timing validation
+- Memory usage monitoring for data processing
+- CSV parsing performance benchmarks
+- Venn diagram generation performance
+
+Example:
+```python
+def test_large_dataset_performance(self):
+    """Test performance with large datasets."""
+    # Test with 10,000 rows
+    large_data = generate_test_data(10000)
+    start_time = time.time()
+    
+    # Execute action
+    result = await action.execute(params, context)
+    
+    execution_time = time.time() - start_time
+    assert execution_time < 30.0  # Should complete within 30 seconds
+```
+
+## Future Enhancements
+
+### Planned Improvements
+- Property-based testing for edge cases
+- Performance regression testing
+- Automated integration test environment
+- Test data generation improvements
+- API load testing
+
+### Monitoring Integration
+- Test execution metrics
+- Coverage trending
+- Performance benchmarks
+- Failure analysis
