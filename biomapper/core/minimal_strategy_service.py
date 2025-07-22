@@ -18,9 +18,9 @@ logger = logging.getLogger(__name__)
 class MinimalStrategyService:
     """Minimal service for executing YAML strategies."""
     
-    def __init__(self, strategies_dir: Path):
+    def __init__(self, strategies_dir: str):
         """Initialize with strategies directory."""
-        self.strategies_dir = strategies_dir
+        self.strategies_dir = Path(strategies_dir)
         self.strategies = self._load_strategies()
         self.action_registry = self._build_action_registry()
         
