@@ -1,0 +1,38 @@
+description: Map Human Protein Atlas proteins to Quantitative Imaging Network with
+  historical resolution
+name: HPA_TO_QIN_PROTEIN_MAPPING
+steps:
+- action:
+    params:
+      file_path: /procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/hpa_osps.csv
+      identifier_column: uniprot
+      output_key: hpa_proteins
+    type: LOAD_DATASET_IDENTIFIERS
+  name: load_hpa_data
+- action:
+    params:
+      file_path: /procedure/data/local_data/MAPPING_ONTOLOGIES/isb_osp/qin_osps.csv
+      identifier_column: uniprot
+      output_key: qin_proteins
+    type: LOAD_DATASET_IDENTIFIERS
+  name: load_qin_data
+- action:
+    params:
+      output_key: hpa_qin_merged
+      source_dataset_key: hpa_proteins
+      source_id_column: uniprot
+      target_dataset_key: qin_proteins
+      target_id_column: uniprot
+    type: MERGE_WITH_UNIPROT_RESOLUTION
+  name: merge_datasets
+- action:
+    params:
+      confidence_threshold: 0.8
+      input_key: hpa_qin_merged
+      mapping_combo_id: HPA_QIN
+      output_dir: /home/ubuntu/biomapper/data/results
+      output_key: hpa_qin_analysis
+      source_name: HPA
+      target_name: QIN
+    type: CALCULATE_SET_OVERLAP
+  name: analyze_overlap

@@ -1,0 +1,38 @@
+description: Map UK Biobank proteins to KG2C knowledge graph with historical resolution
+name: UKBB_TO_KG2C_PROTEIN_MAPPING
+steps:
+- action:
+    params:
+      file_path: /procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv
+      identifier_column: UniProt
+      output_key: ukbb_proteins
+    type: LOAD_DATASET_IDENTIFIERS
+  name: load_ukbb_data
+- action:
+    params:
+      file_path: /procedure/data/local_data/MAPPING_ONTOLOGIES/kg2c_ontologies/kg2c_proteins.csv
+      identifier_column: id
+      output_key: kg2c_proteins
+      strip_prefix: 'UniProtKB:'
+    type: LOAD_DATASET_IDENTIFIERS
+  name: load_kg2c_data
+- action:
+    params:
+      output_key: ukbb_kg2c_merged
+      source_dataset_key: ukbb_proteins
+      source_id_column: UniProt
+      target_dataset_key: kg2c_proteins
+      target_id_column: id
+    type: MERGE_WITH_UNIPROT_RESOLUTION
+  name: merge_datasets
+- action:
+    params:
+      confidence_threshold: 0.8
+      input_key: ukbb_kg2c_merged
+      mapping_combo_id: UKBB_KG2C
+      output_dir: /home/ubuntu/biomapper/data/results
+      output_key: ukbb_kg2c_analysis
+      source_name: UKBB
+      target_name: KG2C
+    type: CALCULATE_SET_OVERLAP
+  name: analyze_overlap

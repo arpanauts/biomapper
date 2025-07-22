@@ -1,0 +1,42 @@
+name: "ARIVALE_KG2C_PROTEIN_MAPPING"
+description: "Map Arivale proteins to KG2C knowledge graph with historical resolution"
+  
+steps:
+  - name: load_arivale_data
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/proteomics_metadata.tsv"
+        identifier_column: "uniprot"
+        output_key: "arivale_proteins"
+        
+  - name: load_kg2c_data
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/kg2c_ontologies/kg2c_proteins.csv"
+        identifier_column: "id"
+        strip_prefix: "UniProtKB:"
+        output_key: "kg2c_proteins"
+        
+  - name: merge_datasets
+    action:
+      type: MERGE_WITH_UNIPROT_RESOLUTION
+      params:
+        source_dataset_key: "arivale_proteins"
+        target_dataset_key: "kg2c_proteins"
+        source_id_column: "uniprot"
+        target_id_column: "id"
+        output_key: "arivale_kg2c_merged"
+        
+  - name: analyze_overlap
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        input_key: "arivale_kg2c_merged"
+        source_name: "Arivale"
+        target_name: "KG2C"
+        mapping_combo_id: "Arivale_KG2C"
+        confidence_threshold: 0.8
+        output_dir: "/home/ubuntu/biomapper/data/results"
+        output_key: "arivale_kg2c_analysis"

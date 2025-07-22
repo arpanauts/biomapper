@@ -28,6 +28,9 @@ from .api_resolver import ApiResolver
 from .local_id_converter import LocalIdConverter
 from .results_saver import ResultsSaver
 from .uniprot_historical_resolver import UniProtHistoricalResolver
+from .load_dataset_identifiers import LoadDatasetIdentifiersAction, LoadDatasetIdentifiersParams
+from .merge_with_uniprot_resolution import MergeWithUniprotResolutionAction, MergeWithUniprotResolutionParams
+from .calculate_set_overlap import CalculateSetOverlapAction, CalculateSetOverlapParams
 
 __all__ = [
     # Base classes
@@ -59,5 +62,11 @@ __all__ = [
     "ApiResolver",
     "LocalIdConverter",
     "ResultsSaver",
-    "UniProtHistoricalResolver"
+    "UniProtHistoricalResolver",
+    "LoadDatasetIdentifiersAction",
+    "LoadDatasetIdentifiersParams",
+    "MergeWithUniprotResolutionAction",
+    "MergeWithUniprotResolutionParams",
+    "CalculateSetOverlapAction",
+    "CalculateSetOverlapParams"
 ]

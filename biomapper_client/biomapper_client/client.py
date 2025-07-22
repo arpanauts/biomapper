@@ -38,7 +38,10 @@ class BiomapperClient:
     
     async def __aenter__(self):
         """Enter the runtime context for the async client."""
-        self._client = httpx.AsyncClient(base_url=self.base_url)
+        self._client = httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=10800.0  # 3 hours for strategy execution (needed for KG2C with 267K+ rows)
+        )
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):

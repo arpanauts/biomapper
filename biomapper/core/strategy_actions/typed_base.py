@@ -55,9 +55,10 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
                 return MyActionResult(processed_count=len(current_identifiers))
     """
     
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        """Initialize the action with logging."""
-        super().__init__(*args, **kwargs)
+    def __init__(self, db_session: Any = None, *args: Any, **kwargs: Any) -> None:
+        """Initialize the action with logging and optional db_session."""
+        super().__init__()  # BaseStrategyAction doesn't take arguments
+        self.db_session = db_session  # Store the db_session for actions that need it
         self.logger = logging.getLogger(self.__class__.__module__ + '.' + self.__class__.__name__)
     
     @abstractmethod

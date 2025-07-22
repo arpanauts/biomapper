@@ -1,0 +1,37 @@
+description: Map UK Biobank proteins to SPOKE knowledge graph with historical resolution
+name: UKBB_TO_SPOKE_PROTEIN_MAPPING
+steps:
+- action:
+    params:
+      file_path: /procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv
+      identifier_column: UniProt
+      output_key: ukbb_proteins
+    type: LOAD_DATASET_IDENTIFIERS
+  name: load_ukbb_data
+- action:
+    params:
+      file_path: /procedure/data/local_data/MAPPING_ONTOLOGIES/spoke_ontologies/spoke_protein.csv
+      identifier_column: identifier
+      output_key: spoke_proteins
+    type: LOAD_DATASET_IDENTIFIERS
+  name: load_spoke_data
+- action:
+    params:
+      output_key: ukbb_spoke_merged
+      source_dataset_key: ukbb_proteins
+      source_id_column: UniProt
+      target_dataset_key: spoke_proteins
+      target_id_column: identifier
+    type: MERGE_WITH_UNIPROT_RESOLUTION
+  name: merge_datasets
+- action:
+    params:
+      confidence_threshold: 0.8
+      input_key: ukbb_spoke_merged
+      mapping_combo_id: UKBB_SPOKE
+      output_dir: /home/ubuntu/biomapper/data/results
+      output_key: ukbb_spoke_analysis
+      source_name: UKBB
+      target_name: SPOKE
+    type: CALCULATE_SET_OVERLAP
+  name: analyze_overlap
