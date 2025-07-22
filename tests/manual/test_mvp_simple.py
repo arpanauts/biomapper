@@ -4,8 +4,16 @@ Simple test of the MVP strategy with a smaller dataset to validate functionality
 """
 
 import json
+import os
+import pytest
 import requests
 import time
+
+# Skip in CI environments where API server isn't running
+pytestmark = pytest.mark.skipif(
+    os.environ.get('CI') == 'true' or os.environ.get('GITHUB_ACTIONS') == 'true',
+    reason="Requires API server running at localhost:8000"
+)
 
 def test_mvp_strategy():
     """Test the MVP strategy with a simple request."""

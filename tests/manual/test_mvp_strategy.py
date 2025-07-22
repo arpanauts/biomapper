@@ -4,7 +4,15 @@ Test script to execute our MVP strategy via the API.
 """
 import asyncio
 import json
+import os
+import pytest
 from biomapper_client import BiomapperClient, ApiError, NetworkError
+
+# Skip in CI environments where API server isn't running
+pytestmark = pytest.mark.skipif(
+    os.environ.get('CI') == 'true' or os.environ.get('GITHUB_ACTIONS') == 'true',
+    reason="Requires API server running at localhost:8000"
+)
 
 async def main():
     """Test our MVP strategy execution."""
