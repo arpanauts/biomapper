@@ -51,3 +51,5 @@ Key Features
    architecture/overview
    architecture/yaml_strategies
    architecture/action_system
+   architecture/typed_strategy_actions
+   architecture/uniprot_historical_id_resolution

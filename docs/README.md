@@ -1,42 +1,61 @@
 # Biomapper Documentation
 
-This directory contains organized documentation for the Biomapper project.
+This directory contains the complete documentation for the Biomapper biological data harmonization framework.
+
+## Documentation Structure
+
+The documentation is built using Sphinx and located in `/source/`:
+
+### Core Documentation
+- **Getting Started**: `source/guides/` - Installation, quickstart, and first mapping tutorial
+- **Actions Reference**: `source/actions/` - Complete documentation for foundational actions
+- **API Documentation**: `source/api/` - REST API endpoints and usage
+- **Architecture**: `source/architecture/` - System design and extensible action architecture
+
+### Building Documentation
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Build HTML documentation  
+make html
+
+# View documentation
+open build/html/index.html
+```
+
+## Architecture Overview
+
+Biomapper uses an **extensible action-based architecture**:
+
+### Foundational Actions
+- `LOAD_DATASET_IDENTIFIERS` - Load data from CSV/TSV files
+- `MERGE_WITH_UNIPROT_RESOLUTION` - Merge datasets with historical UniProt ID resolution
+- `CALCULATE_SET_OVERLAP` - Calculate overlap statistics and generate Venn diagrams
+
+### Key Design Principles
+- **Extensible**: New specialized actions can be easily added to support sophisticated mapping approaches
+- **Configuration-Driven**: YAML strategies define workflows without coding
+- **Type-Safe**: Pydantic models ensure validation throughout
+- **API-First**: REST API for strategy execution with async Python client
 
 ## Directory Structure
 
-### `/architecture/`
-Core architecture documentation and system design guides:
-- `BIOMAPPER_ARCHITECTURE_GUIDE.md` - Comprehensive architecture overview for LLM agents and developers
-
-### `/llm-guides/`
-Guides and prompts specifically designed for LLM-assisted development:
-- `LLM_ACTION_DEVELOPMENT_PROMPT.md` - Focused prompt for developing action types
-- `LLM_STRATEGY_DEVELOPMENT_PROMPT.md` - Focused prompt for creating mapping strategies  
-- `LLM_TASK_PROMPT_TEMPLATE.md` - General template for biomapper development tasks
-
-### `/development-reports/`
-Historical development reports and analyses:
-- Implementation summaries
-- Test analysis reports
-- Task completion summaries
-- Code review reports
-
-### `/roadmap/`
-Strategic planning and technical specifications:
-- Technical notes on action types and strategies
-- Future development plans
-- Design decisions
+```
+docs/
+├── source/           # Complete Sphinx documentation
+│   ├── guides/       # Getting started and tutorials
+│   ├── actions/      # Action reference documentation
+│   ├── api/          # API documentation
+│   └── architecture/ # System architecture and design
+├── build/            # Built documentation output
+├── Makefile         # Sphinx build configuration
+└── requirements.txt # Documentation dependencies
+```
 
 ## Quick Links
 
-- **For Action Development**: Start with `/llm-guides/LLM_ACTION_DEVELOPMENT_PROMPT.md`
-- **For Strategy Creation**: Start with `/llm-guides/LLM_STRATEGY_DEVELOPMENT_PROMPT.md`
-- **For Architecture Understanding**: Read `/architecture/BIOMAPPER_ARCHITECTURE_GUIDE.md`
-
-## LLM Agent Commands
-
-Specialized agent modes are available via:
-- `/home/ubuntu/.claude/commands/action-type-agent.md` - Enter action development mode
-- `/home/ubuntu/.claude/commands/mapping-strategy-agent.md` - Enter strategy development mode
-
-These commands configure the LLM to provide focused assistance for specific biomapper development tasks.
+- **[Getting Started Guide](source/guides/getting_started.md)** - Start here for basic usage
+- **[First Mapping Tutorial](source/guides/first_mapping.rst)** - Complete step-by-step example
+- **[Action System Architecture](source/architecture/action_system.rst)** - Learn about extensible actions
+- **[API Documentation](source/api/rest_endpoints.rst)** - REST API reference
