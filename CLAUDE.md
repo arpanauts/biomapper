@@ -46,6 +46,16 @@ cd docs && poetry run make html
 poetry run biomapper --help
 poetry run biomapper health
 poetry run biomapper metadata list
+
+# Makefile shortcuts (alternative to poetry run)
+make test           # Run all tests with coverage
+make lint           # Check for linting issues
+make lint-fix       # Auto-fix linting issues
+make format         # Format code with ruff
+make typecheck      # Run mypy type checking
+make check          # Run all checks (format, lint, typecheck, test, docs)
+make docs           # Build documentation
+make clean          # Clean all cache files
 ```
 
 ## Architecture Overview
@@ -216,3 +226,17 @@ class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
 - Integration tests may require external services (document in PR)
 - Follow TDD approach for all new features and refactoring
 - Maintain backward compatibility during type safety migration
+
+## Key Action Types
+
+The biomapper orchestration system supports these core actions:
+
+- **LOAD_DATASET_IDENTIFIERS**: Load biological identifiers from TSV/CSV files
+- **MERGE_WITH_UNIPROT_RESOLUTION**: Map identifiers to UniProt accessions
+- **CALCULATE_SET_OVERLAP**: Calculate Jaccard similarity between datasets
+- **MERGE_DATASETS**: Combine multiple datasets with deduplication
+- **EXECUTE_MAPPING_PATH**: Run predefined mapping workflows
+- **FILTER_DATASET**: Apply filtering criteria to datasets
+- **EXPORT_DATASET**: Export results to various formats
+
+See strategy configuration examples in `configs/strategies/` for usage patterns.
