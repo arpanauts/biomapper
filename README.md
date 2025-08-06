@@ -291,55 +291,12 @@ class MyAction(TypedStrategyAction[MyParams, MyResult]):
         return result
 ```
 
-## Performance Benchmarks
-
-| Operation | Time (10K items) | Memory |
-|-----------|------------------|---------|
-| LOAD_DATASET_IDENTIFIERS | 0.5s | 50MB |
-| BASELINE_FUZZY_MATCH | 2.1s | 200MB |
-| VECTOR_ENHANCED_MATCH | 3.5s | 500MB |
-| VALIDATE_AGAINST_REFERENCE | 1.2s | 100MB |
-
-## Configuration
-
-### Environment Variables
-
-```bash
-# API Configuration
-API_HOST=0.0.0.0
-API_PORT=8000
-DATABASE_URL=postgresql://user:pass@localhost/biomapper
-
-# Validation
-VALIDATION_THRESHOLD=0.90
-BENCHMARK_DIR=/data/benchmarks
-
-# External Services
-CTS_API_KEY=your_key_here
-QDRANT_URL=http://localhost:6333
-```
-
-### Data Requirements
-
-- CSV/TSV files with headers
-- UTF-8 encoding
-- Identifier columns must be specified
-- Absolute paths in strategy files
-
 ## Documentation
 
-- [API Reference](docs/api.md)
 - [Action Development Guide](.claude/BIOLOGICAL_ACTIONS.md)
 - [Validation Framework](.claude/VALIDATION_FRAMEWORK.md)
 - [Strategy Examples](configs/strategies/)
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on:
-- Code standards
-- Testing requirements
-- PR validation process
-- Action development
 
 ## License
 
