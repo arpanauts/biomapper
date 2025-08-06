@@ -574,19 +574,21 @@ class PersistenceService:
         component: Optional[str] = None
     ):
         """Add execution log entry."""
-        # Don't convert details - SQLAlchemy JSON type handles this
-        log = ExecutionLog(
-            # Don't set id - let database auto-generate it
-            job_id=job_id,
-            step_index=step_index,
-            log_level=level,
-            message=message,
-            details=details,  # Keep as dict/None
-            category=category,
-            component=component
-        )
+        # Create log entry without setting id field
+        log_dict = {
+            "job_id": job_id,
+            "step_index": step_index,
+            "log_level": level,
+            "message": message,
+            "details": details,  # SQLAlchemy JSON type handles dict/None correctly
+            "category": category,
+            "component": component,
+            "created_at": datetime.utcnow()
+        }
         
-        self.db.add(log)
+        # Use a raw insert to ensure id field isn't included
+        stmt = ExecutionLog.__table__.insert().values(**log_dict)
+        await self.db.execute(stmt)
         await self.db.commit()  # Commit immediately for logs
         
     async def get_logs(
