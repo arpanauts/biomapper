@@ -347,15 +347,15 @@ class BiomapperClient:
             JobNotFoundError: If job not found
         """
         client = self._get_client()
-            try:
-                response = await client.get(f"/api/mapping/jobs/{job_id}/status")
-                response.raise_for_status()
-                return JobStatus(**response.json())
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    raise JobNotFoundError(f"Job not found: {job_id}")
-                else:
-                    raise ApiError(e.response.status_code, e.response.text)
+        try:
+            response = await client.get(f"/api/mapping/jobs/{job_id}/status")
+            response.raise_for_status()
+            return JobStatus(**response.json())
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise JobNotFoundError(f"Job not found: {job_id}")
+            else:
+                raise ApiError(e.response.status_code, e.response.text)
 
     async def get_job_results(self, job_id: str) -> Dict[str, Any]:
         """Get job results.
@@ -370,15 +370,15 @@ class BiomapperClient:
             JobNotFoundError: If job not found
         """
         client = self._get_client()
-            try:
-                response = await client.get(f"/api/mapping/jobs/{job_id}/results")
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    raise JobNotFoundError(f"Job not found: {job_id}")
-                else:
-                    raise ApiError(e.response.status_code, e.response.text)
+        try:
+            response = await client.get(f"/api/mapping/jobs/{job_id}/results")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise JobNotFoundError(f"Job not found: {job_id}")
+            else:
+                raise ApiError(e.response.status_code, e.response.text)
 
     async def cancel_job(self, job_id: str) -> bool:
         """Cancel a running job.
@@ -474,15 +474,15 @@ class BiomapperClient:
             raise FileUploadError(f"File not found: {file_path}")
 
         client = self._get_client()
-            with open(file_path, "rb") as f:
-                files = {"file": (file_path.name, f, "text/csv")}
-                data = {"session_id": session_id} if session_id else {}
+        with open(file_path, "rb") as f:
+            files = {"file": (file_path.name, f, "text/csv")}
+            data = {"session_id": session_id} if session_id else {}
 
-                response = await client.post(
-                    "/api/files/upload", files=files, data=data
-                )
-                response.raise_for_status()
-                return FileUploadResponse(**response.json())
+            response = await client.post(
+                "/api/files/upload", files=files, data=data
+            )
+            response.raise_for_status()
+            return FileUploadResponse(**response.json())
 
     async def get_file_columns(self, session_id: str) -> ColumnsResponse:
         """Get column information for uploaded file.
@@ -494,9 +494,9 @@ class BiomapperClient:
             ColumnsResponse
         """
         client = self._get_client()
-            response = await client.get(f"/api/files/{session_id}/columns")
-            response.raise_for_status()
-            return ColumnsResponse(**response.json())
+        response = await client.get(f"/api/files/{session_id}/columns")
+        response.raise_for_status()
+        return ColumnsResponse(**response.json())
 
     async def preview_file(
         self,
@@ -513,12 +513,12 @@ class BiomapperClient:
             CSVPreviewResponse
         """
         client = self._get_client()
-            response = await client.get(
-                f"/api/files/{session_id}/preview",
-                params={"rows": rows},
-            )
-            response.raise_for_status()
-            return CSVPreviewResponse(**response.json())
+        response = await client.get(
+            f"/api/files/{session_id}/preview",
+            params={"rows": rows},
+        )
+        response.raise_for_status()
+        return CSVPreviewResponse(**response.json())
 
     # === Checkpoint Management ===
 
@@ -599,9 +599,9 @@ class BiomapperClient:
             Health status dictionary
         """
         client = self._get_client()
-            response = await client.get("/")
-            response.raise_for_status()
-            return response.json()
+        response = await client.get("/")
+        response.raise_for_status()
+        return response.json()
 
     async def list_endpoints(self) -> List[EndpointResponse]:
         """List available API endpoints.
@@ -610,9 +610,9 @@ class BiomapperClient:
             List of EndpointResponse objects
         """
         client = self._get_client()
-            response = await client.get("/api/endpoints")
-            response.raise_for_status()
-            return [EndpointResponse(**e) for e in response.json()]
+        response = await client.get("/api/endpoints")
+        response.raise_for_status()
+        return [EndpointResponse(**e) for e in response.json()]
 
     # === Private Helper Methods ===
 
