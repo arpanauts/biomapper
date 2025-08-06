@@ -38,7 +38,7 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api/health", tags=["health"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(mapping.router, prefix="/api/mapping", tags=["mapping"])
-app.include_router(strategies.router)
+# app.include_router(strategies.router)  # Disabled - conflicts with v2
 app.include_router(strategies_v2_simple.router)  # Add v2 strategies endpoint
 app.include_router(endpoints.router, prefix="/api/endpoints", tags=["endpoints"])
 app.include_router(resources.router, prefix="/api", tags=["resources"])

@@ -13,6 +13,7 @@ from biomapper.core.minimal_strategy_service import MinimalStrategyService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/strategies/v2", tags=["Strategy Execution V2"])
+logger.info("strategies_v2_simple module loaded - v2 routes registered at /api/strategies/v2")
 
 
 class V2ExecutionOptions(BaseModel):
@@ -57,7 +58,8 @@ async def run_strategy_async(job_id: str, strategy_name: str, parameters: Dict[s
         jobs[job_id]["status"] = "running"
         
         # Execute strategy
-        service = MinimalStrategyService()
+        strategies_dir = "/home/ubuntu/biomapper/configs/strategies"
+        service = MinimalStrategyService(strategies_dir)
         result = await service.execute_strategy(
             strategy_name=strategy_name,
             context=parameters
@@ -84,6 +86,7 @@ async def execute_strategy(
     This is a simplified v2 endpoint that works with modern YAML strategies.
     """
     try:
+        logger.info(f"V2 endpoint hit! Request: strategy={request.strategy}, params={request.parameters}")
         # Generate job ID
         job_id = str(uuid.uuid4())
         
@@ -103,12 +106,16 @@ async def execute_strategy(
         }
         
         # Check if strategy exists
-        service = MinimalStrategyService()
-        available_strategies = await service.list_strategies()
+        strategies_dir = "/home/ubuntu/biomapper/configs/strategies"
+        logger.info(f"Loading strategies from: {strategies_dir}")
+        service = MinimalStrategyService(strategies_dir)
+        logger.info(f"Loaded strategies: {list(service.strategies.keys())}")
         
-        if strategy_name not in available_strategies:
+        if strategy_name not in service.strategies:
             # Try without checking - it might be in a different location
-            logger.warning(f"Strategy '{strategy_name}' not in list, attempting execution anyway")
+            logger.warning(f"Strategy '{strategy_name}' not in loaded strategies, attempting execution anyway")
+        else:
+            logger.info(f"Found strategy '{strategy_name}' in loaded strategies")
         
         # Execute in background
         background_tasks.add_task(

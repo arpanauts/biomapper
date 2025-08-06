@@ -128,16 +128,16 @@ class TestProgressTracker:
         # Callback should not be called
         callback.assert_not_called()
 
-    @patch("biomapper_client.progress.tqdm")
-    def test_add_tqdm(self, mock_tqdm_module):
+    @patch("tqdm.tqdm")
+    def test_add_tqdm(self, mock_tqdm_class):
         """Test adding tqdm backend."""
         mock_tqdm = Mock()
-        mock_tqdm_module.tqdm.return_value = mock_tqdm
+        mock_tqdm_class.return_value = mock_tqdm
 
         tracker = ProgressTracker(100, "Testing")
         tracker.add_tqdm(ncols=80)
 
-        mock_tqdm_module.tqdm.assert_called_once_with(
+        mock_tqdm_class.assert_called_once_with(
             total=100,
             desc="Testing",
             ncols=80,
@@ -145,11 +145,11 @@ class TestProgressTracker:
         assert len(tracker.backends) == 1
         assert tracker.backends[0][0] == "tqdm"
 
-    @patch("biomapper_client.progress.tqdm")
-    def test_update_with_tqdm(self, mock_tqdm_module):
+    @patch("tqdm.tqdm")
+    def test_update_with_tqdm(self, mock_tqdm_class):
         """Test update with tqdm backend."""
         mock_pbar = Mock()
-        mock_tqdm_module.tqdm.return_value = mock_pbar
+        mock_tqdm_class.return_value = mock_pbar
 
         tracker = ProgressTracker(100)
         tracker.add_tqdm()
@@ -160,11 +160,11 @@ class TestProgressTracker:
         mock_pbar.refresh.assert_called_once()
         mock_pbar.set_postfix_str.assert_called_once_with("Processing")
 
-    @patch("biomapper_client.progress.tqdm")
-    def test_close_with_tqdm(self, mock_tqdm_module):
+    @patch("tqdm.tqdm")
+    def test_close_with_tqdm(self, mock_tqdm_class):
         """Test closing with tqdm backend."""
         mock_pbar = Mock()
-        mock_tqdm_module.tqdm.return_value = mock_pbar
+        mock_tqdm_class.return_value = mock_pbar
 
         tracker = ProgressTracker(100)
         tracker.add_tqdm()
@@ -173,7 +173,7 @@ class TestProgressTracker:
 
         mock_pbar.close.assert_called_once()
 
-    @patch("biomapper_client.progress.Progress")
+    @patch("rich.progress.Progress")
     def test_add_rich(self, mock_progress_class):
         """Test adding rich backend."""
         mock_progress = Mock()
@@ -189,7 +189,7 @@ class TestProgressTracker:
         assert len(tracker.backends) == 1
         assert tracker.backends[0][0] == "rich"
 
-    @patch("biomapper_client.progress.Progress")
+    @patch("rich.progress.Progress")
     def test_update_with_rich(self, mock_progress_class):
         """Test update with rich backend."""
         mock_progress = Mock()
@@ -208,10 +208,10 @@ class TestProgressTracker:
             description="Testing: Processing",
         )
 
-    @patch("biomapper_client.progress.display")
-    @patch("biomapper_client.progress.HBox")
-    @patch("biomapper_client.progress.IntProgress")
-    @patch("biomapper_client.progress.Label")
+    @patch("IPython.display.display")
+    @patch("ipywidgets.HBox")
+    @patch("ipywidgets.IntProgress")
+    @patch("ipywidgets.Label")
     def test_add_jupyter(self, mock_label, mock_progress, mock_hbox, mock_display):
         """Test adding Jupyter backend."""
         mock_progress_widget = Mock()
@@ -236,7 +236,8 @@ class TestProgressTracker:
 
     def test_add_tqdm_import_error(self):
         """Test adding tqdm when not installed."""
-        with patch("biomapper_client.progress.tqdm", side_effect=ImportError):
+        # Patch the import inside the method
+        with patch("builtins.__import__", side_effect=ImportError):
             tracker = ProgressTracker(100)
             result = tracker.add_tqdm()
 
