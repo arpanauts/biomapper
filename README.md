@@ -1,7 +1,6 @@
 # BioMapper
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://github.com/biomapper/biomapper/actions/workflows/pr_validation.yml/badge.svg)](https://github.com/biomapper/biomapper/actions)
 [![Coverage](https://img.shields.io/badge/coverage-85%25-green.svg)](https://codecov.io/gh/biomapper/biomapper)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
