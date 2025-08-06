@@ -3,9 +3,36 @@ import pytest
 import os
 
 # Disable Langfuse monitoring for tests to prevent connection errors
-os.environ.pop("LANGFUSE_PUBLIC_KEY", None)
-os.environ.pop("LANGFUSE_SECRET_KEY", None)
-os.environ.pop("LANGFUSE_HOST", None)
+# More aggressive - set to empty strings rather than removing
+os.environ["LANGFUSE_PUBLIC_KEY"] = ""
+os.environ["LANGFUSE_SECRET_KEY"] = ""
+os.environ["LANGFUSE_HOST"] = ""
+os.environ["LANGFUSE_ENABLED"] = "false"
+os.environ["LANGFUSE_RELEASE"] = ""
+
+# Also try to disable via the library if it's imported
+try:
+    import langfuse
+    langfuse.disabled = True
+    # Also monkey-patch the Langfuse class to prevent initialization
+    class DisabledLangfuse:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: None
+    langfuse.Langfuse = DisabledLangfuse
+except ImportError:
+    pass
+
+# Monkey-patch the decorator to do nothing
+try:
+    from langfuse import decorators
+    decorators.observe = lambda **kwargs: lambda func: func
+    decorators.langfuse_context = type('MockContext', (), {
+        '__getattr__': lambda self, name: lambda *args, **kwargs: None
+    })()
+except ImportError:
+    pass
 
 
 def pytest_collection_modifyitems(config, items):

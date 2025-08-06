@@ -574,12 +574,14 @@ class PersistenceService:
         component: Optional[str] = None
     ):
         """Add execution log entry."""
+        # Don't convert details - SQLAlchemy JSON type handles this
         log = ExecutionLog(
+            # Don't set id - let database auto-generate it
             job_id=job_id,
             step_index=step_index,
             log_level=level,
             message=message,
-            details=details,
+            details=details,  # Keep as dict/None
             category=category,
             component=component
         )
