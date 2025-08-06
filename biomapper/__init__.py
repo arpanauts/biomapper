@@ -17,6 +17,18 @@ try:
 except ImportError:
     pass
 
+# Loaders
+try:
+    from . import loaders
+except ImportError:
+    pass
+
+# RAG
+try:
+    from . import rag
+except ImportError:
+    pass
+
 __version__ = "0.5.1"
 __all__ = [
     # Utilities

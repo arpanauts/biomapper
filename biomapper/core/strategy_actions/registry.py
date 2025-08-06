@@ -1,4 +1,4 @@
-from typing import Dict, Type, Callable
+from typing import Dict, Type, Callable, Optional
 
 # The central registry for all strategy actions
 ACTION_REGISTRY: Dict[str, Type] = {}
@@ -11,3 +11,7 @@ def register_action(name: str) -> Callable:
         ACTION_REGISTRY[name] = cls
         return cls
     return decorator
+
+def get_action_class(name: str) -> Optional[Type]:
+    """Get an action class by name from the registry."""
+    return ACTION_REGISTRY.get(name)
