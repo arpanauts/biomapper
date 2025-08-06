@@ -205,7 +205,8 @@ class ControlFlowExecutor:
         # Determine error action
         if isinstance(error_config, str):
             error_action = ErrorAction(error_config)
-            max_attempts = 3
+            # For continue/skip, don't retry; for retry, use default 3 attempts
+            max_attempts = 1 if error_action in [ErrorAction.CONTINUE, ErrorAction.SKIP] else 3
             backoff = BackoffStrategy.LINEAR
             delay = 5
         elif error_config:
@@ -370,10 +371,15 @@ class ControlFlowExecutor:
         if hasattr(action, 'execute_typed'):
             # New typed action
             from ..models.execution_context import StrategyExecutionContext
+            # Provide default values for required fields if not present
+            current_ids = action_context.get('current_identifiers', [])
             typed_context = StrategyExecutionContext(**{
-                'current_identifiers': action_context['current_identifiers'],
-                'datasets': action_context['datasets'],
-                'statistics': action_context['statistics']
+                'initial_identifier': current_ids[0] if current_ids else 'unknown',
+                'current_identifier': current_ids[0] if current_ids else 'unknown',
+                'ontology_type': action_context.get('ontology_type', 'gene'),  # Default to 'gene'
+                'current_identifiers': current_ids,
+                'datasets': action_context.get('datasets', {}),
+                'statistics': action_context.get('statistics', {})
             })
             result = await action.execute_typed(params, typed_context)
         else:

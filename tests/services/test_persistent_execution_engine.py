@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 # Add biomapper-api to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent / "biomapper-api"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "biomapper-api"))
 
 import asyncio
 import pytest

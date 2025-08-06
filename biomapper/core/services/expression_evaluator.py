@@ -157,12 +157,8 @@ class SafeExpressionEvaluator:
         def replacer(match):
             path = match.group(1).strip()
             
-            # Check cache
-            if path in self._variable_cache:
-                value = self._variable_cache[path]
-            else:
-                value = self._get_nested_value(path)
-                self._variable_cache[path] = value
+            # Don't use cache - always get fresh value
+            value = self._get_nested_value(path)
             
             # Convert value to Python literal
             if isinstance(value, str):
@@ -454,6 +450,13 @@ class ConditionEvaluator:
         """Initialize with execution context."""
         self.context = context
         self.evaluator = SafeExpressionEvaluator(context)
+    
+    def __setattr__(self, name: str, value: Any):
+        """Override setattr to ensure evaluator updates when context changes."""
+        super().__setattr__(name, value)
+        if name == 'context' and hasattr(self, 'evaluator'):
+            # Re-create evaluator with new context
+            self.evaluator = SafeExpressionEvaluator(value)
     
     def evaluate_condition(self, condition: Union[str, Dict[str, Any]]) -> bool:
         """

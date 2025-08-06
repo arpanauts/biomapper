@@ -99,12 +99,31 @@ class TestBaselineFuzzyMatch:
             'datasets': {
                 'source': sample_source_data,
                 'target': sample_target_data
-            }
+            },
+            'custom_action_data': {}
         }
         
-        result = await action.execute(params, context)
+        # Convert params to dict for the execute method
+        params_dict = params.model_dump()
         
-        assert result.success
+        # Call execute with all required arguments
+        result = await action.execute(
+            current_identifiers=[],  # Not used in this action
+            current_ontology_type="metabolite",
+            action_params=params_dict,
+            source_endpoint=None,  # Not used in this action
+            target_endpoint=None,  # Not used in this action
+            context=context
+        )
+        
+        # Check result dictionary structure
+        assert 'details' in result
+        assert result['details'].get('success', False)
+        
+        # Check that matches were stored in context
+        # The action stores data in 'datasets' key directly
+        assert 'datasets' in context
+        assert 'matches' in context['datasets']
         matches = context['datasets']['matches']
         
         # Should match at least cholesterol and spermidine
@@ -117,7 +136,6 @@ class TestBaselineFuzzyMatch:
             assert 'score' in match
             assert match['score'] >= 0.80
             assert match['stage'] == 'baseline'
-        # This test should FAIL initially
     
     @pytest.mark.asyncio
     async def test_unmatched_tracking(self, action):
@@ -141,19 +159,33 @@ class TestBaselineFuzzyMatch:
                 'target': [
                     {'unified_name': 'Total cholesterol'}
                 ]
-            }
+            },
+            'custom_action_data': {}
         }
         
-        result = await action.execute(params, context)
+        # Convert params to dict for the execute method
+        params_dict = params.model_dump()
         
+        # Call execute with all required arguments
+        result = await action.execute(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            action_params=params_dict,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=context
+        )
+        
+        # Check that unmatched were stored in context
         unmatched_key = "unmatched.baseline.source"
+        # The action stores data in 'datasets' key directly
+        assert 'datasets' in context
         assert unmatched_key in context['datasets']
         unmatched = context['datasets'][unmatched_key]
         
         # Unknown metabolite should be unmatched
         assert len(unmatched) >= 1
         assert any(u['BIOCHEMICAL_NAME'] == 'unknown-metabolite-xyz' for u in unmatched)
-        # This test should FAIL initially
     
     @pytest.mark.asyncio
     async def test_metrics_tracking(self, action, sample_source_data, sample_target_data):
@@ -173,11 +205,25 @@ class TestBaselineFuzzyMatch:
             'datasets': {
                 'source': sample_source_data,
                 'target': sample_target_data
-            }
+            },
+            'custom_action_data': {}
         }
         
-        result = await action.execute(params, context)
+        # Convert params to dict for the execute method
+        params_dict = params.model_dump()
         
+        # Call execute with all required arguments
+        result = await action.execute(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            action_params=params_dict,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=context
+        )
+        
+        # Check that metrics were stored in context
+        # The action stores metrics in 'metrics' key directly
         assert 'metrics' in context
         assert 'baseline' in context['metrics']
         
@@ -189,7 +235,6 @@ class TestBaselineFuzzyMatch:
         assert metrics['execution_time'] > 0
         assert 'confidence_distribution' in metrics
         assert metrics['algorithm_used'] == 'token_set_ratio'
-        # This test should FAIL initially
     
     @pytest.mark.asyncio
     async def test_limit_per_source(self, action):
@@ -216,12 +261,29 @@ class TestBaselineFuzzyMatch:
                     {'name': 'HDL cholesterol'},
                     {'name': 'VLDL cholesterol'}
                 ]
-            }
+            },
+            'custom_action_data': {}
         }
         
-        result = await action.execute(params, context)
+        # Convert params to dict for the execute method
+        params_dict = params.model_dump()
         
+        # Call execute with all required arguments
+        result = await action.execute(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            action_params=params_dict,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=context
+        )
+        
+        # Check that matches were stored in context
+        # The action stores data in 'datasets' key directly
+        assert 'datasets' in context
+        assert 'matches' in context['datasets']
         matches = context['datasets']['matches']
+        
         # Should have at most 2 matches for cholesterol
         cholesterol_matches = [m for m in matches if m['source']['name'] == 'cholesterol']
         assert len(cholesterol_matches) <= 2
@@ -229,7 +291,6 @@ class TestBaselineFuzzyMatch:
         # Should be the highest scoring matches
         if len(cholesterol_matches) == 2:
             assert cholesterol_matches[0]['score'] >= cholesterol_matches[1]['score']
-        # This test should FAIL initially
     
     @pytest.mark.asyncio
     async def test_performance_tracking(self, action):
@@ -252,14 +313,26 @@ class TestBaselineFuzzyMatch:
             'datasets': {
                 'source': source_data,
                 'target': target_data
-            }
+            },
+            'custom_action_data': {}
         }
         
+        # Convert params to dict for the execute method
+        params_dict = params.model_dump()
+        
         start = time.time()
-        result = await action.execute(params, context)
+        # Call execute with all required arguments
+        result = await action.execute(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            action_params=params_dict,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=context
+        )
         actual_time = time.time() - start
         
         # Check that reported time is reasonable
-        reported_time = result.data['execution_time']
+        assert 'details' in result
+        reported_time = result['details']['execution_time']
         assert abs(reported_time - actual_time) < 0.1  # Within 100ms
-        # This test should FAIL initially

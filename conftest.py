@@ -2,6 +2,11 @@
 import pytest
 import os
 
+# Disable Langfuse monitoring for tests to prevent connection errors
+os.environ.pop("LANGFUSE_PUBLIC_KEY", None)
+os.environ.pop("LANGFUSE_SECRET_KEY", None)
+os.environ.pop("LANGFUSE_HOST", None)
+
 
 def pytest_collection_modifyitems(config, items):
     """Configure test collection and marking."""

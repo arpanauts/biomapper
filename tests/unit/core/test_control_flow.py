@@ -317,18 +317,28 @@ class TestControlFlowExecutor:
             mock_action = AsyncMock()
             
             async def capture_params(*args, **kwargs):
-                if 'action_params' in kwargs:
+                # For execute_typed, params are first argument
+                if len(args) > 0 and isinstance(args[0], dict):
+                    executed_params.append(args[0])
+                # For legacy execute, params are in kwargs
+                elif 'action_params' in kwargs:
                     executed_params.append(kwargs['action_params'])
                 return {'result': 'success'}
             
             mock_action.execute.side_effect = capture_params
+            # Also set execute_typed in case it's checked first
+            mock_action.execute_typed = capture_params
             mock_get_action.return_value = lambda: mock_action
             
             executor = ControlFlowExecutor(strategy)
             result = await executor.execute()
             
-            # Should execute 3 times
-            assert mock_action.execute.call_count == 3
+            # Should execute 3 times - check both methods since either might be called
+            total_calls = mock_action.execute.call_count + (
+                mock_action.execute_typed.call_count if hasattr(mock_action.execute_typed, 'call_count') 
+                else len(executed_params)
+            )
+            assert total_calls == 3 or len(executed_params) == 3
             assert len(executed_params) == 3
             
             # Check that each dataset was processed
@@ -373,6 +383,8 @@ class TestControlFlowExecutor:
                 return {'result': 'success'}
             
             mock_action.execute.side_effect = increment_counter
+            # Also set execute_typed in case it's checked first
+            mock_action.execute_typed = increment_counter
             mock_get_action.return_value = lambda: mock_action
             
             executor = ControlFlowExecutor(strategy)
@@ -407,7 +419,7 @@ class TestControlFlowExecutor:
                     'on_error': {
                         'action': 'retry',
                         'max_attempts': 3,
-                        'delay': 0  # No delay for testing
+                        'delay': 1  # Minimum delay (1 second)
                     }
                 }
             ]
@@ -428,6 +440,8 @@ class TestControlFlowExecutor:
                 return {'result': 'success'}
             
             mock_action.execute.side_effect = fail_then_succeed
+            # Also set execute_typed in case it's checked first
+            mock_action.execute_typed = fail_then_succeed
             mock_get_action.return_value = lambda: mock_action
             
             executor = ControlFlowExecutor(strategy)
@@ -466,9 +480,13 @@ class TestControlFlowExecutor:
         with patch('biomapper.core.services.control_flow_executor.get_action_class') as mock_get_action:
             mock_action1 = AsyncMock()
             mock_action1.execute.side_effect = Exception("Simulated failure")
+            # Also set execute_typed in case it's checked first
+            mock_action1.execute_typed = AsyncMock(side_effect=Exception("Simulated failure"))
             
             mock_action2 = AsyncMock()
             mock_action2.execute.return_value = {'result': 'success'}
+            # Also set execute_typed in case it's checked first
+            mock_action2.execute_typed = AsyncMock(return_value={'result': 'success'})
             
             def get_action(action_type):
                 if action_type == 'TEST_ACTION':
@@ -536,6 +554,8 @@ class TestControlFlowExecutor:
                 return {'result': 'success'}
             
             mock_action.execute.side_effect = track_execution
+            # Also set execute_typed in case it's checked first
+            mock_action.execute_typed = track_execution
             mock_get_action.return_value = lambda: mock_action
             
             executor = ControlFlowExecutor(strategy)

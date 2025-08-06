@@ -5,7 +5,7 @@ import time
 from typing import Dict, List, Any, Optional, Tuple
 from enum import Enum
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, model_validator
 
 from biomapper.core.strategy_actions.typed_base import (
     TypedStrategyAction,
@@ -90,21 +90,21 @@ class MetaboliteApiEnrichmentParams(BaseModel):
     )
     track_metrics: bool = Field(True, description="Track enrichment metrics")
 
-    @validator("api_services", always=True)
-    def handle_legacy_mode(cls, v, values):
+    @model_validator(mode='after')
+    def handle_legacy_mode(self):
         """Convert legacy parameters to new format if needed."""
-        if v is None and values.get("identifier_columns"):
+        if self.api_services is None and self.identifier_columns:
             # Legacy mode - create CTS-only configuration
             logger.info("Converting legacy CTS-only configuration to multi-API format")
-            return [
+            self.api_services = [
                 ApiServiceConfig(
                     service=ApiService.CTS,
                     input_column="multiple",  # Special marker for legacy mode
                     output_fields=["chemical_name", "synonyms"],
-                    timeout=values.get("cts_timeout", 30),
+                    timeout=self.cts_timeout or 30,
                 )
             ]
-        return v
+        return self
 
 
 class EnrichmentMetrics(BaseModel):
@@ -477,27 +477,38 @@ class MetaboliteApiEnrichmentAction(
                 }
 
                 for method, score in scores.items():
-                    if score > best_score and score >= threshold:
+                    # Determine which API provided the matching name
+                    if source_name in enriched_metabolite.get("cts_enriched_names", []):
+                        api_source = "cts"
+                    elif source_name in enriched_metabolite.get("hmdb_enriched_names", []):
+                        api_source = "hmdb"
+                    elif source_name in enriched_metabolite.get("pubchem_enriched_names", []):
+                        api_source = "pubchem"
+                    else:
+                        api_source = "original"
+                    
+                    # Update best match if:
+                    # 1. Score is better than current best
+                    # 2. Score is equal but this is from an enriched source (prefer enriched over original)
+                    # 3. Score is equal, both are enriched/original, but this is an exact match
+                    should_update = False
+                    if score >= threshold:
+                        if score > best_score:
+                            should_update = True
+                        elif score == best_score:
+                            # Prefer enriched names over original when scores are equal
+                            if api_source != "original" and best_api_source == "original":
+                                should_update = True
+                            # Prefer exact matches when scores are equal
+                            elif source_name.lower() == target_name.lower():
+                                should_update = True
+                    
+                    if should_update:
                         best_score = score
                         best_match = target_item
                         best_source_name = source_name
                         best_matching_method = f"multi_api_{method}"
-
-                        # Determine which API provided the matching name
-                        if source_name in enriched_metabolite.get(
-                            "cts_enriched_names", []
-                        ):
-                            best_api_source = "cts"
-                        elif source_name in enriched_metabolite.get(
-                            "hmdb_enriched_names", []
-                        ):
-                            best_api_source = "hmdb"
-                        elif source_name in enriched_metabolite.get(
-                            "pubchem_enriched_names", []
-                        ):
-                            best_api_source = "pubchem"
-                        else:
-                            best_api_source = "original"
+                        best_api_source = api_source
 
         if best_match:
             return {

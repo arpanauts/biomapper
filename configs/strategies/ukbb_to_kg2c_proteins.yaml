@@ -1,0 +1,464 @@
+# Strategy: Map UKBB proteins to KG2c proteins via UniProt IDs
+# Author: BiomapperStrategyAssistant
+# Date: 2025-08-06
+# Expected match rate: 85-95% (UKBB has clean UniProt IDs)
+
+name: UKBB_TO_KG2C_PROTEINS
+description: "Map UK Biobank protein data to KG2c proteins using UniProt identifiers"
+version: "1.0.0"
+
+# Parameters that can be overridden
+parameters:
+  # Input file paths
+  ukbb_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
+  kg2c_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/kg2.10.2c_ontologies/kg2c_proteins.csv"
+  
+  # Output configuration
+  output_dir: "/home/ubuntu/biomapper/data/results/ukbb_kg2c_proteins"
+  
+  # Matching configuration
+  min_confidence: 0.90
+  include_obsolete: false
+  batch_size: 1000
+
+steps:
+  # ===== Phase 1: Data Loading and Validation =====
+  - name: load_ukbb_proteins
+    description: "Load UKBB protein metadata with UniProt IDs"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.ukbb_file}"
+        identifier_column: "UniProt"
+        additional_columns:
+          - "Assay"
+          - "Panel"
+        output_key: "ukbb_proteins"
+        drop_empty: true
+        validate_types: true
+    metrics:
+      - total_rows_loaded
+      - valid_uniprot_ids
+      - missing_values
+      - unique_panels
+
+  - name: load_kg2c_proteins
+    description: "Load KG2c protein dataset"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.kg2c_file}"
+        identifier_column: "xrefs"
+        additional_columns:
+          - "id"
+          - "name"
+          - "category"
+          - "description"
+          - "synonyms"
+        output_key: "kg2c_proteins"
+        drop_empty: true
+        validate_types: true
+    metrics:
+      - total_rows_loaded
+      - rows_with_uniprot_refs
+
+  # ===== Phase 2: UniProt ID Extraction and Normalization =====
+  - name: extract_kg2c_uniprot
+    description: "Extract and normalize UniProt IDs from KG2c xrefs"
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: "kg2c_proteins"
+        output_key: "kg2c_uniprot_extracted"
+        transformation: |
+          # Extract UniProtKB identifiers from xrefs column
+          import pandas as pd
+          import re
+          
+          df = context['datasets']['kg2c_proteins']
+          
+          def extract_uniprot_ids(xrefs):
+              if pd.isna(xrefs):
+                  return []
+              # Extract all UniProtKB:XXXXX patterns
+              matches = re.findall(r'UniProtKB:([A-Z0-9]+)', str(xrefs))
+              return matches
+          
+          # Create expanded dataframe with one row per UniProt ID
+          rows = []
+          for idx, row in df.iterrows():
+              uniprot_ids = extract_uniprot_ids(row['xrefs'])
+              if uniprot_ids:
+                  for uniprot_id in uniprot_ids:
+                      new_row = row.copy()
+                      new_row['uniprot_id'] = uniprot_id
+                      new_row['has_uniprot'] = True
+                      rows.append(new_row)
+          
+          result_df = pd.DataFrame(rows)
+          
+          # Store unique mappings
+          if not result_df.empty:
+              uniprot_to_kg2c = result_df.groupby('uniprot_id').first()[['id', 'name', 'description']].to_dict('index')
+              context['metadata']['uniprot_to_kg2c'] = uniprot_to_kg2c
+              context['statistics']['unique_kg2c_uniprot'] = len(uniprot_to_kg2c)
+          
+          return result_df
+    metrics:
+      - total_kg2c_proteins
+      - proteins_with_uniprot
+      - unique_uniprot_ids
+      - multiple_uniprot_per_protein
+
+  - name: normalize_ukbb_uniprot
+    description: "Normalize and validate UKBB UniProt IDs"
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: "ukbb_proteins"
+        output_key: "ukbb_normalized"
+        transformation: |
+          import pandas as pd
+          import re
+          
+          df = context['datasets']['ukbb_proteins']
+          
+          def normalize_uniprot(uniprot_id):
+              if pd.isna(uniprot_id):
+                  return None
+              # Remove any whitespace and convert to uppercase
+              normalized = str(uniprot_id).strip().upper()
+              # Validate UniProt format
+              if re.match(r'^[OPQ][0-9][A-Z0-9]{3}[0-9]$|^[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2}$', normalized):
+                  return normalized.split('-')[0]  # Remove isoform suffix if present
+              return normalized if normalized else None
+          
+          df['uniprot_normalized'] = df['UniProt'].apply(normalize_uniprot)
+          df['is_valid_uniprot'] = df['uniprot_normalized'].notna()
+          
+          # Track panel distribution
+          panel_counts = df.groupby('Panel').size().to_dict()
+          context['statistics']['panel_distribution'] = panel_counts
+          
+          return df
+    metrics:
+      - total_ukbb_proteins
+      - valid_uniprot_format
+      - invalid_uniprot_format
+      - proteins_per_panel
+
+  # ===== Phase 3: Direct UniProt Matching =====
+  - name: match_uniprot_ids
+    description: "Match UKBB and KG2c proteins by UniProt ID"
+    action:
+      type: MERGE_DATASETS
+      params:
+        left_dataset_key: "ukbb_normalized"
+        right_dataset_key: "kg2c_uniprot_extracted"
+        left_on: "uniprot_normalized"
+        right_on: "uniprot_id"
+        how: "inner"
+        output_key: "matched_proteins"
+        suffixes:
+          left: "_ukbb"
+          right: "_kg2c"
+    metrics:
+      - total_matches
+      - match_rate
+      - unique_ukbb_matched
+      - unique_kg2c_matched
+
+  - name: analyze_panel_coverage
+    description: "Analyze match rates by UKBB panel"
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: "matched_proteins"
+        output_key: "panel_coverage"
+        transformation: |
+          import pandas as pd
+          
+          matched_df = context['datasets']['matched_proteins']
+          ukbb_df = context['datasets']['ukbb_normalized']
+          
+          # Calculate coverage by panel
+          panel_stats = []
+          for panel in ukbb_df['Panel'].unique():
+              panel_proteins = ukbb_df[ukbb_df['Panel'] == panel]
+              panel_matched = matched_df[matched_df['Panel_ukbb'] == panel]
+              
+              stats = {
+                  'panel': panel,
+                  'total_proteins': len(panel_proteins),
+                  'matched_proteins': len(panel_matched),
+                  'match_rate': len(panel_matched) / len(panel_proteins) if len(panel_proteins) > 0 else 0,
+                  'unique_kg2c_matches': panel_matched['id_kg2c'].nunique() if not panel_matched.empty else 0
+              }
+              panel_stats.append(stats)
+          
+          coverage_df = pd.DataFrame(panel_stats)
+          context['statistics']['panel_coverage'] = coverage_df.to_dict('records')
+          
+          return coverage_df
+    metrics:
+      - panels_analyzed
+      - average_panel_match_rate
+      - best_performing_panel
+      - worst_performing_panel
+
+  # ===== Phase 4: Handle Unmatched Proteins =====
+  - name: identify_unmatched_ukbb
+    description: "Identify UKBB proteins without KG2c matches"
+    action:
+      type: FILTER_DATASET
+      params:
+        input_key: "ukbb_normalized"
+        output_key: "unmatched_ukbb"
+        filter_criteria:
+          - field: "uniprot_normalized"
+            operator: "not_in"
+            value_source: "matched_proteins.uniprot_normalized"
+    metrics:
+      - total_unmatched
+      - unmatched_rate
+      - unmatched_by_panel
+
+  - name: attempt_uniprot_resolution
+    description: "Try to resolve unmatched proteins via UniProt API"
+    action:
+      type: MERGE_WITH_UNIPROT_RESOLUTION
+      params:
+        input_key: "unmatched_ukbb"
+        identifier_column: "uniprot_normalized"
+        output_key: "resolved_proteins"
+        include_obsolete: "${parameters.include_obsolete}"
+        batch_size: "${parameters.batch_size}"
+        resolution_fields:
+          - "accession"
+          - "id"
+          - "gene_names"
+          - "organism_name"
+          - "protein_name"
+          - "reviewed"
+    metrics:
+      - attempted_resolutions
+      - successful_resolutions
+      - obsolete_entries
+      - reviewed_entries
+      - api_errors
+
+  # ===== Phase 5: Secondary Matching with Resolved IDs =====
+  - name: match_resolved_proteins
+    description: "Match resolved proteins with KG2c"
+    action:
+      type: MERGE_DATASETS
+      params:
+        left_dataset_key: "resolved_proteins"
+        right_dataset_key: "kg2c_uniprot_extracted"
+        left_on: "resolved_accession"
+        right_on: "uniprot_id"
+        how: "inner"
+        output_key: "secondary_matches"
+        suffixes:
+          left: "_resolved"
+          right: "_kg2c"
+    metrics:
+      - secondary_matches
+      - secondary_match_rate
+
+  # ===== Phase 6: Gene-based Fallback Matching =====
+  - name: extract_gene_names
+    description: "Extract gene names for fallback matching"
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: "unmatched_ukbb"
+        output_key: "unmatched_with_genes"
+        transformation: |
+          import pandas as pd
+          
+          df = context['datasets']['unmatched_ukbb']
+          resolved_df = context['datasets'].get('resolved_proteins', pd.DataFrame())
+          
+          # Extract gene names from Assay column (often contains gene symbols)
+          def extract_gene_from_assay(assay):
+              if pd.isna(assay):
+                  return None
+              # Many UKBB assays are named after genes
+              # Remove common suffixes and clean
+              gene = str(assay).strip()
+              # Remove version numbers or suffixes
+              gene = gene.split('_')[0].split('.')[0]
+              return gene if gene else None
+          
+          df['extracted_gene'] = df['Assay'].apply(extract_gene_from_assay)
+          
+          # Combine with any gene names from UniProt resolution
+          if not resolved_df.empty and 'gene_names' in resolved_df.columns:
+              gene_mapping = resolved_df.set_index('uniprot_normalized')['gene_names'].to_dict()
+              df['uniprot_gene'] = df['uniprot_normalized'].map(gene_mapping)
+              df['final_gene'] = df['uniprot_gene'].fillna(df['extracted_gene'])
+          else:
+              df['final_gene'] = df['extracted_gene']
+          
+          return df[df['final_gene'].notna()]
+    metrics:
+      - proteins_with_genes
+      - gene_extraction_rate
+
+  # ===== Phase 7: Combine All Matches =====
+  - name: combine_all_matches
+    description: "Combine primary and secondary matches"
+    action:
+      type: MERGE_DATASETS
+      params:
+        left_dataset_key: "matched_proteins"
+        right_dataset_key: "secondary_matches"
+        how: "outer"
+        output_key: "all_matches"
+        combine_duplicates: true
+    metrics:
+      - total_combined_matches
+      - duplicate_matches_removed
+
+  # ===== Phase 8: Calculate Statistics =====
+  - name: calculate_mapping_statistics
+    description: "Calculate comprehensive mapping statistics"
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        dataset1_key: "ukbb_normalized"
+        dataset2_key: "kg2c_uniprot_extracted"
+        id_column1: "uniprot_normalized"
+        id_column2: "uniprot_id"
+        output_key: "mapping_statistics"
+    metrics:
+      - jaccard_similarity
+      - overlap_coefficient
+      - dataset1_coverage
+      - dataset2_coverage
+
+  # ===== Phase 9: Quality Assessment =====
+  - name: assess_match_quality
+    description: "Assess quality of matches"
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: "all_matches"
+        output_key: "quality_assessment"
+        transformation: |
+          import pandas as pd
+          
+          df = context['datasets']['all_matches']
+          
+          quality_metrics = {
+              'total_matches': len(df),
+              'unique_ukbb_proteins': df['uniprot_normalized'].nunique() if 'uniprot_normalized' in df.columns else 0,
+              'unique_kg2c_proteins': df['id_kg2c'].nunique() if 'id_kg2c' in df.columns else 0,
+              'one_to_one_matches': 0,
+              'one_to_many_matches': 0,
+              'many_to_one_matches': 0
+          }
+          
+          if not df.empty and 'uniprot_normalized' in df.columns:
+              # Check mapping cardinality
+              ukbb_counts = df.groupby('uniprot_normalized')['id_kg2c'].nunique()
+              kg2c_counts = df.groupby('id_kg2c')['uniprot_normalized'].nunique()
+              
+              quality_metrics['one_to_one_matches'] = len(ukbb_counts[ukbb_counts == 1])
+              quality_metrics['one_to_many_matches'] = len(ukbb_counts[ukbb_counts > 1])
+              quality_metrics['many_to_one_matches'] = len(kg2c_counts[kg2c_counts > 1])
+          
+          context['statistics']['quality_metrics'] = quality_metrics
+          
+          return pd.DataFrame([quality_metrics])
+    metrics:
+      - mapping_cardinality
+      - quality_score
+
+  # ===== Phase 10: Export Results =====
+  - name: export_matched_proteins
+    description: "Export matched protein pairs"
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "all_matches"
+        output_path: "${parameters.output_dir}/ukbb_kg2c_matched.tsv"
+        format: "tsv"
+        include_metadata: true
+    metrics:
+      - rows_exported
+      - file_size
+
+  - name: export_unmatched_proteins
+    description: "Export unmatched UKBB proteins for review"
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "unmatched_ukbb"
+        output_path: "${parameters.output_dir}/ukbb_unmatched.tsv"
+        format: "tsv"
+        include_metadata: true
+    metrics:
+      - unmatched_exported
+
+  - name: export_panel_coverage
+    description: "Export panel coverage analysis"
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "panel_coverage"
+        output_path: "${parameters.output_dir}/panel_coverage.tsv"
+        format: "tsv"
+        include_metadata: true
+    metrics:
+      - panels_exported
+
+  - name: export_statistics
+    description: "Export mapping statistics"
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "mapping_statistics"
+        output_path: "${parameters.output_dir}/mapping_statistics.json"
+        format: "json"
+        include_metadata: true
+    metrics:
+      - statistics_exported
+
+  - name: generate_summary_report
+    description: "Generate comprehensive mapping report"
+    action:
+      type: GENERATE_REPORT
+      params:
+        template: "protein_mapping"
+        output_path: "${parameters.output_dir}/mapping_report.html"
+        include_sections:
+          - overview
+          - match_statistics
+          - panel_analysis
+          - unmatched_analysis
+          - quality_metrics
+          - recommendations
+        data_sources:
+          - "all_matches"
+          - "unmatched_ukbb"
+          - "panel_coverage"
+          - "mapping_statistics"
+          - "quality_assessment"
+    metrics:
+      - report_generated
+
+# Final validation and checkpointing
+validation:
+  - check: "match_rate >= 0.75"
+    message: "Warning: Match rate below 75%"
+  - check: "api_errors < 100"
+    message: "Warning: High number of API errors"
+  - check: "panels_with_low_coverage < 2"
+    message: "Warning: Multiple panels with low coverage"
+  
+checkpointing:
+  enabled: true
+  frequency: "after_each_phase"
+  cleanup_on_success: false
