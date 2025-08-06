@@ -131,6 +131,16 @@ sudo docker compose -f docker-compose.ci.yml run --rm ci-test bash -c "rm -f bio
   ```python
   id = Column(Integer, primary_key=True, autoincrement=True)
   ```
+- **Note**: SQLite requires INTEGER (not BIGINT) for AUTOINCREMENT to work properly
+
+### Mock Patching Issues
+- **Problem**: `AttributeError: module does not have the attribute 'tqdm'`
+- **Solution**: Patch where imports actually occur, not at module level:
+  ```python
+  # Wrong: @patch("biomapper_client.progress.tqdm")
+  # Right: @patch("tqdm.tqdm")  # Patch where it's imported
+  ```
+- **For local imports in methods**: Patch the actual module, not the local reference
 
 ### Langfuse Connection Errors
 - **Problem**: Tests try to connect to Langfuse
@@ -147,9 +157,33 @@ sudo docker compose -f docker-compose.ci.yml run --rm ci-test bash -c "rm -f bio
   sudo docker compose -f docker-compose.ci.yml build --no-cache
   ```
 
+### Finding Test Files
+- **Problem**: Can't locate test file from CI error
+- **Solution**: Use find to locate tests across all subdirectories:
+  ```bash
+  find . -name "*test_name*" -type f
+  ```
+
+## Quick Diagnostics
+
+Run this before testing to catch common issues:
+```bash
+python scripts/ci_diagnostics.py
+```
+
+For detailed import information (useful for debugging mock patches):
+```bash
+python scripts/ci_diagnostics.py --verbose
+```
+
 ## Workflow Recommendation
 
-1. **Before pushing any code**, run:
+1. **Run diagnostics first**:
+   ```bash
+   python scripts/ci_diagnostics.py
+   ```
+
+2. **Then run full CI tests locally**:
    ```bash
    sudo docker compose -f docker-compose.ci.yml run --rm ci-test
    ```

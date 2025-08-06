@@ -1,4 +1,4 @@
-.PHONY: test lint lint-fix format typecheck check clean docs docs-clean docs-serve full-check all
+.PHONY: test lint lint-fix format typecheck check clean docs docs-clean docs-serve full-check all ci-diagnostics ci-test-local ci-test-quick
 
 # Default target when just running 'make'
 all: check
@@ -59,3 +59,20 @@ check:
 
 # Full check with clean first
 full-check: clean check
+
+# CI-related targets
+ci-diagnostics:  ## Run CI diagnostics to catch common issues
+	@python scripts/ci_diagnostics.py
+
+ci-test-local:  ## Run tests in Docker CI environment
+	@echo "Building CI environment..."
+	@sudo docker compose -f docker-compose.ci.yml build
+	@echo "Running tests..."
+	@sudo docker compose -f docker-compose.ci.yml run --rm ci-test
+
+ci-test-quick:  ## Run CI diagnostics and tests if diagnostics pass
+	@echo "Running diagnostics..."
+	@python scripts/ci_diagnostics.py && \
+		echo "Diagnostics passed! Running tests..." && \
+		make ci-test-local || \
+		echo "Fix diagnostics issues before running tests"
