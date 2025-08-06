@@ -622,16 +622,20 @@ class PersistenceService:
         severity: str = "info"
     ):
         """Emit a job event for real-time monitoring."""
-        event = JobEvent(
-            job_id=job_id,
-            event_type=event_type,
-            data=data,
-            message=message,
-            severity=severity
-        )
+        # Create event without setting id field
+        event_dict = {
+            "job_id": job_id,
+            "event_type": event_type,
+            "data": data,
+            "message": message,
+            "severity": severity,
+            "timestamp": datetime.utcnow()
+        }
         
-        self.db.add(event)
-        # Events are committed separately for real-time delivery
+        # Use raw insert to ensure id field isn't included
+        stmt = JobEvent.__table__.insert().values(**event_dict)
+        await self.db.execute(stmt)
+        await self.db.commit()  # Commit immediately for real-time delivery
         
     async def get_events(
         self,
