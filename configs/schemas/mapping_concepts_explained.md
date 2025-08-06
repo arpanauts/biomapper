@@ -1,5 +1,7 @@
 # Biomapper Mapping Concepts: Paths, Strategies, and Actions
 
+**Architecture Note (2025-08-04)**: This document has been updated to reflect the current implementation where configurations are loaded directly from YAML files at API startup. References to `metamapper.db` storage reflect a previous or alternative architecture that is not currently in use.
+
 This document explains the key differences between **Mapping Paths**, **Mapping Strategies**, and **Action Types** in the Biomapper codebase. These three concepts work together to enable flexible, powerful biological entity mapping.
 
 ## Overview
@@ -34,7 +36,7 @@ mapping_paths:
 ```
 
 ### Storage
-Defined in entity-specific config files (e.g., `protein_config.yaml`) and stored in the `mapping_paths` table in `metamapper.db`.
+Defined in entity-specific config files (e.g., `protein_config.yaml`). In the current implementation (2025-08-04), these are loaded directly from YAML files at API startup rather than being stored in a database.
 
 ## 2. Action Types
 
@@ -115,7 +117,7 @@ mapping_strategies:
 ```
 
 ### Storage
-Defined in entity-specific config files and stored in the `mapping_strategies` table in `metamapper.db`.
+Defined in strategy YAML files in the `configs/` directory. In the current implementation (2025-08-04), these are loaded directly from YAML files at API startup by `MinimalStrategyService`.
 
 ## Key Differences
 

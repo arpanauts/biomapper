@@ -1,0 +1,43 @@
+# CTS API Client Configuration
+name: CTS_API_CONFIG
+description: "Configuration for Chemical Translation Service API client"
+
+# API settings
+base_url: "https://cts.fiehnlab.ucdavis.edu/rest"
+timeout_seconds: 30
+retry_attempts: 3
+retry_delay: 1.0
+
+# Rate limiting
+rate_limit:
+  requests_per_second: 10
+  burst_size: 20
+  wait_on_limit: true
+
+# Caching
+cache:
+  enabled: true
+  ttl_minutes: 60
+  max_size: 10000
+  cache_dir: "/home/ubuntu/biomapper/data/cache/cts"
+
+# Supported conversions
+supported_conversions:
+  from_types:
+    - HMDB
+    - KEGG
+    - PubChem CID
+    - InChIKey
+    - Chemical Name
+  to_types:
+    - Chemical Name
+    - InChIKey
+    - HMDB
+    - KEGG
+    - PubChem CID
+
+# Error handling
+error_handling:
+  log_errors: true
+  raise_on_404: false
+  default_empty_result: []

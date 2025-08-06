@@ -1,0 +1,77 @@
+# Example strategy demonstrating multi-API metabolite enrichment
+name: example_multi_api_enrichment
+description: "Example of using the extended METABOLITE_API_ENRICHMENT action with multiple APIs"
+
+steps:
+  # Step 1: Load source metabolites
+  - name: load_source_metabolites
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${DATA_DIR}/metabolites_to_harmonize.csv"
+        dataset_key: "source_metabolites"
+        columns:
+          - BIOCHEMICAL_NAME
+          - HMDB_ID
+          - PUBCHEM_CID
+          - KEGG_ID
+  
+  # Step 2: Load reference metabolites
+  - name: load_reference_metabolites
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${DATA_DIR}/reference_metabolites.csv"
+        dataset_key: "reference_metabolites"
+        columns:
+          - unified_name
+          - alternative_names
+  
+  # Step 3: Multi-API enrichment with HMDB, PubChem, and CTS
+  - name: multi_api_enrichment
+    action:
+      type: METABOLITE_API_ENRICHMENT  # Using the alias
+      params:
+        unmatched_dataset_key: "source_metabolites"
+        target_dataset_key: "reference_metabolites"
+        target_column: "unified_name"
+        
+        # Configure multiple API services
+        api_services:
+          # HMDB configuration
+          - service: "hmdb"
+            input_column: "HMDB_ID"
+            output_fields: ["name", "synonyms", "iupac_name", "inchikey"]
+            timeout: 30
+          
+          # PubChem configuration
+          - service: "pubchem" 
+            input_column: "PUBCHEM_CID"
+            output_fields: ["name", "synonyms", "inchikey", "formula"]
+            timeout: 30
+            id_type: "cid"  # Specify that we're using CID identifiers
+          
+          # CTS configuration for KEGG IDs
+          - service: "cts"
+            input_column: "KEGG_ID"
+            output_fields: ["chemical_name", "synonyms"]
+            timeout: 20
+        
+        # Matching parameters
+        match_threshold: 0.85
+        batch_size: 50
+        cache_results: true
+        
+        # Output configuration
+        output_key: "enriched_matches"
+        unmatched_key: "still_unmatched"
+        track_metrics: true
+  
+  # Step 4: Generate report
+  - name: generate_report
+    action:
+      type: GENERATE_ENHANCEMENT_REPORT
+      params:
+        matched_dataset_key: "enriched_matches"
+        unmatched_dataset_key: "still_unmatched"
+        report_file: "${OUTPUT_DIR}/multi_api_enrichment_report.md"

@@ -1,0 +1,42 @@
+# Arivale Chemistry Patient Analysis Summary
+
+Analysis Date: 2025-07-29 14:54:42.530616
+
+Total unique patients in dataset: 4881
+Total chemistry records: 11167
+
+Number of test columns analyzed: 128
+Tests with data: 128
+
+Tests with most patients:
+               Test Name  Unique Patients  Total Measurements  Avg Measurements per Patient
+0              A/G RATIO             4881               11080                          2.27
+2            ALAT (SGPT)             4881               11080                          2.27
+3                ALBUMIN             4881               11080                          2.27
+4   ALKALINE PHOSPHATASE             4881               11080                          2.27
+13      BILIRUBIN, TOTAL             4881               11080                          2.27
+14       BUN/CREAT RATIO             4881               11080                          2.27
+15               CALCIUM             4881               11080                          2.27
+8            ASAT (SGOT)             4881               11080                          2.27
+20   CREATININE ENZ, SER             4881               11080                          2.27
+28              FERRITIN             4881                9493                          1.94
+
+
+Tests with fewest patients (non-zero):
+             Test Name  Unique Patients  Total Measurements  Avg Measurements per Patient
+19         COPPER, RBC              586                 786                          1.34
+83                 MPV              586                 786                          1.34
+125          ZINC, RBC              586                 786                          1.34
+117  VITAMIN D2, 25-OH              586                 787                          1.34
+94      PLATELET COUNT              586                 786                          1.34
+118  VITAMIN D3, 25-OH              586                 787                          1.34
+7       ARSENIC, BLOOD              585                 785                          1.34
+100             QUICKI              584                 781                          1.34
+27              EPA/AA              541                 699                          1.29
+126             leptin              251                 266                          1.06
+
+
+Key Findings:
+- Most common tests have around 4881 unique patients
+- Average measurements per patient ranges from 1.02 to 2.47
+- 0 tests have fewer than 100 patients

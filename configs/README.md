@@ -1,24 +1,36 @@
 # Biomapper Configuration Files (`configs/`)
 
-This directory contains YAML configuration files that define the data sources, ontologies, and mapping strategies for different biological entity types within the Biomapper system. These configurations are crucial for populating the `metamapper.db` metadata database and guiding the `MappingExecutor` during the mapping processes.
+This directory contains YAML configuration files that define the data sources, ontologies, and mapping strategies for different biological entity types within the Biomapper system. These configurations are loaded directly by the API at runtime and drive all biological data harmonization processes.
 
-## Configuration Structure
+## 🏗️ Architecture Status: Complete (August 2025)
 
-The configuration system is divided into two types of files:
+The biomapper system has achieved full **API-first architecture**:
+- ✅ All wrapper scripts migrated to simple API clients  
+- ✅ All orchestration handled by biomapper-api service
+- ✅ Complete configuration-driven strategy execution
+- ✅ Zero architectural violations remaining
 
-### 1. Entity Configuration Files (e.g., `protein_config.yaml`, `metabolite_config.yaml`)
-These files define:
-- **Ontologies**: Identifier types for the entity
-- **Databases**: Data sources and their endpoints
-- **Mapping Paths**: Direct conversion sequences between ontologies
-- **Additional Resources**: External API clients and services
+## Configuration Architecture
 
-### 2. Mapping Strategies Configuration (`mapping_strategies_config.yaml`)
-This centralized file contains:
-- **Generic Strategies**: Reusable across all entity types
-- **Entity-Specific Strategies**: Complex pipelines for specific entities
-- **Composition Rules**: How strategies can be combined
-- **Selection Hints**: Guidance on when to use each strategy
+The current system uses **direct YAML loading** with three main categories:
+
+### 1. Strategy Configuration Files (`strategies/`)
+**Primary configuration type** for defining complete biological data harmonization workflows:
+- **`metabolomics_progressive_enhancement.yaml`** - Main metabolomics pipeline (313 lines)
+- **`three_way_metabolomics_complete.yaml`** - Complete 3-way dataset analysis
+- **`arivale_ukbb_mapping.yaml`** - Reference protein mapping implementation
+
+### 2. Legacy Entity Configuration Files 
+Historical configuration approach (mostly deprecated):
+- **`protein_config.yaml`** - Legacy protein configuration
+- Contains ontologies, databases, mapping paths, and clients
+- **Note**: New development should use strategy-based approach
+
+### 3. Schema and Documentation
+Supporting files for validation and guidance:
+- **`schemas/metabolomics_strategy_schema.json`** - Strategy validation
+- **`schemas/mapping_concepts_explained.md`** - Conceptual documentation
+- **Various `.md` files** - Implementation guides and references
 
 ## Structure of Entity Configuration Files
 
@@ -165,43 +177,113 @@ For datasets like HPA, QIN, and UKBB protein data, where UniProt Accession numbe
 
 This layered approach simplifies initial configuration while allowing for sophisticated enhancements to mapping recall. The `MappingExecutor` can be guided to use UniProt AC as the PSO, and specific `mapping_paths` can be defined to leverage the `UniProtMappingClient` for the secondary step.
 
-## Action Types Reference
+## Current Action Types (15+ Available)
 
-For information about the action types available in mapping strategies, see:
-- `/home/ubuntu/biomapper/docs/ACTION_TYPES_REFERENCE.md`
+Action types are the building blocks of all strategies. The system includes:
 
-Action types are the building blocks of mapping strategies, each corresponding to a method in the MappingExecutor. Understanding these action types is essential for creating new mapping strategies.
+### Core Actions
+- **`LOAD_DATASET_IDENTIFIERS`** - Load biological identifiers from TSV/CSV files
+- **`MERGE_WITH_UNIPROT_RESOLUTION`** - Map identifiers with historical UniProt resolution
+- **`CALCULATE_SET_OVERLAP`** - Calculate Jaccard similarity and generate overlap analysis
+- **`MERGE_DATASETS`** - Combine multiple datasets with deduplication
+- **`EXECUTE_MAPPING_PATH`** - Run predefined mapping workflows
 
-## Mapping Strategies Configuration
+### Metabolomics-Specific Actions
+- **`NIGHTINGALE_NMR_MATCH`** - Match metabolites using Nightingale NMR reference
+- **`CTS_ENRICHED_MATCH`** - Enhanced matching via Chemical Translation Service  
+- **`METABOLITE_API_ENRICHMENT`** - Enrich using external metabolite APIs
+- **`SEMANTIC_METABOLITE_MATCH`** - AI-powered semantic matching
+- **`VECTOR_ENHANCED_MATCH`** - Vector similarity-based matching
+- **`COMBINE_METABOLITE_MATCHES`** - Merge multiple matching approaches
+- **`CALCULATE_THREE_WAY_OVERLAP`** - Specialized 3-way dataset overlap analysis
 
-Mapping strategies are now centralized in `mapping_strategies_config.yaml`. This file contains:
+### Utility Actions
+- **`FILTER_DATASET`** - Apply filtering criteria to datasets
+- **`EXPORT_DATASET`** - Export results to various formats
+- **`GENERATE_METABOLOMICS_REPORT`** - Create comprehensive analysis reports
 
-### Generic Strategies
-Reusable strategies that work across entity types:
-- **DIRECT_SHARED_ONTOLOGY_MATCH**: Simple matching when endpoints share an ontology
-- **BRIDGE_VIA_COMMON_ID**: Use a common identifier as bridge between endpoints
-- **RESOLVE_AND_MATCH**: Handle deprecated/historical identifiers before matching
+**Full Documentation**: `/home/ubuntu/biomapper/docs/ACTION_TYPES_REFERENCE.md`
 
-### Entity-Specific Strategies
-Complex pipelines tailored to specific entity types:
-- **protein.UKBB_TO_HPA_PROTEIN_PIPELINE**: Maps UKBB assay IDs to HPA gene names
-- **protein.HANDLE_COMPOSITE_UNIPROT**: Processes composite UniProt IDs
-- **metabolite.PUBCHEM_TO_HMDB_VIA_INCHIKEY**: Maps using chemical structure keys
+## Current Strategy Implementations
 
-### Using the Separated Configuration
+The system includes several production-ready strategies:
 
-1. **Loading Order**: The `populate_metamapper_db.py` script processes entity configs first, then mapping strategies
-2. **Config Type Detection**: Files with `config_type: "mapping_strategies"` are handled differently
-3. **Backward Compatibility**: The system warns if strategies are found in entity configs but continues to work
+### Metabolomics Strategies
+- **`METABOLOMICS_PROGRESSIVE_ENHANCEMENT`** - 3-stage progressive enhancement pipeline
+  - Stage 1: Baseline fuzzy matching  
+  - Stage 2: API-enhanced matching (CTS, metabolite APIs)
+  - Stage 3: Vector similarity and semantic matching
+  - **Result**: Systematic improvement in match rates across 3 stages
 
-## Migration Guide
+- **`THREE_WAY_METABOLOMICS_COMPLETE`** - Complete 3-way dataset analysis
+  - Harmonizes Israeli10K, UKBB, and Arivale metabolomics datasets
+  - Uses advanced matching techniques and overlap analysis
+  - Generates comprehensive reporting
 
-If you have existing entity configs with mapping strategies:
+### Protein Strategies  
+- **`ARIVALE_TO_UKBB_PROTEIN_MAPPING`** - Reference protein mapping implementation
+  - Maps Arivale proteins to UK Biobank using UniProt resolution
+  - 4-step pipeline with historical identifier resolution
+  - Demonstrates best practices for protein harmonization
 
-1. **Move strategies** to `mapping_strategies_config.yaml` under appropriate sections
-2. **Update references** if any scripts directly reference strategy names
-3. **Test thoroughly** to ensure strategies still work correctly
-4. **Remove old sections** from entity configs once migration is verified
+## Using the Configuration System
+
+### Strategy Execution via API
+The system operates entirely through API-first architecture:
+
+1. **Client Scripts** - Simple API clients (e.g., `run_metabolomics_harmonization.py`)
+2. **API Service** - Loads strategies from `configs/` directory on startup  
+3. **Direct Execution** - BiomapperClient.execute_strategy() triggers YAML-defined workflows
+4. **Job Persistence** - Execution state stored in `biomapper-api/biomapper.db`
+
+### No Database Loading Required
+- **No intermediate steps** - YAML files loaded directly by `MinimalStrategyService`
+- **No populate scripts** - Strategies available immediately after API restart
+- **Dynamic loading** - Add new `.yaml` files to `configs/` and restart API
+
+### Execution Flow
+```
+Client Script → BiomapperClient → API → MinimalStrategyService → YAML Strategy → Action Sequence
+```
+
+## Quick Start Guide
+
+### Creating a New Strategy
+
+1. **Create YAML file** in `configs/strategies/`:
+   ```yaml
+   name: MY_NEW_STRATEGY
+   description: "Clear description of strategy purpose"
+   steps:
+     - name: load_data
+       action:
+         type: LOAD_DATASET_IDENTIFIERS
+         params:
+           file_path: /path/to/data.tsv
+           identifier_column: id_column  
+           output_key: loaded_identifiers
+   ```
+
+2. **Restart API service**:
+   ```bash
+   cd biomapper-api && poetry run uvicorn main:app --reload
+   ```
+
+3. **Execute via client**:
+   ```python
+   async with BiomapperClient() as client:
+       result = await client.execute_strategy(
+           strategy_name="MY_NEW_STRATEGY",
+           context={}
+       )
+   ```
+
+### Best Practices
+- **Start with existing strategies** as templates (e.g., `arivale_ukbb_mapping.yaml`)
+- **Use descriptive step names** and clear descriptions
+- **Test with small datasets** before full production runs
+- **Follow progressive enhancement patterns** for complex workflows
+- **Validate YAML syntax** before deployment
 
 ## Approaching New Mappings: A Systematic Workflow
 
@@ -342,24 +424,33 @@ entity_strategies:
 
 ### Phase 4: Implementation - Load and Test
 
-1. **Validate configuration**:
+1. **Create strategy YAML** in `configs/strategies/`:
    ```bash
-   python scripts/setup_and_configuration/validate_config_separation.py
+   # Follow patterns of existing strategies
+   # Use metabolomics_progressive_enhancement.yaml for complex workflows
+   # Use arivale_ukbb_mapping.yaml for simple mappings
    ```
 
-2. **Load into database**:
+2. **Restart API service** (strategies loaded on startup):
    ```bash
-   python scripts/setup_and_configuration/populate_metamapper_db.py --drop-all
+   cd biomapper-api && poetry run uvicorn main:app --reload
    ```
 
-3. **Test with small sample**:
-   - Use the notebook to test on a subset
-   - Verify each step produces expected results
-   - Check for data quality issues
+3. **Test via wrapper script or client**:
+   ```bash
+   # Via wrapper script
+   python scripts/main_pipelines/run_metabolomics_harmonization.py --strategy YOUR_STRATEGY_NAME --dry-run
+   
+   # Via BiomapperClient  
+   async with BiomapperClient() as client:
+       result = await client.execute_strategy("YOUR_STRATEGY_NAME", context)
+   ```
 
-4. **Run full pipeline**:
-   - Create a script following the pattern in `run_full_ukbb_hpa_mapping.py`
-   - Monitor performance and results
+4. **Monitor execution**:
+   - API logs show strategy loading and execution progress
+   - Step-by-step results available in response
+   - Output files created as specified in strategy
+   - Job state persisted in `biomapper-api/biomapper.db`
 
 ### Example: UKBB to HPA Protein Mapping
 

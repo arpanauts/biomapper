@@ -1,0 +1,313 @@
+# Metabolomics Progressive Enhancement Strategy
+# Three-stage approach: Baseline → API Enhancement → Vector Enhancement
+# Demonstrates measurable improvement at each stage
+
+name: METABOLOMICS_PROGRESSIVE_ENHANCEMENT
+description: |
+  Three-stage progressive enhancement for metabolomics harmonization.
+  Stage 1: Baseline fuzzy matching (45% expected)
+  Stage 2: CTS API enrichment (+15% improvement)
+  Stage 3: Vector search enhancement (+10% improvement)
+  Total expected improvement: 55% over baseline
+
+# Metadata for tracking and analysis
+metadata:
+  version: "1.0"
+  created_date: "2024-01-20"
+  author: "Biomapper Team"
+  tags:
+    - metabolomics
+    - progressive_enhancement
+    - nightingale_nmr
+    - cts_api
+    - vector_search
+  expected_outcomes:
+    baseline_match_rate: 0.45
+    api_enhanced_rate: 0.60
+    vector_enhanced_rate: 0.70
+
+# Configuration parameters
+parameters:
+  # File paths - using full paths from the harmonization plan
+  israeli10k_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_metabolomics_metadata.csv"
+  ukbb_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_NMR_Meta.tsv"
+  arivale_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/metabolomics_metadata.tsv"
+  
+  # Output paths
+  nightingale_reference_csv: "/home/ubuntu/biomapper/data/results/nightingale_reference.csv"
+  final_report_path: "/home/ubuntu/biomapper/data/results/metabolomics_enhancement_report.md"
+  
+  # CTS API configuration
+  cts_config:
+    rate_limit_per_second: 10
+    timeout_seconds: 30
+    retry_attempts: 3
+    cache_ttl_minutes: 60
+  
+  # Qdrant configuration
+  qdrant_config:
+    url: "localhost:6333"
+    collection: "hmdb_metabolites"
+    embedding_model: "BAAI/bge-small-en-v1.5"
+  
+  # Matching thresholds
+  nightingale_confidence_threshold: 0.85
+  baseline_fuzzy_threshold: 0.80
+  api_match_threshold: 0.80
+  vector_similarity_threshold: 0.75
+
+# Pipeline steps
+steps:
+  # ===== PHASE 1: Load All Datasets =====
+  - name: load_israeli10k
+    description: "Load Israeli10K metabolomics metadata"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.israeli10k_file}"
+        identifier_column: "tabular_field_name"
+        additional_columns:
+          - "nightingale_metabolomics_original_name"
+          - "description"
+        output_key: "israeli10k_data"
+    validation:
+      min_records: 100
+      required_columns:
+        - "tabular_field_name"
+        - "nightingale_metabolomics_original_name"
+
+  - name: load_ukbb
+    description: "Load UKBB NMR metadata"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.ukbb_file}"
+        identifier_column: "field_id"
+        additional_columns:
+          - "title"
+          - "category"
+        output_key: "ukbb_data"
+    validation:
+      min_records: 100
+      required_columns:
+        - "field_id"
+        - "title"
+
+  - name: load_arivale
+    description: "Load Arivale metabolomics metadata"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.arivale_file}"
+        identifier_column: "BIOCHEMICAL_NAME"
+        additional_columns:
+          - "HMDB"
+          - "KEGG"
+          - "PUBCHEM"
+          - "SUPER_PATHWAY"
+          - "SUB_PATHWAY"
+        output_key: "arivale_data"
+    validation:
+      min_records: 500
+      required_columns:
+        - "BIOCHEMICAL_NAME"
+
+  # ===== PHASE 2: Nightingale Platform Harmonization =====
+  - name: match_nightingale_platforms
+    description: "Match Israeli10K and UKBB using Nightingale NMR commonality"
+    action:
+      type: NIGHTINGALE_NMR_MATCH
+      params:
+        source_dataset_key: "israeli10k_data"
+        target_dataset_key: "ukbb_data"
+        source_nightingale_column: "nightingale_metabolomics_original_name"
+        target_title_column: "title"
+        match_strategy: "fuzzy"
+        confidence_threshold: "${parameters.nightingale_confidence_threshold}"
+        output_key: "nightingale_matches"
+        unmatched_source_key: "israeli10k_unmatched"
+        unmatched_target_key: "ukbb_unmatched"
+    expected:
+      min_match_rate: 0.80
+      avg_confidence: 0.90
+
+  - name: build_nightingale_reference
+    description: "Build unified Nightingale reference from matched pairs"
+    action:
+      type: BUILD_NIGHTINGALE_REFERENCE
+      params:
+        israeli10k_data: "israeli10k_data"
+        ukbb_data: "ukbb_data"
+        matched_pairs: "nightingale_matches"
+        output_key: "nightingale_reference"
+        export_csv: true
+        csv_path: "${parameters.nightingale_reference_csv}"
+        include_metadata: true
+    expected:
+      min_metabolites: 400
+
+  # ===== PHASE 3: Progressive Enhancement for Arivale =====
+  
+  ## Stage 1: Baseline Fuzzy Matching
+  - name: baseline_arivale_match
+    description: "Stage 1: Baseline fuzzy matching for Arivale metabolites"
+    action:
+      type: BASELINE_FUZZY_MATCH
+      params:
+        source_dataset_key: "arivale_data"
+        target_dataset_key: "nightingale_reference"
+        source_column: "BIOCHEMICAL_NAME"
+        target_column: "unified_name"
+        threshold: "${parameters.baseline_fuzzy_threshold}"
+        algorithm: "token_set_ratio"
+        output_key: "baseline_matches"
+        track_metrics: true
+        limit_per_source: 1
+    expected:
+      match_rate_range: [0.40, 0.50]
+      stage_name: "baseline"
+
+  ## Stage 2: CTS API Enhancement
+  - name: cts_enrichment
+    description: "Stage 2: CTS API enrichment for unmatched Arivale metabolites"
+    action:
+      type: CTS_ENRICHED_MATCH
+      params:
+        unmatched_dataset_key: "unmatched.baseline.arivale_data"
+        target_dataset_key: "nightingale_reference"
+        identifier_columns:
+          - "HMDB"
+          - "KEGG"
+          - "PUBCHEM"
+        target_column: "unified_name"
+        cts_timeout: "${parameters.cts_config.timeout_seconds}"
+        batch_size: 50
+        output_key: "api_enhanced_matches"
+        track_metrics: true
+        match_threshold: "${parameters.api_match_threshold}"
+        cts_config: "${parameters.cts_config}"
+    expected:
+      min_enrichment_rate: 0.60
+      additional_match_rate: 0.15
+      stage_name: "api_enriched"
+
+  ## Stage 3: Vector Search Enhancement
+  - name: vector_enhancement
+    description: "Stage 3: Vector search for remaining unmatched metabolites"
+    action:
+      type: VECTOR_ENHANCED_MATCH
+      params:
+        unmatched_dataset_key: "unmatched.api.arivale_data"
+        qdrant_url: "${parameters.qdrant_config.url}"
+        qdrant_collection: "${parameters.qdrant_config.collection}"
+        embedding_model: "${parameters.qdrant_config.embedding_model}"
+        similarity_threshold: "${parameters.vector_similarity_threshold}"
+        top_k: 5
+        output_key: "vector_enhanced_matches"
+        track_metrics: true
+        batch_size: 50
+    prerequisites:
+      - message: "Ensure Qdrant is running and HMDB data is indexed"
+        check_command: "curl -f http://localhost:6333/collections/hmdb_metabolites"
+    expected:
+      additional_match_rate: 0.10
+      avg_similarity: 0.80
+      stage_name: "vector_enhanced"
+
+  # ===== PHASE 4: Combine Results and Generate Report =====
+  # NOTE: MERGE_DATASETS action is not implemented yet
+  # For now, the individual match results will be used separately
+  # - name: combine_all_matches
+  #   description: "Combine matches from all three stages"
+  #   action:
+  #     type: MERGE_DATASETS
+  #     params:
+  #       dataset_keys:
+  #         - "baseline_matches"
+  #         - "api_enhanced_matches"
+  #         - "vector_enhanced_matches"
+  #       output_key: "all_arivale_matches"
+  #       merge_strategy: "union"
+  #       deduplicate: true
+  #       deduplicate_on: ["source.BIOCHEMICAL_NAME"]
+  #       keep: "highest_score"
+
+  # NOTE: CALCULATE_THREE_WAY_OVERLAP is not implemented yet
+  # Using CALCULATE_SET_OVERLAP for simpler pairwise comparison
+  - name: calculate_final_statistics
+    description: "Calculate overlap statistics between Nightingale reference and Arivale"
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        source_dataset_key: "arivale_data"
+        target_dataset_key: "nightingale_reference"
+        source_identifier_column: "BIOCHEMICAL_NAME"
+        target_identifier_column: "unified_name"
+        output_key: "overlap_statistics"
+
+  - name: generate_enhancement_report
+    description: "Generate comprehensive report showing progressive enhancement"
+    action:
+      type: GENERATE_ENHANCEMENT_REPORT
+      params:
+        metrics_keys:
+          - "metrics.baseline"
+          - "metrics.api_enriched"
+          - "metrics.vector_enhanced"
+        stage_names:
+          - "Baseline Fuzzy"
+          - "CTS API Enhanced"
+          - "Vector Enhanced"
+        output_path: "${parameters.final_report_path}"
+        include_visualizations: true
+        include_detailed_stats: true
+
+# Error handling configuration
+error_handling:
+  continue_on_error: false
+  log_errors: true
+  error_report_path: "/home/ubuntu/biomapper/data/results/metabolomics_errors.log"
+  
+  step_specific:
+    cts_enrichment:
+      retry_on_timeout: true
+      max_retries: 3
+      fallback_action: "skip_and_continue"
+    
+    vector_enhancement:
+      retry_on_connection_error: true
+      max_retries: 2
+      fallback_action: "skip_and_continue"
+
+# Validation rules
+validations:
+  post_execution:
+    - name: "minimum_match_improvement"
+      description: "Ensure progressive enhancement shows improvement"
+      rules:
+        - "metrics.api_enriched.match_rate > metrics.baseline.match_rate"
+        - "metrics.vector_enhanced.match_rate > metrics.api_enriched.match_rate"
+        - "(metrics.vector_enhanced.match_rate - metrics.baseline.match_rate) >= 0.20"
+    
+    - name: "data_quality"
+      description: "Ensure data quality throughout pipeline"
+      rules:
+        - "nightingale_reference.__count__ >= 400"
+        - "all_arivale_matches.__count__ >= 300"
+        - "three_way_statistics.total_unique_metabolites >= 1000"
+
+# Logging configuration
+logging:
+  level: "INFO"
+  include_timestamps: true
+  log_to_file: true
+  log_path: "/home/ubuntu/biomapper/data/logs/metabolomics_enhancement.log"
+  
+  step_logging:
+    enabled: true
+    include_params: true
+    include_results: true
+    
+  metric_logging:
+    enabled: true
+    log_interval: "after_each_stage"

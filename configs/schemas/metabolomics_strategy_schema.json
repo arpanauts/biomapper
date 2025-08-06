@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Metabolomics Strategy Configuration",
+  "type": "object",
+  "required": ["name", "description", "steps"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Z_]+$"
+    },
+    "description": {
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "version": {"type": "string"},
+        "created_date": {"type": "string", "format": "date"},
+        "expected_outcomes": {
+          "type": "object",
+          "properties": {
+            "baseline_match_rate": {"type": "number", "minimum": 0, "maximum": 1},
+            "api_enhanced_rate": {"type": "number", "minimum": 0, "maximum": 1},
+            "vector_enhanced_rate": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        }
+      }
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "action"],
+        "properties": {
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "action": {
+            "type": "object",
+            "required": ["type", "params"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "LOAD_DATASET_IDENTIFIERS",
+                  "NIGHTINGALE_NMR_MATCH",
+                  "BUILD_NIGHTINGALE_REFERENCE",
+                  "BASELINE_FUZZY_MATCH",
+                  "CTS_ENRICHED_MATCH",
+                  "VECTOR_ENHANCED_MATCH",
+                  "MERGE_DATASETS",
+                  "CALCULATE_THREE_WAY_OVERLAP",
+                  "GENERATE_REPORT"
+                ]
+              },
+              "params": {"type": "object"}
+            }
+          },
+          "validation": {"type": "object"},
+          "expected": {"type": "object"},
+          "prerequisites": {"type": "array"}
+        }
+      }
+    }
+  }
+}

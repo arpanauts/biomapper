@@ -1,0 +1,344 @@
+# Example: Advanced Metabolomics Harmonization with Control Flow
+# This strategy demonstrates all control flow features for metabolomics data harmonization
+
+name: ADVANCED_METABOLOMICS_HARMONIZATION
+description: "Harmonize metabolomics data across multiple platforms with intelligent fallbacks and quality control"
+version: "2.0"
+tags: ["metabolomics", "control-flow", "example"]
+
+# Strategy-level variables (constants)
+variables:
+  base_confidence: 0.95
+  min_acceptable_quality: 0.80
+  enable_expensive_operations: "${env.ENABLE_LLM:-false}"
+  max_retry_attempts: 3
+
+# Runtime parameters (can be overridden)
+parameters:
+  # Input files
+  israeli10k_file: "/data/metabolomics/israeli10k_metabolites.csv"
+  ukbb_file: "/data/metabolomics/ukbb_nmr_metabolites.csv"
+  arivale_file: "/data/metabolomics/arivale_metabolites.csv"
+  
+  # Configuration
+  output_dir: "/data/results/metabolomics"
+  enable_api_enrichment: true
+  parallel_workers: 3
+
+# Global error handling configuration
+error_handling:
+  default: retry
+  max_retries: 3
+  retry_delay: 5
+  continue_on_error: false
+  error_log_level: "error"
+
+# Checkpointing for recovery
+checkpointing:
+  enabled: true
+  strategy: after_critical_steps
+  storage: local
+  retention: "7d"
+  path: "/var/biomapper/checkpoints/metabolomics"
+
+# Execution mode
+execution:
+  mode: dag  # Use DAG for parallel execution where possible
+  timeout: 3600  # 1 hour timeout for entire strategy
+
+# Pre-execution checks
+pre_conditions:
+  - "${parameters.israeli10k_file} != null"
+  - "${parameters.ukbb_file} != null"
+  - "${parameters.arivale_file} != null"
+
+steps:
+  # ============================================
+  # PHASE 1: Load datasets in parallel
+  # ============================================
+  
+  - name: load_israeli10k
+    description: "Load Israeli 10K metabolomics data"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.israeli10k_file}"
+        identifier_column: "metabolite_name"
+        additional_columns: ["hmdb_id", "chebi_id", "pubchem_id"]
+    checkpoint: after
+    is_critical: true
+    on_error: stop  # Critical - must succeed
+    
+  - name: load_ukbb
+    description: "Load UK Biobank NMR metabolomics data"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.ukbb_file}"
+        identifier_column: "biomarker_name"
+        additional_columns: ["unit", "platform"]
+    checkpoint: after
+    is_critical: true
+    on_error: stop
+    
+  - name: load_arivale
+    description: "Load Arivale metabolomics data"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.arivale_file}"
+        identifier_column: "metabolite"
+        additional_columns: ["assay_type", "lod"]
+    checkpoint: after
+    is_critical: true
+    on_error: stop
+
+  # ============================================
+  # PHASE 2: Build reference and perform initial matching
+  # ============================================
+  
+  - name: build_nightingale_reference
+    description: "Build Nightingale NMR reference for standardization"
+    depends_on: [load_israeli10k, load_ukbb]
+    action:
+      type: BUILD_NIGHTINGALE_REFERENCE
+      params:
+        confidence_threshold: "${variables.base_confidence}"
+    set_variables:
+      reference_built: true
+      reference_size: "${steps.build_nightingale_reference.metrics.reference_count}"
+    
+  - name: nightingale_match_israeli
+    description: "Match Israeli 10K to Nightingale reference"
+    depends_on: [build_nightingale_reference]
+    condition: "${variables.reference_built} == true"
+    action:
+      type: NIGHTINGALE_NMR_MATCH
+      params:
+        dataset: "${steps.load_israeli10k.result}"
+        reference: "${steps.build_nightingale_reference.result}"
+        threshold: "${variables.base_confidence}"
+    on_error:
+      action: retry
+      max_attempts: 2
+      backoff: exponential
+      fallback:
+        action: continue
+        set_variable: "israeli_nightingale_failed=true"
+        
+  - name: nightingale_match_ukbb
+    description: "Match UK Biobank to Nightingale reference"
+    depends_on: [build_nightingale_reference]
+    condition: "${variables.reference_built} == true"
+    action:
+      type: NIGHTINGALE_NMR_MATCH
+      params:
+        dataset: "${steps.load_ukbb.result}"
+        reference: "${steps.build_nightingale_reference.result}"
+        threshold: "${variables.base_confidence}"
+    on_error:
+      action: retry
+      max_attempts: 2
+      backoff: exponential
+      fallback:
+        action: continue
+        set_variable: "ukbb_nightingale_failed=true"
+        
+  - name: nightingale_match_arivale
+    description: "Match Arivale to Nightingale reference"
+    depends_on: [build_nightingale_reference, load_arivale]
+    condition: "${variables.reference_built} == true"
+    action:
+      type: NIGHTINGALE_NMR_MATCH
+      params:
+        dataset: "${steps.load_arivale.result}"
+        reference: "${steps.build_nightingale_reference.result}"
+        threshold: "${variables.base_confidence}"
+    on_error:
+      action: retry
+      max_attempts: 2
+      backoff: exponential
+      fallback:
+        action: continue
+        set_variable: "arivale_nightingale_failed=true"
+
+  # ============================================
+  # PHASE 3: Fallback matching for unmatched metabolites
+  # ============================================
+  
+  - name: collect_unmatched
+    description: "Collect all unmatched metabolites"
+    depends_on: [nightingale_match_israeli, nightingale_match_ukbb, nightingale_match_arivale]
+    action:
+      type: COMBINE_METABOLITE_MATCHES
+      params:
+        mode: "unmatched_only"
+    set_variables:
+      unmatched_count: "${steps.collect_unmatched.metrics.total_unmatched}"
+      
+  - name: baseline_fuzzy_match
+    description: "Try baseline fuzzy matching for unmatched"
+    depends_on: [collect_unmatched]
+    condition: "${variables.unmatched_count} > 0"
+    action:
+      type: BASELINE_FUZZY_MATCH
+      params:
+        input: "${steps.collect_unmatched.result}"
+        threshold: "${variables.base_confidence} * 0.85"  # Lower threshold for fuzzy
+    set_variables:
+      fuzzy_matched: "${steps.baseline_fuzzy_match.metrics.matched_count}"
+      fuzzy_unmatched: "${steps.baseline_fuzzy_match.metrics.unmatched_count}"
+
+  # ============================================
+  # PHASE 4: API Enrichment (parallel for each database)
+  # ============================================
+  
+  - name: api_enrichment
+    description: "Enrich remaining unmatched via external APIs"
+    depends_on: [baseline_fuzzy_match]
+    condition:
+      type: all
+      all:
+        - "${parameters.enable_api_enrichment} == true"
+        - "${variables.fuzzy_unmatched:-0} > 0"
+    for_each:
+      items: ["hmdb", "pubchem", "chebi", "kegg"]
+      as_variable: database
+    parallel:
+      max_workers: "${parameters.parallel_workers}"
+      fail_fast: false  # Continue even if some APIs fail
+      timeout: 300  # 5 minutes per API
+    action:
+      type: METABOLITE_API_ENRICHMENT
+      params:
+        database: "${database}"
+        input: "${steps.baseline_fuzzy_match.outputs.unmatched}"
+        batch_size: 50
+    on_error:
+      action: continue
+      message: "API enrichment failed for ${database}, continuing without it"
+    set_variables:
+      "api_${foreach.item}_success": "${steps.api_enrichment.success:-false}"
+
+  # ============================================
+  # PHASE 5: Semantic matching with LLM (if enabled)
+  # ============================================
+  
+  - name: semantic_match
+    description: "Use LLM for semantic metabolite matching"
+    depends_on: [api_enrichment]
+    condition:
+      type: all
+      all:
+        - "${variables.enable_expensive_operations} == true"
+        - "${env.OPENAI_API_KEY} != null"
+        - "${steps.api_enrichment.outputs.unmatched_count:-0} > 0"
+    action:
+      type: SEMANTIC_METABOLITE_MATCH
+      params:
+        model: "gpt-4"
+        input: "${steps.api_enrichment.outputs.unmatched}"
+        batch_size: 10
+        temperature: 0.1
+    timeout: 600  # 10 minutes timeout
+    on_error:
+      action: skip
+      message: "Semantic matching failed or timed out, proceeding without it"
+
+  # ============================================
+  # PHASE 6: Quality improvement loop
+  # ============================================
+  
+  - name: quality_check
+    description: "Check overall matching quality"
+    depends_on: [semantic_match, api_enrichment, baseline_fuzzy_match]
+    action:
+      type: CALCULATE_MAPPING_QUALITY
+      params:
+        include_confidence_scores: true
+    set_variables:
+      current_quality: "${steps.quality_check.metrics.overall_quality}"
+      
+  - name: iterative_refinement
+    description: "Iteratively refine matches to improve quality"
+    depends_on: [quality_check]
+    condition: "${variables.current_quality} < ${variables.min_acceptable_quality}"
+    repeat:
+      max_iterations: 3
+      while_condition: |
+        ${steps.iterative_refinement.metrics.quality_score:-variables.current_quality} < 
+        ${variables.min_acceptable_quality}
+    action:
+      type: REFINE_METABOLITE_MATCHES
+      params:
+        iteration: "${repeat.iteration}"
+        aggressive_mode: "${repeat.iteration} > 1"  # More aggressive after first iteration
+    set_variables:
+      refinement_iterations: "${repeat.iteration}"
+      final_quality: "${steps.iterative_refinement.metrics.quality_score}"
+
+  # ============================================
+  # PHASE 7: Final overlap calculation and reporting
+  # ============================================
+  
+  - name: calculate_final_overlap
+    description: "Calculate three-way overlap with all improvements"
+    depends_on: [iterative_refinement, quality_check]
+    action:
+      type: CALCULATE_THREE_WAY_OVERLAP
+      params:
+        dataset1_name: "Israeli10K"
+        dataset2_name: "UKBB"
+        dataset3_name: "Arivale"
+        method: "jaccard"
+        include_partial_matches: true
+    checkpoint: after
+    is_critical: true
+    
+  - name: generate_report
+    description: "Generate comprehensive harmonization report"
+    depends_on: [calculate_final_overlap]
+    action:
+      type: GENERATE_METABOLOMICS_REPORT
+      params:
+        output_dir: "${parameters.output_dir}"
+        include_metrics: true
+        include_visualizations: true
+        format: "html"  # HTML report with interactive visualizations
+    
+  - name: export_results
+    description: "Export harmonized datasets"
+    depends_on: [calculate_final_overlap]
+    for_each:
+      items: ["csv", "parquet", "json"]
+      as_variable: format
+    action:
+      type: EXPORT_DATASET
+      params:
+        format: "${format}"
+        output_path: "${parameters.output_dir}/harmonized_metabolomics.${format}"
+        include_metadata: true
+
+# Always execute these steps, even if main execution fails
+finally:
+  - name: save_execution_summary
+    description: "Save execution summary regardless of success/failure"
+    action:
+      type: SAVE_EXECUTION_SUMMARY
+      params:
+        output_path: "${parameters.output_dir}/execution_summary.json"
+        include_metrics: true
+        include_errors: true
+        
+  - name: cleanup_temp_files
+    description: "Clean up temporary files"
+    condition: "${env.KEEP_TEMP_FILES:-false} == false"
+    action:
+      type: CLEANUP_TEMP_FILES
+      params:
+        pattern: "/tmp/biomapper_*"
+
+# Post-execution validations
+post_conditions:
+  - "${steps.calculate_final_overlap.metrics.total_overlapping} > 0"
+  - "${steps.generate_report.success} == true"

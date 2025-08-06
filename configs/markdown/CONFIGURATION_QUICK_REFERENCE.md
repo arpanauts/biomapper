@@ -1,5 +1,7 @@
 # Biomapper Configuration Quick Reference
 
+**Note**: This documentation reflects the current implementation (2025-08-04) where strategies are loaded directly from YAML files at API startup. References to database loading are from a previous architecture.
+
 ## File Organization
 
 ```
@@ -92,10 +94,12 @@ entity_strategies:                  # Entity-specific strategies
 | FILTER_IDENTIFIERS_BY_TARGET_PRESENCE | Keep only IDs in target | endpoint_context, ontology_type_to_match |
 | MATCH_SHARED_ONTOLOGY | Direct matching | shared_ontology_type |
 
-## Loading Order
+## Loading Process
 
-1. Entity configs (alphabetically) → Creates ontologies, endpoints, paths
-2. Strategies config → Creates strategies using existing components
+1. API starts up and initializes `MinimalStrategyService`
+2. Service scans `configs/` directory for all `*.yaml` files
+3. Each YAML file is loaded into memory
+4. Strategies are available for execution via API endpoints
 
 ## Migration Checklist
 
@@ -103,7 +107,7 @@ entity_strategies:                  # Entity-specific strategies
 - [ ] Categorize as generic or entity-specific
 - [ ] Update any direct strategy references in code
 - [ ] Run validation: `python validate_config_separation.py`
-- [ ] Reload database: `python populate_metamapper_db.py --drop-all`
+- [ ] Restart API to reload strategies: `cd biomapper-api && poetry run uvicorn main:app --reload`
 - [ ] Remove old `mapping_strategies` sections from entity configs
 
 ## Key Commands
@@ -112,8 +116,8 @@ entity_strategies:                  # Entity-specific strategies
 # Validate configuration separation
 python scripts/setup_and_configuration/validate_config_separation.py
 
-# Reload database with new configs
-python scripts/setup_and_configuration/populate_metamapper_db.py --drop-all
+# Restart API to load new strategies
+cd biomapper-api && poetry run uvicorn main:app --reload
 
 # Check for strategies in entity configs
 grep -l "mapping_strategies:" configs/*_config.yaml
