@@ -16,6 +16,7 @@ from sqlalchemy import (
     Index,
     Integer,
     JSON,
+    Sequence,
     String,
     Text,
 )
@@ -172,7 +173,8 @@ class ExecutionLog(Base):
     
     __tablename__ = "execution_logs"
     
-    id = Column(BigInteger, primary_key=True, autoincrement=True, nullable=False)
+    # SQLite requires Integer (not BigInteger) for autoincrement to work properly
+    id = Column(Integer, primary_key=True, autoincrement=True)
     job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
     step_index = Column(Integer, nullable=True)
     
@@ -238,7 +240,8 @@ class JobEvent(Base):
     
     __tablename__ = "job_events"
     
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    # SQLite requires Integer (not BigInteger) for autoincrement to work properly
+    id = Column(Integer, primary_key=True, autoincrement=True)
     job_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     
     # Event details

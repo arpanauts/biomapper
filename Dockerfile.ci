@@ -1,0 +1,48 @@
+# CI Testing Environment - Replicates GitHub Actions
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    build-essential \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 -
+
+# Add Poetry to PATH
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Set working directory
+WORKDIR /app
+
+# Copy project files
+COPY pyproject.toml poetry.lock ./
+COPY README.md ./
+COPY biomapper ./biomapper
+COPY biomapper-api ./biomapper-api
+COPY biomapper_client ./biomapper_client
+COPY tests ./tests
+COPY configs ./configs
+COPY conftest.py ./
+COPY CLAUDE.md ./
+
+# Install dependencies for main project
+RUN poetry config virtualenvs.create false && \
+    poetry install --no-interaction --no-root
+
+# Install dependencies for biomapper-api
+WORKDIR /app/biomapper-api
+RUN poetry install --no-interaction --no-root
+
+# Back to main directory
+WORKDIR /app
+
+# Set environment variables to match CI
+ENV LANGFUSE_ENABLED=false
+ENV PYTHONPATH=/app:/app/biomapper-api:$PYTHONPATH
+
+# Default command - run tests
+CMD ["poetry", "run", "pytest", "-v"]

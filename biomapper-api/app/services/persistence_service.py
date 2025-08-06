@@ -574,21 +574,20 @@ class PersistenceService:
         component: Optional[str] = None
     ):
         """Add execution log entry."""
-        # Create log entry without setting id field
-        log_dict = {
-            "job_id": job_id,
-            "step_index": step_index,
-            "log_level": level,
-            "message": message,
-            "details": details,  # SQLAlchemy JSON type handles dict/None correctly
-            "category": category,
-            "component": component,
-            "created_at": datetime.utcnow()
-        }
+        # For SQLite compatibility, create the object without id and let DB handle it
+        log = ExecutionLog(
+            job_id=job_id,
+            step_index=step_index,
+            log_level=level,
+            message=message,
+            details=details,
+            category=category,
+            component=component,
+            created_at=datetime.utcnow()
+        )
+        # Don't set id - let the database auto-generate it
         
-        # Use a raw insert to ensure id field isn't included
-        stmt = ExecutionLog.__table__.insert().values(**log_dict)
-        await self.db.execute(stmt)
+        self.db.add(log)
         await self.db.commit()  # Commit immediately for logs
         
     async def get_logs(
@@ -622,19 +621,18 @@ class PersistenceService:
         severity: str = "info"
     ):
         """Emit a job event for real-time monitoring."""
-        # Create event without setting id field
-        event_dict = {
-            "job_id": job_id,
-            "event_type": event_type,
-            "data": data,
-            "message": message,
-            "severity": severity,
-            "timestamp": datetime.utcnow()
-        }
+        # For SQLite compatibility, create the object without id and let DB handle it
+        event = JobEvent(
+            job_id=job_id,
+            event_type=event_type,
+            data=data,
+            message=message,
+            severity=severity,
+            timestamp=datetime.utcnow()
+        )
+        # Don't set id - let the database auto-generate it
         
-        # Use raw insert to ensure id field isn't included
-        stmt = JobEvent.__table__.insert().values(**event_dict)
-        await self.db.execute(stmt)
+        self.db.add(event)
         await self.db.commit()  # Commit immediately for real-time delivery
         
     async def get_events(

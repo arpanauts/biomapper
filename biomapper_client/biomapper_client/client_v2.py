@@ -199,18 +199,33 @@ class BiomapperClient:
         # Prepare request
         request = self._prepare_strategy_request(strategy, parameters, context, options)
 
-        # Determine endpoint
+        # Determine endpoint - use v2 endpoint for modern strategies
         if isinstance(strategy, str) and not Path(strategy).exists():
-            # Strategy name
-            endpoint = f"/api/strategies/{strategy}/execute"
+            # Strategy name - use v2 endpoint which handles modern YAML strategies
+            endpoint = "/api/strategies/v2/execute"
         else:
-            # Strategy YAML (dict or file)
-            endpoint = "/api/strategies/execute"
+            # Strategy YAML (dict or file) - also use v2 endpoint
+            endpoint = "/api/strategies/v2/execute"
 
         # Execute request
         client = self._get_client()
         try:
-            response = await client.post(endpoint, json=request.dict())
+            # Convert request to v2 API format
+            request_dict = request.dict()
+            
+            # For v2 API, map fields correctly
+            if endpoint.endswith("/v2/execute"):
+                v2_request = {
+                    "strategy": request_dict.get("strategy_name") or request_dict.get("strategy_yaml"),
+                    "parameters": request_dict.get("parameters", {}),
+                    "options": request_dict.get("options", {})
+                }
+                # Remove context field for v2 API (not needed)
+                response = await client.post(endpoint, json=v2_request)
+            else:
+                # Use original format for old API
+                response = await client.post(endpoint, json=request_dict)
+                
             response.raise_for_status()
             data = response.json()
 
@@ -655,7 +670,7 @@ class BiomapperClient:
                 request.options = options
             return request
 
-        # Handle strategy input
+        # Handle strategy input - prepare for v2 API format
         if isinstance(strategy, Path):
             # Load YAML file
             with open(strategy) as f:
@@ -665,22 +680,25 @@ class BiomapperClient:
                     strategy_dict = yaml.safe_load(f)
                 else:
                     strategy_dict = json.load(f)
+            # For v2 API, pass dict as 'strategy' field (handled in dict conversion)
             return StrategyExecutionRequest(
-                strategy_yaml=strategy_dict,
+                strategy_yaml=strategy_dict,  # Will be mapped to 'strategy' in dict()
                 parameters=parameters or {},
                 options=options or ExecutionOptions(),
                 context=context or {},
             )
         elif isinstance(strategy, dict):
+            # For v2 API, pass dict as 'strategy' field (handled in dict conversion)
             return StrategyExecutionRequest(
-                strategy_yaml=strategy,
+                strategy_yaml=strategy,  # Will be mapped to 'strategy' in dict()
                 parameters=parameters or {},
                 options=options or ExecutionOptions(),
                 context=context or {},
             )
         else:
+            # For v2 API, pass name as 'strategy' field (handled in dict conversion)
             return StrategyExecutionRequest(
-                strategy_name=strategy,
+                strategy_name=strategy,  # Will be mapped to 'strategy' in dict()
                 parameters=parameters or {},
                 options=options or ExecutionOptions(),
                 context=context or {},
