@@ -1,13 +1,17 @@
 import logging
+import asyncio
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import files, mapping, health, strategies, endpoints
+from app.api.routes import files, mapping, health, strategies, endpoints, resources, jobs
 from app.core.config import settings
+from app.core.database import init_db, close_db
 from app.core.logging_config import configure_logging
 from app.services.mapper_service import MapperService
+from app.services.resource_manager import ResourceManager
+from app.config.resources import RESOURCE_CONFIGURATION
 
 # Configure logging before creating the FastAPI app
 configure_logging()
@@ -15,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    description="API for Biomapper Web UI",
-    version="0.1.0",
+    description="API for Biomapper Web UI with Resource Management",
+    version="0.2.0",
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
 )
@@ -36,19 +40,69 @@ app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(mapping.router, prefix="/api/mapping", tags=["mapping"])
 app.include_router(strategies.router)
 app.include_router(endpoints.router, prefix="/api/endpoints", tags=["endpoints"])
+app.include_router(resources.router, prefix="/api", tags=["resources"])
+app.include_router(jobs.router, tags=["jobs"])
 
 
 
 @app.on_event("startup")
 async def startup_event():
-    """Initializes the mapper service on application startup."""
+    """Initializes services on application startup."""
     logger.info("API starting up...")
+    
+    # Initialize database
+    try:
+        await init_db()
+        logger.info("Database initialized successfully.")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}", exc_info=True)
+        # Don't raise - allow API to start even if database fails
+    
+    # Initialize mapper service
     try:
         app.state.mapper_service = MapperService()
         logger.info("MapperService initialized successfully.")
     except Exception as e:
         logger.critical(f"Failed to initialize MapperService during startup: {e}", exc_info=True)
         raise
+    
+    # Initialize resource manager
+    try:
+        app.state.resource_manager = ResourceManager(RESOURCE_CONFIGURATION)
+        await app.state.resource_manager.initialize()
+        logger.info("ResourceManager initialized successfully.")
+        
+        # Log resource status
+        resources = await app.state.resource_manager.get_resource_status()
+        logger.info(f"Resource status: {len(resources)} resources registered")
+        for name, resource in resources.items():
+            logger.info(f"  - {name}: {resource.status.value}")
+            
+    except Exception as e:
+        logger.error(f"Failed to initialize ResourceManager: {e}", exc_info=True)
+        # Don't raise - allow API to start even if resource manager fails
+        app.state.resource_manager = None
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on application shutdown."""
+    logger.info("API shutting down...")
+    
+    # Cleanup database
+    try:
+        await close_db()
+        logger.info("Database connections closed successfully.")
+    except Exception as e:
+        logger.error(f"Error closing database connections: {e}", exc_info=True)
+    
+    # Cleanup resource manager
+    if hasattr(app.state, 'resource_manager') and app.state.resource_manager:
+        try:
+            await app.state.resource_manager.cleanup()
+            logger.info("ResourceManager cleaned up successfully.")
+        except Exception as e:
+            logger.error(f"Error cleaning up ResourceManager: {e}", exc_info=True)
 
 
 # Global exception handler
