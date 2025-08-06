@@ -4,8 +4,7 @@ from biomapper.core.strategy_actions.baseline_fuzzy_match import (
     BaselineFuzzyMatchAction,
     BaselineFuzzyMatchParams,
     FuzzyAlgorithm,
-    MatchMetrics,
-    BaselineFuzzyMatchResult
+    MatchMetrics
 )
 
 class TestBaselineFuzzyMatch:

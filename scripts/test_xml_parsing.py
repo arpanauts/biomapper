@@ -5,8 +5,13 @@ import xml.etree.ElementTree as ET
 import time
 import sys
 from pathlib import Path
+import pytest
 
 xml_path = Path("/home/ubuntu/biomapper/data/hmdb_metabolites.xml")
+
+# Skip test if XML file doesn't exist
+if not xml_path.exists():
+    pytest.skip(f"XML file not found: {xml_path}", allow_module_level=True)
 
 print("Testing XML parsing...")
 print(f"File size: {xml_path.stat().st_size / 1024 / 1024 / 1024:.1f} GB")

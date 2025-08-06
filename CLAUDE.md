@@ -33,7 +33,7 @@ poetry run ruff format .  # Format code
 poetry run mypy biomapper biomapper-api biomapper_client
 
 # Run API server
-cd biomapper-api && poetry run uvicorn main:app --reload
+cd biomapper-api && poetry run uvicorn app.main:app --reload
 
 # Database migrations
 poetry run alembic upgrade head  # Apply migrations
@@ -60,38 +60,57 @@ make clean          # Clean all cache files
 
 ## Architecture Overview
 
-Biomapper is a modular biological data harmonization toolkit with three main components:
+Biomapper is a modular biological data harmonization toolkit built around an extensible action system and YAML-based strategy configuration.
+
+### System Architecture Flow
+```
+Client Request → FastAPI Server → MapperService → MinimalStrategyService
+                                                   ↓
+                                  ACTION_REGISTRY (Global Dict)
+                                                   ↓
+                            Individual Action Classes (self-registered)
+                                                   ↓
+                                  Execution Context (Dict[str, Any])
+```
+
+### Three Main Components
 
 1. **biomapper/** - Core library with mapping logic and orchestration
+   - Self-registering action system using `@register_action` decorator
+   - `MinimalStrategyService` for lightweight strategy execution
+   - Pydantic models for type safety and validation
+
 2. **biomapper-api/** - FastAPI service exposing REST endpoints
+   - Direct YAML loading from `configs/` directory at runtime
+   - Job persistence in SQLite (`biomapper.db`)
+   - Background job execution with checkpointing
+
 3. **biomapper_client/** - Python client for the API
+   - Clean interface for strategy execution
+   - No direct imports from core library
+   - Used by all wrapper scripts
 
-### Core Components
+### Core Architecture Components
 
-- **core/**: Main executor, handlers, and strategy actions
-  - `Executor`: Orchestrates mapping strategies
-  - `ActionHandler`: Processes individual mapping actions
-  - `ExecutionSet`: Manages execution state and checkpointing
+- **ACTION_REGISTRY**: Global dictionary mapping action names to classes
+  - Actions self-register via `@register_action("ACTION_NAME")` decorator
+  - Located in `biomapper/core/strategy_actions/registry.py`
+  - Loaded dynamically by `MinimalStrategyService`
 
-- **mapping/**: Various biological database clients
-  - Each client inherits from `BaseMappingClient`
-  - Implements entity-specific mapping logic (proteins, genes, metabolites)
-  - Examples: UniProtClient, OBOTermClient, EnsemblClient
+- **Execution Context**: Simple dictionary flowing through action pipeline
+  - Contains: `current_identifiers`, `datasets`, `statistics`, `output_files`
+  - Each action reads from and modifies this shared state
+  - Enables actions to build upon previous results
 
-- **rag/**: Retrieval Augmented Generation components
-  - `QueryEngine`: Semantic search over biological data
-  - Vector store implementations (ChromaDB, Qdrant, FAISS)
-  - Document preprocessing and chunking
+- **Strategy Actions**: Self-contained processing units in `biomapper/core/strategy_actions/`
+  - Inherit from `TypedStrategyAction` for type safety
+  - Use Pydantic models for parameters and results
+  - Register themselves automatically when imported
 
-- **llm/**: LLM integration for intelligent mapping
-  - OpenAI and Anthropic client wrappers
-  - Prompt templates for biological entity mapping
-  - Response parsing and validation
-
-- **db/**: Database models and session management
-  - SQLAlchemy async models
-  - Alembic migrations in `alembic/`
-  - Session management patterns
+- **YAML Strategies**: Configuration files in `configs/strategies/`
+  - Define workflows as sequences of actions
+  - Support variable substitution (e.g., `${DATA_DIR}`)
+  - Loaded directly by API at runtime without database intermediary
 
 ## Development Guidelines
 
@@ -103,63 +122,63 @@ Biomapper is a modular biological data harmonization toolkit with three main com
 4. **Async/Await**: Use async patterns for I/O operations
 5. **Configuration**: Use Pydantic models for all configuration
 
-### Testing Patterns
+### Testing Requirements
 
 - Minimum 80% test coverage required
 - Use pytest fixtures for common test data
 - Mock external services in unit tests
 - Integration tests should use test databases/APIs
-- Follow Test-Driven Development (TDD) for new features and refactoring
+- Follow Test-Driven Development (TDD) for new features
 - Write failing tests first, then implement minimal code to pass
 
-### Test-Driven Development (TDD) Workflow
+### Creating a New Strategy Action
 
-When adding new features or refactoring (especially for type safety):
+1. **Write failing tests first** (TDD approach)
+2. Create action class in `biomapper/core/strategy_actions/`
+3. Inherit from `TypedStrategyAction` for type safety
+4. Define Pydantic models for parameters and results:
+   ```python
+   from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
+   from biomapper.core.strategy_actions.registry import register_action
+   from pydantic import BaseModel
+   
+   class MyActionParams(BaseModel):
+       required_field: str
+       optional_field: int = 100
+   
+   @register_action("MY_ACTION")
+   class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
+       def get_params_model(self) -> type[MyActionParams]:
+           return MyActionParams
+       
+       async def execute_typed(self, params: MyActionParams, context: Dict) -> ActionResult:
+           # Type-safe implementation
+           pass
+   ```
+5. Action will auto-register via decorator - no need to modify executor
+6. Add comprehensive unit tests in `tests/unit/core/strategy_actions/`
+7. Update documentation if needed
 
-1. **Red Phase**: Write failing tests that define the desired behavior
-2. **Green Phase**: Implement minimal code to make tests pass
-3. **Refactor Phase**: Improve code quality while keeping tests green
+### Creating a New YAML Strategy
 
-Example TDD cycle for adding Pydantic models:
-```python
-# 1. RED: Write failing test
-def test_action_params_validation():
-    params = ExecuteMappingPathParams(path_name="test")
-    assert params.path_name == "test"
-    
-    with pytest.raises(ValidationError):
-        ExecuteMappingPathParams()  # Missing required field
-
-# 2. GREEN: Implement model
-class ExecuteMappingPathParams(BaseModel):
-    path_name: str = Field(..., min_length=1)
-
-# 3. REFACTOR: Add more validation, docs, etc.
-```
-
-### Common Development Tasks
-
-**Adding a New Mapping Client:**
-1. Create new file in `biomapper/mapping/clients/`
-2. Inherit from `BaseMappingClient`
-3. Implement required methods: `map_entity()`, `validate_input()`
-4. Add unit tests in `tests/unit/mapping/clients/`
-5. Update strategy configuration schema if needed
-
-**Creating a New Strategy Action:**
-1. Write failing tests for the new action (TDD approach)
-2. Add action class in `biomapper/core/strategy_actions/`
-3. Inherit from `BaseStrategyAction` (or `TypedStrategyAction` for new actions)
-4. Define Pydantic models for parameters and results
-5. Implement `execute()` method with type safety
-6. Use `@register_action("ACTION_NAME")` decorator for auto-registration
-7. Add action to strategy validation registry
-8. Update documentation
-
-**Working with Configurations:**
-- Strategy configs go in `configs/strategies/`
-- Client configs go in `configs/clients/`
-- All configs use YAML format with Pydantic validation
+1. Create YAML file in `configs/strategies/`:
+   ```yaml
+   name: MY_NEW_STRATEGY
+   description: Clear description of what this strategy accomplishes
+   parameters:
+     data_file: "/path/to/data.tsv"
+     output_dir: "/path/to/output"
+   steps:
+     - name: load_data
+       action:
+         type: LOAD_DATASET_IDENTIFIERS
+         params:
+           file_path: "${parameters.data_file}"
+           identifier_column: id_column
+           output_key: loaded_data
+   ```
+2. API will auto-load on next request (no restart needed)
+3. Test via BiomapperClient: `client.execute_strategy("MY_NEW_STRATEGY")`
 
 ### API Development
 
@@ -170,73 +189,51 @@ When working on biomapper-api:
 - Use Pydantic models for request/response validation
 - Follow RESTful conventions
 
-### Database Guidelines
+## Key Action Types
 
-- Always use async SQLAlchemy sessions
-- Create Alembic migrations for schema changes
-- Use proper transaction management
-- Index frequently queried fields
-- Follow naming conventions: snake_case for tables/columns
+The biomapper orchestration system supports these core actions (auto-registered):
 
-## Type Safety and Pydantic Integration
+**Data Operations:**
+- `LOAD_DATASET_IDENTIFIERS`: Load biological identifiers from TSV/CSV files
+- `MERGE_DATASETS`: Combine multiple datasets with deduplication
+- `FILTER_DATASET`: Apply filtering criteria to datasets
+- `EXPORT_DATASET`: Export results to various formats
 
-### Current Type Safety Initiative
+**Mapping Operations:**
+- `MERGE_WITH_UNIPROT_RESOLUTION`: Map identifiers to UniProt accessions
+- `EXECUTE_MAPPING_PATH`: Run predefined mapping workflows
+- `CALCULATE_SET_OVERLAP`: Calculate Jaccard similarity between datasets
+- `CALCULATE_THREE_WAY_OVERLAP`: Specialized 3-way dataset analysis
 
-Biomapper is transitioning to full type safety using Pydantic models:
+**Metabolomics-Specific:**
+- `NIGHTINGALE_NMR_MATCH`: Match using Nightingale NMR reference
+- `CTS_ENRICHED_MATCH`: Enhanced matching via Chemical Translation Service
+- `METABOLITE_API_ENRICHMENT`: Enrich using external metabolite APIs
+- `SEMANTIC_METABOLITE_MATCH`: AI-powered semantic matching
+- `VECTOR_ENHANCED_MATCH`: Vector similarity-based matching
+- `COMBINE_METABOLITE_MATCHES`: Merge multiple matching approaches
+- `GENERATE_METABOLOMICS_REPORT`: Create comprehensive analysis reports
 
-1. **Strategy Actions**: Moving from `Dict[str, Any]` to typed Pydantic models
-2. **Execution Context**: Replacing untyped context dictionaries with `StrategyExecutionContext`
-3. **YAML Validation**: Strategy configurations validated at load time
-4. **Backward Compatibility**: Maintaining dict interfaces during migration
-
-### Implementing Type-Safe Actions
-
-**For new actions:**
-```python
-from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
-from biomapper.core.models import ActionParams, ActionResult
-
-class MyActionParams(BaseModel):
-    required_field: str
-    optional_field: int = 100
-
-@register_action("MY_ACTION")
-class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
-    def get_params_model(self) -> type[MyActionParams]:
-        return MyActionParams
-    
-    async def execute_typed(self, params: MyActionParams, ...) -> ActionResult:
-        # Type-safe implementation
-        pass
-```
-
-**For migrating existing actions:**
-1. Create Pydantic models for params and results
-2. Add `execute_typed()` method alongside existing `execute()`
-3. Implement compatibility wrapper in base class
-4. Gradually deprecate dict-based interface
+See strategy configuration examples in `configs/strategies/` for usage patterns.
 
 ## Important Notes
 
-- ALWAYS USE POETRY ENVIRONMENT - Never use pip directly
-- Configuration files in `configs/` are version-controlled examples
-- Environment-specific settings use `.env` files (not committed)
-- The project uses strict MyPy settings - resolve all type errors
-- ChromaDB requires specific system dependencies on some platforms
-- Integration tests may require external services (document in PR)
-- Follow TDD approach for all new features and refactoring
-- Maintain backward compatibility during type safety migration
+- **ALWAYS USE POETRY ENVIRONMENT** - Never use pip directly
+- **Action Registration** - Actions self-register via `@register_action` decorator
+- **No Database Loading** - Strategies load directly from YAML files at runtime
+- **Configuration files** in `configs/` are version-controlled examples
+- **Environment-specific settings** use `.env` files (not committed)
+- **The project uses strict MyPy settings** - resolve all type errors
+- **ChromaDB** requires specific system dependencies on some platforms
+- **Integration tests** may require external services (document in PR)
+- **Follow TDD approach** for all new features and refactoring
+- **Maintain backward compatibility** during type safety migration
 
-## Key Action Types
+## Current Architecture State (August 2025)
 
-The biomapper orchestration system supports these core actions:
-
-- **LOAD_DATASET_IDENTIFIERS**: Load biological identifiers from TSV/CSV files
-- **MERGE_WITH_UNIPROT_RESOLUTION**: Map identifiers to UniProt accessions
-- **CALCULATE_SET_OVERLAP**: Calculate Jaccard similarity between datasets
-- **MERGE_DATASETS**: Combine multiple datasets with deduplication
-- **EXECUTE_MAPPING_PATH**: Run predefined mapping workflows
-- **FILTER_DATASET**: Apply filtering criteria to datasets
-- **EXPORT_DATASET**: Export results to various formats
-
-See strategy configuration examples in `configs/strategies/` for usage patterns.
+- **Simplified Execution**: `MinimalStrategyService` provides lightweight strategy execution
+- **Direct YAML Loading**: No database intermediary, strategies loaded from `configs/` at runtime
+- **Self-Registering Actions**: Actions register themselves via decorator pattern
+- **API-First Architecture**: All scripts use `BiomapperClient`, no direct core imports
+- **Type Safety Migration**: Moving from `Dict[str, Any]` to typed Pydantic models
+- **Job Persistence**: SQLite database (`biomapper.db`) for execution state and checkpoints

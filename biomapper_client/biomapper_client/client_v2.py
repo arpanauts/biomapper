@@ -209,29 +209,29 @@ class BiomapperClient:
 
         # Execute request
         client = self._get_client()
-            try:
-                response = await client.post(endpoint, json=request.dict())
-                response.raise_for_status()
-                data = response.json()
+        try:
+            response = await client.post(endpoint, json=request.dict())
+            response.raise_for_status()
+            data = response.json()
 
-                # Convert to Job object
-                return Job(
-                    id=data["job_id"],
-                    status=JobStatusEnum.RUNNING,
-                    strategy_name=request.strategy_name or "custom",
-                    created_at=data.get("created_at", ""),
-                    updated_at=data.get("updated_at", ""),
-                )
+            # Convert to Job object
+            return Job(
+                id=data["job_id"],
+                status=JobStatusEnum.RUNNING,
+                strategy_name=request.strategy_name or "custom",
+                created_at=data.get("created_at", ""),
+                updated_at=data.get("updated_at", ""),
+            )
 
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    raise StrategyNotFoundError(f"Strategy not found: {strategy}")
-                elif e.response.status_code == 400:
-                    raise ValidationError(f"Invalid strategy: {e.response.text}")
-                else:
-                    raise ApiError(e.response.status_code, e.response.text)
-            except httpx.RequestError as e:
-                raise NetworkError(f"Network error: {e}")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                raise StrategyNotFoundError(f"Strategy not found: {strategy}")
+            elif e.response.status_code == 400:
+                raise ValidationError(f"Invalid strategy: {e.response.text}")
+            else:
+                raise ApiError(e.response.status_code, e.response.text)
+        except httpx.RequestError as e:
+            raise NetworkError(f"Network error: {e}")
 
     async def wait_for_job(
         self,

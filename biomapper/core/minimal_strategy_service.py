@@ -1,8 +1,11 @@
 """Minimal YAML strategy execution service."""
 import logging
+import json
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import yaml
+from jinja2 import Template
 
 from biomapper.core.strategy_actions import (
     LoadDatasetIdentifiersAction,
@@ -43,14 +46,46 @@ class MinimalStrategyService:
                 logger.error(f"Failed to load {yaml_file}: {e}")
                 
         return strategies
+    
+    def _substitute_parameters(self, obj: Any, parameters: Dict[str, Any]) -> Any:
+        """Recursively substitute parameter placeholders in a nested structure.
+        
+        Args:
+            obj: The object to process (dict, list, str, or other)
+            parameters: The parameters dictionary for substitution
+            
+        Returns:
+            The object with all parameter placeholders substituted
+        """
+        if isinstance(obj, str):
+            # Check if the string contains parameter placeholders
+            if '${' in obj:
+                # Use Jinja2 template for substitution
+                # Convert ${parameters.key} to {{ parameters.key }}
+                template_str = re.sub(r'\$\{([^}]+)\}', r'{{ \1 }}', obj)
+                template = Template(template_str)
+                try:
+                    return template.render(parameters=parameters)
+                except Exception as e:
+                    logger.warning(f"Failed to substitute parameters in '{obj}': {e}")
+                    return obj
+            return obj
+        elif isinstance(obj, dict):
+            return {key: self._substitute_parameters(value, parameters) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [self._substitute_parameters(item, parameters) for item in obj]
+        else:
+            return obj
         
     def _build_action_registry(self) -> Dict[str, type[TypedStrategyAction]]:
         """Build registry of available actions."""
-        return {
-            'LOAD_DATASET_IDENTIFIERS': LoadDatasetIdentifiersAction,
-            'MERGE_WITH_UNIPROT_RESOLUTION': MergeWithUniprotResolutionAction,
-            'CALCULATE_SET_OVERLAP': CalculateSetOverlapAction,
-        }
+        # Import to ensure all actions are registered
+        import biomapper.core.strategy_actions  # This triggers all action imports
+        from biomapper.core.strategy_actions.registry import ACTION_REGISTRY
+        
+        # Use the central action registry which has all registered actions
+        logger.info(f"Loaded {len(ACTION_REGISTRY)} actions from registry")
+        return ACTION_REGISTRY
         
     async def execute_strategy(
         self,
@@ -66,6 +101,11 @@ class MinimalStrategyService:
             raise ValueError(f"Strategy '{strategy_name}' not found")
             
         strategy = self.strategies[strategy_name]
+        
+        # Merge default parameters with context overrides
+        parameters = strategy.get('parameters', {}).copy()
+        if context and 'parameters' in context:
+            parameters.update(context['parameters'])
         
         # Initialize execution context as a simple dict (not StrategyExecutionContext)
         execution_context = {
@@ -94,7 +134,9 @@ class MinimalStrategyService:
             step_name = step.get('name', 'unnamed')
             action_config = step.get('action', {})
             action_type = action_config.get('type')
-            action_params = action_config.get('params', {})
+            # Substitute parameters in action params
+            raw_params = action_config.get('params', {})
+            action_params = self._substitute_parameters(raw_params, parameters)
             
             logger.info(f"Executing step '{step_name}' with action '{action_type}'")
             
@@ -117,10 +159,18 @@ class MinimalStrategyService:
                 )
                 
                 # Update context with results from dict
-                if 'output_identifiers' in result_dict:
-                    execution_context['current_identifiers'] = result_dict['output_identifiers']
-                if 'output_ontology_type' in result_dict:
-                    execution_context['current_ontology_type'] = result_dict['output_ontology_type']
+                if result_dict:
+                    # Update standard fields
+                    if 'output_identifiers' in result_dict:
+                        execution_context['current_identifiers'] = result_dict['output_identifiers']
+                    if 'output_ontology_type' in result_dict:
+                        execution_context['current_ontology_type'] = result_dict['output_ontology_type']
+                    
+                    # Merge all result data back into context
+                    # This ensures datasets and other action outputs are preserved
+                    for key, value in result_dict.items():
+                        if key not in ['output_identifiers', 'output_ontology_type']:
+                            execution_context[key] = value
                     
             except Exception as e:
                 logger.error(f"Action '{action_type}' failed: {str(e)}")

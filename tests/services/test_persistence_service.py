@@ -1,5 +1,11 @@
 """Comprehensive tests for PersistenceService."""
 
+import sys
+from pathlib import Path
+
+# Add biomapper-api to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent / "biomapper-api"))
+
 import asyncio
 import json
 import pytest
