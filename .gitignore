@@ -51,6 +51,7 @@ mapping_cache.db-*
 metamapper.db-*
 *.prof
 pytest_output.txt
+/qdrant_storage
 
 # IDE specific files
 .idea/
@@ -121,7 +122,7 @@ instance/
 .scrapy
 
 # Sphinx documentation
-#docs/_build/
+docs/_build/
 
 # PyBuilder
 .pybuilder/
@@ -249,10 +250,7 @@ docs/generated/
 # Development experiments and temporary sample data
 scripts/dev_experiments/
 temp_sample_data/
-
 **/.claude/settings.local.json
-#_active_prompts/
-#CLAUDE.md
 
 # Qdrant vector database storage (large binary data)
 docker/qdrant/qdrant_storage/
