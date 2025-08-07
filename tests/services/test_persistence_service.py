@@ -288,9 +288,12 @@ class TestCheckpointManagement:
             current_identifier="test_id",
             ontology_type="protein"
         )
-        context.input_identifiers = ["id1", "id2", "id3"]
-        context.output_identifiers = ["out1", "out2"]
-        context.custom_action_data = {"step_0": {"result": "data"}}
+        # Store identifiers in custom_action_data instead of as direct attributes
+        context.custom_action_data = {
+            "input_identifiers": ["id1", "id2", "id3"],
+            "output_identifiers": ["out1", "out2"],
+            "step_0": {"result": "data"}
+        }
         
         return job, context
     
@@ -335,8 +338,9 @@ class TestCheckpointManagement:
         assert "job_id" in restored_data
         
         restored_context = restored_data["context"]
-        assert restored_context.input_identifiers == original_context.input_identifiers
-        assert restored_context.output_identifiers == original_context.output_identifiers
+        # Check identifiers are preserved in custom_action_data
+        assert restored_context.custom_action_data.get("input_identifiers") == original_context.custom_action_data.get("input_identifiers")
+        assert restored_context.custom_action_data.get("output_identifiers") == original_context.custom_action_data.get("output_identifiers")
         assert restored_context.custom_action_data == original_context.custom_action_data
     
     @pytest.mark.asyncio
@@ -437,8 +441,11 @@ class TestResultStorage:
         """Test storing and retrieving large results (external)."""
         job_id = test_job.id
         
-        # Create large data (> 100KB)
-        large_data = {"data": "x" * 200000, "metadata": {"size": "large"}}
+        # Create large data (> 100KB) with random content that won't compress well
+        import random
+        import string
+        random_data = ''.join(random.choices(string.ascii_letters + string.digits, k=150000))
+        large_data = {"data": random_data, "metadata": {"size": "large"}}
         
         # Store result
         storage = await persistence_service.store_result(
@@ -513,7 +520,13 @@ class TestLoggingAndEvents:
         
         # Retrieve logs
         all_logs = await persistence_service.get_logs(job_id)
-        assert len(all_logs) == 2
+        
+        # Should have 3 logs: 1 automatic "Job created" + 2 test logs
+        assert len(all_logs) == 3
+        
+        # Check that our test logs are present
+        test_logs = [log for log in all_logs if "Test" in log.message]
+        assert len(test_logs) == 2
         
         # Filter by level
         error_logs = await persistence_service.get_logs(job_id, level="ERROR")
@@ -551,7 +564,9 @@ class TestLoggingAndEvents:
         
         # Retrieve events
         all_events = await persistence_service.get_events(job_id)
-        assert len(all_events) == 2
+        
+        # Should have 3 events: 1 automatic "job_created" + 2 test events
+        assert len(all_events) == 3
         
         # Filter by type
         error_events = await persistence_service.get_events(job_id, event_type="error")
@@ -726,7 +741,8 @@ class TestPersistenceIntegration:
             current_identifier="test_id",
             ontology_type="protein"
         )
-        context.input_identifiers = ["id1", "id2", "id3"]
+        # Store identifiers in custom_action_data
+        context.custom_action_data["input_identifiers"] = ["id1", "id2", "id3"]
         
         for i, step in enumerate(strategy["steps"]):
             # Start step

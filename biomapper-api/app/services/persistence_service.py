@@ -88,18 +88,26 @@ class PersistenceService:
         **kwargs
     ) -> Job:
         """Update job status and metadata."""
+        # For completion statuses, we need to calculate execution time
+        if status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+            if "execution_time_ms" not in kwargs:
+                # Fetch just the started_at field if we need it
+                stmt = select(Job.started_at).where(Job.id == job_id)
+                result = await self.db.execute(stmt)
+                started_at = result.scalar_one_or_none()
+                
+                if started_at:
+                    completed_at = kwargs.get("completed_at", datetime.utcnow())
+                    kwargs["execution_time_ms"] = int(
+                        (completed_at - started_at).total_seconds() * 1000
+                    )
+            
+            if "completed_at" not in kwargs:
+                kwargs["completed_at"] = datetime.utcnow()
+        
         # Handle status-specific updates
         if status == JobStatus.RUNNING and "started_at" not in kwargs:
             kwargs["started_at"] = datetime.utcnow()
-        elif status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
-            if "completed_at" not in kwargs:
-                kwargs["completed_at"] = datetime.utcnow()
-            if "execution_time_ms" not in kwargs and "started_at" in kwargs:
-                started = kwargs.get("started_at")
-                if started:
-                    kwargs["execution_time_ms"] = int(
-                        (datetime.utcnow() - started).total_seconds() * 1000
-                    )
         
         stmt = (
             update(Job)
@@ -121,10 +129,23 @@ class PersistenceService:
         return job
     
     async def get_job(self, job_id: uuid.UUID) -> Optional[Job]:
-        """Retrieve job by ID."""
-        stmt = select(Job).where(Job.id == job_id)
+        """Retrieve job by ID with eager loading of relationships."""
+        from sqlalchemy.orm import selectinload
+        stmt = (
+            select(Job)
+            .where(Job.id == job_id)
+            .options(
+                selectinload(Job.steps),
+                selectinload(Job.checkpoints),
+                selectinload(Job.logs)
+            )
+        )
         result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        job = result.scalar_one_or_none()
+        if job:
+            # Ensure we have fresh data
+            await self.db.refresh(job, ["steps", "checkpoints", "logs"])
+        return job
     
     async def list_jobs(
         self,
