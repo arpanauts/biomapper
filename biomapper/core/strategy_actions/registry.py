@@ -9,6 +9,8 @@ def register_action(name: str) -> Callable:
         if name in ACTION_REGISTRY:
             print(f"Warning: Action '{name}' is already registered. Overwriting.")
         ACTION_REGISTRY[name] = cls
+        # Set the action name as an attribute for discovery
+        cls._action_name = name
         return cls
     return decorator
 

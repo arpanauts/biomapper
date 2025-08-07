@@ -42,14 +42,12 @@ class ActionRegistryService:
         # Import the strategy actions module to trigger registration
         try:
             import biomapper.core.strategy_actions
+            # Import action classes to trigger their @register_action decorators
             from biomapper.core.strategy_actions import (
-                LOAD_DATASET_IDENTIFIERS,
-                MERGE_WITH_UNIPROT_RESOLUTION,
-                CALCULATE_SET_OVERLAP,
-                MERGE_DATASETS,
-                FILTER_DATASET,
-                EXPORT_DATASET,
-                EXECUTE_MAPPING_PATH,
+                LoadDatasetIdentifiersAction,
+                MergeWithUniprotResolutionAction,
+                CalculateSetOverlapAction,
+                MergeDatasetsAction,
             )
         except ImportError as e:
             logger.warning(f"Could not import builtin actions: {e}")

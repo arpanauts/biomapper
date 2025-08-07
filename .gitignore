@@ -52,6 +52,7 @@ metamapper.db-*
 *.prof
 pytest_output.txt
 /qdrant_storage
+!mappings_list.csv
 
 # IDE specific files
 .idea/
