@@ -5,10 +5,11 @@ import pandas as pd
 
 class RelationshipMappingExecutor:
     """Mock RelationshipMappingExecutor class"""
+
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
-    
+
     async def map_from_endpoint_data(self, relationship_id, source_data):
         """Mock implementation of map_from_endpoint_data."""
         return [
@@ -21,6 +22,6 @@ class RelationshipMappingExecutor:
                 "path_id": 1,
             }
         ]
-    
+
     def execute(self, data: pd.DataFrame) -> Dict[str, Any]:
         return {"status": "mock", "data": data.to_dict()}

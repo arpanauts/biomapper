@@ -26,23 +26,23 @@ class CSVAdapter(EndpointAdapter):
         config: Optional[Dict[str, Any]] = None,
         resource_name: str = "csv_adapter",
         cache_max_size: Optional[int] = None,
-        endpoint=None
+        endpoint=None,
     ):
         # Consider adding super().__init__() if EndpointAdapter evolves a base init
         self.config = config or {}
         self.resource_name = resource_name
         self.endpoint = endpoint
         self.logger = logging.getLogger(__name__)
-        
+
         # Determine cache size from settings if not explicitly provided
         if cache_max_size is None:
             settings = get_settings()
             cache_max_size = settings.csv_adapter_cache_size
-        
+
         # Initialize LRU cache for CSV data
         # Cache key: (file_path, frozenset(columns_to_load) if columns_to_load else None)
         self._data_cache: LRUCache = LRUCache(maxsize=cache_max_size)
-        
+
         # Initialize performance monitoring counters
         self._cache_hits: int = 0
         self._cache_misses: int = 0
@@ -89,21 +89,21 @@ class CSVAdapter(EndpointAdapter):
         """
         # Ideally, get this dynamically from extractors.py
         return list(SUPPORTED_ID_TYPES)
-    
+
     async def load_data(
         self,
         file_path: Optional[str] = None,
-        columns_to_load: Optional[List[str]] = None
+        columns_to_load: Optional[List[str]] = None,
     ) -> pd.DataFrame:
         """Load CSV data with selective column loading and caching.
-        
+
         Args:
             file_path: Path to the CSV file. If None, uses endpoint's file path.
             columns_to_load: List of column names to load. If None or empty, loads all columns.
-            
+
         Returns:
             pandas DataFrame containing the loaded data.
-            
+
         Raises:
             ValueError: If file_path is not provided and no endpoint is configured.
             FileNotFoundError: If the specified file does not exist.
@@ -111,95 +111,126 @@ class CSVAdapter(EndpointAdapter):
         # Determine file path
         if file_path is None:
             if self.endpoint is None:
-                raise ValueError("file_path must be provided when no endpoint is configured")
-            
+                raise ValueError(
+                    "file_path must be provided when no endpoint is configured"
+                )
+
             # Try to get file path from endpoint configuration
-            if hasattr(self.endpoint, 'file_path') and self.endpoint.file_path:
+            if hasattr(self.endpoint, "file_path") and self.endpoint.file_path:
                 file_path = self.endpoint.file_path
-            elif hasattr(self.endpoint, 'url') and self.endpoint.url:
+            elif hasattr(self.endpoint, "url") and self.endpoint.url:
                 file_path = self.endpoint.url
-            elif hasattr(self.endpoint, 'connection_details') and self.endpoint.connection_details:
+            elif (
+                hasattr(self.endpoint, "connection_details")
+                and self.endpoint.connection_details
+            ):
                 # Parse connection_details JSON to get file_path
                 import json
+
                 try:
                     connection_details = json.loads(self.endpoint.connection_details)
-                    file_path = connection_details.get('file_path')
+                    file_path = connection_details.get("file_path")
                     if not file_path:
-                        raise ValueError(f"No file_path found in connection_details for endpoint {self.endpoint}")
+                        raise ValueError(
+                            f"No file_path found in connection_details for endpoint {self.endpoint}"
+                        )
                 except (json.JSONDecodeError, TypeError) as e:
-                    raise ValueError(f"Invalid connection_details JSON for endpoint {self.endpoint}: {e}")
+                    raise ValueError(
+                        f"Invalid connection_details JSON for endpoint {self.endpoint}: {e}"
+                    )
             else:
-                raise ValueError(f"Could not determine file path from endpoint {self.endpoint}")
-        
+                raise ValueError(
+                    f"Could not determine file path from endpoint {self.endpoint}"
+                )
+
         # Create cache key
         columns_key = frozenset(columns_to_load) if columns_to_load else None
         cache_key = (file_path, columns_key)
-        
+
         # Check cache first
         if cache_key in self._data_cache:
             self._cache_hits += 1
-            self.logger.debug(f"Cache hit for file: {file_path}, columns: {columns_to_load}")
+            self.logger.debug(
+                f"Cache hit for file: {file_path}, columns: {columns_to_load}"
+            )
             return self._data_cache[cache_key]
-        
+
         # Record cache miss
         self._cache_misses += 1
-        
+
         self.logger.info(f"Loading CSV data from: {file_path}")
         if columns_to_load:
             self.logger.info(f"Loading only columns: {columns_to_load}")
-        
+
         # Get CSV reading options from endpoint configuration
         read_kwargs = {}
-        if self.endpoint and hasattr(self.endpoint, 'connection_details') and self.endpoint.connection_details:
+        if (
+            self.endpoint
+            and hasattr(self.endpoint, "connection_details")
+            and self.endpoint.connection_details
+        ):
             import json
+
             try:
                 connection_details = json.loads(self.endpoint.connection_details)
-                if 'delimiter' in connection_details:
-                    read_kwargs['delimiter'] = connection_details['delimiter']
-                if 'sep' in connection_details:
-                    read_kwargs['sep'] = connection_details['sep']
+                if "delimiter" in connection_details:
+                    read_kwargs["delimiter"] = connection_details["delimiter"]
+                if "sep" in connection_details:
+                    read_kwargs["sep"] = connection_details["sep"]
             except (json.JSONDecodeError, TypeError):
                 pass  # Use default pandas options
-        
+
         # Load data from file
         try:
             if columns_to_load:
                 # First check what columns are available
                 try:
-                    available_data = pd.read_csv(file_path, nrows=0, **read_kwargs)  # Just get header
+                    available_data = pd.read_csv(
+                        file_path, nrows=0, **read_kwargs
+                    )  # Just get header
                     available_columns = available_data.columns.tolist()
-                    
+
                     # Filter to only existing columns
-                    existing_columns = [col for col in columns_to_load if col in available_columns]
-                    missing_columns = [col for col in columns_to_load if col not in available_columns]
-                    
+                    existing_columns = [
+                        col for col in columns_to_load if col in available_columns
+                    ]
+                    missing_columns = [
+                        col for col in columns_to_load if col not in available_columns
+                    ]
+
                     if missing_columns:
-                        self.logger.warning(f"Some columns not found in {file_path}: {missing_columns}")
+                        self.logger.warning(
+                            f"Some columns not found in {file_path}: {missing_columns}"
+                        )
                         self.logger.info(f"Available columns: {available_columns}")
-                    
+
                     if not existing_columns:
-                        raise ValueError(f"None of the requested columns {columns_to_load} exist in {file_path}")
-                    
+                        raise ValueError(
+                            f"None of the requested columns {columns_to_load} exist in {file_path}"
+                        )
+
                     # Load only the existing columns
                     self.logger.info(f"Loading existing columns: {existing_columns}")
-                    data = pd.read_csv(file_path, usecols=existing_columns, **read_kwargs)
+                    data = pd.read_csv(
+                        file_path, usecols=existing_columns, **read_kwargs
+                    )
                 except pd.errors.EmptyDataError:
                     # Handle empty file case
                     data = pd.DataFrame()
-                
+
             else:
                 # Load all columns
                 data = pd.read_csv(file_path, **read_kwargs)
-            
+
             # Store in cache
             self._data_cache[cache_key] = data
-            
+
             self.logger.info(
                 f"Successfully loaded {len(data)} rows and {len(data.columns)} columns from {file_path}"
             )
-            
+
             return data
-            
+
         except FileNotFoundError:
             self.logger.error(f"File not found: {file_path}")
             raise
@@ -209,41 +240,41 @@ class CSVAdapter(EndpointAdapter):
         except Exception as e:
             self.logger.error(f"Unexpected error loading CSV file {file_path}: {e}")
             raise
-    
+
     def clear_cache(self) -> None:
         """Clear the data cache and reset performance counters."""
         self._data_cache.clear()
         self._cache_hits = 0
         self._cache_misses = 0
         self.logger.info("CSV data cache cleared and performance counters reset")
-    
+
     def get_cache_info(self) -> Dict[str, Any]:
         """Get information about the current cache state.
-        
+
         Returns:
             Dictionary containing cache statistics.
         """
         return {
             "cache_size": len(self._data_cache),
             "max_size": self._data_cache.maxsize,
-            "cached_files": list(self._data_cache.keys())
+            "cached_files": list(self._data_cache.keys()),
         }
-    
+
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get performance statistics for the cache.
-        
+
         Returns:
-            Dictionary containing cache performance metrics including hits, misses, 
+            Dictionary containing cache performance metrics including hits, misses,
             hit rate, current size, and max size.
         """
         total_requests = self._cache_hits + self._cache_misses
         hit_rate = (self._cache_hits / total_requests) if total_requests > 0 else 0.0
-        
+
         return {
             "cache_hits": self._cache_hits,
             "cache_misses": self._cache_misses,
             "total_requests": total_requests,
             "hit_rate": hit_rate,
             "cache_size": len(self._data_cache),
-            "max_size": self._data_cache.maxsize
+            "max_size": self._data_cache.maxsize,
         }

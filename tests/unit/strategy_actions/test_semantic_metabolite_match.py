@@ -1,19 +1,14 @@
 """Unit tests for semantic metabolite matching action."""
 
-import json
 import os
-from pathlib import Path
-from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
-import numpy as np
 import pytest
 
 from biomapper.core.strategy_actions.semantic_metabolite_match import (
     EmbeddingCache,
     SemanticMetaboliteMatchAction,
     SemanticMetaboliteMatchParams,
-    SemanticMatchResult,
 )
 
 
@@ -307,7 +302,7 @@ class TestSemanticMetaboliteMatchAction:
             sample_params,
             None,  # source_endpoint
             None,  # target_endpoint
-            sample_context
+            sample_context,
         )
 
         assert result.success
@@ -334,7 +329,7 @@ class TestSemanticMetaboliteMatchAction:
                 sample_params,
                 None,  # source_endpoint
                 None,  # target_endpoint
-                context
+                context,
             )
 
         assert result.success
@@ -355,7 +350,7 @@ class TestSemanticMetaboliteMatchAction:
                 sample_params,
                 None,  # source_endpoint
                 None,  # target_endpoint
-                context
+                context,
             )
 
         assert not result.success
@@ -397,14 +392,16 @@ class TestSemanticMetaboliteMatchAction:
                 params,
                 None,  # source_endpoint
                 None,  # target_endpoint
-                sample_context
+                sample_context,
             )
 
         assert result.success
         assert result.data["llm_calls"] == 1  # Respected limit
 
     @pytest.mark.asyncio
-    async def test_execute_typed_no_api_key(self, action, sample_params, sample_context):
+    async def test_execute_typed_no_api_key(
+        self, action, sample_params, sample_context
+    ):
         """Test execution without API key."""
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(ValueError, match="OPENAI_API_KEY"):
@@ -460,7 +457,7 @@ class TestSemanticMetaboliteMatchAction:
                 sample_params,
                 None,  # source_endpoint
                 None,  # target_endpoint
-                sample_context
+                sample_context,
             )
 
             assert result.success

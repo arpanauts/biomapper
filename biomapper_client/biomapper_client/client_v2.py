@@ -213,25 +213,27 @@ class BiomapperClient:
         try:
             # Convert request to v2 API format
             request_dict = request.dict()
-            
+
             # For v2 API, map fields correctly
             if endpoint.endswith("/v2/execute"):
                 v2_request = {
-                    "strategy": request_dict.get("strategy_name") or request_dict.get("strategy_yaml"),
+                    "strategy": request_dict.get("strategy_name")
+                    or request_dict.get("strategy_yaml"),
                     "parameters": request_dict.get("parameters", {}),
-                    "options": request_dict.get("options", {})
+                    "options": request_dict.get("options", {}),
                 }
                 # Remove context field for v2 API (not needed)
                 response = await client.post(endpoint, json=v2_request)
             else:
                 # Use original format for old API
                 response = await client.post(endpoint, json=request_dict)
-                
+
             response.raise_for_status()
             data = response.json()
 
             # Convert to Job object
             from datetime import datetime
+
             return Job(
                 id=data["job_id"],
                 status=JobStatusEnum.RUNNING,
@@ -495,9 +497,7 @@ class BiomapperClient:
             files = {"file": (file_path.name, f, "text/csv")}
             data = {"session_id": session_id} if session_id else {}
 
-            response = await client.post(
-                "/api/files/upload", files=files, data=data
-            )
+            response = await client.post("/api/files/upload", files=files, data=data)
             response.raise_for_status()
             return FileUploadResponse(**response.json())
 

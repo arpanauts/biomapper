@@ -1,7 +1,6 @@
 """Alembic environment configuration for async SQLAlchemy."""
 
 import asyncio
-import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
@@ -16,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import models and database configuration
 from app.core.database import Base, DATABASE_URL
-from app.models import persistence  # Import to register models
 
 # this is the Alembic Config object
 config = context.config
@@ -58,7 +56,7 @@ async def run_async_migrations() -> None:
     """Run migrations in 'online' mode with async engine."""
     configuration = config.get_section(config.config_ini_section)
     configuration["sqlalchemy.url"] = DATABASE_URL
-    
+
     connectable = async_engine_from_config(
         configuration,
         prefix="sqlalchemy.",

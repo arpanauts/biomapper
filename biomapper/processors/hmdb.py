@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 import logging
 from tqdm.asyncio import tqdm
 
-from ..schemas.domain_schema import DomainDocument, DomainType
+from ..schemas.domain_schema import DomainDocument
 from .base import BaseDataProcessor
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,9 @@ class HMDBProcessor(BaseDataProcessor):
         self.xml_file = xml_file
         if skip_count:
             self._total_compounds = 0  # Unknown, but avoid slow counting
-            logger.info(f"Skipping compound count for {xml_file} (faster initialization)")
+            logger.info(
+                f"Skipping compound count for {xml_file} (faster initialization)"
+            )
         else:
             self._total_compounds = self._count_compounds()
             logger.info(f"Found {self._total_compounds} compounds in {xml_file}")
@@ -48,7 +50,9 @@ class HMDBProcessor(BaseDataProcessor):
             return 0
 
     @staticmethod
-    def _get_text(element: ET.Element, tag_name: str, default: Optional[str] = None) -> str:
+    def _get_text(
+        element: ET.Element, tag_name: str, default: Optional[str] = None
+    ) -> str:
         """Safely extract text from XML element, handling namespaces."""
         try:
             # Look for any element with tag ending in the given name (handles namespace)
@@ -64,8 +68,10 @@ class HMDBProcessor(BaseDataProcessor):
         """Process HMDB XML file as a stream of documents."""
         # Original method implementation
         pass
-    
-    async def process_batch(self, batch_size: int = 100) -> AsyncGenerator[List[Any], None]:
+
+    async def process_batch(
+        self, batch_size: int = 100
+    ) -> AsyncGenerator[List[Any], None]:
         """Process data in batches - delegates to process_metabolite_batch."""
         async for batch in self.process_metabolite_batch(batch_size):
             yield batch
@@ -74,7 +80,7 @@ class HMDBProcessor(BaseDataProcessor):
         self, batch_size: int = 100
     ) -> AsyncGenerator[List[dict], None]:
         """Process HMDB XML file in batches yielding raw metabolite dictionaries.
-        
+
         Memory-efficient streaming parser that doesn't load the entire XML into memory.
 
         Args:
@@ -91,19 +97,19 @@ class HMDBProcessor(BaseDataProcessor):
             context = ET.iterparse(self.xml_file, events=("start", "end"))
             context = iter(context)
             event, root = next(context)
-            
+
             # Use indeterminate progress bar if total is unknown
             pbar = tqdm(
-                total=self._total_compounds if self._total_compounds > 0 else None, 
-                desc="Processing compounds for Qdrant"
+                total=self._total_compounds if self._total_compounds > 0 else None,
+                desc="Processing compounds for Qdrant",
             )
-            
+
             for event, elem in context:
                 # Handle namespace - check if tag ends with 'metabolite'
                 if event == "end" and elem.tag.endswith("metabolite"):
                     try:
                         compound = elem
-                        
+
                         # Get all synonyms including IUPAC names (handling namespace)
                         synonyms = [
                             cast(str, syn.text)
@@ -124,29 +130,41 @@ class HMDBProcessor(BaseDataProcessor):
 
                         # Create metabolite dictionary with all relevant fields
                         metabolite_dict = {
-                            'hmdb_id': self._get_text(compound, "accession"),
-                            'name': self._get_text(compound, "name"),
-                            'description': self._get_text(compound, "description"),
-                            'chemical_formula': self._get_text(compound, "chemical_formula"),
-                            'iupac_name': iupac,
-                            'traditional_iupac': trad_iupac,
-                            'synonyms': synonyms,
-                            'inchikey': self._get_text(compound, "inchikey"),
-                            'cas_registry_number': self._get_text(compound, "cas_registry_number"),
-                            'kegg_id': self._get_text(compound, "kegg_id"),
-                            'pubchem_compound_id': self._get_text(compound, "pubchem_compound_id"),
-                            'chebi_id': self._get_text(compound, "chebi_id"),
-                            'drugbank_id': self._get_text(compound, "drugbank_id"),
-                            'foodb_id': self._get_text(compound, "foodb_id"),
-                            'hmdb_id_alt': self._get_text(compound, "secondary_accessions"),
-                            'molecular_weight': self._get_text(compound, "molecular_weight"),
-                            'monoisotopic_molecular_weight': self._get_text(compound, "monoisotopic_molecular_weight"),
-                            'smiles': self._get_text(compound, "smiles"),
-                            'inchi': self._get_text(compound, "inchi")
+                            "hmdb_id": self._get_text(compound, "accession"),
+                            "name": self._get_text(compound, "name"),
+                            "description": self._get_text(compound, "description"),
+                            "chemical_formula": self._get_text(
+                                compound, "chemical_formula"
+                            ),
+                            "iupac_name": iupac,
+                            "traditional_iupac": trad_iupac,
+                            "synonyms": synonyms,
+                            "inchikey": self._get_text(compound, "inchikey"),
+                            "cas_registry_number": self._get_text(
+                                compound, "cas_registry_number"
+                            ),
+                            "kegg_id": self._get_text(compound, "kegg_id"),
+                            "pubchem_compound_id": self._get_text(
+                                compound, "pubchem_compound_id"
+                            ),
+                            "chebi_id": self._get_text(compound, "chebi_id"),
+                            "drugbank_id": self._get_text(compound, "drugbank_id"),
+                            "foodb_id": self._get_text(compound, "foodb_id"),
+                            "hmdb_id_alt": self._get_text(
+                                compound, "secondary_accessions"
+                            ),
+                            "molecular_weight": self._get_text(
+                                compound, "molecular_weight"
+                            ),
+                            "monoisotopic_molecular_weight": self._get_text(
+                                compound, "monoisotopic_molecular_weight"
+                            ),
+                            "smiles": self._get_text(compound, "smiles"),
+                            "inchi": self._get_text(compound, "inchi"),
                         }
 
                         # Only add if we have required fields
-                        if metabolite_dict['hmdb_id'] and metabolite_dict['name']:
+                        if metabolite_dict["hmdb_id"] and metabolite_dict["name"]:
                             batch.append(metabolite_dict)
                             processed += 1
 
@@ -162,9 +180,9 @@ class HMDBProcessor(BaseDataProcessor):
                         # For ElementTree, we just clear the element
                         # (getprevious is lxml-specific)
                         pbar.update(1)
-            
+
             pbar.close()
-            
+
             # Yield any remaining items
             if batch:
                 yield batch

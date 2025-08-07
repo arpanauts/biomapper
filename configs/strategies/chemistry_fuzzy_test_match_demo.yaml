@@ -1,0 +1,87 @@
+name: CHEMISTRY_FUZZY_TEST_MATCH_DEMO
+description: |
+  Demonstrate chemistry test name fuzzy matching capabilities.
+  
+  This strategy shows how to match clinical chemistry test names across different 
+  datasets using fuzzy matching algorithms. It handles abbreviations, synonyms, 
+  vendor variations, and test panels.
+  
+  Use cases:
+  - Matching LabCorp to Quest test names
+  - Harmonizing UKBB field codes to standard test names  
+  - Mapping abbreviations (ALT, AST, BUN) to full names
+  - Expanding test panels (BMP, CMP) to individual components
+
+parameters:
+  # Input datasets
+  source_file: "/path/to/source_chemistry_tests.tsv"
+  target_file: "/path/to/target_chemistry_tests.tsv"
+  output_dir: "/path/to/output"
+  
+  # Column configuration  
+  source_test_column: "test_name"
+  target_test_column: "test_name"
+  
+  # Matching configuration
+  match_threshold: 0.75
+  algorithms: ["exact", "token_sort", "partial", "abbreviation", "synonym"]
+
+steps:
+  - name: load_source_tests
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.source_file}"
+        identifier_column: "${parameters.source_test_column}"
+        output_key: "source_chemistry_tests"
+        has_header: true
+        separator: "\t"
+        
+  - name: load_target_tests
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.target_file}"
+        identifier_column: "${parameters.target_test_column}"
+        output_key: "target_chemistry_tests"
+        has_header: true
+        separator: "\t"
+        
+  - name: fuzzy_match_chemistry_tests
+    action:
+      type: CHEMISTRY_FUZZY_TEST_MATCH
+      params:
+        # Input/Output
+        source_key: "source_chemistry_tests"
+        target_key: "target_chemistry_tests"
+        output_key: "chemistry_test_matches"
+        
+        # Column configuration
+        source_test_column: "${parameters.source_test_column}"
+        target_test_column: "${parameters.target_test_column}"
+        
+        # Matching configuration
+        match_threshold: "${parameters.match_threshold}"
+        use_synonyms: true
+        use_abbreviations: true
+        algorithms: "${parameters.algorithms}"
+        
+        # Advanced options
+        handle_panels: true
+        normalize_units: true
+        handle_vendor_prefixes: true
+        cross_vendor_matching: true
+        
+        # Output options
+        include_similarity_score: true
+        include_match_method: true
+        max_matches_per_test: 1
+        
+  - name: export_matches
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "chemistry_test_matches"
+        output_file: "${parameters.output_dir}/chemistry_test_matches.tsv"
+        format: "tsv"
+        include_stats: true

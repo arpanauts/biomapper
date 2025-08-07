@@ -11,6 +11,7 @@ from app.services.mapper_service import MapperService
 
 class EndpointResponse(BaseModel):
     """Response model for endpoint information."""
+
     name: str
     description: str
     type: str
@@ -23,8 +24,6 @@ router = APIRouter()
 
 
 @router.get("/", response_model=List[EndpointResponse])
-async def list_endpoints(
-    mapper_service: MapperService = Depends(get_mapper_service)
-):
+async def list_endpoints(mapper_service: MapperService = Depends(get_mapper_service)):
     """Retrieve a list of all available data endpoints."""
     return await mapper_service.get_endpoints()

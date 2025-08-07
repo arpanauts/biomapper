@@ -3,9 +3,10 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List
 
+
 class BaseStrategyAction(ABC):
     """Abstract base class for all strategy actions."""
-    
+
     @abstractmethod
     async def execute(
         self,
@@ -14,11 +15,11 @@ class BaseStrategyAction(ABC):
         action_params: Dict[str, Any],
         source_endpoint: Any,
         target_endpoint: Any,
-        context: Dict[str, Any]
+        context: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
         Execute the action.
-        
+
         Args:
             current_identifiers: List of identifiers to process
             current_ontology_type: Current ontology type of the identifiers
@@ -26,7 +27,7 @@ class BaseStrategyAction(ABC):
             source_endpoint: Source endpoint object
             target_endpoint: Target endpoint object
             context: Additional context (cache settings, etc.)
-            
+
         Returns:
             Dictionary containing:
                 - input_identifiers: List of input identifiers
@@ -36,6 +37,7 @@ class BaseStrategyAction(ABC):
                 - details: Additional details about the execution
         """
         pass
+
 
 # Alias for backward compatibility
 StrategyAction = BaseStrategyAction

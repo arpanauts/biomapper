@@ -346,9 +346,14 @@ class NightingaleNmrMatchAction(
         datasets[params.unmatched_target_key] = unmatched_target
         context.set_action_data("datasets", datasets)
 
-        # Store provenance
+        # Store provenance - handle both dict and list formats
         provenance_data = context.get_action_data("provenance", {})
-        provenance_data["nightingale_matches"] = match_provenance
+        if isinstance(provenance_data, list):
+            # If provenance is a list, append our provenance records to it
+            provenance_data.extend(match_provenance)
+        else:
+            # If provenance is a dict, store under our key
+            provenance_data["nightingale_matches"] = match_provenance
         context.set_action_data("provenance", provenance_data)
 
         # Calculate statistics

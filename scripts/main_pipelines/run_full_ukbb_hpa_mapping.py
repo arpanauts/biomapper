@@ -28,11 +28,15 @@ try:
     from biomapper_client import BiomapperClient, ApiError, NetworkError
 except ImportError:
     print("Error: The 'biomapper-client' package is not installed.")
-    print("Please install it by running 'pip install -e biomapper_client' from the project root.")
+    print(
+        "Please install it by running 'pip install -e biomapper_client' from the project root."
+    )
     exit(1)
 
 # Configure basic logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 async def main():
@@ -44,12 +48,14 @@ async def main():
     client = BiomapperClient(base_url="http://localhost:8000")
 
     # Load the initial list of UKBB protein assay IDs from the data file.
-    ukbb_file_path = "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
+    ukbb_file_path = (
+        "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
+    )
     logging.info(f"Loading initial identifiers from {ukbb_file_path}")
     try:
         # Using pandas for robust CSV/TSV parsing
-        df = pd.read_csv(ukbb_file_path, sep='\t', engine='python')
-        input_ids = df['Assay'].dropna().unique().tolist()
+        df = pd.read_csv(ukbb_file_path, sep="\t", engine="python")
+        input_ids = df["Assay"].dropna().unique().tolist()
         logging.info(f"Loaded {len(input_ids)} unique assay IDs to be mapped.")
     except FileNotFoundError:
         logging.error(f"Input data file not found: {ukbb_file_path}")
@@ -63,9 +69,7 @@ async def main():
         "source_endpoint_name": "UKBB_PROTEIN_ASSAY_ID",
         "target_endpoint_name": "HPA_GENE_NAME",
         "input_identifiers": input_ids,
-        "options": {
-            "some_option": "value"
-        }
+        "options": {"some_option": "value"},
     }
 
     strategy_name = "UKBB_HPA_PROTEIN_OVERLAP_ANALYSIS"
@@ -76,21 +80,24 @@ async def main():
         # which then runs the full workflow defined in the corresponding YAML file.
         async with client:
             final_context = await client.execute_strategy(
-                strategy_name=strategy_name,
-                context=json_payload
+                strategy_name=strategy_name, context=json_payload
             )
 
         logging.info("Strategy execution complete. Final results:")
-        
+
         # Pretty-print the final context returned from the API.
         # The structure of this dictionary depends on the actions in the strategy.
         pprint(final_context)
 
     except ApiError as e:
-        logging.error(f"API Error: The server returned an error (Status: {e.status_code}).")
+        logging.error(
+            f"API Error: The server returned an error (Status: {e.status_code})."
+        )
         logging.error(f"Response: {e.response_body}")
     except NetworkError as e:
-        logging.error(f"Network Error: Could not connect to the Biomapper API at {client.base_url}.")
+        logging.error(
+            f"Network Error: Could not connect to the Biomapper API at {client.base_url}."
+        )
         logging.error(f"Please ensure the API service is running. Details: {e}")
     except Exception as e:
         logging.error(f"An unexpected error occurred: {e}", exc_info=True)

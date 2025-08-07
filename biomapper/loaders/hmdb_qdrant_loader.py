@@ -40,52 +40,64 @@ class HMDBQdrantLoader:
 
         # Initialize Qdrant client only
         self.client = QdrantClient(qdrant_url)
-        
+
         # Lazy initialization for embedding client
         self.embedding_client = None
 
-        logger.info(f"Initialized HMDBQdrantLoader with model: {embedding_model} (lazy loading)")
+        logger.info(
+            f"Initialized HMDBQdrantLoader with model: {embedding_model} (lazy loading)"
+        )
 
     def _ensure_embedding_client(self) -> None:
         """Initialize embedding client with memory-efficient settings if not already initialized."""
         if self.embedding_client is None:
             logger.info(f"Initializing FastEmbed model: {self.embedding_model}")
-            
+
             try:
                 # Try with memory-efficient settings
                 import gc
                 import psutil
-                
+
                 # Log memory before initialization
                 process = psutil.Process()
                 memory_before = process.memory_info().rss / 1024 / 1024  # MB
                 logger.info(f"Memory before FastEmbed init: {memory_before:.1f} MB")
-                
+
                 # Force garbage collection before loading
                 gc.collect()
-                
+
                 # Initialize with explicit settings
                 self.embedding_client = TextEmbedding(
                     model_name=self.embedding_model,
                     # Add providers parameter to limit ONNX providers if needed
                     # providers=["CPUExecutionProvider"]  # Uncomment if GPU issues
                 )
-                
+
                 # Log memory after initialization
                 memory_after = process.memory_info().rss / 1024 / 1024  # MB
                 memory_used = memory_after - memory_before
-                logger.info(f"Memory after FastEmbed init: {memory_after:.1f} MB (+{memory_used:.1f} MB)")
-                
+                logger.info(
+                    f"Memory after FastEmbed init: {memory_after:.1f} MB (+{memory_used:.1f} MB)"
+                )
+
             except Exception as e:
-                logger.error(f"Failed to initialize FastEmbed model {self.embedding_model}: {e}")
+                logger.error(
+                    f"Failed to initialize FastEmbed model {self.embedding_model}: {e}"
+                )
                 # Try fallback to a smaller model
                 logger.info("Attempting fallback to smaller embedding model...")
                 try:
-                    self.embedding_client = TextEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
-                    logger.warning(f"Using fallback model: sentence-transformers/all-MiniLM-L6-v2")
+                    self.embedding_client = TextEmbedding(
+                        model_name="sentence-transformers/all-MiniLM-L6-v2"
+                    )
+                    logger.warning(
+                        "Using fallback model: sentence-transformers/all-MiniLM-L6-v2"
+                    )
                 except Exception as fallback_e:
                     logger.error(f"Fallback model also failed: {fallback_e}")
-                    raise RuntimeError(f"Could not initialize any embedding model. Original error: {e}")
+                    raise RuntimeError(
+                        f"Could not initialize any embedding model. Original error: {e}"
+                    )
 
     def _create_search_text(self, metabolite: Dict[str, Any]) -> str:
         """Create optimized text for embedding from metabolite data.
@@ -179,7 +191,7 @@ class HMDBQdrantLoader:
         total_errors = 0
 
         logger.info("Starting metabolite loading process...")
-        
+
         # Initialize embedding client on first use
         self._ensure_embedding_client()
 
@@ -199,13 +211,17 @@ class HMDBQdrantLoader:
                         continue
 
                     # Process in smaller chunks if batch is large
-                    chunk_size = min(25, len(valid_metabolites))  # Limit embedding batch size
+                    chunk_size = min(
+                        25, len(valid_metabolites)
+                    )  # Limit embedding batch size
                     all_points = []
-                    
+
                     for chunk_start in range(0, len(valid_metabolites), chunk_size):
-                        chunk_end = min(chunk_start + chunk_size, len(valid_metabolites))
+                        chunk_end = min(
+                            chunk_start + chunk_size, len(valid_metabolites)
+                        )
                         chunk_metabolites = valid_metabolites[chunk_start:chunk_end]
-                        
+
                         # Generate embedding texts for this chunk
                         embedding_texts = [
                             self._create_embedding_text(m) for m in chunk_metabolites
@@ -215,7 +231,7 @@ class HMDBQdrantLoader:
                         embeddings = []
                         for embedding in self.embedding_client.embed(embedding_texts):
                             embeddings.append(embedding)
-                        
+
                         # Prepare points for this chunk
                         for i, metabolite in enumerate(chunk_metabolites):
                             all_points.append(
@@ -233,14 +249,16 @@ class HMDBQdrantLoader:
 
                     processed_count = len(valid_metabolites)
                     total_processed += processed_count
-                    
+
                     # Progress logging every 500 metabolites
                     if total_processed % 500 == 0:
-                        logger.info(f"Progress: {total_processed:,} metabolites processed")
-                    
+                        logger.info(
+                            f"Progress: {total_processed:,} metabolites processed"
+                        )
+
                     # Track invalid metabolites as errors
                     invalid_count = len(batch) - processed_count
-                    
+
                     # Clear memory references
                     del all_points, valid_metabolites
                     if invalid_count > 0:
@@ -249,9 +267,7 @@ class HMDBQdrantLoader:
                             f"Skipped {invalid_count} invalid metabolites in batch"
                         )
 
-                    logger.debug(
-                        f"Processed batch of {processed_count} metabolites"
-                    )
+                    logger.debug(f"Processed batch of {processed_count} metabolites")
 
                 except Exception as e:
                     total_errors += 1

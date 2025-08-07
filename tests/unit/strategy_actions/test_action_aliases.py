@@ -15,7 +15,6 @@ class TestMetabolomicsAliases:
     def test_metabolomics_aliases_registered(self):
         """Test that all metabolomics aliases are properly registered."""
         # Import to ensure aliases are registered
-        import biomapper.core.strategy_actions
 
         # Check aliases exist
         assert "METABOLITE_NAME_MATCH" in ACTION_REGISTRY
@@ -39,7 +38,6 @@ class TestMetabolomicsAliases:
     def test_alias_class_identity(self):
         """Test that aliases point to the same class instances."""
         # Import to ensure aliases are registered
-        import biomapper.core.strategy_actions
 
         # METABOLITE_NAME_MATCH should be the same class as BASELINE_FUZZY_MATCH
         assert (

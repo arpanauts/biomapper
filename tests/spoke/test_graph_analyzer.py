@@ -54,7 +54,7 @@ async def test_discover_node_types_spoke_style(
     analyzer = mock_spoke_graph_analyzer
     # Connect the analyzer to the mock client
     analyzer._db = mock_arango_client
-    
+
     mock_arango_client.collections.return_value = [
         {"name": "Nodes"},
         {"name": "Edges"},
@@ -132,7 +132,7 @@ async def test_discover_relationship_types(
     analyzer = mock_spoke_graph_analyzer
     # Connect the analyzer to the mock client
     analyzer._db = mock_arango_client
-    
+
     mock_arango_client.collections.return_value = [
         {"name": "Nodes"},
         {"name": "Edges"},
@@ -141,34 +141,42 @@ async def test_discover_relationship_types(
     # Mock AQL execution for relationship types
     # Create different cursors for different calls
     mock_cursor_1 = MagicMock()
-    mock_cursor_1.__iter__.return_value = iter([
-        {"label": "INTERACTS_WITH", "count": 150},
-        {"label": "PARTICIPATES_IN", "count": 250},
-    ])
-    
+    mock_cursor_1.__iter__.return_value = iter(
+        [
+            {"label": "INTERACTS_WITH", "count": 150},
+            {"label": "PARTICIPATES_IN", "count": 250},
+        ]
+    )
+
     mock_cursor_2 = MagicMock()
-    mock_cursor_2.__iter__.return_value = iter([
-        {
-            "_from": "Nodes/123",
-            "_to": "Nodes/456",
-            "label": "INTERACTS_WITH",
-            "properties": {"score": 0.9},
-        },
-    ])
-    
+    mock_cursor_2.__iter__.return_value = iter(
+        [
+            {
+                "_from": "Nodes/123",
+                "_to": "Nodes/456",
+                "label": "INTERACTS_WITH",
+                "properties": {"score": 0.9},
+            },
+        ]
+    )
+
     mock_cursor_3 = MagicMock()
-    mock_cursor_3.__iter__.return_value = iter([
-        {
-            "_from": "Nodes/789",
-            "_to": "Nodes/012",
-            "label": "PARTICIPATES_IN",
-            "properties": {"evidence": "experimental"},
-        },
-    ])
-    
+    mock_cursor_3.__iter__.return_value = iter(
+        [
+            {
+                "_from": "Nodes/789",
+                "_to": "Nodes/012",
+                "label": "PARTICIPATES_IN",
+                "properties": {"evidence": "experimental"},
+            },
+        ]
+    )
+
     # Set up side_effect for multiple calls
     mock_arango_client.aql.execute.side_effect = [
-        mock_cursor_1, mock_cursor_2, mock_cursor_3
+        mock_cursor_1,
+        mock_cursor_2,
+        mock_cursor_3,
     ]
 
     # Mock the _get_node_type_for_id method

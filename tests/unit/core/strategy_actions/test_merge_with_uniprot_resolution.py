@@ -202,10 +202,10 @@ class TestMergeWithUniprotResolutionAction:
         """Test exact ID matching."""
         source_data = [{"UniProt": "P12345", "Assay": "Test"}]
         target_data = [{"uniprot": "P12345", "gene": "TEST"}]
-        
+
         datasets = {"source": source_data, "target": target_data}
         context = self._create_context(datasets)
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="source",
             target_dataset_key="target",
@@ -214,13 +214,13 @@ class TestMergeWithUniprotResolutionAction:
             output_key="merged",
             use_api=False,  # Only direct matching
         )
-        
+
         await action.execute_typed(
             [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
         )
-        
+
         merged_data = context.get_action_data("datasets", {})["merged"]
-        
+
         # Should have one matched row
         assert len(merged_data) == 1
         assert merged_data[0]["UniProt"] == "P12345"
@@ -239,10 +239,10 @@ class TestMergeWithUniprotResolutionAction:
             {"uniprot": "Q14213", "gene": "EBI3"},
             {"uniprot": "Q8NEV9", "gene": "IL27B"},
         ]
-        
+
         datasets = {"source": source_data, "target": target_data}
         context = self._create_context(datasets)
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="source",
             target_dataset_key="target",
@@ -251,16 +251,16 @@ class TestMergeWithUniprotResolutionAction:
             output_key="merged",
             use_api=False,
         )
-        
+
         await action.execute_typed(
             [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
         )
-        
+
         merged_data = context.get_action_data("datasets", {})["merged"]
-        
+
         # Should have TWO matched rows (one for each composite part)
         assert len(merged_data) == 2
-        
+
         # Check first match
         match1 = next(row for row in merged_data if row["match_value"] == "Q14213")
         assert match1["UniProt"] == "Q14213_Q8NEV9"
@@ -269,7 +269,7 @@ class TestMergeWithUniprotResolutionAction:
         assert match1["match_confidence"] == 1.0
         assert match1["match_status"] == "matched"
         assert match1["gene"] == "EBI3"
-        
+
         # Check second match
         match2 = next(row for row in merged_data if row["match_value"] == "Q8NEV9")
         assert match2["UniProt"] == "Q14213_Q8NEV9"
@@ -284,10 +284,10 @@ class TestMergeWithUniprotResolutionAction:
         """Test composite ID matching composite ID."""
         source_data = [{"UniProt": "Q14213_Q8NEV9", "Assay": "Test"}]
         target_data = [{"uniprot": "Q14213_P12345", "gene": "MULTI"}]
-        
+
         datasets = {"source": source_data, "target": target_data}
         context = self._create_context(datasets)
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="source",
             target_dataset_key="target",
@@ -296,13 +296,13 @@ class TestMergeWithUniprotResolutionAction:
             output_key="merged",
             use_api=False,
         )
-        
+
         await action.execute_typed(
             [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
         )
-        
+
         merged_data = context.get_action_data("datasets", {})["merged"]
-        
+
         # Should have one matched row (common part: Q14213)
         assert len(merged_data) == 1
         assert merged_data[0]["UniProt"] == "Q14213_Q8NEV9"
@@ -317,10 +317,10 @@ class TestMergeWithUniprotResolutionAction:
         """Test custom composite separator."""
         source_data = [{"UniProt": "Q14213__Q8NEV9", "Assay": "Test"}]
         target_data = [{"uniprot": "Q14213", "gene": "EBI3"}]
-        
+
         datasets = {"source": source_data, "target": target_data}
         context = self._create_context(datasets)
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="source",
             target_dataset_key="target",
@@ -330,13 +330,13 @@ class TestMergeWithUniprotResolutionAction:
             composite_separator="__",  # Custom separator
             use_api=False,
         )
-        
+
         await action.execute_typed(
             [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
         )
-        
+
         merged_data = context.get_action_data("datasets", {})["merged"]
-        
+
         # Should match using custom separator
         assert len(merged_data) == 1
         assert merged_data[0]["match_value"] == "Q14213"
@@ -348,10 +348,10 @@ class TestMergeWithUniprotResolutionAction:
         """Test that all match metadata columns are present."""
         source_data = [{"UniProt": "P12345", "Assay": "Test"}]
         target_data = [{"uniprot": "P12345", "gene": "TEST"}]
-        
+
         datasets = {"source": source_data, "target": target_data}
         context = self._create_context(datasets)
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="source",
             target_dataset_key="target",
@@ -360,21 +360,21 @@ class TestMergeWithUniprotResolutionAction:
             output_key="merged",
             use_api=False,
         )
-        
+
         await action.execute_typed(
             [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
         )
-        
+
         merged_data = context.get_action_data("datasets", {})["merged"]
         row = merged_data[0]
-        
+
         # Check all required metadata columns
         assert "match_value" in row
         assert "match_type" in row
         assert "match_confidence" in row
         assert "match_status" in row
         assert "api_resolved" in row
-        
+
         # Check data types
         assert isinstance(row["match_value"], str)
         assert isinstance(row["match_type"], str)
@@ -393,10 +393,10 @@ class TestMergeWithUniprotResolutionAction:
             {"uniprot": "P12345", "gene": "TEST1"},
             {"uniprot": "P88888", "gene": "TEST2"},  # Unmatched
         ]
-        
+
         datasets = {"source": source_data, "target": target_data}
         context = self._create_context(datasets)
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="source",
             target_dataset_key="target",
@@ -405,16 +405,16 @@ class TestMergeWithUniprotResolutionAction:
             output_key="merged",
             use_api=False,
         )
-        
+
         await action.execute_typed(
             [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
         )
-        
+
         merged_data = context.get_action_data("datasets", {})["merged"]
-        
+
         # Should have 3 rows: 1 matched + 1 source_only + 1 target_only
         assert len(merged_data) == 3
-        
+
         statuses = [row["match_status"] for row in merged_data]
         assert "matched" in statuses
         assert "source_only" in statuses
@@ -425,10 +425,10 @@ class TestMergeWithUniprotResolutionAction:
         """Test column conflict resolution with suffixes."""
         source_data = [{"UniProt": "P12345", "name": "Source Name"}]
         target_data = [{"uniprot": "P12345", "name": "Target Name"}]
-        
+
         datasets = {"source": source_data, "target": target_data}
         context = self._create_context(datasets)
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="source",
             target_dataset_key="target",
@@ -437,18 +437,18 @@ class TestMergeWithUniprotResolutionAction:
             output_key="merged",
             use_api=False,
         )
-        
+
         await action.execute_typed(
             [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
         )
-        
+
         merged_data = context.get_action_data("datasets", {})["merged"]
         row = merged_data[0]
-        
+
         # ID columns should not have suffixes
         assert "UniProt" in row
         assert "uniprot" in row
-        
+
         # Conflicting columns should have suffixes
         assert "name_source" in row
         assert "name_target" in row
@@ -467,10 +467,10 @@ class TestMergeWithUniprotResolutionAction:
             {"uniprot": "P12345", "gene": "TEST1"},
             {"uniprot": "NEW123", "gene": "TEST2"},  # OLD123 resolves to this
         ]
-        
+
         datasets = {"source": source_data, "target": target_data}
         context = self._create_context(datasets)
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="source",
             target_dataset_key="target",
@@ -479,40 +479,46 @@ class TestMergeWithUniprotResolutionAction:
             output_key="merged",
             use_api=True,
         )
-        
+
         # Mock the API resolver to return OLD123 -> NEW123
         mock_api_result = (
-            [{
-                "source_idx": 1,
-                "target_idx": 1,
-                "source_id": "OLD123",
-                "target_id": "NEW123",
-                "match_value": "OLD123->NEW123",
-                "match_type": "historical",
-                "match_confidence": 0.9,
-                "api_resolved": True,
-            }],
-            1  # api_calls_made
+            [
+                {
+                    "source_idx": 1,
+                    "target_idx": 1,
+                    "source_id": "OLD123",
+                    "target_id": "NEW123",
+                    "match_value": "OLD123->NEW123",
+                    "match_type": "historical",
+                    "match_confidence": 0.9,
+                    "api_resolved": True,
+                }
+            ],
+            1,  # api_calls_made
         )
-        
+
         with patch.object(action, "_resolve_with_api", return_value=mock_api_result):
             await action.execute_typed(
                 [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
             )
-        
+
         merged_data = context.get_action_data("datasets", {})["merged"]
-        
+
         # Should have 2 matched rows
         matched_rows = [row for row in merged_data if row["match_status"] == "matched"]
         assert len(matched_rows) == 2
-        
+
         # Check direct match
-        direct_match = next(row for row in matched_rows if row["match_type"] == "direct")
+        direct_match = next(
+            row for row in matched_rows if row["match_type"] == "direct"
+        )
         assert direct_match["UniProt"] == "P12345"
         assert direct_match["api_resolved"] is False
-        
+
         # Check API resolved match
-        api_match = next(row for row in matched_rows if row["match_type"] == "historical")
+        api_match = next(
+            row for row in matched_rows if row["match_type"] == "historical"
+        )
         assert api_match["UniProt"] == "OLD123"
         assert api_match["uniprot"] == "NEW123"
         assert api_match["match_value"] == "OLD123->NEW123"
@@ -530,10 +536,10 @@ class TestMergeWithUniprotResolutionAction:
             {"uniprot": "P12345", "gene": "TEST1"},
             {"uniprot": "NEW123", "gene": "TEST2"},
         ]
-        
+
         datasets = {"source": source_data, "target": target_data}
         context = self._create_context(datasets)
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="source",
             target_dataset_key="target",
@@ -542,19 +548,19 @@ class TestMergeWithUniprotResolutionAction:
             output_key="merged",
             use_api=False,
         )
-        
+
         await action.execute_typed(
             [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
         )
-        
+
         merged_data = context.get_action_data("datasets", {})["merged"]
-        
+
         # Should have 1 matched + 1 source_only + 1 target_only
         assert len(merged_data) == 3
         matched_rows = [row for row in merged_data if row["match_status"] == "matched"]
         assert len(matched_rows) == 1
         assert matched_rows[0]["UniProt"] == "P12345"
-        
+
         # Check no API resolution occurred
         for row in merged_data:
             assert row["api_resolved"] is False
@@ -565,7 +571,7 @@ class TestMergeWithUniprotResolutionAction:
         """Test with empty input datasets."""
         datasets = {"source": [], "target": []}
         context = self._create_context(datasets)
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="source",
             target_dataset_key="target",
@@ -573,11 +579,11 @@ class TestMergeWithUniprotResolutionAction:
             target_id_column="uniprot",
             output_key="merged",
         )
-        
+
         await action.execute_typed(
             [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
         )
-        
+
         merged_data = context.get_action_data("datasets", {})["merged"]
         assert len(merged_data) == 0
 
@@ -585,7 +591,7 @@ class TestMergeWithUniprotResolutionAction:
     async def test_missing_datasets(self, action, mock_endpoints):
         """Test error when datasets don't exist in context."""
         context = self._create_context({})
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="missing_source",
             target_dataset_key="missing_target",
@@ -593,12 +599,12 @@ class TestMergeWithUniprotResolutionAction:
             target_id_column="uniprot",
             output_key="merged",
         )
-        
+
         with pytest.raises(ValueError) as exc_info:
             await action.execute_typed(
                 [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
             )
-        
+
         assert "missing_source" in str(exc_info.value)
 
     @pytest.mark.asyncio
@@ -606,10 +612,10 @@ class TestMergeWithUniprotResolutionAction:
         """Test error when ID columns don't exist."""
         source_data = [{"wrong_column": "P12345"}]
         target_data = [{"uniprot": "P12345"}]
-        
+
         datasets = {"source": source_data, "target": target_data}
         context = self._create_context(datasets)
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="source",
             target_dataset_key="target",
@@ -617,12 +623,12 @@ class TestMergeWithUniprotResolutionAction:
             target_id_column="uniprot",
             output_key="merged",
         )
-        
+
         with pytest.raises(ValueError) as exc_info:
             await action.execute_typed(
                 [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
             )
-        
+
         assert "UniProt" in str(exc_info.value)
         assert "not found" in str(exc_info.value).lower()
 
@@ -631,10 +637,10 @@ class TestMergeWithUniprotResolutionAction:
         """Test that matches below confidence threshold are filtered out."""
         source_data = [{"UniProt": "OLD123", "Assay": "Test"}]
         target_data = [{"uniprot": "NEW123", "gene": "TEST"}]
-        
+
         datasets = {"source": source_data, "target": target_data}
         context = self._create_context(datasets)
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="source",
             target_dataset_key="target",
@@ -643,29 +649,31 @@ class TestMergeWithUniprotResolutionAction:
             output_key="merged",
             confidence_threshold=0.9,  # High threshold
         )
-        
+
         # Mock API to return low confidence match
         mock_api_result = (
-            [{
-                "source_idx": 0,
-                "target_idx": 0,
-                "source_id": "OLD123",
-                "target_id": "NEW123",
-                "match_value": "OLD123->NEW123",
-                "match_type": "historical",
-                "match_confidence": 0.5,  # Low confidence
-                "api_resolved": True,
-            }],
-            1  # api_calls_made
+            [
+                {
+                    "source_idx": 0,
+                    "target_idx": 0,
+                    "source_id": "OLD123",
+                    "target_id": "NEW123",
+                    "match_value": "OLD123->NEW123",
+                    "match_type": "historical",
+                    "match_confidence": 0.5,  # Low confidence
+                    "api_resolved": True,
+                }
+            ],
+            1,  # api_calls_made
         )
-        
+
         with patch.object(action, "_resolve_with_api", return_value=mock_api_result):
             await action.execute_typed(
                 [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
             )
-        
+
         merged_data = context.get_action_data("datasets", {})["merged"]
-        
+
         # Should have 2 unmatched rows (confidence too low)
         assert len(merged_data) == 2
         matched_rows = [row for row in merged_data if row["match_status"] == "matched"]
@@ -711,10 +719,10 @@ class TestRealData:
         # We'll skip if the data files don't exist
         ukbb_file = "/procedure/data/local_data/MAPPING_ONTOLOGIES/test_data/ukbb/UKBB_Protein_Meta.tsv"
         hpa_file = "/procedure/data/local_data/MAPPING_ONTOLOGIES/test_data/isb_osp/hpa_osps.csv"
-        
+
         if not Path(ukbb_file).exists() or not Path(hpa_file).exists():
             pytest.skip("Real data files not found")
-        
+
         # This test would require loading the data first with LOAD_DATASET_IDENTIFIERS
         # For now, we'll create a placeholder that confirms the files exist
         assert Path(ukbb_file).exists()
@@ -725,10 +733,10 @@ class TestRealData:
         """Test that metadata has correct structure."""
         source_data = [{"UniProt": "P12345", "Assay": "Test"}]
         target_data = [{"uniprot": "P12345", "gene": "TEST"}]
-        
+
         datasets = {"source": source_data, "target": target_data}
         context = self._create_context(datasets)
-        
+
         params = MergeWithUniprotResolutionParams(
             source_dataset_key="source",
             target_dataset_key="target",
@@ -737,13 +745,13 @@ class TestRealData:
             output_key="merged",
             use_api=False,
         )
-        
+
         await action.execute_typed(
             [], "unknown", params, mock_endpoints[0], mock_endpoints[1], context
         )
-        
+
         metadata = context.get_action_data("metadata", {})["merged"]
-        
+
         # Check required metadata fields
         assert "total_source_rows" in metadata
         assert "total_target_rows" in metadata
@@ -755,7 +763,7 @@ class TestRealData:
         assert "unique_source_ids" in metadata
         assert "unique_target_ids" in metadata
         assert "processing_time" in metadata
-        
+
         # Check values
         assert metadata["total_source_rows"] == 1
         assert metadata["total_target_rows"] == 1

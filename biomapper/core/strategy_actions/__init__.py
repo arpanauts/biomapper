@@ -1,18 +1,50 @@
 """
-Strategy action handlers for YAML-defined mapping strategies.
+Strategy action handlers for YAML-defined mapping strategies (Enhanced Organization).
+
+This module provides biomapper actions organized by entity type and function
+for scalable biological data harmonization.
+
+Enhanced Organization Structure:
+- entities/: Entity-specific actions (proteins, metabolites, chemistry)
+- algorithms/: Reusable computational algorithms  
+- utils/: General utility functions
+- workflows/: High-level orchestration actions
+- io/: Data input/output actions
+- reports/: Analysis and reporting actions
 
 Each action handler implements a specific operation that can be used
 as a step in a mapping strategy.
 """
 
+# Import registry first (required for action registration)
+from . import registry
+
+# Import base classes
 from .base import BaseStrategyAction, StrategyAction, ActionContext
 from .typed_base import TypedStrategyAction, StandardActionResult
-from .load_dataset_identifiers import LoadDatasetIdentifiersAction, LoadDatasetIdentifiersParams
-from .merge_with_uniprot_resolution import MergeWithUniprotResolutionAction, MergeWithUniprotResolutionParams
+
+# Import enhanced organizational modules (triggers action registration)
+from . import entities
+from . import algorithms
+from . import utils
+from . import workflows
+from . import io
+from . import reports
+
+# Import existing actions for backward compatibility
+# (These will be migrated to appropriate entity directories)
+from .load_dataset_identifiers import (
+    LoadDatasetIdentifiersAction,
+    LoadDatasetIdentifiersParams,
+)
+from .merge_with_uniprot_resolution import (
+    MergeWithUniprotResolutionAction,
+    MergeWithUniprotResolutionParams,
+)
 from .calculate_set_overlap import CalculateSetOverlapAction, CalculateSetOverlapParams
 from .merge_datasets import MergeDatasetsAction, MergeDatasetsParams
 
-# Import new metabolomics actions to register them
+# Import metabolomics actions (to be migrated to entities/metabolites/)
 from .baseline_fuzzy_match import BaselineFuzzyMatchAction
 from .build_nightingale_reference import BuildNightingaleReferenceAction
 from .cts_enriched_match import CtsEnrichedMatchAction
@@ -31,7 +63,17 @@ __all__ = [
     "ActionContext",
     "TypedStrategyAction",
     "StandardActionResult",
-    # MVP Action implementations
+    # Enhanced Organization Modules
+    # (Actions auto-register when these are imported)
+    "entities",  # Entity-specific actions (proteins, metabolites, chemistry)
+    "algorithms",  # Reusable algorithms (fuzzy_matching, normalization)
+    "utils",  # General utilities (data_processing, logging)
+    "workflows",  # High-level orchestration actions
+    "io",  # Data input/output actions
+    "reports",  # Analysis and reporting actions
+    "registry",  # Action registry
+    # Legacy Action Classes (for backward compatibility)
+    # TODO: Migrate these to appropriate entity directories
     "LoadDatasetIdentifiersAction",
     "LoadDatasetIdentifiersParams",
     "MergeWithUniprotResolutionAction",
@@ -40,7 +82,7 @@ __all__ = [
     "CalculateSetOverlapParams",
     "MergeDatasetsAction",
     "MergeDatasetsParams",
-    # Metabolomics actions
+    # Metabolomics Actions (to be migrated to entities/metabolites/)
     "BaselineFuzzyMatchAction",
     "BuildNightingaleReferenceAction",
     "CtsEnrichedMatchAction",
@@ -50,7 +92,7 @@ __all__ = [
     "SemanticMetaboliteMatchAction",
     "MetaboliteApiEnrichmentAction",
     "CombineMetaboliteMatchesAction",
-    "CalculateThreeWayOverlapAction"
+    "CalculateThreeWayOverlapAction",
 ]
 
 # Create metabolomics-specific aliases for existing actions

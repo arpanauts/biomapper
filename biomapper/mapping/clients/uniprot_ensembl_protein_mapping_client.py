@@ -44,7 +44,7 @@ class UniProtEnsemblProteinMappingClient(UniProtIDMappingClient):
             "from_db": merged_config.pop("from_db"),
             "to_db": merged_config.pop("to_db"),
         }
-        
+
         # Add optional parameters if present in config
         if "base_url" in merged_config:
             parent_kwargs["base_url"] = merged_config.pop("base_url")

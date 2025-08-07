@@ -85,7 +85,10 @@ class SetAnalyzer:
         self._id_columns[key] = value
 
     def load_dataset(
-        self, name: str, path: Union[Path, str], id_delimiters: Union[List[str], None] = None
+        self,
+        name: str,
+        path: Union[Path, str],
+        id_delimiters: Union[List[str], None] = None,
     ) -> None:
         """Load a dataset from file.
 

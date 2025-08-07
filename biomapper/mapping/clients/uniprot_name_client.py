@@ -172,7 +172,7 @@ class UniProtNameClient:
         )
         raw_results: Dict[str, Optional[List[str]]] = {}
         if not identifiers:
-            return {'primary_ids': [], 'input_to_primary': {}, 'errors': []}
+            return {"primary_ids": [], "input_to_primary": {}, "errors": []}
 
         async with aiohttp.ClientSession() as session:
             tasks = [
@@ -202,21 +202,23 @@ class UniProtNameClient:
                 primary_ids_set.add(primary_accession)
                 input_to_primary_map[original_id] = primary_accession
             else:
-                errors.append({
-                    'input_id': original_id,
-                    'error_type': 'NO_MAPPING_FOUND',
-                    'message': f'No UniProtKB accession found for {original_id}'
-                })
+                errors.append(
+                    {
+                        "input_id": original_id,
+                        "error_type": "NO_MAPPING_FOUND",
+                        "message": f"No UniProtKB accession found for {original_id}",
+                    }
+                )
 
         logger.info(
             f"Finished UniProt search. Found mappings for {len(input_to_primary_map)}/{len(identifiers)} identifiers."
         )
-        
+
         return {
-            'primary_ids': list(primary_ids_set),
-            'input_to_primary': input_to_primary_map,
-            'secondary_ids': {}, # UniProtNameClient doesn't produce secondary IDs in this context
-            'errors': errors
+            "primary_ids": list(primary_ids_set),
+            "input_to_primary": input_to_primary_map,
+            "secondary_ids": {},  # UniProtNameClient doesn't produce secondary IDs in this context
+            "errors": errors,
         }
 
 
@@ -228,7 +230,7 @@ async def run_example():
     test_ids = ["TP53", "EGFR", "BRCA1", "NONEXISTENTGENE", "AARSD1", "ABHD14B"]
     results = await client.map_identifiers(test_ids)
     print("Mapping Results:")
-    for gene, accession in results['input_to_primary'].items():
+    for gene, accession in results["input_to_primary"].items():
         print(f"  {gene}: {accession}")
 
 

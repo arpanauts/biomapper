@@ -1,8 +1,7 @@
 """Tests for progress tracking utilities."""
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
-import pytest
 
 from biomapper_client.progress import NoOpProgressTracker, ProgressTracker
 

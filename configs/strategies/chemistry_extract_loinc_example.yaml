@@ -1,0 +1,65 @@
+name: CHEMISTRY_EXTRACT_LOINC_EXAMPLE
+description: >
+  Example strategy demonstrating LOINC extraction from clinical chemistry test data.
+  Extracts LOINC codes from direct columns, vendor-specific formats, and test names.
+
+parameters:
+  # Input data file path
+  chemistry_data_file: "${DATA_DIR}/chemistry/arivale_chemistry_tests.tsv"
+  
+  # Output directory for results
+  output_dir: "${OUTPUT_DIR}/chemistry_loinc_extraction"
+
+steps:
+  # Step 1: Load chemistry test dataset
+  - name: load_chemistry_data
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.chemistry_data_file}"
+        file_type: "tsv"
+        identifier_column: "test_id"
+        output_key: "chemistry_tests"
+        drop_empty_ids: false
+
+  # Step 2: Extract LOINC codes from multiple sources
+  - name: extract_loinc_codes
+    action:
+      type: CHEMISTRY_EXTRACT_LOINC
+      params:
+        # Input/Output
+        input_key: "chemistry_tests"
+        output_key: "chemistry_with_loinc"
+        
+        # Column configuration
+        loinc_column: "loinc_code"         # Direct LOINC column
+        test_name_column: "test_name"       # Test name for fallback mapping
+        test_id_column: "vendor_test_id"    # Vendor-specific test ID
+        
+        # Vendor configuration (for Arivale format)
+        vendor: "arivale"                   # Handles "Test Name (LOINC)" format
+        
+        # Extraction options
+        validate_format: true               # Validate LOINC format (12345-6)
+        validate_checksum: false            # Skip checksum validation
+        extract_from_name: true             # Try to extract from test names
+        use_fallback_mapping: true          # Use common test name mappings
+        
+        # Output options
+        add_loinc_metadata: true            # Add metadata columns
+        add_extraction_log: true            # Track extraction sources
+
+  # Step 3: Export results with detailed statistics
+  - name: export_results
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "chemistry_with_loinc"
+        output_file: "${parameters.output_dir}/chemistry_tests_with_loinc.tsv"
+        format: "tsv"
+        include_statistics: true
+
+# Expected outputs:
+# - chemistry_tests_with_loinc.tsv: Enhanced dataset with extracted LOINC codes
+# - Columns added: extracted_loinc, loinc_extraction_source, loinc_valid
+# - Statistics: extraction rate, valid LOINC count, source breakdown

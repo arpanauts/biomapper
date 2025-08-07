@@ -1,15 +1,10 @@
 """API routes for resource management."""
 import asyncio
-from typing import Dict, Any, List
+from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
-from ...services.resource_manager import (
-    ResourceManager, 
-    ResourceStatus,
-    ManagedResource,
-    ResourceUnavailableError
-)
+from ...services.resource_manager import ResourceManager, ResourceStatus
 from ..deps import get_resource_manager
 
 router = APIRouter(prefix="/resources", tags=["resources"])
@@ -17,11 +12,11 @@ router = APIRouter(prefix="/resources", tags=["resources"])
 
 @router.get("/status")
 async def get_resource_status(
-    manager: ResourceManager = Depends(get_resource_manager)
+    manager: ResourceManager = Depends(get_resource_manager),
 ) -> Dict[str, Any]:
     """Get status of all managed resources."""
     resources = await manager.get_resource_status()
-    
+
     # Convert to list of dicts for JSON serialization
     resource_list = []
     for resource in resources.values():
@@ -29,67 +24,76 @@ async def get_resource_status(
         # Convert datetime to string
         resource_dict["last_check"] = resource_dict["last_check"].isoformat()
         resource_list.append(resource_dict)
-    
+
     return {
         "resources": resource_list,
         "summary": {
             "total": len(resources),
-            "healthy": sum(1 for r in resources.values() 
-                         if r.status == ResourceStatus.HEALTHY),
-            "degraded": sum(1 for r in resources.values() 
-                          if r.status == ResourceStatus.DEGRADED),
-            "unavailable": sum(1 for r in resources.values() 
-                             if r.status == ResourceStatus.UNAVAILABLE),
-            "unknown": sum(1 for r in resources.values() 
-                         if r.status == ResourceStatus.UNKNOWN)
-        }
+            "healthy": sum(
+                1 for r in resources.values() if r.status == ResourceStatus.HEALTHY
+            ),
+            "degraded": sum(
+                1 for r in resources.values() if r.status == ResourceStatus.DEGRADED
+            ),
+            "unavailable": sum(
+                1 for r in resources.values() if r.status == ResourceStatus.UNAVAILABLE
+            ),
+            "unknown": sum(
+                1 for r in resources.values() if r.status == ResourceStatus.UNKNOWN
+            ),
+        },
     }
 
 
 @router.get("/status/{resource_name}")
 async def get_single_resource_status(
-    resource_name: str,
-    manager: ResourceManager = Depends(get_resource_manager)
+    resource_name: str, manager: ResourceManager = Depends(get_resource_manager)
 ) -> Dict[str, Any]:
     """Get status of a specific resource."""
     resources = await manager.get_resource_status()
-    
+
     if resource_name not in resources:
-        raise HTTPException(status_code=404, detail=f"Resource '{resource_name}' not found")
-    
+        raise HTTPException(
+            status_code=404, detail=f"Resource '{resource_name}' not found"
+        )
+
     resource = resources[resource_name]
     resource_dict = resource.dict()
     resource_dict["last_check"] = resource_dict["last_check"].isoformat()
-    
+
     return resource_dict
 
 
 @router.post("/{resource_name}/start")
 async def start_resource(
-    resource_name: str,
-    manager: ResourceManager = Depends(get_resource_manager)
+    resource_name: str, manager: ResourceManager = Depends(get_resource_manager)
 ) -> Dict[str, Any]:
     """Start a specific resource."""
     try:
         success = await manager.start_resource(resource_name)
         resources = await manager.get_resource_status()
-        
+
         return {
             "success": success,
             "resource": resource_name,
-            "status": resources[resource_name].status.value if resource_name in resources else "unknown",
-            "message": "Resource started successfully" if success else "Failed to start resource"
+            "status": resources[resource_name].status.value
+            if resource_name in resources
+            else "unknown",
+            "message": "Resource started successfully"
+            if success
+            else "Failed to start resource",
         }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error starting resource: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error starting resource: {str(e)}"
+        )
 
 
 @router.post("/{resource_name}/stop")
 async def stop_resource(
-    resource_name: str,
-    manager: ResourceManager = Depends(get_resource_manager)
+    resource_name: str, manager: ResourceManager = Depends(get_resource_manager)
 ) -> Dict[str, Any]:
     """Stop a specific resource."""
     try:
@@ -97,82 +101,91 @@ async def stop_resource(
         return {
             "success": success,
             "resource": resource_name,
-            "message": "Resource stopped successfully" if success else "Failed to stop resource"
+            "message": "Resource stopped successfully"
+            if success
+            else "Failed to stop resource",
         }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error stopping resource: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error stopping resource: {str(e)}"
+        )
 
 
 @router.post("/{resource_name}/restart")
 async def restart_resource(
-    resource_name: str,
-    manager: ResourceManager = Depends(get_resource_manager)
+    resource_name: str, manager: ResourceManager = Depends(get_resource_manager)
 ) -> Dict[str, Any]:
     """Restart a specific resource."""
     try:
         # Stop the resource
         await manager.stop_resource(resource_name)
-        
+
         # Wait a bit
         await asyncio.sleep(2)
-        
+
         # Start the resource
         success = await manager.start_resource(resource_name)
-        
+
         return {
             "success": success,
             "resource": resource_name,
-            "message": "Resource restarted successfully" if success else "Failed to restart resource"
+            "message": "Resource restarted successfully"
+            if success
+            else "Failed to restart resource",
         }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error restarting resource: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error restarting resource: {str(e)}"
+        )
 
 
 @router.post("/{resource_name}/check")
 async def check_resource(
-    resource_name: str,
-    manager: ResourceManager = Depends(get_resource_manager)
+    resource_name: str, manager: ResourceManager = Depends(get_resource_manager)
 ) -> Dict[str, Any]:
     """Manually trigger a health check for a resource."""
     try:
         status = await manager.check_resource(resource_name)
         resources = await manager.get_resource_status()
         resource = resources.get(resource_name)
-        
+
         return {
             "resource": resource_name,
             "status": status.value,
             "last_check": resource.last_check.isoformat() if resource else None,
-            "error_message": resource.error_message if resource else None
+            "error_message": resource.error_message if resource else None,
         }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error checking resource: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error checking resource: {str(e)}"
+        )
 
 
 @router.get("/requirements/{strategy_name}")
 async def get_strategy_requirements(
-    strategy_name: str,
-    manager: ResourceManager = Depends(get_resource_manager)
+    strategy_name: str, manager: ResourceManager = Depends(get_resource_manager)
 ) -> Dict[str, Any]:
     """Get resource requirements for a strategy."""
     try:
         # This would need to load the strategy from file or database
         # For now, return a mock response
         from ...services.mapper_service import load_strategy_config
-        
+
         strategy = load_strategy_config(strategy_name)
         if not strategy:
-            raise HTTPException(status_code=404, detail=f"Strategy '{strategy_name}' not found")
-        
+            raise HTTPException(
+                status_code=404, detail=f"Strategy '{strategy_name}' not found"
+            )
+
         # Get requirements
         required = await manager.get_resource_requirements(strategy)
-        
+
         # Check current status
         resources = await manager.get_resource_status()
         status = {}
@@ -180,37 +193,42 @@ async def get_strategy_requirements(
             resource = resources.get(resource_name)
             if resource:
                 status[resource_name] = resource.status.value
-        
+
         return {
             "strategy": strategy_name,
             "required_resources": required,
             "current_status": status,
             "ready": all(
-                status.get(r) == ResourceStatus.HEALTHY.value 
-                for r in required
-            )
+                status.get(r) == ResourceStatus.HEALTHY.value for r in required
+            ),
         }
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting requirements: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error getting requirements: {str(e)}"
+        )
 
 
 @router.post("/ensure-required")
 async def ensure_required_resources(
-    manager: ResourceManager = Depends(get_resource_manager)
+    manager: ResourceManager = Depends(get_resource_manager),
 ) -> Dict[str, Any]:
     """Ensure all required resources are available."""
     try:
         results = await manager.ensure_required_resources()
-        
+
         return {
             "success": all(results.values()) if results else True,
             "resources": results,
-            "message": "All required resources are available" if all(results.values()) else "Some required resources failed to start"
+            "message": "All required resources are available"
+            if all(results.values())
+            else "Some required resources failed to start",
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error ensuring resources: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error ensuring resources: {str(e)}"
+        )
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
@@ -471,8 +489,7 @@ async def resource_dashboard():
 
 @router.websocket("/ws")
 async def websocket_resources(
-    websocket: WebSocket,
-    manager: ResourceManager = Depends(get_resource_manager)
+    websocket: WebSocket, manager: ResourceManager = Depends(get_resource_manager)
 ):
     """WebSocket endpoint for real-time resource status updates."""
     await websocket.accept()
@@ -480,36 +497,39 @@ async def websocket_resources(
         while True:
             # Get current resource status
             resources = await manager.get_resource_status()
-            
+
             # Convert to list of dicts
             resource_list = []
             for resource in resources.values():
                 resource_dict = resource.dict()
                 resource_dict["last_check"] = resource_dict["last_check"].isoformat()
                 resource_list.append(resource_dict)
-            
+
             # Calculate summary
             summary = {
                 "total": len(resources),
-                "healthy": sum(1 for r in resources.values() 
-                             if r.status == ResourceStatus.HEALTHY),
-                "degraded": sum(1 for r in resources.values() 
-                              if r.status == ResourceStatus.DEGRADED),
-                "unavailable": sum(1 for r in resources.values() 
-                                 if r.status == ResourceStatus.UNAVAILABLE),
-                "unknown": sum(1 for r in resources.values() 
-                             if r.status == ResourceStatus.UNKNOWN)
+                "healthy": sum(
+                    1 for r in resources.values() if r.status == ResourceStatus.HEALTHY
+                ),
+                "degraded": sum(
+                    1 for r in resources.values() if r.status == ResourceStatus.DEGRADED
+                ),
+                "unavailable": sum(
+                    1
+                    for r in resources.values()
+                    if r.status == ResourceStatus.UNAVAILABLE
+                ),
+                "unknown": sum(
+                    1 for r in resources.values() if r.status == ResourceStatus.UNKNOWN
+                ),
             }
-            
+
             # Send update
-            await websocket.send_json({
-                "resources": resource_list,
-                "summary": summary
-            })
-            
+            await websocket.send_json({"resources": resource_list, "summary": summary})
+
             # Wait before next update
             await asyncio.sleep(5)
-            
+
     except WebSocketDisconnect:
         pass
     except Exception as e:

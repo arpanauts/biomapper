@@ -8,7 +8,6 @@ from typing import List, Optional
 from fastapi import UploadFile
 
 
-
 async def save_upload_file(upload_file: UploadFile, destination: Path) -> Path:
     """
     Save an uploaded file to the specified destination.

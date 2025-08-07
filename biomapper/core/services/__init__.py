@@ -1,7 +1,11 @@
 """Core services for biomapper."""
 
 # Import only the new control flow modules we created
-from .expression_evaluator import SafeExpressionEvaluator, ConditionEvaluator, ExpressionError
+from .expression_evaluator import (
+    SafeExpressionEvaluator,
+    ConditionEvaluator,
+    ExpressionError,
+)
 from .control_flow_executor import ControlFlowExecutor, StepExecutionError
 
 # Try to import existing services if they exist

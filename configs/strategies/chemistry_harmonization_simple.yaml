@@ -1,0 +1,44 @@
+name: CHEMISTRY_HARMONIZATION_SIMPLE
+description: Simple chemistry vendor harmonization example for auto-detection
+
+parameters:
+  input_file: "/procedure/data/local_data/chemistry/mixed_vendor_results.tsv"
+  output_dir: "/procedure/data/local_data/outputs"
+
+steps:
+  # Load mixed vendor data
+  - name: load_chemistry_data
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.input_file}"
+        identifier_column: test_name
+        output_key: raw_data
+        additional_columns: [test_code, value, unit, reference_range, vendor]
+
+  # Auto-detect and harmonize all vendors
+  - name: harmonize_chemistry
+    action:
+      type: CHEMISTRY_VENDOR_HARMONIZATION
+      params:
+        input_key: raw_data
+        output_key: harmonized_data
+        vendor: auto  # Auto-detect vendor from data patterns
+        vendor_column: vendor  # Use existing vendor column if available
+        target_unit_system: SI
+        standardize_test_names: true
+        standardize_units: true
+        standardize_reference_ranges: true
+        flag_out_of_range: true
+        preserve_original: true
+        add_harmonization_log: true
+
+  # Export results
+  - name: export_results
+    action:
+      type: EXPORT_DATASET
+      params:
+        input_key: harmonized_data
+        output_file: "${parameters.output_dir}/chemistry_harmonized.tsv"
+        format: tsv
+        include_metadata: true

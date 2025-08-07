@@ -34,12 +34,12 @@ def get_csv_service() -> Generator[CSVService, None, None]:
 
 def get_mapper_service(request: Request) -> MapperService:
     """Dependency for mapper service.
-    
+
     Returns the singleton MapperService instance from the application state.
-    
+
     Args:
         request: The FastAPI request object.
-        
+
     Returns:
         MapperService: The singleton mapper service instance.
     """
@@ -48,13 +48,13 @@ def get_mapper_service(request: Request) -> MapperService:
 
 def get_resource_manager(request: Request) -> Optional[ResourceManager]:
     """Dependency for resource manager.
-    
+
     Returns the singleton ResourceManager instance from the application state.
-    
+
     Args:
         request: The FastAPI request object.
-        
+
     Returns:
         ResourceManager: The singleton resource manager instance, or None if not initialized.
     """
-    return getattr(request.app.state, 'resource_manager', None)
+    return getattr(request.app.state, "resource_manager", None)

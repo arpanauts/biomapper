@@ -96,7 +96,7 @@ MAPPINGS = [
         "description": "UKBB to HPA protein mapping",
         "source": "UKBB",
         "target": "HPA",
-        "mapping_id": "UKBB_HPA"
+        "mapping_id": "UKBB_HPA",
     },
     {
         "script_name": "run_arivale_spoke_mapping.py",
@@ -104,7 +104,7 @@ MAPPINGS = [
         "description": "Arivale to SPOKE protein mapping",
         "source": "Arivale",
         "target": "SPOKE",
-        "mapping_id": "Arivale_SPOKE"
+        "mapping_id": "Arivale_SPOKE",
     },
     {
         "script_name": "run_arivale_kg2c_mapping.py",
@@ -112,7 +112,7 @@ MAPPINGS = [
         "description": "Arivale to KG2C protein mapping",
         "source": "Arivale",
         "target": "KG2C",
-        "mapping_id": "Arivale_KG2C"
+        "mapping_id": "Arivale_KG2C",
     },
     {
         "script_name": "run_arivale_ukbb_mapping.py",
@@ -120,7 +120,7 @@ MAPPINGS = [
         "description": "Arivale to UKBB protein mapping",
         "source": "Arivale",
         "target": "UKBB",
-        "mapping_id": "Arivale_UKBB"
+        "mapping_id": "Arivale_UKBB",
     },
     {
         "script_name": "run_hpa_qin_mapping.py",
@@ -128,7 +128,7 @@ MAPPINGS = [
         "description": "HPA to QIN protein mapping",
         "source": "HPA",
         "target": "QIN",
-        "mapping_id": "HPA_QIN"
+        "mapping_id": "HPA_QIN",
     },
     {
         "script_name": "run_hpa_spoke_mapping.py",
@@ -136,7 +136,7 @@ MAPPINGS = [
         "description": "HPA to SPOKE protein mapping",
         "source": "HPA",
         "target": "SPOKE",
-        "mapping_id": "HPA_SPOKE"
+        "mapping_id": "HPA_SPOKE",
     },
     {
         "script_name": "run_ukbb_kg2c_mapping.py",
@@ -144,7 +144,7 @@ MAPPINGS = [
         "description": "UKBB to KG2C protein mapping",
         "source": "UKBB",
         "target": "KG2C",
-        "mapping_id": "UKBB_KG2C"
+        "mapping_id": "UKBB_KG2C",
     },
     {
         "script_name": "run_ukbb_qin_mapping.py",
@@ -152,7 +152,7 @@ MAPPINGS = [
         "description": "UKBB to QIN protein mapping",
         "source": "UKBB",
         "target": "QIN",
-        "mapping_id": "UKBB_QIN"
+        "mapping_id": "UKBB_QIN",
     },
     {
         "script_name": "run_ukbb_spoke_mapping.py",
@@ -160,32 +160,34 @@ MAPPINGS = [
         "description": "UKBB to SPOKE protein mapping",
         "source": "UKBB",
         "target": "SPOKE",
-        "mapping_id": "UKBB_SPOKE"
-    }
+        "mapping_id": "UKBB_SPOKE",
+    },
 ]
+
 
 def create_client_scripts():
     """Create all client scripts."""
-    
+
     scripts_dir = Path("/home/ubuntu/biomapper/scripts/main_pipelines")
     scripts_dir.mkdir(exist_ok=True)
-    
+
     for mapping in MAPPINGS:
         script_path = scripts_dir / mapping["script_name"]
-        
+
         # Generate script content
         script_content = SCRIPT_TEMPLATE.format(**mapping)
-        
+
         # Write script
-        with open(script_path, 'w') as f:
+        with open(script_path, "w") as f:
             f.write(script_content)
-        
+
         # Make executable
         script_path.chmod(0o755)
-        
+
         print(f"✅ Created {mapping['script_name']} for {mapping['strategy_name']}")
-    
+
     print(f"\n🎉 All {len(MAPPINGS)} client scripts created successfully!")
+
 
 if __name__ == "__main__":
     create_client_scripts()

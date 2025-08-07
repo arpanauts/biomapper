@@ -8,9 +8,11 @@ from enum import Enum
 from pydantic import BaseModel, Field
 from thefuzz import fuzz
 
-from biomapper.core.strategy_actions.typed_base import TypedStrategyAction, StandardActionResult
+from biomapper.core.strategy_actions.typed_base import (
+    TypedStrategyAction,
+    StandardActionResult,
+)
 from biomapper.core.strategy_actions.registry import register_action
-from biomapper.core.models.execution_context import StrategyExecutionContext
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +48,10 @@ class BaselineFuzzyMatchParams(BaseModel):
         default=1, ge=1, description="Maximum matches per source item"
     )
     unmatched_key: Optional[str] = Field(
-        None,
-        description="Key for storing unmatched items for progressive enhancement"
+        None, description="Key for storing unmatched items for progressive enhancement"
     )
     metrics_key: Optional[str] = Field(
-        None,
-        description="Key for storing metrics in context"
+        None, description="Key for storing metrics in context"
     )
 
 
@@ -73,18 +73,16 @@ class MatchMetrics(BaseModel):
     algorithm_used: str
 
 
-
-
 @register_action("BASELINE_FUZZY_MATCH")
 class BaselineFuzzyMatchAction(
     TypedStrategyAction[BaselineFuzzyMatchParams, StandardActionResult]
 ):
     """Baseline fuzzy matching for progressive enhancement comparison."""
-    
+
     def get_params_model(self) -> Type[BaselineFuzzyMatchParams]:
         """Return the Pydantic model class for action parameters."""
         return BaselineFuzzyMatchParams
-    
+
     def get_result_model(self) -> Type[StandardActionResult]:
         """Return the Pydantic model class for action results."""
         return StandardActionResult
@@ -157,7 +155,7 @@ class BaselineFuzzyMatchAction(
         params: BaselineFuzzyMatchParams,
         source_endpoint: Any,
         target_endpoint: Any,
-        context: Any  # Can be StrategyExecutionContext or mock context
+        context: Any,  # Can be StrategyExecutionContext or mock context
     ) -> StandardActionResult:
         """Execute baseline fuzzy matching."""
 
@@ -281,7 +279,9 @@ class BaselineFuzzyMatchAction(
         context.set_action_data("datasets", datasets)
 
         # Store unmatched for next stage
-        unmatched_key = params.unmatched_key or f"unmatched.baseline.{params.source_dataset_key}"
+        unmatched_key = (
+            params.unmatched_key or f"unmatched.baseline.{params.source_dataset_key}"
+        )
         datasets[unmatched_key] = unmatched
         context.set_action_data("datasets", datasets)
 
@@ -301,16 +301,20 @@ class BaselineFuzzyMatchAction(
         # Return StandardActionResult
         return StandardActionResult(
             input_identifiers=current_identifiers,
-            output_identifiers=[match['source_name'] for match in matches],  # Return matched source names
+            output_identifiers=[
+                match["source_name"] for match in matches
+            ],  # Return matched source names
             output_ontology_type=current_ontology_type,
-            provenance=[{
-                'action': 'BASELINE_FUZZY_MATCH',
-                'algorithm': params.algorithm.value,
-                'matched_count': total_matched,
-                'unmatched_count': total_unmatched,
-                'avg_confidence': avg_confidence,
-                'execution_time': execution_time
-            }],
+            provenance=[
+                {
+                    "action": "BASELINE_FUZZY_MATCH",
+                    "algorithm": params.algorithm.value,
+                    "matched_count": total_matched,
+                    "unmatched_count": total_unmatched,
+                    "avg_confidence": avg_confidence,
+                    "execution_time": execution_time,
+                }
+            ],
             details={
                 "success": True,
                 "message": f"Matched {total_matched} metabolites using {params.algorithm.value}",
@@ -318,5 +322,5 @@ class BaselineFuzzyMatchAction(
                 "matched_count": total_matched,
                 "unmatched_count": total_unmatched,
                 "execution_time": execution_time,
-            }
+            },
         )

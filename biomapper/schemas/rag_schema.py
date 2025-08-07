@@ -4,7 +4,7 @@ from typing import Optional, List, Dict, Any
 
 class MappingResultItem(BaseModel):
     """Schema for individual mapping result with confidence scores.
-    
+
     Attributes:
         identifier: The input identifier that was mapped
         target_ids: List of mapped target identifiers (e.g., ["PUBCHEM:123456"])
@@ -15,7 +15,7 @@ class MappingResultItem(BaseModel):
                                For Euclidean distance: lower values (closer to 0.0) indicate better similarity.
         metadata: Additional metadata including all scores, distance metric, and interpretation
     """
-    
+
     identifier: str
     target_ids: Optional[List[str]] = None
     component_id: Optional[str] = None
@@ -26,7 +26,7 @@ class MappingResultItem(BaseModel):
 
 class MappingOutput(BaseModel):
     """Schema for complete mapping output.
-    
+
     Attributes:
         results: List of MappingResultItem objects containing detailed mapping results
         metadata: Global metadata about the mapping operation including:
@@ -36,7 +36,7 @@ class MappingOutput(BaseModel):
                  - top_k: Number of top results requested
                  - score_threshold: Minimum score threshold used
     """
-    
+
     results: List[MappingResultItem]
     metadata: Optional[Dict[str, Any]] = None
 

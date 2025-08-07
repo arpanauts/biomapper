@@ -1,17 +1,18 @@
 import pytest
 from biomapper.core.strategy_actions.build_nightingale_reference import (
     BuildNightingaleReferenceAction,
-    BuildNightingaleReferenceParams
+    BuildNightingaleReferenceParams,
 )
 from biomapper.core.strategy_actions.nightingale_nmr_match import (
     NightingaleNmrMatchAction,
-    NightingaleNmrMatchParams
+    NightingaleNmrMatchParams,
 )
+
 
 @pytest.mark.integration
 class TestReferenceIntegration:
     """Integration tests for reference building."""
-    
+
     @pytest.mark.asyncio
     @pytest.mark.requires_external_services
     async def test_end_to_end_reference_creation(self):
@@ -27,32 +28,32 @@ class TestReferenceIntegration:
             confidence_threshold=0.80,
             output_key="matches",
             unmatched_source_key="unmatched_source",
-            unmatched_target_key="unmatched_target"
+            unmatched_target_key="unmatched_target",
         )
-        
+
         # Sample data
         context = {
-            'datasets': {
-                'israeli10k': [
+            "datasets": {
+                "israeli10k": [
                     {
-                        'tabular_field_name': 'total_c',
-                        'nightingale_metabolomics_original_name': 'Total_C',
-                        'description': 'Total cholesterol'
+                        "tabular_field_name": "total_c",
+                        "nightingale_metabolomics_original_name": "Total_C",
+                        "description": "Total cholesterol",
                     }
                 ],
-                'ukbb': [
+                "ukbb": [
                     {
-                        'field_id': '23400',
-                        'title': 'Total cholesterol',
-                        'category': 'Cholesterol'
+                        "field_id": "23400",
+                        "title": "Total cholesterol",
+                        "category": "Cholesterol",
                     }
-                ]
+                ],
             }
         }
-        
+
         # Run matching
         await match_action.execute_typed(match_params, context)
-        
+
         # Now build reference
         ref_action = BuildNightingaleReferenceAction()
         ref_params = BuildNightingaleReferenceParams(
@@ -60,13 +61,13 @@ class TestReferenceIntegration:
             ukbb_data="ukbb",
             matched_pairs="matches",
             output_key="reference",
-            export_csv=False
+            export_csv=False,
         )
-        
+
         result = await ref_action.execute_typed(ref_params, context)
-        
+
         assert result.success
-        reference = context['datasets']['reference']
+        reference = context["datasets"]["reference"]
         assert len(reference) == 1
-        assert reference[0]['unified_name'] == 'Total cholesterol'
+        assert reference[0]["unified_name"] == "Total cholesterol"
         # This test should FAIL initially

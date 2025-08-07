@@ -43,7 +43,7 @@ class ArangoStore(BaseArango):
         self.port = port
         self.conn: Optional[Connection] = None
         self.db: Optional[Database] = None
-    
+
     @property
     def is_connected(self) -> bool:
         """Check if connected to the database."""

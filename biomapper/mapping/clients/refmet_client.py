@@ -265,7 +265,7 @@ class RefMetClient:
                 except Exception:
                     continue
 
-            # If still no results, try the legacy endpoint as a last resort  
+            # If still no results, try the legacy endpoint as a last resort
             legacy_url = f"{self.config.base_url}/name_to_refmet_new_minID.php"
             payload = {"metabolite_name": name}
 
@@ -273,18 +273,18 @@ class RefMetClient:
             # 1 initial try + max_retries retries = max_retries + 1 total attempts
             max_attempts = self.config.max_retries + 1
             last_exception = None
-            
+
             for attempt in range(max_attempts):
                 try:
                     response = self.session.post(
                         legacy_url, data=payload, timeout=self.config.timeout
                     )
                     response.raise_for_status()
-                    
+
                     if response.content:
                         return self._process_legacy_response(response.text)
                     return None
-                    
+
                 except requests.exceptions.RequestException as e:
                     last_exception = e
                     if attempt < max_attempts - 1:
@@ -440,9 +440,7 @@ class RefMetClient:
             "kegg_id": str(data.get("kegg_id", "")),
         }
 
-    def _process_legacy_response(
-        self, response_text: str
-    ) -> Optional[Dict[str, str]]:
+    def _process_legacy_response(self, response_text: str) -> Optional[Dict[str, str]]:
         """Process the RefMet response text from legacy endpoints."""
         try:
             df = pd.read_csv(io.StringIO(response_text), sep="\t")
@@ -461,14 +459,14 @@ class RefMetClient:
 
             # Get RefMet ID - return as is without REFMET prefix to match test expectations
             refmet_id = safe_get(row.get("RefMet_ID"))
-            
+
             # Get compound name to check if this is a valid result
             compound_name = safe_get(row.get("Standardized name"))
-            
+
             # If we don't have a RefMet ID or all critical fields are empty/missing, return None
             if not refmet_id and not compound_name:
                 return None
-                
+
             # Get ChEBI ID and add prefix if it's a valid ID
             chebi_id = safe_get(row.get("ChEBI_ID"))
             if chebi_id and chebi_id.isdigit():

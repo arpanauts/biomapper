@@ -418,7 +418,7 @@ class TestNightingaleIntegration:
     @pytest.mark.asyncio
     async def test_real_world_data_quality_issues(self):
         """Test with realistic data quality issues like NaN, missing values, numeric values."""
-        
+
         # Simulate real-world data with quality issues
         israeli10k_messy = [
             # Valid entries
@@ -426,75 +426,75 @@ class TestNightingaleIntegration:
                 "tabular_field_name": "serum_total_c",
                 "nightingale_metabolomics_original_name": "Serum_Total_C",
                 "units": "mmol/L",
-                "patient_id": "P001"
+                "patient_id": "P001",
             },
             {
                 "tabular_field_name": "hdl_c",
                 "nightingale_metabolomics_original_name": "HDL_C",
                 "units": "mmol/L",
-                "patient_id": "P002"
+                "patient_id": "P002",
             },
             # NaN values (common in real datasets)
             {
                 "tabular_field_name": "ldl_c",
                 "nightingale_metabolomics_original_name": np.nan,
                 "units": "mmol/L",
-                "patient_id": "P003"
+                "patient_id": "P003",
             },
             {
                 "tabular_field_name": "vldl_c",
-                "nightingale_metabolomics_original_name": float('nan'),
+                "nightingale_metabolomics_original_name": float("nan"),
                 "units": "mmol/L",
-                "patient_id": "P004"
+                "patient_id": "P004",
             },
             # Empty strings
             {
                 "tabular_field_name": "glucose",
                 "nightingale_metabolomics_original_name": "",
                 "units": "mmol/L",
-                "patient_id": "P005"
+                "patient_id": "P005",
             },
             {
                 "tabular_field_name": "lactate",
                 "nightingale_metabolomics_original_name": "   ",  # Whitespace only
                 "units": "mmol/L",
-                "patient_id": "P006"
+                "patient_id": "P006",
             },
             # None values
             {
                 "tabular_field_name": "pyruvate",
                 "nightingale_metabolomics_original_name": None,
                 "units": "mmol/L",
-                "patient_id": "P007"
+                "patient_id": "P007",
             },
             # Numeric values (data entry errors)
             {
                 "tabular_field_name": "citrate",
                 "nightingale_metabolomics_original_name": 123.45,
                 "units": "mmol/L",
-                "patient_id": "P008"
+                "patient_id": "P008",
             },
             {
                 "tabular_field_name": "acetate",
                 "nightingale_metabolomics_original_name": 999,
                 "units": "mmol/L",
-                "patient_id": "P009"
+                "patient_id": "P009",
             },
             # More valid entries
             {
                 "tabular_field_name": "total_tg",
                 "nightingale_metabolomics_original_name": "Total_TG",
                 "units": "mmol/L",
-                "patient_id": "P010"
+                "patient_id": "P010",
             },
             {
                 "tabular_field_name": "apob_apoa1",
                 "nightingale_metabolomics_original_name": "ApoB_ApoA1_ratio",
                 "units": "ratio",
-                "patient_id": "P011"
+                "patient_id": "P011",
             },
         ]
-        
+
         # UKBB data with similar issues
         ukbb_messy = [
             # Valid entries
@@ -502,66 +502,66 @@ class TestNightingaleIntegration:
                 "field_id": "23400",
                 "title": "Total cholesterol",
                 "category": "Cholesterol",
-                "units": "mmol/L"
+                "units": "mmol/L",
             },
             {
                 "field_id": "23401",
                 "title": "HDL cholesterol",
                 "category": "Cholesterol",
-                "units": "mmol/L"
+                "units": "mmol/L",
             },
             # Data quality issues
             {
                 "field_id": "23402",
                 "title": np.nan,
                 "category": "Cholesterol",
-                "units": "mmol/L"
+                "units": "mmol/L",
             },
             {
                 "field_id": "23403",
                 "title": "",
                 "category": "Triglycerides",
-                "units": "mmol/L"
+                "units": "mmol/L",
             },
             {
                 "field_id": "23404",
                 "title": None,
                 "category": "Glycolysis",
-                "units": "mmol/L"
+                "units": "mmol/L",
             },
             {
                 "field_id": "23405",
                 "title": 456.78,  # Numeric title
                 "category": "Other",
-                "units": "mmol/L"
+                "units": "mmol/L",
             },
             # More valid entries
             {
                 "field_id": "23406",
                 "title": "Triglycerides",
                 "category": "Triglycerides",
-                "units": "mmol/L"
+                "units": "mmol/L",
             },
             {
                 "field_id": "23407",
                 "title": "Apolipoprotein B/Apolipoprotein A1 ratio",
                 "category": "Apolipoproteins",
-                "units": "ratio"
+                "units": "ratio",
             },
             {
                 "field_id": "23408",
                 "title": "LDL cholesterol",
                 "category": "Cholesterol",
-                "units": "mmol/L"
+                "units": "mmol/L",
             },
             {
                 "field_id": "23409",
                 "title": "Glucose",
                 "category": "Glycolysis",
-                "units": "mmol/L"
+                "units": "mmol/L",
             },
         ]
-        
+
         params = NightingaleNmrMatchParams(
             source_dataset_key="israeli10k",
             target_dataset_key="ukbb",
@@ -573,27 +573,24 @@ class TestNightingaleIntegration:
             unmatched_source_key="unmatched_source",
             unmatched_target_key="unmatched_target",
         )
-        
+
         class MockContext:
             def __init__(self):
                 self._data = {
-                    "datasets": {
-                        "israeli10k": israeli10k_messy,
-                        "ukbb": ukbb_messy
-                    },
-                    "provenance": {}
+                    "datasets": {"israeli10k": israeli10k_messy, "ukbb": ukbb_messy},
+                    "provenance": {},
                 }
-            
+
             def get_action_data(self, key, default=None):
                 return self._data.get(key, default)
-            
+
             def set_action_data(self, key, value):
                 self._data[key] = value
-        
+
         mock_context = MockContext()
-        
+
         action = NightingaleNmrMatchAction()
-        
+
         # Should not raise any errors despite data quality issues
         result = await action.execute_typed(
             current_identifiers=[],
@@ -603,46 +600,58 @@ class TestNightingaleIntegration:
             target_endpoint=None,
             context=mock_context,
         )
-        
+
         # Verify execution completed successfully
         assert result.details["success"]
-        
+
         # Check data quality metrics
         data_quality = result.details["data_quality"]
         assert data_quality["source_nan_count"] >= 3  # np.nan, float('nan'), None
-        assert data_quality["source_empty_count"] >= 1  # "" (whitespace-only is trimmed and counted as empty)
+        assert (
+            data_quality["source_empty_count"] >= 1
+        )  # "" (whitespace-only is trimmed and counted as empty)
         assert data_quality["source_numeric_count"] >= 2  # 123.45 and 999
         assert data_quality["target_nan_count"] >= 2  # np.nan and None
         assert data_quality["target_empty_count"] >= 1  # ""
         assert data_quality["target_numeric_count"] >= 1  # 456.78
-        
+
         # Verify matches were found for valid entries
         datasets = mock_context.get_action_data("datasets")
         matches = datasets["matches"]
-        
+
         # Should have matches for valid entries
         assert len(matches) >= 3, f"Expected at least 3 matches, got {len(matches)}"
-        
+
         # Check specific expected matches
-        match_pairs = [(m["source"]["nightingale_metabolomics_original_name"], 
-                       m["target"]["title"]) for m in matches]
-        
+        match_pairs = [
+            (
+                m["source"]["nightingale_metabolomics_original_name"],
+                m["target"]["title"],
+            )
+            for m in matches
+        ]
+
         # These should definitely match
         expected_matches = [
             ("Serum_Total_C", "Total cholesterol"),
             ("HDL_C", "HDL cholesterol"),
             ("Total_TG", "Triglycerides"),
         ]
-        
+
         for source, target in expected_matches:
             found = any(source in pair[0] and target in pair[1] for pair in match_pairs)
             assert found, f"Expected match between {source} and {target}"
-        
+
         # Verify numeric values were handled
-        numeric_matches = [m for m in matches 
-                          if isinstance(m["source"].get("nightingale_metabolomics_original_name"), (int, float))
-                          or isinstance(m["target"].get("title"), (int, float))]
-        
+        numeric_matches = [
+            m
+            for m in matches
+            if isinstance(
+                m["source"].get("nightingale_metabolomics_original_name"), (int, float)
+            )
+            or isinstance(m["target"].get("title"), (int, float))
+        ]
+
         # If numeric values matched, they should have been converted to strings
         for match in numeric_matches:
             source_name = match["source"].get("nightingale_metabolomics_original_name")
@@ -651,17 +660,22 @@ class TestNightingaleIntegration:
                 assert str(source_name) in str(match["confidence"])
             if isinstance(target_title, (int, float)):
                 assert str(target_title) in str(match["confidence"])
-        
+
         # Verify unmatched tracking
         unmatched_source = datasets["unmatched_source"]
         unmatched_target = datasets["unmatched_target"]
-        
+
         # Check that items with NaN/None/empty names are in unmatched
-        invalid_source_count = sum(1 for item in israeli10k_messy 
-                                  if pd.isna(item.get("nightingale_metabolomics_original_name"))
-                                  or item.get("nightingale_metabolomics_original_name") in [None, "", "   "])
-        
+        invalid_source_count = sum(
+            1
+            for item in israeli10k_messy
+            if pd.isna(item.get("nightingale_metabolomics_original_name"))
+            or item.get("nightingale_metabolomics_original_name") in [None, "", "   "]
+        )
+
         # Total unmatched should include at least the invalid entries
         assert len(unmatched_source) >= invalid_source_count
-        
-        print(f"Data quality test completed: {len(matches)} matches found despite {sum(data_quality.values())} data quality issues")
+
+        print(
+            f"Data quality test completed: {len(matches)} matches found despite {sum(data_quality.values())} data quality issues"
+        )

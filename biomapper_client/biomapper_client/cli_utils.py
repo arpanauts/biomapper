@@ -33,9 +33,9 @@ def run_strategy(
             context = {
                 "source_endpoint_name": "",  # Not used for metabolomics strategies
                 "target_endpoint_name": "",  # Not used for metabolomics strategies
-                "input_identifiers": [],     # Strategies load their own data
+                "input_identifiers": [],  # Strategies load their own data
                 "parameters": parameters or {},
-                "options": kwargs
+                "options": kwargs,
             }
             if output_dir:
                 context["parameters"]["output_dir"] = str(output_dir)

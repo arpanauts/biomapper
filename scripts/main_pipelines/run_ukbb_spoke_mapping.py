@@ -23,16 +23,16 @@ from biomapper_client import BiomapperClient
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
+
 async def main():
     """Execute the UKBB to SPOKE protein mapping pipeline."""
-    
+
     logger.info("Starting UKBB to SPOKE protein mapping...")
-    
+
     try:
         # Initialize client using async context manager
         async with BiomapperClient(base_url="http://localhost:8000") as client:
@@ -41,39 +41,47 @@ async def main():
                 "source_endpoint_name": "",  # MVP strategies don't use endpoints
                 "target_endpoint_name": "",  # MVP strategies don't use endpoints
                 "input_identifiers": [],  # MVP strategies load their own data
-                "options": {}
+                "options": {},
             }
-            
+
             result = await client.execute_strategy(
-                strategy_name="UKBB_TO_SPOKE_PROTEIN_MAPPING",
-                context=context
+                strategy_name="UKBB_TO_SPOKE_PROTEIN_MAPPING", context=context
             )
-        
+
         # Log success
         logger.info("✅ UKBB to SPOKE protein mapping completed successfully!")
-        
+
         # Print key results
         if "step_results" in result:
             for step in result["step_results"]:
                 if step.get("status") == "success":
-                    logger.info(f"  ✅ {step['step_id']}: {step['input_count']} → {step['output_count']}")
+                    logger.info(
+                        f"  ✅ {step['step_id']}: {step['input_count']} → {step['output_count']}"
+                    )
                 else:
-                    logger.error(f"  ❌ {step['step_id']}: {step.get('details', {}).get('error', 'Unknown error')}")
-        
+                    logger.error(
+                        f"  ❌ {step['step_id']}: {step.get('details', {}).get('error', 'Unknown error')}"
+                    )
+
         # Check for analysis results
         if "summary" in result and "step_results" in result["summary"]:
-            analysis_steps = [s for s in result["summary"]["step_results"] if s.get("action_type") == "CALCULATE_SET_OVERLAP"]
+            analysis_steps = [
+                s
+                for s in result["summary"]["step_results"]
+                if s.get("action_type") == "CALCULATE_SET_OVERLAP"
+            ]
             for step in analysis_steps:
                 if step.get("status") == "success":
                     logger.info(f"📊 Analysis complete: {step['step_id']}")
-                    logger.info(f"📁 Results saved to: results/UKBB_SPOKE/")
-        
+                    logger.info("📁 Results saved to: results/UKBB_SPOKE/")
+
         return 0
-        
+
     except Exception as e:
         logger.error(f"❌ Pipeline failed: {e}")
         logger.exception("Full error details:")
         return 1
+
 
 if __name__ == "__main__":
     exit_code = asyncio.run(main())

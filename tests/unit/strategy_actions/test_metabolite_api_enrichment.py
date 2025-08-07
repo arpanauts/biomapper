@@ -2,7 +2,6 @@
 
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
-from typing import List, Dict, Any
 
 from biomapper.core.strategy_actions.metabolite_api_enrichment import (
     MetaboliteApiEnrichmentAction,
@@ -13,7 +12,6 @@ from biomapper.core.strategy_actions.metabolite_api_enrichment import (
 from biomapper.mapping.clients.metabolite_apis import (
     HMDBMetaboliteInfo,
     PubChemCompoundInfo,
-    PubChemIdType,
 )
 
 

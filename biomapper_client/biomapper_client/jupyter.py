@@ -1,6 +1,5 @@
 """Jupyter notebook integration for Biomapper client."""
 
-import asyncio
 from typing import Any, Dict, List, Optional
 
 from .client_v2 import BiomapperClient
@@ -83,6 +82,7 @@ class JupyterExecutor:
             if not isinstance(result, StrategyResult):
                 # If it's a Job, wait for it
                 import asyncio
+
                 result = asyncio.run(self.client.wait_for_job(result.id))
             return result
 

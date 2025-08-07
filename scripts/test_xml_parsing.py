@@ -3,7 +3,6 @@
 
 import xml.etree.ElementTree as ET
 import time
-import sys
 from pathlib import Path
 import pytest
 
@@ -25,7 +24,7 @@ try:
         if event == "end" and elem.tag == "metabolite":
             count += 1
             if count == 1:
-                print(f"   Found first metabolite!")
+                print("   Found first metabolite!")
                 # Print some info about it
                 name = elem.find("name")
                 if name is not None and name.text:
@@ -33,23 +32,26 @@ try:
                 hmdb_id = elem.find("accession")
                 if hmdb_id is not None and hmdb_id.text:
                     print(f"   HMDB ID: {hmdb_id.text}")
-            
+
             # Clear memory
             elem.clear()
-            
+
             # Progress update
             if count % 100 == 0:
                 elapsed = time.time() - start
-                print(f"   Processed {count} metabolites in {elapsed:.1f}s ({count/elapsed:.1f} per second)")
-            
+                print(
+                    f"   Processed {count} metabolites in {elapsed:.1f}s ({count/elapsed:.1f} per second)"
+                )
+
             # Stop after 500 for quick test
             if count >= 500:
                 print(f"   Stopping test after {count} metabolites")
                 break
-                
+
 except Exception as e:
     print(f"ERROR: {e}")
     import traceback
+
     traceback.print_exc()
 
 print(f"\nTest complete. Found {count} metabolites in {time.time() - start:.1f}s")
@@ -58,7 +60,7 @@ print(f"\nTest complete. Found {count} metabolites in {time.time() - start:.1f}s
 print("\n2. Checking XML structure...")
 try:
     # Just parse first few bytes to check structure
-    with open(xml_path, 'rb') as f:
+    with open(xml_path, "rb") as f:
         first_1000_bytes = f.read(1000)
         print(f"First 1000 bytes:\n{first_1000_bytes.decode('utf-8', errors='ignore')}")
 except Exception as e:

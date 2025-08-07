@@ -43,20 +43,18 @@ class Settings(BaseSettings):
     # Mapping settings
     MAPPING_RESULTS_DIR: Path = BASE_DIR / "data" / "results"
     STRATEGIES_DIR: Path = BASE_DIR.parent / "configs"
-    
+
     # Database settings
     DATABASE_URL: str = "sqlite+aiosqlite:///./biomapper.db"
     DATABASE_ECHO: bool = False
-    
+
     # Storage settings
     CHECKPOINT_DIR: Path = BASE_DIR / "data" / "checkpoints"
     EXTERNAL_STORAGE_DIR: Path = BASE_DIR / "data" / "storage"
     MAX_INLINE_STORAGE_SIZE: int = 100 * 1024  # 100KB
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False
     )
 
     def __init__(self, **data):

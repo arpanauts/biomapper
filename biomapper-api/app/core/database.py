@@ -7,10 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import declarative_base
 
 # Database URL from environment or default to SQLite
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "sqlite+aiosqlite:///./biomapper.db"
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./biomapper.db")
 
 # Convert postgres:// to postgresql+asyncpg:// for async support
 if DATABASE_URL.startswith("postgres://"):

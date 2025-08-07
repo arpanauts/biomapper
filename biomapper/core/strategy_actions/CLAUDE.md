@@ -1,329 +1,437 @@
-# Strategy Actions - AI Assistant Instructions
+# Strategy Actions - AI Assistant Instructions (Enhanced Organization)
 
 ## Overview
 
-This directory contains the action type implementations for biomapper's mapping strategies. Each action type represents a specific operation that can be performed on identifiers during the mapping process. When working with action types, follow these guidelines carefully.
+This directory contains the action type implementations for biomapper's mapping strategies using an enhanced organizational structure. Each action represents a specific operation that can be performed on identifiers during the mapping process. The organization is optimized for scalability, maintainability, and parallel development.
 
-## Directory Purpose
+## Enhanced Directory Structure
 
-Action types are the building blocks of mapping strategies. They:
-- Execute specific operations on identifier lists
-- Handle the complexity of bioinformatics data (composites, many-to-many)
-- Provide detailed provenance tracking
-- Can read/write to shared execution context
-
-## Key Principles
-
-### 1. **Modular Design**
-- Each action type is a separate module
-- All inherit from `BaseStrategyAction`
-- Minimal modifications to MappingExecutor (just add to dispatch logic)
-- Future goal: Dynamic loading to eliminate MappingExecutor changes
-
-### 2. **Assume Complexity**
-- Always handle composite identifiers (e.g., Q14213_Q8NEV9)
-- Always support many-to-many mappings
-- Never assume 1:1 relationships
-- Handle empty inputs gracefully
-
-### 3. **Consistent Interface and Parameter Handling**
-All actions inherit from `BaseStrategyAction`. The `MappingExecutor` instantiates actions, passing YAML-defined parameters to `__init__`. These parameters are stored in `self.params` and are available during the `execute` phase.
-
-**Initialization (`__init__`)**:
-The `__init__` method receives the static configuration parameters for the action instance as defined in the YAML strategy.
-```python
-def __init__(self, params: Dict[str, Any], executor: 'MappingExecutor'):
-    super().__init__(params, executor)
-    # `self.params` now holds the YAML configuration for this action instance.
-    # `self.executor` provides access to executor functionalities (e.g., logging, db sessions).
-    # Perform any one-time setup or parameter validation based on `self.params`.
-    # Example:
-    # self.output_key = self.params.get('output_key', 'default_output')
-    # if not self.params.get('required_yaml_param'):
-    #     raise ValueError(f"Action {self.__class__.__name__}: Missing 'required_yaml_param' in configuration.")
+```
+strategy_actions/
+├── entities/                       # Entity-specific actions
+│   ├── proteins/                   # Protein-specific actions
+│   │   ├── annotation/             # ID extraction & normalization
+│   │   │   ├── extract_uniprot_from_xrefs.py
+│   │   │   └── normalize_accessions.py
+│   │   ├── matching/               # Matching strategies
+│   │   │   └── multi_bridge.py
+│   │   └── structure/              # Future: protein structure
+│   ├── metabolites/                # Metabolite-specific actions
+│   │   ├── identification/         # ID extraction & normalization
+│   │   │   ├── extract_identifiers.py
+│   │   │   └── normalize_hmdb.py
+│   │   ├── matching/               # Matching strategies
+│   │   │   ├── cts_bridge.py
+│   │   │   ├── nightingale_nmr_match.py
+│   │   │   ├── semantic_match.py
+│   │   │   └── vector_enhanced_match.py
+│   │   └── enrichment/             # External data
+│   │       └── api_enrichment.py
+│   ├── chemistry/                  # Chemistry-specific actions
+│   │   ├── identification/         # LOINC extraction
+│   │   ├── matching/               # Fuzzy test matching
+│   │   └── harmonization/          # Vendor differences
+│   └── genes/                      # Future expansion
+│
+├── algorithms/                     # Reusable algorithms
+│   ├── fuzzy_matching/             # String similarity algorithms
+│   ├── normalization/              # ID standardization
+│   └── validation/                 # Data validation
+│
+├── utils/                          # General utilities
+│   ├── data_processing/            # DataFrame operations
+│   ├── io_helpers/                 # File I/O utilities
+│   └── logging/                    # Action logging
+│
+├── workflows/                      # High-level workflows
+├── io/                            # Data input/output
+├── reports/                       # Analysis & reporting
+└── deprecated/                    # Legacy actions
 ```
 
-**Execution (`execute`)**:
-The `execute` method performs the core logic of the action. It receives the current execution `context` (a dictionary, potentially wrapped in an `ExecutionContext` object in the future), modifies it, and returns the updated `context`.
+## Organizational Principles
+
+### 1. **Entity-Based Organization**
+Actions are organized by the biological entity they primarily handle:
+
+- **proteins/**: UniProt, Ensembl, gene symbol processing
+- **metabolites/**: HMDB, InChIKey, CHEBI, KEGG handling
+- **chemistry/**: LOINC, clinical test matching
+- **genes/**: Gene-specific operations (future)
+
+### 2. **Functional Sub-Categories**
+Within each entity, actions are organized by function:
+
+- **annotation/**: Identifier extraction and normalization
+- **matching/**: Identifier resolution and mapping
+- **enrichment/**: External data integration
+- **structure/**: Structural analysis (proteins)
+- **identification/**: ID format handling
+- **harmonization/**: Cross-platform standardization
+
+### 3. **Separation of Concerns**
+- **Actions**: Business logic for biological data processing
+- **Algorithms**: Reusable computational methods
+- **Utils**: General-purpose helper functions
+
+## Naming Conventions
+
+### File Naming (Pythonic)
 ```python
-async def execute(
-    self,
-    context: Dict[str, Any]
-) -> Dict[str, Any]:
-    # Extract necessary data from context, e.g.:
-    # current_identifiers = context.get('current_identifiers', [])
-    # current_ontology_type = context.get('current_ontology_type')
-    # source_endpoint_name = context.get('source_endpoint_name')
-    # target_endpoint_name = context.get('target_endpoint_name')
-    # logger = self.executor.logger
+extract_uniprot_from_xrefs.py     # verb_object_from_source
+normalize_hmdb_ids.py             # verb_object_type
+match_via_semantic_similarity.py  # verb_via_method
+```
 
-    # Access YAML parameters via self.params:
-    # my_yaml_param = self.params.get('my_yaml_param_key')
-    # logger.debug(f"Action {self.__class__.__name__} executing with param: {my_yaml_param}")
+### Action Registration (Consistent)
+```python
+@register_action("PROTEIN_EXTRACT_UNIPROT_FROM_XREFS")
+@register_action("METABOLITE_NORMALIZE_HMDB")
+@register_action("CHEMISTRY_FUZZY_TEST_MATCH")
+```
 
-    # --- Action's core logic begins ---
-    # 1. Operate on current_identifiers.
-    # 2. Generate output_identifiers and their output_ontology_type.
-    # 3. Create detailed provenance entries for the operations performed.
-    # 4. Store results and any intermediate data back into the context.
-    # --- Action's core logic ends ---
+### Class and Function Names
+```python
+# Classes: PascalCase
+class ProteinExtractUniprotFromXrefs(TypedStrategyAction):
 
-    # Example updates to context:
-    # context['current_identifiers'] = new_identifier_list
-    # context['current_ontology_type'] = new_ontology_type
-    # context.setdefault('provenance', []).extend(action_specific_provenance_entries)
-    # context['my_action_output_key'] = some_result_data
+# Functions: snake_case
+def extract_uniprot_ids(xrefs_field: str) -> List[str]:
+def normalize_hmdb_format(hmdb_id: str) -> str:
+```
+
+## Enhanced Development Workflow
+
+### Step 1: Determine Action Category
+Choose the appropriate location in the enhanced structure:
+
+```python
+# Entity-specific processing
+entities/proteins/annotation/     # UniProt extraction, normalization
+entities/metabolites/matching/    # CTS bridge, semantic matching
+entities/chemistry/identification/ # LOINC extraction
+
+# Shared functionality
+algorithms/fuzzy_matching/        # Reusable matching algorithms
+utils/data_processing/            # DataFrame manipulation
+workflows/                        # Multi-step orchestration
+```
+
+### Step 2: Use Enhanced Base Classes
+```python
+from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
+from biomapper.core.strategy_actions.registry import register_action
+from pydantic import BaseModel
+
+class MyActionParams(BaseModel):
+    input_key: str = Field(..., description="Input dataset key")
+    output_key: str = Field(..., description="Output dataset key")
+
+@register_action("MY_ENTITY_ACTION_NAME")
+class MyEntityAction(TypedStrategyAction[MyActionParams, ActionResult]):
+    def get_params_model(self) -> type[MyActionParams]:
+        return MyActionParams
     
-    return context
+    async def execute_typed(self, params: MyActionParams, context: Dict) -> ActionResult:
+        # Type-safe implementation
+        pass
 ```
 
-### 4. **Modifying and Returning the Execution Context**
-Actions operate by modifying the `context` dictionary they receive and returning this modified dictionary. The `MappingExecutor` then passes this updated context to the next action in the strategy.
-
-Key items typically managed in the `context`:
-- **`current_identifiers` (List[str])**: The primary list of identifiers the current action should process. The action updates this to reflect its output.
-- **`current_ontology_type` (str)**: The ontology type of the `current_identifiers`. Updated if the action changes the identifier type.
-- **`provenance` (List[Dict])**: A list where each action appends its detailed provenance records. (See "Comprehensive Provenance" section for structure).
-- **`source_endpoint_name` (str)**, **`target_endpoint_name` (str)**: Names of the overall source and target endpoints. Usually read-only by actions.
-- **`source_endpoint` (Endpoint)**, **`target_endpoint` (Endpoint)**: Loaded `Endpoint` objects. Usually read-only.
-- **Custom Keys**: Actions can read data placed in the context by previous actions (e.g., `context.get('intermediate_results_from_action_X')`) and can write their own specific outputs to new keys (e.g., `context['my_action_specific_output'] = data`). These keys must be coordinated with other actions in the strategy that might consume them.
-
-**Important:** Actions should generally avoid removing standard keys from the context unless it's explicitly part of their function (e.g., a cleanup action). They primarily add to or update existing keys like `current_identifiers` and `provenance`.
-
-## When Creating New Actions
-
-### Step 1: Check Existing Actions First
-Before creating a new action, check if an existing one can be enhanced with parameters.
-
-### Step 2: Follow Naming Conventions
-- Module name: `lowercase_with_underscores.py`
-- Class name: `PascalCaseAction`
-- Action type constant: `UPPERCASE_WITH_UNDERSCORES`
-
-### Step 3: Required Implementation Elements
-
-1. **Comprehensive docstring**:
-   ```python
-   """
-   Brief description of what the action does.
-   
-   This action:
-   - Key capability 1
-   - Key capability 2
-   - Handles edge case X
-   """
-   ```
-
-2. **Parameter validation**:
-   ```python
-   # Validate required parameters
-   if not action_params.get('required_param'):
-       raise ValueError("required_param is required")
-   ```
-
-3. **Early exit for empty input**:
-   ```python
-   if not current_identifiers:
-       return self._empty_result()
-   ```
-
-4. **Logging at appropriate levels**:
-   ```python
-   logger.debug(f"Processing {len(identifiers)} identifiers")
-   logger.info(f"Completed with {success_count} successes")
-   logger.warning(f"Failed to process {failed_count} identifiers")
-   ```
-
-### Step 4: Register Your Action
-
-1. In `__init__.py`, add import and update `__all__`:
-   ```python
-   from .your_new_action import YourNewAction
-   
-   __all__ = [
-       # ... existing actions ...
-       "YourNewAction",
-   ]
-   ```
-
-2. **Ensure Action is Discoverable:**
-   The `MappingExecutor` typically discovers actions specified via `action_class_path` in the YAML strategy by dynamically importing them. For this to work:
-   - Ensure your new action class (e.g., `YourNewAction`) is in its own module (e.g., `your_new_action.py`) within the `biomapper.core.strategy_actions` package.
-   - Add your action class to the `__all__` list in `/home/ubuntu/Software-Engineer-AI-Agent-Atlas/biomapper/biomapper/core/strategy_actions/__init__.py`:
-     ```python
-     from .your_new_action import YourNewAction
-     
-     __all__ = [
-         # ... existing actions ...
-         "YourNewAction",
-     ]
-     ```
-   - For most new actions defined with `action_class_path` in YAML, direct modification of `MappingExecutor.py`'s dispatch logic is **no longer required**. The dynamic import mechanism handles instantiation. Manual additions to `MappingExecutor` might only be needed for very core, built-in action types not intended to be specified by class path.
-
-## When Modifying Existing Actions
-
-### 1. **Maintain Backward Compatibility**
-- Don't change required parameters
-- Make new parameters optional with sensible defaults
-- Don't change return structure
-
-### 2. **Document Changes**
-- Update docstrings
-- Add comments explaining why changes were made
-- Update tests to cover new functionality
-
-### 3. **Test Thoroughly**
-- Run existing tests to ensure nothing breaks
-- Add new tests for new functionality
-- Test with realistic data
-
-## Common Patterns to Follow
-
-### Composite Identifier Handling
+### Step 3: Leverage Shared Components
 ```python
-def _handle_composites(self, identifiers: List[str]) -> List[str]:
-    """Standard composite handling."""
-    expanded = []
-    for id in identifiers:
-        if '_' in id:  # Or configurable delimiter
-            expanded.extend(id.split('_'))
-        expanded.append(id)  # Always keep original
-    return list(set(expanded))
+# Use shared algorithms
+from ..algorithms.fuzzy_matching import string_similarity
+from ..algorithms.normalization import identifier_patterns
+
+# Use shared utilities
+from ..utils.data_processing import chunk_processor
+from ..utils.logging import action_logger
 ```
 
-### Many-to-Many Mapping
-```python
-from collections import defaultdict
+## Enhanced Testing Structure
 
-mappings = defaultdict(list)
-for source, target in matches:
-    mappings[source].append(target)
+### Test Organization
+```
+tests/unit/core/strategy_actions/
+├── entities/
+│   ├── proteins/
+│   │   ├── annotation/
+│   │   │   ├── test_extract_uniprot_from_xrefs.py
+│   │   │   └── test_normalize_accessions.py
+│   │   └── matching/
+│   │       └── test_multi_bridge.py
+│   ├── metabolites/
+│   └── chemistry/
+├── algorithms/
+└── utils/
 ```
 
-### Context Usage
-```python
-# Read from context
-previous_results = context.get('previous_matches', [])
+### Testing Commands
+```bash
+# Test specific action
+poetry run pytest -xvs tests/unit/core/strategy_actions/entities/proteins/annotation/test_extract_uniprot.py
 
-# Write to context
-if save_key := action_params.get('save_results_to'):
-    context[save_key] = results
+# Test entity category
+poetry run pytest -xvs tests/unit/core/strategy_actions/entities/proteins/annotation/
+
+# Test entire entity
+poetry run pytest -xvs tests/unit/core/strategy_actions/entities/proteins/
+
+# Test all actions
+poetry run pytest -xvs tests/unit/core/strategy_actions/
 ```
 
+## Import Strategy and Registration
 
-### Handling Path Parameters with Variable Expansion
-Action parameters defined in YAML (accessible via `self.params`) might include file paths that contain variables needing expansion, such as `${OUTPUT_DIR}` or `${DATA_DIR}`. Actions are responsible for resolving these paths.
-
-**Example:**
+### Main Module Imports
 ```python
-# In __init__ or execute method:
-# output_file_template = self.params.get('output_file') # e.g., "${OUTPUT_DIR}/my_results.csv"
+# biomapper/core/strategy_actions/__init__.py
 
-# Method 1: Using executor's utility (Preferred if available)
-# resolved_output_path = self.executor.resolve_path_parameter(output_file_template)
+from . import registry
 
-# Method 2: Using os.path.expandvars (if variables are set as environment variables)
-# import os
-# resolved_output_path = os.path.expandvars(output_file_template)
-# Ensure the relevant environment variables (e.g., OUTPUT_DIR) are set when the pipeline runs.
+# Entity imports (triggers action registration)
+from .entities import *
 
-# Method 3: Using context variables (if OUTPUT_DIR is passed in context)
-# output_dir = context.get('OUTPUT_DIR_PATH') # Assuming it's placed in context
-# if output_dir and output_file_template:
-#    resolved_output_path = output_file_template.replace('${OUTPUT_DIR}', output_dir)
-# else:
-#    # Handle error or default path
+# Algorithm and utility imports
+from .algorithms import *
+from .utils import *
+from .workflows import *
+from .io import *
+from .reports import *
 
-# Always ensure paths are absolute and validated before use.
-# resolved_output_path = os.path.abspath(resolved_output_path)
-# os.makedirs(os.path.dirname(resolved_output_path), exist_ok=True)
+__all__ = ['registry']
 ```
-Consult with the `MappingExecutor`'s capabilities or project conventions for the standard way to resolve these path variables. The `executor` object itself might provide helper methods.
 
-## Testing Requirements
-
-### 1. **Unit Tests are Mandatory**
-- Create test file in `/tests/unit/core/strategy_actions/`
-- Test all parameter combinations
-- Test error conditions
-- Test edge cases (empty input, composites, M2M)
-
-### 2. **Test File Structure**
+### Entity Module Imports
 ```python
-class TestYourAction:
-    @pytest.fixture
-    def action(self, mock_session):
-        return YourAction(session=mock_session)
+# biomapper/core/strategy_actions/entities/proteins/__init__.py
+
+# Import all protein action categories
+from .annotation import *  # extract_uniprot, normalize_accessions
+from .matching import *    # multi_bridge
+# from .structure import * # Future expansion
+
+__all__ = []  # Actions register themselves
+```
+
+### Category Module Imports
+```python
+# biomapper/core/strategy_actions/entities/proteins/annotation/__init__.py
+
+# Import all annotation actions to trigger registration
+from .extract_uniprot_from_xrefs import *
+from .normalize_accessions import *
+
+__all__ = []  # Actions register themselves
+```
+
+## Entity-Specific Development Guidelines
+
+### Proteins
+**Focus**: UniProt accessions, gene symbols, Ensembl IDs
+**Common Patterns**:
+- UniProt format: P12345, O00533 (6-character)
+- Ensembl proteins: ENSP00000123456
+- Gene symbols: HGNC official symbols
+
+**Key Actions**:
+```python
+PROTEIN_EXTRACT_UNIPROT_FROM_XREFS  # annotation/
+PROTEIN_NORMALIZE_ACCESSIONS        # annotation/
+PROTEIN_MULTI_BRIDGE               # matching/
+```
+
+### Metabolites
+**Focus**: HMDB, InChIKey, CHEBI, KEGG, PubChem
+**Common Patterns**:
+- HMDB: HMDB0001234 (7-digit standard)
+- InChIKey: BQJCRHHNABKAKU-KBQPJGBKSA-N
+- CHEBI: CHEBI:28001
+
+**Key Actions**:
+```python
+METABOLITE_EXTRACT_IDENTIFIERS     # identification/
+METABOLITE_NORMALIZE_HMDB          # identification/
+METABOLITE_CTS_BRIDGE             # matching/
+```
+
+### Chemistry
+**Focus**: LOINC codes, clinical test names, vendor harmonization
+**Common Patterns**:
+- LOINC: 12345-6 (numeric-check format)
+- Test names: Highly variable, fuzzy matching required
+
+**Key Actions**:
+```python
+CHEMISTRY_EXTRACT_LOINC            # identification/
+CHEMISTRY_FUZZY_TEST_MATCH         # matching/
+CHEMISTRY_VENDOR_HARMONIZATION     # harmonization/
+```
+
+## Performance and Scalability
+
+### Chunking for Large Datasets
+```python
+from ..utils.data_processing.chunk_processor import ChunkProcessor
+
+# Use shared chunking utility
+processor = ChunkProcessor(chunk_size=10000)
+for chunk in processor.process_dataframe(large_df):
+    # Process chunk
+    results.extend(process_chunk(chunk))
+```
+
+### Algorithm Reuse
+```python
+from ..algorithms.fuzzy_matching import calculate_similarity
+from ..algorithms.normalization import standardize_identifiers
+
+# Reuse across entity types
+similarity_score = calculate_similarity(source_name, target_name)
+standardized_ids = standardize_identifiers(raw_ids, id_type="hmdb")
+```
+
+### Caching and Optimization
+```python
+from ..utils.data_processing import cached_operation
+
+@cached_operation(cache_key="uniprot_patterns")
+def load_uniprot_patterns():
+    # Expensive operation cached across actions
+    return patterns
+```
+
+## Documentation Requirements
+
+### Entity Module Documentation
+```python
+# entities/proteins/__init__.py
+"""
+Protein-specific actions for biomapper.
+
+This module provides comprehensive protein identifier processing,
+normalization, and matching capabilities.
+
+Submodules:
+    annotation: UniProt extraction, accession normalization
+    matching: Multi-bridge resolution strategies
+    structure: Protein structure analysis (future)
+
+Common Data Patterns:
+    UniProt: P12345, O00533 (standard 6-character accessions)
+    Ensembl: ENSP00000123456 (protein IDs)
+    Gene symbols: CD4, TP53 (HGNC official symbols)
+
+Example Workflow:
+    1. Load protein datasets with LOAD_DATASET_IDENTIFIERS
+    2. Extract UniProt IDs with PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
+    3. Normalize formats with PROTEIN_NORMALIZE_ACCESSIONS
+    4. Match across datasets with PROTEIN_MULTI_BRIDGE
+"""
+```
+
+### Action Documentation
+```python
+@register_action("PROTEIN_EXTRACT_UNIPROT_FROM_XREFS")
+class ProteinExtractUniprotFromXrefs(TypedStrategyAction):
+    """
+    Extract UniProt accession IDs from compound xrefs fields.
+    
+    This action handles the complex task of extracting UniProt identifiers
+    from KG2c and SPOKE xrefs fields that contain multiple identifier types
+    separated by various delimiters.
+    
+    Handles:
+    - Multiple UniProt IDs per xrefs field
+    - Isoform suffixes (P12345-1) - configurable removal
+    - Version numbers (P12345.2) - automatic removal
+    - Various prefix formats (UniProtKB:, uniprot:)
+    
+    Args:
+        params: ProteinExtractUniprotParams with extraction configuration
+        context: Execution context with datasets
         
-    async def test_basic_functionality(self, action):
-        # Test happy path
+    Returns:
+        ActionResult with extracted UniProt identifiers
         
-    async def test_composite_handling(self, action):
-        # Test with composite IDs
-        
-    async def test_error_conditions(self, action):
-        # Test validation and errors
+    Example:
+        # Input xrefs: "UniProtKB:P12345|RefSeq:NP_001234|KEGG:K12345"
+        # Output: ["P12345"]
+    """
 ```
 
-## Performance Considerations
+## Migration Strategy
 
-1. **Load only necessary data** - Use column filtering
-2. **Process in batches** for large datasets
-3. **Cache expensive operations** in context
-4. **Early exit** when possible
+### Phase 1: Structure Creation
+1. Create enhanced directory structure
+2. Update main `__init__.py` imports
+3. Test backward compatibility
 
-## Debugging Support
+### Phase 2: Action Migration
+1. Move existing actions to appropriate entity directories
+2. Update imports throughout codebase
+3. Test all existing functionality
 
-### Always Include Detailed Logging
-```python
-logger.debug(f"Action parameters: {action_params}")
-logger.info(f"Processing {len(identifiers)} identifiers of type {ontology_type}")
-logger.debug(f"First 5 identifiers: {identifiers[:5]}")
-```
+### Phase 3: Enhancement
+1. Add shared algorithms and utilities
+2. Implement new entity-specific actions
+3. Add comprehensive documentation
 
-### Comprehensive Provenance
-```python
-provenance.append({
-    'action': self.__class__.__name__,
-    'timestamp': datetime.utcnow().isoformat(),
-    'input': input_id,
-    'output': output_ids,
-    'method': specific_method_used,
-    'confidence': confidence_score,
-    'details': any_relevant_details
-})
-```
+### Phase 4: Optimization
+1. Leverage shared components for performance
+2. Add enhanced testing and validation
+3. Optimize import strategy
 
-## Code Review Checklist
+## Code Review Checklist (Enhanced)
 
 Before submitting a new action:
 
-- [ ] Follows BaseStrategyAction interface exactly
-- [ ] Handles composite identifiers
-- [ ] Supports many-to-many mappings
-- [ ] Validates all parameters
-- [ ] Returns complete result structure
-- [ ] Has comprehensive unit tests
-- [ ] Includes detailed logging
-- [ ] Provides detailed provenance
-- [ ] Added to __init__.py imports and __all__
-- [ ] Added to MappingExecutor dispatch logic
-- [ ] Documented in ACTION_TYPES_REFERENCE.md
+- [ ] **Organization**: Action placed in correct entity/category directory
+- [ ] **Typing**: Uses TypedStrategyAction with Pydantic models
+- [ ] **Registration**: Properly registered with @register_action decorator
+- [ ] **Imports**: Added to appropriate __init__.py files
+- [ ] **Testing**: Comprehensive tests in matching directory structure
+- [ ] **Documentation**: Entity-specific docstrings with examples
+- [ ] **Algorithms**: Uses shared algorithms where appropriate
+- [ ] **Utilities**: Leverages shared utilities for common operations
+- [ ] **Performance**: Considers chunking for large datasets
+- [ ] **Validation**: Pydantic models validate all parameters
+- [ ] **Error Handling**: Comprehensive error handling and logging
+- [ ] **Compatibility**: Maintains backward compatibility
 
-## Common Mistakes to Avoid
+## Getting Help with Enhanced Organization
 
-1. **Assuming 1:1 mappings** - Always use lists/sets
-2. **Modifying input lists** - Work with copies
-3. **Poor error messages** - Be specific
-4. **Missing provenance** - Track everything
-5. **Forgetting edge cases** - Empty input, None values
-6. **Tight coupling** - Actions should be independent
+### Finding Existing Actions
+```bash
+# Search by entity type
+find entities/proteins/ -name "*.py" | grep -v __pycache__
 
-## Getting Help
+# Search by function
+find . -path "*/matching/*" -name "*.py"
 
-- Review existing actions for patterns
-- Check test files for usage examples
-- Consult `/roadmap/technical_notes/action_types/developing_new_action_types.md`
-- Look at integration tests to see actions in use
+# Search by pattern in action names
+grep -r "EXTRACT.*UNIPROT" entities/
+```
 
-Remember: Actions are the workhorses of biomapper. They must be robust, well-tested, and handle the messy reality of bioinformatics data gracefully.
+### Understanding Dependencies
+```bash
+# See what algorithms an action uses
+grep -r "from.*algorithms" entities/proteins/
+
+# See what utilities are shared
+ls utils/*/
+```
+
+### Development Commands
+```bash
+# Run entity-specific tests
+poetry run pytest tests/unit/core/strategy_actions/entities/proteins/
+
+# Run algorithm tests
+poetry run pytest tests/unit/core/strategy_actions/algorithms/
+
+# Type checking for specific entity
+poetry run mypy biomapper/core/strategy_actions/entities/proteins/
+```
+
+Remember: The enhanced organization enables scalable development while maintaining the robust, tested patterns that make biomapper actions reliable for complex bioinformatics data processing.

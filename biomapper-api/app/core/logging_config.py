@@ -66,7 +66,7 @@ def configure_logging() -> None:
     Configure structured logging for the application.
     """
     logging.config.dictConfig(get_logging_config())
-    
+
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,

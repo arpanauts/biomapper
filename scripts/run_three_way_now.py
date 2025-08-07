@@ -14,12 +14,12 @@ runner_path = Path(__file__).parent / "run_three_way_metabolomics.py"
 if __name__ == "__main__":
     print("Starting three-way metabolomics pipeline...")
     print("=" * 80)
-    
+
     # Run the simpler three-way script
     result = subprocess.run(
         [sys.executable, str(runner_path)],
         capture_output=False,  # Show output in real-time
-        text=True
+        text=True,
     )
-    
+
     sys.exit(result.returncode)

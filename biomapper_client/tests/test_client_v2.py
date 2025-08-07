@@ -1,9 +1,7 @@
 """Tests for enhanced Biomapper client."""
 
-import asyncio
-import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
@@ -11,19 +9,15 @@ import pytest
 from biomapper_client.client_v2 import BiomapperClient
 from biomapper_client.exceptions import (
     ApiError,
-    JobNotFoundError,
     NetworkError,
     StrategyNotFoundError,
     TimeoutError,
 )
 from biomapper_client.models import (
     ExecutionContext,
-    ExecutionOptions,
     Job,
     JobStatus,
     JobStatusEnum,
-    ProgressEvent,
-    ProgressEventType,
     StrategyResult,
 )
 
@@ -88,7 +82,7 @@ class TestBiomapperClient:
         with patch.object(client, "_get_client") as mock_get_client:
             # Create a mock client (not AsyncMock to avoid auto-async attributes)
             mock_client = Mock()
-            
+
             # Create mock response with proper synchronous methods
             mock_response = Mock()
             # Make json() return the dict directly (not a Mock)
@@ -100,15 +94,17 @@ class TestBiomapperClient:
             }
             # Make raise_for_status() a no-op function
             mock_response.raise_for_status = lambda: None
-            
+
             # Create an AsyncMock for post that returns the response
             mock_post = AsyncMock(return_value=mock_response)
             mock_client.post = mock_post
-            
+
             # Make _get_client return the mock client
             mock_get_client.return_value = mock_client
 
-            job = await client.execute_strategy("test_strategy", parameters={"param": "value"})
+            job = await client.execute_strategy(
+                "test_strategy", parameters={"param": "value"}
+            )
 
             assert isinstance(job, Job)
             assert job.id == "job-123"
@@ -225,7 +221,9 @@ class TestBiomapperClient:
 
     def test_run_sync(self, client):
         """Test synchronous run method."""
-        with patch.object(client, "_async_run", new_callable=AsyncMock) as mock_async_run:
+        with patch.object(
+            client, "_async_run", new_callable=AsyncMock
+        ) as mock_async_run:
             mock_result = StrategyResult(
                 success=True,
                 job_id="job-123",
@@ -246,7 +244,9 @@ class TestBiomapperClient:
 
     def test_run_with_progress(self, client):
         """Test run with progress tracking."""
-        with patch.object(client, "_async_run_with_progress", new_callable=AsyncMock) as mock_run:
+        with patch.object(
+            client, "_async_run_with_progress", new_callable=AsyncMock
+        ) as mock_run:
             mock_result = StrategyResult(
                 success=True,
                 job_id="job-123",
@@ -292,7 +292,7 @@ class TestBiomapperClient:
                 updated_at="2024-01-01T00:00:02",
             ),
         ]
-        
+
         with patch.object(client, "get_job_status", mock_get_status):
             events = []
             async for event in client.stream_progress("job-123"):

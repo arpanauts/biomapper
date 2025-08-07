@@ -21,10 +21,9 @@ RESOURCE_CONFIGURATION: Dict[str, ResourceConfig] = {
             "host": QDRANT_HOST,
             "port": QDRANT_PORT,
             "container_name": "biomapper-qdrant",
-            "collections": ["metabolites", "proteins", "genes", "hmdb_metabolites"]
-        }
+            "collections": ["metabolites", "proteins", "genes", "hmdb_metabolites"],
+        },
     ),
-    
     "cts_api": ResourceConfig(
         name="cts_api",
         type=ResourceType.EXTERNAL_API,
@@ -34,10 +33,9 @@ RESOURCE_CONFIGURATION: Dict[str, ResourceConfig] = {
         config={
             "base_url": "https://cts.fiehnlab.ucdavis.edu",
             "health_endpoint": "https://cts.fiehnlab.ucdavis.edu/rest/status",
-            "timeout": 30
-        }
+            "timeout": 30,
+        },
     ),
-    
     "hmdb_api": ResourceConfig(
         name="hmdb_api",
         type=ResourceType.EXTERNAL_API,
@@ -47,10 +45,9 @@ RESOURCE_CONFIGURATION: Dict[str, ResourceConfig] = {
         config={
             "base_url": "https://www.hmdb.ca",
             "health_endpoint": "https://www.hmdb.ca",
-            "timeout": 30
-        }
+            "timeout": 30,
+        },
     ),
-    
     "pubchem_api": ResourceConfig(
         name="pubchem_api",
         type=ResourceType.EXTERNAL_API,
@@ -60,10 +57,9 @@ RESOURCE_CONFIGURATION: Dict[str, ResourceConfig] = {
         config={
             "base_url": "https://pubchem.ncbi.nlm.nih.gov",
             "health_endpoint": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/1/property/MolecularFormula/JSON",
-            "timeout": 10
-        }
+            "timeout": 10,
+        },
     ),
-    
     "chemspider_api": ResourceConfig(
         name="chemspider_api",
         type=ResourceType.EXTERNAL_API,
@@ -73,22 +69,17 @@ RESOURCE_CONFIGURATION: Dict[str, ResourceConfig] = {
         config={
             "base_url": "https://www.chemspider.com",
             "health_endpoint": "https://www.chemspider.com",
-            "timeout": 10
-        }
+            "timeout": 10,
+        },
     ),
-    
     "postgres": ResourceConfig(
         name="postgres",
         type=ResourceType.DATABASE,
         required=True,
         auto_start=False,  # Database should be managed externally
         health_check_interval=30,
-        config={
-            "connection_string": POSTGRES_URL,
-            "pool_size": 10
-        }
+        config={"connection_string": POSTGRES_URL, "pool_size": 10},
     ),
-    
     "redis": ResourceConfig(
         name="redis",
         type=ResourceType.DOCKER_CONTAINER,
@@ -99,7 +90,7 @@ RESOURCE_CONFIGURATION: Dict[str, ResourceConfig] = {
             "container_name": "biomapper-redis",
             "image": "redis:alpine",
             "host": REDIS_HOST,
-            "port": REDIS_PORT
-        }
-    )
+            "port": REDIS_PORT,
+        },
+    ),
 }

@@ -1,6 +1,5 @@
 import pytest
 import numpy as np
-import pandas as pd
 from biomapper.core.strategy_actions.nightingale_nmr_match import (
     NightingaleNmrMatchAction,
     NightingaleNmrMatchParams,
@@ -323,16 +322,16 @@ class TestNightingaleNmrMatch:
         # Test various invalid inputs
         assert action._normalize_nightingale_name(np.nan) == ""
         assert action._normalize_nightingale_name(None) == ""
-        assert action._normalize_nightingale_name(float('nan')) == ""
-        
+        assert action._normalize_nightingale_name(float("nan")) == ""
+
         # Test numeric values
         assert action._normalize_nightingale_name(123.45) == "123.45"
         assert action._normalize_nightingale_name(123) == "123"
-        
+
         # Test empty strings
         assert action._normalize_nightingale_name("") == ""
         assert action._normalize_nightingale_name("   ") == ""
-        
+
         # Test normal strings still work
         assert action._normalize_nightingale_name("Total_C") == "c"
         assert action._normalize_nightingale_name("HDL_C") == "hdl c"
@@ -351,7 +350,7 @@ class TestNightingaleNmrMatch:
             unmatched_source_key="unmatched_source",
             unmatched_target_key="unmatched_target",
         )
-        
+
         # Create test data with quality issues
         class MockContext:
             def __init__(self):
@@ -374,15 +373,15 @@ class TestNightingaleNmrMatch:
                         ],
                     }
                 }
-            
+
             def get_action_data(self, key, default=None):
                 return self._data.get(key, default)
-            
+
             def set_action_data(self, key, value):
                 self._data[key] = value
-        
+
         context = MockContext()
-        
+
         # Run matching and verify it completes without error
         result = await action.execute_typed(
             current_identifiers=[],
@@ -392,9 +391,9 @@ class TestNightingaleNmrMatch:
             target_endpoint=None,
             context=context,
         )
-        
+
         assert result.details["success"]
-        
+
         # Verify data quality metrics
         data_quality = result.details["data_quality"]
         assert data_quality["source_nan_count"] == 2  # np.nan and None
@@ -403,12 +402,12 @@ class TestNightingaleNmrMatch:
         assert data_quality["target_nan_count"] == 1
         assert data_quality["target_empty_count"] == 1
         assert data_quality["target_numeric_count"] == 1
-        
+
         # Verify matches were found for valid entries
         datasets = context.get_action_data("datasets")
         matches = datasets["matches"]
         assert len(matches) >= 2  # At least Total_C and HDL_C should match
-        
+
         # Verify invalid entries are in unmatched
         unmatched_source = datasets["unmatched_source"]
         assert len(unmatched_source) >= 3  # NaN, None, and empty entries
@@ -427,7 +426,7 @@ class TestNightingaleNmrMatch:
             unmatched_source_key="unmatched_source",
             unmatched_target_key="unmatched_target",
         )
-        
+
         class MockContext:
             def __init__(self):
                 self._data = {
@@ -442,15 +441,15 @@ class TestNightingaleNmrMatch:
                         ],
                     }
                 }
-            
+
             def get_action_data(self, key, default=None):
                 return self._data.get(key, default)
-            
+
             def set_action_data(self, key, value):
                 self._data[key] = value
-        
+
         context = MockContext()
-        
+
         result = await action.execute_typed(
             current_identifiers=[],
             current_ontology_type="",
@@ -459,9 +458,9 @@ class TestNightingaleNmrMatch:
             target_endpoint=None,
             context=context,
         )
-        
+
         assert result.details["success"]
-        
+
         # Both numeric values should be matched after string conversion
         datasets = context.get_action_data("datasets")
         matches = datasets["matches"]

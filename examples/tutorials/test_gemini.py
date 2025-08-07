@@ -7,7 +7,7 @@ from unittest.mock import patch, Mock
 
 @pytest.mark.skipif(
     not os.getenv("GEMINI_API_URL") or not os.getenv("GEMINI_API_KEY"),
-    reason="GEMINI_API_URL and GEMINI_API_KEY not set in environment"
+    reason="GEMINI_API_URL and GEMINI_API_KEY not set in environment",
 )
 def test_gemini_api():
     """Test the Gemini API integration."""
@@ -42,28 +42,30 @@ def test_gemini_api_mocked():
     mock_response = Mock()
     mock_response.status_code = 200
     mock_response.json.return_value = {
-        "choices": [{
-            "message": {
-                "content": "Phenomics is the comprehensive study of phenotypes..."
+        "choices": [
+            {
+                "message": {
+                    "content": "Phenomics is the comprehensive study of phenotypes..."
+                }
             }
-        }]
+        ]
     }
     mock_response.text = '{"choices": [{"message": {"content": "Phenomics is..."}}]}'
-    
+
     # Test prompt
     prompt = {
         "model": "gemini-pro",
         "messages": [{"content": "What is Phenomics according to Lee Hood?"}],
     }
-    
-    with patch('requests.post', return_value=mock_response):
+
+    with patch("requests.post", return_value=mock_response):
         # Make API call
         r = requests.post(
             "https://api.example.com/gemini",  # Mock URL
             headers={"Authorization": "Bearer mock_key"},
             json=prompt,
         )
-        
+
         assert r.status_code == 200
         res = r.json()
         assert "choices" in res

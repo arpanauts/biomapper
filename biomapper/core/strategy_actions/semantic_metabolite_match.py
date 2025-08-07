@@ -13,7 +13,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from biomapper.core.strategy_actions.registry import register_action
 from biomapper.core.strategy_actions.typed_base import (
-    StandardActionResult,
     TypedStrategyAction,
 )
 
@@ -102,7 +101,7 @@ class EmbeddingCache:
 
 class SemanticMatchResult(BaseModel):
     """Result model for semantic metabolite matching."""
-    
+
     success: bool
     message: str
     data: Dict[str, Any] = {}
@@ -124,7 +123,7 @@ class SemanticMetaboliteMatchAction(
     def get_params_model(self) -> type[SemanticMetaboliteMatchParams]:
         """Get the Pydantic model for action parameters."""
         return SemanticMetaboliteMatchParams
-    
+
     def get_result_model(self) -> type[SemanticMatchResult]:
         """Get the Pydantic model for action results."""
         return SemanticMatchResult
@@ -197,9 +196,7 @@ class SemanticMetaboliteMatchAction(
 
             try:
                 # Generate embedding
-                response = self.openai_client.embeddings.create(
-                    input=text, model=model
-                )
+                response = self.openai_client.embeddings.create(input=text, model=model)
                 embedding = response.data[0].embedding
 
                 # Cache the result

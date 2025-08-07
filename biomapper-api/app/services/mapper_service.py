@@ -14,11 +14,12 @@ from pydantic import ValidationError
 from biomapper.utils.io_utils import load_tabular_file
 from biomapper.core.models.strategy import Strategy
 from biomapper.core.minimal_strategy_service import MinimalStrategyService
+
 # BiomapperContext import removed - using dict directly
 from app.core.config import settings
 from app.core.session import Session
 from app.models.job import Job
-from app.models.mapping import MappingStatus, MappingResult
+from app.models.mapping import MappingStatus
 # Removed database and legacy imports
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,9 @@ class MapperService:
         try:
             self.mapper_service = MapperServiceForStrategies()
         except Exception as e:
-            logger.error(f"Failed to create MapperServiceForStrategies: {e}", exc_info=True)
+            logger.error(
+                f"Failed to create MapperServiceForStrategies: {e}", exc_info=True
+            )
             raise
 
         # No longer using relationship executor
@@ -162,7 +165,8 @@ class MapperService:
                         result = {}
                         for ontology in target_ontologies:
                             mapping_result = await self.mapper_service.execute_strategy(
-                                "composite_id_split", {"value": value, "ontology": ontology}
+                                "composite_id_split",
+                                {"value": value, "ontology": ontology},
                             )
                             if mapping_result:
                                 result[ontology] = mapping_result
@@ -347,26 +351,26 @@ class MapperService:
         return []
 
     async def execute_strategy(
-        self, 
-        strategy_name: str, 
+        self,
+        strategy_name: str,
         source_endpoint_name: str,
         target_endpoint_name: str,
         input_identifiers: List[str],
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Execute a mapping strategy by name.
-        
+
         Args:
             strategy_name: Name of the strategy to execute.
             source_endpoint_name: The name of the source data endpoint.
             target_endpoint_name: The name of the target data endpoint.
             input_identifiers: A list of identifiers to be mapped.
             context: Optional execution context for the strategy.
-            
+
         Returns:
             Dictionary containing the strategy execution results.
-            
+
         Raises:
             KeyError: If the strategy is not found.
             Exception: If the strategy execution fails.
@@ -376,7 +380,7 @@ class MapperService:
             source_endpoint_name=source_endpoint_name,
             target_endpoint_name=target_endpoint_name,
             input_identifiers=input_identifiers,
-            context=context
+            context=context,
         )
 
 
@@ -389,21 +393,24 @@ class MapperServiceForStrategies:
         """
         print("DEBUG: MapperServiceForStrategies.__init__ starting", flush=True)
         logger.info("Initializing MapperServiceForStrategies...")
-        
+
         try:
             print("DEBUG: About to initialize MinimalStrategyService", flush=True)
             self.strategy_service = MinimalStrategyService(settings.STRATEGIES_DIR)
             self.strategies = self.strategy_service.strategies
             print(f"DEBUG: Loaded {len(self.strategies)} strategies", flush=True)
-            
+
             logger.info("MinimalStrategyService initialized successfully.")
 
         except Exception as e:
-            print(f"DEBUG: Failed to initialize MapperServiceForStrategies: {type(e).__name__}: {str(e)}", flush=True)
+            print(
+                f"DEBUG: Failed to initialize MapperServiceForStrategies: {type(e).__name__}: {str(e)}",
+                flush=True,
+            )
             logger.exception(f"Failed to initialize MapperServiceForStrategies: {e}")
             raise
         print("DEBUG: MapperServiceForStrategies.__init__ completed", flush=True)
-    
+
     def _load_strategies(self) -> Dict[str, Strategy]:
         """
         Scans the strategies directory, loads each YAML file, and validates it against the Strategy model.
@@ -422,7 +429,7 @@ class MapperServiceForStrategies:
 
         for file_path in strategies_dir.glob("*.yaml"):
             try:
-                with open(file_path, 'r') as f:
+                with open(file_path, "r") as f:
                     strategy_data = yaml.safe_load(f)
                     if not strategy_data:
                         logger.warning(f"Skipping empty YAML file: {file_path.name}")
@@ -430,15 +437,22 @@ class MapperServiceForStrategies:
 
                     strategy = Strategy(**strategy_data)
                     if strategy.name in strategies:
-                        logger.warning(f"Duplicate strategy name '{strategy.name}' found in {file_path.name}. Overwriting.")
+                        logger.warning(
+                            f"Duplicate strategy name '{strategy.name}' found in {file_path.name}. Overwriting."
+                        )
                     strategies[strategy.name] = strategy
-                    logger.info(f"Successfully loaded strategy: '{strategy.name}' from {file_path.name}")
+                    logger.info(
+                        f"Successfully loaded strategy: '{strategy.name}' from {file_path.name}"
+                    )
             except yaml.YAMLError as e:
                 logger.error(f"Error parsing YAML file {file_path.name}: {e}")
             except ValidationError as e:
                 logger.error(f"Invalid strategy format in {file_path.name}: {e}")
             except Exception as e:
-                logger.error(f"Unexpected error loading strategy from {file_path.name}: {e}", exc_info=True)
+                logger.error(
+                    f"Unexpected error loading strategy from {file_path.name}: {e}",
+                    exc_info=True,
+                )
 
         if not strategies:
             logger.warning("No strategies were loaded.")
@@ -446,44 +460,45 @@ class MapperServiceForStrategies:
         return strategies
 
     async def execute_strategy(
-        self, 
-        strategy_name: str, 
+        self,
+        strategy_name: str,
         source_endpoint_name: str,
         target_endpoint_name: str,
         input_identifiers: List[str],
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Executes a named strategy with the given context using MinimalStrategyService.
         """
         if not self.strategies.get(strategy_name):
             raise HTTPException(
-                status_code=404,
-                detail=f"Strategy '{strategy_name}' not found."
+                status_code=404, detail=f"Strategy '{strategy_name}' not found."
             )
 
         try:
             logger.info(f"Executing strategy '{strategy_name}' with minimal service...")
-            
+
             # Execute the strategy using MinimalStrategyService
             final_context = await self.strategy_service.execute_strategy(
                 strategy_name=strategy_name,
                 source_endpoint_name=source_endpoint_name,
                 target_endpoint_name=target_endpoint_name,
                 input_identifiers=input_identifiers,
-                context=context
+                context=context,
             )
-            
+
             logger.info(f"Successfully executed strategy '{strategy_name}'.")
             return final_context
 
         except Exception as e:
-            logger.exception(f"An error occurred during execution of strategy '{strategy_name}': {e}")
+            logger.exception(
+                f"An error occurred during execution of strategy '{strategy_name}': {e}"
+            )
             raise HTTPException(
                 status_code=500,
                 detail=f"An internal error occurred while executing the strategy: {e}",
             )
-    
+
     async def get_endpoints(self) -> List[Any]:
         """Return empty list since we're not using database endpoints anymore."""
         logger.info("Returning empty endpoints list (database-free mode)")

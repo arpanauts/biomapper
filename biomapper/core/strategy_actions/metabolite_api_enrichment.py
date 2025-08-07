@@ -90,7 +90,7 @@ class MetaboliteApiEnrichmentParams(BaseModel):
     )
     track_metrics: bool = Field(True, description="Track enrichment metrics")
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def handle_legacy_mode(self):
         """Convert legacy parameters to new format if needed."""
         if self.api_services is None and self.identifier_columns:
@@ -480,13 +480,17 @@ class MetaboliteApiEnrichmentAction(
                     # Determine which API provided the matching name
                     if source_name in enriched_metabolite.get("cts_enriched_names", []):
                         api_source = "cts"
-                    elif source_name in enriched_metabolite.get("hmdb_enriched_names", []):
+                    elif source_name in enriched_metabolite.get(
+                        "hmdb_enriched_names", []
+                    ):
                         api_source = "hmdb"
-                    elif source_name in enriched_metabolite.get("pubchem_enriched_names", []):
+                    elif source_name in enriched_metabolite.get(
+                        "pubchem_enriched_names", []
+                    ):
                         api_source = "pubchem"
                     else:
                         api_source = "original"
-                    
+
                     # Update best match if:
                     # 1. Score is better than current best
                     # 2. Score is equal but this is from an enriched source (prefer enriched over original)
@@ -497,12 +501,15 @@ class MetaboliteApiEnrichmentAction(
                             should_update = True
                         elif score == best_score:
                             # Prefer enriched names over original when scores are equal
-                            if api_source != "original" and best_api_source == "original":
+                            if (
+                                api_source != "original"
+                                and best_api_source == "original"
+                            ):
                                 should_update = True
                             # Prefer exact matches when scores are equal
                             elif source_name.lower() == target_name.lower():
                                 should_update = True
-                    
+
                     if should_update:
                         best_score = score
                         best_match = target_item

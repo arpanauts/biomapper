@@ -21,20 +21,26 @@ class TestCombineMetaboliteMatches:
         context = Mock()
         context.get_action_data = Mock(side_effect=self._get_action_data)
         context.set_action_data = Mock()
-        
+
         # Store test data
         self.test_data = {
             "datasets": {
                 # Nightingale matches between Israeli10K and UKBB
                 "israeli10k_ukbb_nightingale_matches": [
                     {
-                        "source": {"identifier": "total_c", "display_name": "Total cholesterol"},
+                        "source": {
+                            "identifier": "total_c",
+                            "display_name": "Total cholesterol",
+                        },
                         "target": {"field_id": "23400", "title": "Total cholesterol"},
                         "confidence": 1.0,
                         "match_algorithm": "nightingale_direct",
                     },
                     {
-                        "source": {"identifier": "ldl_c", "display_name": "LDL cholesterol"},
+                        "source": {
+                            "identifier": "ldl_c",
+                            "display_name": "LDL cholesterol",
+                        },
                         "target": {"field_id": "23401", "title": "LDL cholesterol"},
                         "confidence": 1.0,
                         "match_algorithm": "nightingale_direct",
@@ -43,13 +49,19 @@ class TestCombineMetaboliteMatches:
                 # Arivale baseline matches
                 "arivale_baseline_matches": [
                     {
-                        "source": {"biochemical_name": "cholesterol", "hmdb": "HMDB0000067"},
+                        "source": {
+                            "biochemical_name": "cholesterol",
+                            "hmdb": "HMDB0000067",
+                        },
                         "target": {"nightingale_name": "Total_C"},
                         "confidence": 0.9,
                         "match_algorithm": "baseline_fuzzy",
                     },
                     {
-                        "source": {"biochemical_name": "glucose", "hmdb": "HMDB0000122"},
+                        "source": {
+                            "biochemical_name": "glucose",
+                            "hmdb": "HMDB0000122",
+                        },
                         "target": {"nightingale_name": "Glucose"},
                         "confidence": 0.95,
                         "match_algorithm": "baseline_fuzzy",
@@ -58,7 +70,10 @@ class TestCombineMetaboliteMatches:
                 # Arivale API-enriched matches
                 "arivale_api_matches": [
                     {
-                        "source": {"biochemical_name": "LDL Cholesterol", "hmdb": "HMDB0000068"},
+                        "source": {
+                            "biochemical_name": "LDL Cholesterol",
+                            "hmdb": "HMDB0000068",
+                        },
                         "target": {"nightingale_name": "LDL_C"},
                         "confidence": 0.85,
                         "match_algorithm": "multi_api",
@@ -75,9 +90,9 @@ class TestCombineMetaboliteMatches:
                 ],
             }
         }
-        
+
         return context
-    
+
     def _get_action_data(self, key: str, default: Any = None) -> Any:
         """Mock implementation of get_action_data."""
         return self.test_data.get(key, default)
@@ -145,27 +160,26 @@ class TestCombineMetaboliteMatches:
             target_endpoint=None,
             context=mock_context,
         )
-        
+
         # Check result structure
         assert isinstance(result, StandardActionResult)
         assert result.details["success"] is True
-        
+
         # Get the combined results
         saved_data = {}
         for call in mock_context.set_action_data.call_args_list:
             saved_data[call[0][0]] = call[0][1]
-        
+
         datasets = saved_data.get("datasets", {})
         combined = datasets.get("three_way_combined", {})
-        
+
         # Should have cholesterol as a three-way match
         three_way_matches = combined.get("three_way_matches", [])
         assert len(three_way_matches) >= 1
-        
+
         # Find cholesterol match
         cholesterol_match = next(
-            (m for m in three_way_matches if "cholesterol" in str(m).lower()),
-            None
+            (m for m in three_way_matches if "cholesterol" in str(m).lower()), None
         )
         assert cholesterol_match is not None
         assert cholesterol_match["israeli10k"]["field_name"] == "total_c"
@@ -183,30 +197,34 @@ class TestCombineMetaboliteMatches:
             target_endpoint=None,
             context=mock_context,
         )
-        
+
         assert result.details["success"] is True
-        
+
         # Get combined results
         saved_data = {}
         for call in mock_context.set_action_data.call_args_list:
             saved_data[call[0][0]] = call[0][1]
-        
+
         datasets = saved_data.get("datasets", {})
         combined = datasets.get("three_way_combined", {})
         three_way_matches = combined.get("three_way_matches", [])
-        
+
         # Should have multiple matches
         assert len(three_way_matches) >= 1
-        
+
         # Check LDL cholesterol match (has API-enriched match)
         ldl_match = next(
-            (m for m in three_way_matches if "ldl" in str(m).lower()),
-            None
+            (m for m in three_way_matches if "ldl" in str(m).lower()), None
         )
         if ldl_match:
-            assert "api_enriched" in ldl_match["match_methods"] or "multi_api" in ldl_match["match_methods"]
+            assert (
+                "api_enriched" in ldl_match["match_methods"]
+                or "multi_api" in ldl_match["match_methods"]
+            )
 
-    async def test_confidence_calculation(self, action, multi_tier_params, mock_context):
+    async def test_confidence_calculation(
+        self, action, multi_tier_params, mock_context
+    ):
         """Test weighted and boosted confidence calculation."""
         await action.execute_typed(
             current_identifiers=[],
@@ -216,20 +234,20 @@ class TestCombineMetaboliteMatches:
             target_endpoint=None,
             context=mock_context,
         )
-        
+
         saved_data = {}
         for call in mock_context.set_action_data.call_args_list:
             saved_data[call[0][0]] = call[0][1]
-        
+
         datasets = saved_data.get("datasets", {})
         combined = datasets.get("three_way_combined", {})
         three_way_matches = combined.get("three_way_matches", [])
-        
+
         # Check confidence scores
         for match in three_way_matches:
             confidence = match["match_confidence"]
             assert 0.0 <= confidence <= 1.0
-            
+
             # If multiple methods found the same match, confidence should be boosted
             if len(match["match_methods"]) > 1:
                 # Confidence should be higher than individual confidences
@@ -245,11 +263,11 @@ class TestCombineMetaboliteMatches:
             target_endpoint=None,
             context=mock_context,
         )
-        
+
         # Check provenance in result
         assert "provenance" in result.dict()
         assert len(result.provenance) > 0
-        
+
         # Each provenance entry should have required fields
         for prov in result.provenance:
             assert "match_id" in prov
@@ -272,14 +290,14 @@ class TestCombineMetaboliteMatches:
             target_endpoint=None,
             context=mock_context,
         )
-        
+
         saved_data = {}
         for call in mock_context.set_action_data.call_args_list:
             saved_data[call[0][0]] = call[0][1]
-        
+
         datasets = saved_data.get("datasets", {})
         combined = datasets.get("three_way_combined", {})
-        
+
         # Should have successfully created transitive matches
         assert len(combined.get("three_way_matches", [])) > 0
 
@@ -294,15 +312,15 @@ class TestCombineMetaboliteMatches:
             target_endpoint=None,
             context=mock_context,
         )
-        
+
         saved_data = {}
         for call in mock_context.set_action_data.call_args_list:
             saved_data[call[0][0]] = call[0][1]
-        
+
         datasets = saved_data.get("datasets", {})
         combined = datasets.get("three_way_combined", {})
         summary = combined.get("summary_statistics", {})
-        
+
         # Should track two-way matches separately
         assert "total_two_way_matches" in summary
         assert summary["total_two_way_matches"] >= summary["total_three_way_matches"]
@@ -324,10 +342,10 @@ class TestCombineMetaboliteMatches:
             track_provenance=True,
             min_confidence=0.5,
         )
-        
+
         # Override mock to return empty datasets
         mock_context.get_action_data = Mock(return_value={"datasets": {}})
-        
+
         result = await action.execute_typed(
             current_identifiers=[],
             current_ontology_type="metabolite",
@@ -336,7 +354,7 @@ class TestCombineMetaboliteMatches:
             target_endpoint=None,
             context=mock_context,
         )
-        
+
         # Should handle gracefully without errors
         assert result.details["success"] is True
         assert result.details.get("total_three_way_matches", 0) == 0
@@ -349,7 +367,10 @@ class TestCombineMetaboliteMatches:
             "datasets": {
                 "israeli10k_ukbb_nightingale_matches": [
                     {
-                        "source": {"identifier": "hdl_c", "display_name": "HDL cholesterol"},
+                        "source": {
+                            "identifier": "hdl_c",
+                            "display_name": "HDL cholesterol",
+                        },
                         "target": {"field_id": "23402", "title": "HDL cholesterol"},
                         "confidence": 1.0,
                         "match_algorithm": "nightingale_direct",
@@ -357,7 +378,10 @@ class TestCombineMetaboliteMatches:
                 ],
                 "arivale_baseline_matches": [
                     {
-                        "source": {"biochemical_name": "HDL cholesterol", "hmdb": "HMDB0000069"},
+                        "source": {
+                            "biochemical_name": "HDL cholesterol",
+                            "hmdb": "HMDB0000069",
+                        },
                         "target": {"nightingale_name": "HDL_C"},
                         "confidence": 0.95,
                         "match_algorithm": "baseline_fuzzy",
@@ -373,10 +397,12 @@ class TestCombineMetaboliteMatches:
                 ],
             }
         }
-        
-        context.get_action_data = Mock(side_effect=lambda k, d=None: duplicate_data.get(k, d))
+
+        context.get_action_data = Mock(
+            side_effect=lambda k, d=None: duplicate_data.get(k, d)
+        )
         context.set_action_data = Mock()
-        
+
         params = CombineMetaboliteMatchesParams(
             nightingale_pairs="israeli10k_ukbb_nightingale_matches",
             arivale_mappings=[
@@ -397,7 +423,7 @@ class TestCombineMetaboliteMatches:
             track_provenance=True,
             min_confidence=0.0,
         )
-        
+
         await action.execute_typed(
             current_identifiers=[],
             current_ontology_type="metabolite",
@@ -406,19 +432,19 @@ class TestCombineMetaboliteMatches:
             target_endpoint=None,
             context=context,
         )
-        
+
         saved_data = {}
         for call in context.set_action_data.call_args_list:
             saved_data[call[0][0]] = call[0][1]
-        
+
         datasets = saved_data.get("datasets", {})
         combined = datasets.get("deduplicated", {})
         three_way_matches = combined.get("three_way_matches", [])
-        
+
         # Should have only one HDL match with combined confidence
         hdl_matches = [m for m in three_way_matches if "hdl" in str(m).lower()]
         assert len(hdl_matches) == 1
-        
+
         hdl_match = hdl_matches[0]
         # Should have both methods listed
         assert len(hdl_match["match_methods"]) >= 2
@@ -441,7 +467,7 @@ class TestCombineMetaboliteMatches:
             track_provenance=True,
             min_confidence=0.7,  # Should filter out the 0.64 confidence match
         )
-        
+
         await action.execute_typed(
             current_identifiers=[],
             current_ontology_type="metabolite",
@@ -450,15 +476,15 @@ class TestCombineMetaboliteMatches:
             target_endpoint=None,
             context=mock_context,
         )
-        
+
         saved_data = {}
         for call in mock_context.set_action_data.call_args_list:
             saved_data[call[0][0]] = call[0][1]
-        
+
         datasets = saved_data.get("datasets", {})
         combined = datasets.get("filtered", {})
         three_way_matches = combined.get("three_way_matches", [])
-        
+
         # Should have filtered out low confidence matches
         for match in three_way_matches:
             assert match["match_confidence"] >= 0.7
@@ -473,25 +499,25 @@ class TestCombineMetaboliteMatches:
             target_endpoint=None,
             context=mock_context,
         )
-        
+
         saved_data = {}
         for call in mock_context.set_action_data.call_args_list:
             saved_data[call[0][0]] = call[0][1]
-        
+
         datasets = saved_data.get("datasets", {})
         combined = datasets.get("three_way_combined", {})
         summary = combined.get("summary_statistics", {})
-        
+
         # Check required summary fields
         assert "total_three_way_matches" in summary
         assert "total_two_way_matches" in summary
         assert "matches_by_method" in summary
         assert "confidence_distribution" in summary
-        
+
         # Verify counts make sense
         assert summary["total_three_way_matches"] >= 0
         assert summary["total_two_way_matches"] >= summary["total_three_way_matches"]
-        
+
         # Check method breakdown
         methods = summary["matches_by_method"]
         assert "nightingale_direct" in methods
