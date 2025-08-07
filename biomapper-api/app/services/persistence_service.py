@@ -662,17 +662,18 @@ class PersistenceService:
         context: StrategyExecutionContext
     ) -> bytes:
         """Serialize execution context for storage."""
-        # Convert to dict representation
+        # Convert to dict representation using actual StrategyExecutionContext fields
         context_dict = {
-            "input_identifiers": context.input_identifiers,
-            "output_identifiers": context.output_identifiers,
-            "output_ontology_type": context.output_ontology_type,
+            "initial_identifier": context.initial_identifier,
+            "current_identifier": context.current_identifier,
+            "ontology_type": context.ontology_type,
+            "step_results": {k: v.model_dump() for k, v in context.step_results.items()},
+            "provenance": [p.model_dump() for p in context.provenance],
             "custom_action_data": context.custom_action_data,
-            "provenance": context.provenance,
-            "details": context.details
+            "config": context.config.model_dump()
         }
         
-        return json.dumps(context_dict).encode()
+        return json.dumps(context_dict, default=str).encode()
     
     async def _deserialize_context(
         self,
@@ -681,14 +682,26 @@ class PersistenceService:
         """Deserialize execution context from storage."""
         context_dict = json.loads(data.decode())
         
-        return StrategyExecutionContext(
-            input_identifiers=context_dict.get("input_identifiers", []),
-            output_identifiers=context_dict.get("output_identifiers", []),
-            output_ontology_type=context_dict.get("output_ontology_type"),
+        # Reconstruct using actual StrategyExecutionContext fields
+        from biomapper.core.models.execution_context import StepResult, ProvenanceRecord, ExecutionConfig
+        
+        context = StrategyExecutionContext(
+            initial_identifier=context_dict.get("initial_identifier", "integration_test"),
+            current_identifier=context_dict.get("current_identifier", "integration_test"),
+            ontology_type=context_dict.get("ontology_type", "gene"),
             custom_action_data=context_dict.get("custom_action_data", {}),
-            provenance=context_dict.get("provenance", []),
-            details=context_dict.get("details", {})
+            config=ExecutionConfig(**context_dict.get("config", {}))
         )
+        
+        # Add step results
+        for name, result_dict in context_dict.get("step_results", {}).items():
+            context.step_results[name] = StepResult(**result_dict)
+        
+        # Add provenance records
+        for prov_dict in context_dict.get("provenance", []):
+            context.provenance.append(ProvenanceRecord(**prov_dict))
+        
+        return context
     
     async def cleanup_old_data(self, days: int = 30):
         """Clean up old execution data."""

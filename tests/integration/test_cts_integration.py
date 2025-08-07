@@ -34,7 +34,7 @@ class TestCTSIntegration:
     async def test_real_batch_conversion(self, client):
         """Test real batch conversion with metabolites."""
         # Common metabolites
-        identifiers = ["HMDB0000001", "HMDB0000002"]  # L-Histidine, Malonic acid
+        identifiers = ["HMDB0000177", "HMDB0000691"]  # L-Histidine, Malonic acid
         
         results = await client.convert_batch(
             identifiers,
@@ -47,7 +47,7 @@ class TestCTSIntegration:
         assert all(id in results for id in identifiers)
         
         # Check L-Histidine
-        assert "L-Histidine" in results["HMDB0000001"].get("Chemical Name", [])
+        assert "L-Histidine" in results["HMDB0000177"].get("Chemical Name", [])
         # This test should FAIL initially
     
     async def test_real_scoring_algorithm(self, client):

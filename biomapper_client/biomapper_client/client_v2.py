@@ -230,12 +230,13 @@ class BiomapperClient:
             data = response.json()
 
             # Convert to Job object
+            from datetime import datetime
             return Job(
                 id=data["job_id"],
                 status=JobStatusEnum.RUNNING,
                 strategy_name=request.strategy_name or "custom",
-                created_at=data.get("created_at", ""),
-                updated_at=data.get("updated_at", ""),
+                created_at=data.get("created_at", datetime.utcnow()),
+                updated_at=data.get("updated_at", datetime.utcnow()),
             )
 
         except httpx.HTTPStatusError as e:

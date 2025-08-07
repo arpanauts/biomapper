@@ -26,7 +26,7 @@ class CTSConversionResult(BaseModel):
     from_identifier: str = Field(alias="fromIdentifier")
     search_term: str = Field(alias="searchTerm")
     to_identifier: str = Field(alias="toIdentifier")
-    result: List[str]
+    results: List[str]  # Note: field is "results" not "result"
 
 
 class InChIKeyScore(BaseModel):
@@ -65,6 +65,23 @@ class CTSClient(BaseMappingClient):
     """
     
     BASE_URL = "https://cts.fiehnlab.ucdavis.edu/rest"
+    
+    # Common ID type abbreviations mapping to full CTS names
+    ID_TYPE_MAPPING = {
+        "HMDB": "Human Metabolome Database",
+        "KEGG": "KEGG",
+        "ChEBI": "ChEBI",
+        "PubChem": "PubChem CID",
+        "InChIKey": "InChIKey",
+        "InChI": "InChI",
+        "SMILES": "SMILES",
+        "Chemical Name": "Chemical Name",
+        "CAS": "CAS",
+        "DrugBank": "DrugBank",
+        "ChemSpider": "ChemSpider",
+        "LMSD": "LMSD",
+        "LipidMAPS": "LipidMAPS"
+    }
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
@@ -109,9 +126,13 @@ class CTSClient(BaseMappingClient):
     
     def _validate_id_types(self, from_type: str, to_type: str) -> None:
         """Validate that ID types are supported."""
-        if self._valid_from_ids and from_type not in self._valid_from_ids:
+        # Map common abbreviations to full names
+        from_type_mapped = self.ID_TYPE_MAPPING.get(from_type, from_type)
+        to_type_mapped = self.ID_TYPE_MAPPING.get(to_type, to_type)
+        
+        if self._valid_from_ids and from_type_mapped not in self._valid_from_ids:
             raise ValueError(f"Invalid source ID type: {from_type}. Valid types: {sorted(self._valid_from_ids)}")
-        if self._valid_to_ids and to_type not in self._valid_to_ids:
+        if self._valid_to_ids and to_type_mapped not in self._valid_to_ids:
             raise ValueError(f"Invalid target ID type: {to_type}. Valid types: {sorted(self._valid_to_ids)}")
     
     def _get_cache_key(self, endpoint: str, **params: Any) -> str:
@@ -196,15 +217,19 @@ class CTSClient(BaseMappingClient):
         # Validate ID types if we have the data
         self._validate_id_types(from_type, to_type)
         
+        # Map common abbreviations to full names for API call
+        from_type_api = self.ID_TYPE_MAPPING.get(from_type, from_type)
+        to_type_api = self.ID_TYPE_MAPPING.get(to_type, to_type)
+        
         # Check cache
-        cache_key = self._get_cache_key("convert", from_type=from_type, to_type=to_type, id=identifier)
+        cache_key = self._get_cache_key("convert", from_type=from_type_api, to_type=to_type_api, id=identifier)
         if use_cache:
             cached = self._get_from_cache(cache_key)
             if cached is not None:
                 return cached  # type: ignore
         
         # Make request
-        endpoint = f"convert/{quote(from_type)}/{quote(to_type)}/{quote(identifier)}"
+        endpoint = f"convert/{quote(from_type_api)}/{quote(to_type_api)}/{quote(identifier)}"
         
         try:
             data = await self._make_request(endpoint)
@@ -213,8 +238,8 @@ class CTSClient(BaseMappingClient):
                 
                 # Cache and return
                 if use_cache:
-                    self._set_cache(cache_key, result.result)
-                return result.result
+                    self._set_cache(cache_key, result.results)
+                return result.results
             return []
             
         except Exception as e:

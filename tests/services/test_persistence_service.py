@@ -283,7 +283,11 @@ class TestCheckpointManagement:
             options={}
         )
         
-        context = StrategyExecutionContext()
+        context = StrategyExecutionContext(
+            initial_identifier="test_id",
+            current_identifier="test_id",
+            ontology_type="protein"
+        )
         context.input_identifiers = ["id1", "id2", "id3"]
         context.output_identifiers = ["out1", "out2"]
         context.custom_action_data = {"step_0": {"result": "data"}}
@@ -717,7 +721,11 @@ class TestPersistenceIntegration:
         await persistence_service.update_job_status(job.id, JobStatus.RUNNING)
         
         # Simulate step execution
-        context = StrategyExecutionContext()
+        context = StrategyExecutionContext(
+            initial_identifier="test_id",
+            current_identifier="test_id",
+            ontology_type="protein"
+        )
         context.input_identifiers = ["id1", "id2", "id3"]
         
         for i, step in enumerate(strategy["steps"]):

@@ -294,7 +294,11 @@ class TestCheckpointing:
         )
         
         # Create a checkpoint with some context
-        context = StrategyExecutionContext()
+        context = StrategyExecutionContext(
+            initial_identifier="test_id",
+            current_identifier="test_id",
+            ontology_type="protein"
+        )
         context.input_identifiers = ["id1", "id2"]
         context.custom_action_data = {"step_0_output": {"data": "from_checkpoint"}}
         

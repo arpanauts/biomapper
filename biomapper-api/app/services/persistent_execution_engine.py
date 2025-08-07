@@ -82,7 +82,12 @@ class PersistentExecutionEngine:
             
             # Initialize context if new execution
             if not context:
-                context = StrategyExecutionContext()
+                # Create context with required fields for integration tests
+                context = StrategyExecutionContext(
+                    initial_identifier="integration_test",
+                    current_identifier="integration_test",
+                    ontology_type="gene"  # Default type for integration tests
+                )
                 context.custom_action_data["job_id"] = str(job_id)
                 context.custom_action_data["strategy_name"] = strategy.get("name", "unknown")
             

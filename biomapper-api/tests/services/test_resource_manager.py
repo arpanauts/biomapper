@@ -5,6 +5,7 @@ import asyncio
 import sys
 from pathlib import Path
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 # Add parent directory to path for imports
@@ -20,15 +21,28 @@ from app.services.resource_manager import (
 )
 
 
+class DockerException(Exception):
+    """Mock Docker exception."""
+    pass
+
+class NotFound(DockerException):
+    """Mock Docker NotFound exception."""
+    pass
+
 @pytest.fixture
 def mock_docker_client():
     """Create a mock Docker client."""
     with patch('app.services.resource_manager.docker') as mock_docker:
         client = MagicMock()
         mock_docker.from_env.return_value = client
-        mock_docker.errors.DockerException = Exception
-        mock_docker.errors.NotFound = Exception
-        yield client
+        
+        # Set up exception classes
+        mock_docker.errors.DockerException = DockerException
+        mock_docker.errors.NotFound = NotFound
+        
+        # Also patch the NotFound import in resource_manager
+        with patch('app.services.resource_manager.NotFound', NotFound):
+            yield client
 
 
 @pytest.fixture
@@ -154,14 +168,21 @@ class TestResourceManager:
         """Test external API health check when healthy."""
         config = resource_manager.config["cts_api"]
         
-        with patch('app.services.resource_manager.aiohttp.ClientSession') as MockSession:
-            mock_session = AsyncMock()
-            MockSession.return_value.__aenter__.return_value = mock_session
-            
-            mock_response = AsyncMock()
+        # Create async context manager for response
+        @asynccontextmanager
+        async def mock_session_get(*args, **kwargs):
+            mock_response = Mock()
             mock_response.status = 200
-            mock_session.get.return_value.__aenter__.return_value = mock_response
-            
+            yield mock_response
+        
+        # Create async context manager for session
+        @asynccontextmanager 
+        async def mock_session():
+            session = Mock()
+            session.get = mock_session_get
+            yield session
+        
+        with patch('app.services.resource_manager.aiohttp.ClientSession', mock_session):
             status = await resource_manager._check_external_api(config)
             assert status == ResourceStatus.HEALTHY
     
@@ -170,14 +191,21 @@ class TestResourceManager:
         """Test external API health check when degraded."""
         config = resource_manager.config["cts_api"]
         
-        with patch('app.services.resource_manager.aiohttp.ClientSession') as MockSession:
-            mock_session = AsyncMock()
-            MockSession.return_value.__aenter__.return_value = mock_session
-            
-            mock_response = AsyncMock()
+        # Create async context manager for response
+        @asynccontextmanager
+        async def mock_session_get(*args, **kwargs):
+            mock_response = Mock()
             mock_response.status = 503
-            mock_session.get.return_value.__aenter__.return_value = mock_response
-            
+            yield mock_response
+        
+        # Create async context manager for session
+        @asynccontextmanager 
+        async def mock_session():
+            session = Mock()
+            session.get = mock_session_get
+            yield session
+        
+        with patch('app.services.resource_manager.aiohttp.ClientSession', mock_session):
             status = await resource_manager._check_external_api(config)
             assert status == ResourceStatus.DEGRADED
     
@@ -186,11 +214,14 @@ class TestResourceManager:
         """Test external API health check with timeout."""
         config = resource_manager.config["cts_api"]
         
-        with patch('app.services.resource_manager.aiohttp.ClientSession') as MockSession:
-            mock_session = AsyncMock()
-            MockSession.return_value.__aenter__.return_value = mock_session
-            mock_session.get.side_effect = asyncio.TimeoutError()
-            
+        # Create async context manager for session that raises timeout
+        @asynccontextmanager 
+        async def mock_session():
+            session = Mock()
+            session.get.side_effect = asyncio.TimeoutError()
+            yield session
+        
+        with patch('app.services.resource_manager.aiohttp.ClientSession', mock_session):
             status = await resource_manager._check_external_api(config)
             assert status == ResourceStatus.DEGRADED
     
@@ -214,7 +245,8 @@ class TestResourceManager:
         resource_manager.docker_client = mock_docker_client
         config = resource_manager.config["redis"]
         
-        mock_docker_client.containers.get.side_effect = Exception("Not found")
+        # Use the proper Docker NotFound exception (defined in the module)
+        mock_docker_client.containers.get.side_effect = NotFound("Container not found")
         
         status = await resource_manager._check_docker_container(config)
         assert status == ResourceStatus.UNAVAILABLE
@@ -244,8 +276,8 @@ class TestResourceManager:
         resource_manager.docker_client = mock_docker_client
         config = resource_manager.config["qdrant"]
         
-        # Simulate container not found
-        mock_docker_client.containers.get.side_effect = Exception("Not found")
+        # Simulate container not found - use proper Docker NotFound exception (defined in the module)
+        mock_docker_client.containers.get.side_effect = NotFound("Container not found")
         
         # Mock container creation
         mock_container = Mock()

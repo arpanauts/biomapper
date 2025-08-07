@@ -26,11 +26,15 @@ from biomapper.core.models import StrategyExecutionContext
 
 
 # Mock actions for integration testing
-class IntegrationTestAction(BaseStrategyAction):
+class IntegrationTestAction:
     """Test action that simulates real work."""
     
     async def execute(self, params, context):
         await asyncio.sleep(0.01)  # Simulate work
+        
+        # Access context attributes directly (context is StrategyExecutionContext)
+        # Store results in custom_action_data
+        context.custom_action_data["test_output"] = f"processed_{params.get('step', 0)}"
         
         return {
             "success": True,
@@ -40,7 +44,7 @@ class IntegrationTestAction(BaseStrategyAction):
         }
 
 
-class FailingTestAction(BaseStrategyAction):
+class FailingTestAction:
     """Test action that fails."""
     
     async def execute(self, params, context):
@@ -355,7 +359,11 @@ class TestResumeAndRecovery:
         )
         
         # Simulate partial execution by creating context and checkpoint manually
-        context = StrategyExecutionContext()
+        context = StrategyExecutionContext(
+            initial_identifier="test_id",
+            current_identifier="test_id", 
+            ontology_type="protein"
+        )
         context.input_identifiers = ["id1", "id2", "id3"]
         context.custom_action_data = {
             "step_0_output": {"success": True, "records": 200},
@@ -453,7 +461,11 @@ class TestJobControlIntegration:
         await integration_persistence.update_job_status(job.id, JobStatus.RUNNING)
         
         # Create a checkpoint to simulate execution state
-        context = StrategyExecutionContext()
+        context = StrategyExecutionContext(
+            initial_identifier="test_id",
+            current_identifier="test_id",
+            ontology_type="protein"
+        )
         context.custom_action_data = {"current_progress": "50%", "processed_items": 250}
         
         checkpoint = await integration_persistence.create_checkpoint(
