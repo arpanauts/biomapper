@@ -18,7 +18,7 @@ from biomapper.core.minimal_strategy_service import MinimalStrategyService
 # BiomapperContext import removed - using dict directly
 from app.core.config import settings
 from app.core.session import Session
-from app.models.job import Job
+from app.models.persistence import Job
 from app.models.mapping import MappingStatus
 # Removed database and legacy imports
 

@@ -149,20 +149,13 @@ class MetaboliteExtractIdentifiersAction(
                             len(x) if isinstance(x, list) else (1 if pd.notna(x) else 0)
                             for x in result_df[id_type]
                         )
-                        unique = len(
-                            set(
-                                item
-                                for x in result_df[id_type]
-                                if isinstance(x, list)
-                                for item in x
-                            ).union(
-                                set(
-                                    x
-                                    for x in result_df[id_type]
-                                    if pd.notna(x) and not isinstance(x, list)
-                                )
-                            )
-                        )
+                        unique_set = set()
+                        for x in result_df[id_type]:
+                            if isinstance(x, list):
+                                unique_set.update(x)
+                            elif pd.notna(x):
+                                unique_set.add(x)
+                        unique = len(unique_set)
                     else:
                         count = non_null.sum()
                         unique = result_df[id_type][non_null].nunique()
@@ -318,8 +311,9 @@ class MetaboliteExtractIdentifiersAction(
         if not numeric:
             return hmdb_id  # Can't normalize
 
-        # Pad to 7 digits
-        return f"HMDB{numeric.zfill(7)}"
+        # Convert to 7-digit standard format
+        num_val = int(numeric)
+        return f"HMDB{num_val:07d}"
 
     def _validate_identifier(self, id_val: str, id_type: str) -> bool:
         """Validate identifier format."""
