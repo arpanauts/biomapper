@@ -10,6 +10,7 @@ class TestVectorEnhancementIntegration:
     """Integration tests for vector enhancement stage."""
     
     @pytest.mark.asyncio
+    @pytest.mark.requires_external_services
     async def test_progressive_enhancement_final_stage(self):
         """Test vector search as final enhancement stage."""
         # Simulate unmatched from CTS stage

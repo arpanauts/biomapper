@@ -123,6 +123,7 @@ class TestHMDBQdrantIntegration:
             pass
     
     @pytest.mark.asyncio
+    @pytest.mark.requires_qdrant
     async def test_end_to_end_loading(self, setup_test_collection):
         """Test complete loading pipeline with small dataset."""
         from biomapper.processors.hmdb import HMDBProcessor
@@ -160,6 +161,7 @@ class TestHMDBQdrantIntegration:
             test_xml.unlink()
     
     @pytest.mark.asyncio
+    @pytest.mark.requires_qdrant
     async def test_arivale_compound_matching(self, setup_test_collection):
         """Test matching Arivale compounds against HMDB."""
         from biomapper.processors.hmdb import HMDBProcessor
@@ -209,6 +211,7 @@ class TestHMDBQdrantIntegration:
             test_xml.unlink()
     
     @pytest.mark.asyncio
+    @pytest.mark.requires_qdrant
     async def test_search_quality_metrics(self, setup_test_collection):
         """Test search quality with various query types."""
         from biomapper.processors.hmdb import HMDBProcessor
@@ -256,6 +259,7 @@ class TestHMDBQdrantIntegration:
             test_xml.unlink()
     
     @pytest.mark.asyncio
+    @pytest.mark.requires_qdrant
     async def test_batch_loading_performance(self, setup_test_collection):
         """Test that batch loading is efficient."""
         from biomapper.processors.hmdb import HMDBProcessor
@@ -295,6 +299,7 @@ class TestHMDBQdrantIntegration:
             test_xml.unlink()
     
     @pytest.mark.asyncio
+    @pytest.mark.requires_qdrant
     async def test_error_recovery_during_loading(self, setup_test_collection):
         """Test that loader handles errors gracefully."""
         from biomapper.processors.hmdb import HMDBProcessor

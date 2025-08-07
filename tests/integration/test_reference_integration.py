@@ -13,6 +13,7 @@ class TestReferenceIntegration:
     """Integration tests for reference building."""
     
     @pytest.mark.asyncio
+    @pytest.mark.requires_external_services
     async def test_end_to_end_reference_creation(self):
         """Test complete reference creation workflow."""
         # First run NIGHTINGALE_NMR_MATCH

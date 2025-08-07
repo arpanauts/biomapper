@@ -10,6 +10,7 @@ class TestBaselineIntegration:
     """Integration tests for baseline matching with real metabolite names."""
     
     @pytest.mark.asyncio
+    @pytest.mark.requires_external_services
     async def test_arivale_to_nightingale_matching(self):
         """Test matching Arivale metabolites to Nightingale reference."""
         # Real Arivale metabolite names
