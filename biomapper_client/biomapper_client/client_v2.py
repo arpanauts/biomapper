@@ -31,6 +31,7 @@ from .models import (
     JobStatusEnum,
     LogEntry,
     ProgressEvent,
+    ProgressEventType,
     StrategyExecutionRequest,
     StrategyInfo,
     StrategyResult,

@@ -22,6 +22,8 @@ from biomapper_client.models import (
     Job,
     JobStatus,
     JobStatusEnum,
+    ProgressEvent,
+    ProgressEventType,
     StrategyResult,
 )
 
@@ -82,26 +84,36 @@ class TestBiomapperClient:
     @pytest.mark.asyncio
     async def test_execute_strategy_with_name(self, client):
         """Test executing strategy by name."""
+        # Mock _get_client to return a mock client directly
         with patch.object(client, "_get_client") as mock_get_client:
-            mock_client = AsyncMock()
-            mock_get_client.return_value.__aenter__.return_value = mock_client
-
+            # Create a mock client (not AsyncMock to avoid auto-async attributes)
+            mock_client = Mock()
+            
+            # Create mock response with proper synchronous methods
             mock_response = Mock()
-            mock_response.json.return_value = {
+            # Make json() return the dict directly (not a Mock)
+            mock_response.json = lambda: {
                 "job_id": "job-123",
                 "status": "running",
                 "created_at": "2024-01-01T00:00:00",
                 "updated_at": "2024-01-01T00:00:00",
             }
-            mock_response.raise_for_status = Mock()
-            mock_client.post.return_value = mock_response
+            # Make raise_for_status() a no-op function
+            mock_response.raise_for_status = lambda: None
+            
+            # Create an AsyncMock for post that returns the response
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.post = mock_post
+            
+            # Make _get_client return the mock client
+            mock_get_client.return_value = mock_client
 
             job = await client.execute_strategy("test_strategy", parameters={"param": "value"})
 
             assert isinstance(job, Job)
             assert job.id == "job-123"
             assert job.status == JobStatusEnum.RUNNING
-            mock_client.post.assert_called_once()
+            mock_post.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_execute_strategy_with_yaml_file(self, client, tmp_path):
@@ -111,28 +123,31 @@ class TestBiomapperClient:
         yaml_file.write_text("name: test\nactions: []")
 
         with patch.object(client, "_get_client") as mock_get_client:
-            mock_client = AsyncMock()
-            mock_get_client.return_value.__aenter__.return_value = mock_client
+            mock_client = Mock()
+            # Make _get_client return an async context manager
+            mock_get_client.return_value = mock_client
 
             mock_response = Mock()
-            mock_response.json.return_value = {
+            mock_response.json = lambda: {
                 "job_id": "job-456",
                 "status": "running",
             }
-            mock_response.raise_for_status = Mock()
-            mock_client.post.return_value = mock_response
+            mock_response.raise_for_status = lambda: None
+            mock_post = AsyncMock(return_value=mock_response)
+            mock_client.post = mock_post
 
             job = await client.execute_strategy(yaml_file)
 
             assert job.id == "job-456"
-            mock_client.post.assert_called_once()
+            mock_post.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_execute_strategy_not_found(self, client):
         """Test executing non-existent strategy."""
         with patch.object(client, "_get_client") as mock_get_client:
-            mock_client = AsyncMock()
-            mock_get_client.return_value.__aenter__.return_value = mock_client
+            mock_client = Mock()
+            # Make _get_client return an async context manager
+            mock_get_client.return_value = mock_client
 
             error_response = httpx.Response(
                 status_code=404,
@@ -252,32 +267,33 @@ class TestBiomapperClient:
     @pytest.mark.asyncio
     async def test_stream_progress(self, client):
         """Test progress streaming."""
-        with patch.object(client, "get_job_status") as mock_get_status:
-            # Simulate progress updates
-            mock_get_status.side_effect = [
-                JobStatus(
-                    job_id="job-123",
-                    status=JobStatusEnum.RUNNING,
-                    progress=25.0,
-                    message="Step 1",
-                    updated_at="2024-01-01T00:00:00",
-                ),
-                JobStatus(
-                    job_id="job-123",
-                    status=JobStatusEnum.RUNNING,
-                    progress=50.0,
-                    message="Step 2",
-                    updated_at="2024-01-01T00:00:01",
-                ),
-                JobStatus(
-                    job_id="job-123",
-                    status=JobStatusEnum.COMPLETED,
-                    progress=100.0,
-                    message="Done",
-                    updated_at="2024-01-01T00:00:02",
-                ),
-            ]
-
+        # Make get_job_status an AsyncMock that returns values
+        mock_get_status = AsyncMock()
+        mock_get_status.side_effect = [
+            JobStatus(
+                job_id="job-123",
+                status=JobStatusEnum.RUNNING,
+                progress=25.0,
+                message="Step 1",
+                updated_at="2024-01-01T00:00:00",
+            ),
+            JobStatus(
+                job_id="job-123",
+                status=JobStatusEnum.RUNNING,
+                progress=50.0,
+                message="Step 2",
+                updated_at="2024-01-01T00:00:01",
+            ),
+            JobStatus(
+                job_id="job-123",
+                status=JobStatusEnum.COMPLETED,
+                progress=100.0,
+                message="Done",
+                updated_at="2024-01-01T00:00:02",
+            ),
+        ]
+        
+        with patch.object(client, "get_job_status", mock_get_status):
             events = []
             async for event in client.stream_progress("job-123"):
                 events.append(event)
@@ -291,18 +307,20 @@ class TestBiomapperClient:
     async def test_get_job_status(self, client):
         """Test getting job status."""
         with patch.object(client, "_get_client") as mock_get_client:
-            mock_client = AsyncMock()
-            mock_get_client.return_value.__aenter__.return_value = mock_client
+            mock_client = Mock()
+            # Make _get_client return an async context manager
+            mock_get_client.return_value = mock_client
 
             mock_response = Mock()
-            mock_response.json.return_value = {
+            mock_response.json = lambda: {
                 "job_id": "job-123",
                 "status": "running",
                 "progress": 75.0,
                 "updated_at": "2024-01-01T00:00:00",
             }
-            mock_response.raise_for_status = Mock()
-            mock_client.get.return_value = mock_response
+            mock_response.raise_for_status = lambda: None
+            mock_get = AsyncMock(return_value=mock_response)
+            mock_client.get = mock_get
 
             status = await client.get_job_status("job-123")
 
@@ -314,13 +332,15 @@ class TestBiomapperClient:
     async def test_health_check(self, client):
         """Test health check."""
         with patch.object(client, "_get_client") as mock_get_client:
-            mock_client = AsyncMock()
-            mock_get_client.return_value.__aenter__.return_value = mock_client
+            mock_client = Mock()
+            # Make _get_client return an async context manager
+            mock_get_client.return_value = mock_client
 
             mock_response = Mock()
-            mock_response.json.return_value = {"status": "healthy", "version": "1.0.0"}
-            mock_response.raise_for_status = Mock()
-            mock_client.get.return_value = mock_response
+            mock_response.json = lambda: {"status": "healthy", "version": "1.0.0"}
+            mock_response.raise_for_status = lambda: None
+            mock_get = AsyncMock(return_value=mock_response)
+            mock_client.get = mock_get
 
             health = await client.health_check()
 
@@ -435,8 +455,9 @@ class TestErrorHandling:
     async def test_network_error(self, client):
         """Test network error handling."""
         with patch.object(client, "_get_client") as mock_get_client:
-            mock_client = AsyncMock()
-            mock_get_client.return_value.__aenter__.return_value = mock_client
+            mock_client = Mock()
+            # Make _get_client return an async context manager
+            mock_get_client.return_value = mock_client
 
             mock_client.post.side_effect = httpx.RequestError("Connection failed")
 
@@ -447,8 +468,9 @@ class TestErrorHandling:
     async def test_api_error(self, client):
         """Test API error handling."""
         with patch.object(client, "_get_client") as mock_get_client:
-            mock_client = AsyncMock()
-            mock_get_client.return_value.__aenter__.return_value = mock_client
+            mock_client = Mock()
+            # Make _get_client return an async context manager
+            mock_get_client.return_value = mock_client
 
             error_response = httpx.Response(
                 status_code=500,
