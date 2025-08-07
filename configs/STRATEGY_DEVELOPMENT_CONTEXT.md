@@ -47,13 +47,165 @@ The created strategies follow this pattern:
 6. **Calculate statistics** and quality metrics
 7. **Export results** in multiple formats (TSV, JSON, HTML)
 
+## Comprehensive Mapping Plan
+
+### Available Datasets Inventory
+
+#### Source Datasets (Clinical/Research)
+
+**Arivale:**
+- `proteomics_metadata.tsv` - 1,197 proteins with UniProt IDs, gene info
+- `metabolomics_metadata.tsv` - Metabolite data with various identifiers
+- `chemistries_metadata.tsv` - 128 clinical chemistry tests with LOINC codes
+
+**UKBB (UK Biobank):**
+- `UKBB_Protein_Meta.tsv` - Proteins with UniProt IDs and panel assignments
+- `UKBB_NMR_Meta.tsv` - NMR metabolomics with field IDs and groups
+
+**Israeli10k:**
+- `israeli10k_chemistries_metadata.csv` - Clinical chemistry tests
+- `israeli10k_metabolomics_metadata.csv` - Metabolomics data
+- `israeli10k_lipidomics_metadata.csv` - Lipidomics data
+
+**Function Health:**
+- `function_health_tests.csv` - Health test categories and names
+
+**ISB OSP:**
+- `hpa_osps.csv` - Gene-UniProt-Organ mappings from Human Protein Atlas
+- `qin_osps.csv` - Additional organ-specific protein data
+
+#### Target Knowledge Graphs
+
+**KG2c (Knowledge Graph 2.10.2c):**
+- `kg2c_proteins.csv` - Comprehensive protein ontology with xrefs
+- `kg2c_genes.csv` - Gene data with cross-references
+- `kg2c_metabolites.csv` - Metabolite entities
+- `kg2c_chemicals.csv` - Chemical compounds
+- `kg2c_drugs.csv` - Drug entities
+- `kg2c_diseases.csv` - Disease ontology
+- `kg2c_phenotypes.csv` - Phenotype data
+- `kg2c_pathways.csv` - Biological pathways
+- `kg2c_biological_processes.csv` - GO biological processes
+- `kg2c_molecular_activities.csv` - GO molecular activities
+- `kg2c_cellular_components.csv` - GO cellular components
+
+**SPOKE:**
+- `spoke_proteins.csv` - Proteins with RefSeq/UniProt xrefs
+- `spoke_genes.csv` - Genes with Ensembl IDs
+- `spoke_metabolites.csv` - Metabolites with InChIKey, PubChem
+- `spoke_diseases.csv` - Disease entities
+- `spoke_pathways.csv` - Pathway data
+- `spoke_clinical_labs.csv` - Clinical lab tests
+- `spoke_variants.csv` - Genetic variants
+- `spoke_symptoms.csv` - Clinical symptoms
+- `spoke_anatomy.csv` - Anatomical entities
+- `spoke_cell_types.csv` - Cell type ontology
+- `spoke_ec_numbers.csv` - Enzyme commission numbers
+- `spoke_organisms.csv` - Organism data
+
+### Identified Mapping Bridges
+
+#### Protein Mappings
+- **Primary Bridge**: UniProt IDs (most reliable)
+- **Secondary Bridges**: Gene symbols, Ensembl IDs, RefSeq
+
+#### Metabolite Mappings
+- **Primary Bridges**: InChIKey, PubChem CID, HMDB ID
+- **Secondary Bridges**: Chemical names (with fuzzy matching), KEGG IDs
+
+#### Clinical Test Mappings
+- **Primary Bridge**: LOINC codes
+- **Secondary Bridges**: Test names (standardized), Labcorp IDs
+
+#### Gene Mappings
+- **Primary Bridges**: Ensembl IDs, NCBI Gene IDs
+- **Secondary Bridges**: Gene symbols, RefSeq
+
+### Proposed Mapping Strategies
+
+#### Completed Strategies ✅
+1. `arivale_to_kg2c_proteins.yaml` - Arivale proteins → KG2c proteins
+2. `ukbb_to_kg2c_proteins.yaml` - UKBB proteins → KG2c proteins
+
+#### High Priority Strategies 🔴
+
+**Metabolomics Mappings:**
+3. `arivale_metabolomics_to_kg2c.yaml` - Arivale metabolites → KG2c metabolites
+4. `ukbb_nmr_to_kg2c_metabolites.yaml` - UKBB NMR → KG2c metabolites
+5. `israeli10k_metabolomics_to_kg2c.yaml` - Israeli10k metabolites → KG2c
+
+**Clinical Chemistry Mappings:**
+6. `arivale_chemistries_to_spoke_clinical.yaml` - Arivale labs → SPOKE clinical labs (via LOINC)
+7. `israeli10k_chemistries_to_spoke.yaml` - Israeli10k labs → SPOKE clinical labs
+
+**Cross-KG Mappings:**
+8. `kg2c_to_spoke_proteins.yaml` - KG2c proteins → SPOKE proteins (UniProt bridge)
+9. `kg2c_to_spoke_metabolites.yaml` - KG2c metabolites → SPOKE metabolites (InChIKey/PubChem)
+
+#### Medium Priority Strategies 🟡
+
+**Gene-Protein Mappings:**
+10. `isb_osp_to_kg2c.yaml` - ISB organ-specific proteins → KG2c (UniProt + organ context)
+11. `spoke_genes_to_kg2c_genes.yaml` - SPOKE genes → KG2c genes (Ensembl bridge)
+
+**Lipidomics:**
+12. `israeli10k_lipidomics_to_kg2c.yaml` - Israeli10k lipids → KG2c chemicals/metabolites
+
+**Function Health:**
+13. `function_health_to_spoke_clinical.yaml` - Function Health tests → SPOKE clinical labs
+
+#### Low Priority/Exploratory 🟢
+
+**Pathway & Disease Mappings:**
+14. `kg2c_pathways_to_spoke_pathways.yaml` - Cross-KG pathway alignment
+15. `kg2c_diseases_to_spoke_diseases.yaml` - Disease ontology alignment
+
+**Multi-Source Integration:**
+16. `unified_protein_atlas.yaml` - Combine all protein sources into unified view
+17. `unified_metabolomics_atlas.yaml` - Merge all metabolomics datasets
+
+### Implementation Order & Rationale
+
+**Phase 1: Core Metabolomics** (Weeks 1-2)
+- Strategies 3-5: Critical for multi-omics integration
+- Builds on existing protein mapping patterns
+- High scientific value for biomarker discovery
+
+**Phase 2: Clinical Integration** (Week 3)
+- Strategies 6-7, 13: Enable clinical data harmonization
+- LOINC bridging is well-established
+- Direct clinical application value
+
+**Phase 3: Cross-KG Harmonization** (Week 4)
+- Strategies 8-9: Enable KG2c ↔ SPOKE interoperability
+- Foundation for unified knowledge graph queries
+
+**Phase 4: Specialized Mappings** (Weeks 5-6)
+- Strategies 10-12: Target specific research needs
+- Organ-specific and lipidomics focus
+
+**Phase 5: Advanced Integration** (Week 7+)
+- Strategies 14-17: Complex multi-source unification
+- Requires results from earlier phases
+
+### Expected Match Rates
+
+Based on initial analysis:
+- **Protein mappings**: 80-95% (UniProt is reliable)
+- **Metabolite mappings**: 60-80% (varied identifier coverage)
+- **Clinical test mappings**: 70-85% (LOINC coverage varies)
+- **Gene mappings**: 85-95% (well-standardized)
+- **Cross-KG mappings**: 70-90% (depends on overlap)
+
 ## Next Steps / TODO
 
+- [x] Document comprehensive mapping plan
 - [ ] Test the arivale_to_kg2c_proteins strategy execution
 - [ ] Test the ukbb_to_kg2c_proteins strategy execution
-- [ ] Verify match rates meet expectations
-- [ ] Consider additional mappings if other datasets need KG2c integration
-- [ ] Optimize performance for large-scale execution if needed
+- [ ] Implement Phase 1 metabolomics strategies (3-5)
+- [ ] Develop reusable action for LOINC-based matching
+- [ ] Create validation framework for match quality assessment
+- [ ] Build visualization dashboards for mapping results
 
 ## Working Directory Best Practice
 

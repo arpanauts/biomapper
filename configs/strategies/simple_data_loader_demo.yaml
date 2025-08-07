@@ -1,0 +1,51 @@
+# Simple demo strategy that only uses working actions
+name: SIMPLE_DATA_LOADER_DEMO
+description: "Demo strategy that loads datasets without complex processing"
+version: "1.0.0"
+
+parameters:
+  # Using files we know exist from the API logs
+  israeli10k_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israel10k_metabolomics_nmr_metabolomicsworkbench.tsv"
+  ukbb_file: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_NMR_Meta.tsv"
+  output_dir: "/tmp/demo_results"
+
+steps:
+  - name: load_israeli10k
+    description: "Load Israeli10K metabolomics data"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.israeli10k_file}"
+        identifier_column: "BIOCHEMICAL_NAME"
+        additional_columns:
+          - "HMDB_ID"
+          - "PUBCHEM_ID"
+          - "MW"
+        output_key: "israeli10k_data"
+        drop_empty: true
+
+  - name: load_ukbb
+    description: "Load UKBB metabolomics data"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.ukbb_file}"
+        identifier_column: "Description"
+        additional_columns:
+          - "Biomarker"
+          - "Field.ID"
+          - "Units"
+        output_key: "ukbb_data"
+        drop_empty: true
+
+  - name: merge_datasets
+    description: "Merge the loaded datasets"
+    action:
+      type: MERGE_DATASETS
+      params:
+        dataset_keys:
+          - "israeli10k_data"
+          - "ukbb_data"
+        output_key: "merged_data"
+        merge_strategy: "union"  # or "intersection"
+        deduplicate: true
