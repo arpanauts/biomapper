@@ -71,7 +71,7 @@ class TestCTSClient:
             "fromIdentifier": "InChIKey",
             "searchTerm": "QNAYBMKLOCPYGJ-REOHCLBHSA-N",
             "toIdentifier": "Chemical Name",
-            "result": ["L-Alanine"]
+            "results": ["L-Alanine"]  # Changed from "result" to "results"
         }]
         
         response = AsyncMock()
@@ -251,10 +251,11 @@ class TestCTSClient:
     # Test validation
     def test_validate_id_types(self, client):
         """Test ID type validation."""
-        client._valid_from_ids = {"HMDB", "KEGG"}
+        # Use the full names that ID_TYPE_MAPPING would produce
+        client._valid_from_ids = {"Human Metabolome Database", "KEGG"}
         client._valid_to_ids = {"Chemical Name", "InChIKey"}
         
-        # Valid types should pass
+        # Valid types should pass (HMDB gets mapped to "Human Metabolome Database")
         client._validate_id_types("HMDB", "Chemical Name")
         
         # Invalid types should raise

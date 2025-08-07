@@ -80,7 +80,7 @@ class TestCTSIntegration:
         test_cases = [
             ("HMDB0000161", "HMDB"),  # L-Alanine
             ("C00041", "KEGG"),        # L-Alanine
-            ("5793", "PubChem CID")    # L-Alanine
+            ("5950", "PubChem CID")    # L-Alanine
         ]
         
         for identifier, id_type in test_cases:

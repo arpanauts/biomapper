@@ -31,7 +31,7 @@ class CTSConversionResult(BaseModel):
 
 class InChIKeyScore(BaseModel):
     """Score for an InChIKey."""
-    inchikey: str = Field(alias="InChIKey")
+    inchikey: Optional[str] = Field(alias="InChIKey", default=None)  # Not always present
     score: float
 
 
