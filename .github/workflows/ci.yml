@@ -47,4 +47,4 @@ jobs:
     
     - name: Run tests
       run: |
-        poetry run pytest
+        poetry run pytest -m "not requires_qdrant and not requires_external_services"
