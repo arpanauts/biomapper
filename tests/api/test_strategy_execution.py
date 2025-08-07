@@ -23,7 +23,7 @@ class TestActionRegistry:
         """Test listing all registered actions."""
         registry = ActionRegistryService()
         
-        actions = registry.list_actions()
+        actions = registry.list_available_actions()
         assert isinstance(actions, list)
         
         # Should have loaded built-in actions
