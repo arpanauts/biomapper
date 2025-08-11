@@ -12,7 +12,12 @@ from typing import Any, Dict, List, Optional, Type
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.persistence import ExecutionCheckpoint as Checkpoint, Job, ExecutionLog as JobLog, ExecutionStep as JobStep
+from app.models.persistence import (
+    ExecutionCheckpoint as Checkpoint,
+    Job,
+    ExecutionLog as JobLog,
+    ExecutionStep as JobStep,
+)
 from app.models.strategy_execution import JobStatus
 from biomapper.core.strategy_actions.base import BaseStrategyAction
 from biomapper.core.models import StrategyExecutionContext
