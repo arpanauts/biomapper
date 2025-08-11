@@ -32,6 +32,10 @@ class ErrorCode(enum.Enum):
     INVALID_INPUT_ERROR = 402
     STRATEGY_NOT_FOUND_ERROR = 403
     INACTIVE_STRATEGY_ERROR = 404
+    DATASET_NOT_FOUND_ERROR = 405
+    TRANSFORMATION_ERROR = 406
+    SCHEMA_VALIDATION_ERROR = 407
+    MAPPING_QUALITY_ERROR = 408
 
     # API errors (500-599)
     API_VALIDATION_ERROR = 500
@@ -252,4 +256,40 @@ class InactiveStrategyError(BiomapperError):
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(
             message, error_code=ErrorCode.INACTIVE_STRATEGY_ERROR, details=details
+        )
+
+
+class DatasetNotFoundError(BiomapperError):
+    """Raised when a required dataset is not found in the execution context."""
+
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(
+            message, error_code=ErrorCode.DATASET_NOT_FOUND_ERROR, details=details
+        )
+
+
+class TransformationError(BiomapperError):
+    """Raised when a data transformation operation fails."""
+
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(
+            message, error_code=ErrorCode.TRANSFORMATION_ERROR, details=details
+        )
+
+
+class SchemaValidationError(BiomapperError):
+    """Raised when data schema validation fails."""
+
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(
+            message, error_code=ErrorCode.SCHEMA_VALIDATION_ERROR, details=details
+        )
+
+
+class MappingQualityError(BiomapperError):
+    """Raised when mapping quality calculation encounters an error."""
+
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(
+            message, error_code=ErrorCode.MAPPING_QUALITY_ERROR, details=details
         )
