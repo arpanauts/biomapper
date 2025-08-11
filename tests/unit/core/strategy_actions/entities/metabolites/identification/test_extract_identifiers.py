@@ -124,7 +124,14 @@ class TestMetaboliteExtractIdentifiersAction:
             normalize_ids=True,
         )
 
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
 
         assert result.success is True
         extracted_df = mock_context["datasets"]["hmdb_ids"]
@@ -149,7 +156,14 @@ class TestMetaboliteExtractIdentifiersAction:
             validate_formats=True,
         )
 
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
 
         assert result.success is True
         extracted_df = mock_context["datasets"]["inchikey_ids"]
@@ -183,7 +197,14 @@ class TestMetaboliteExtractIdentifiersAction:
             normalize_ids=True,
         )
 
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
 
         assert result.success is True
         extracted_df = mock_context["datasets"]["multi_ids"]
@@ -225,7 +246,14 @@ class TestMetaboliteExtractIdentifiersAction:
             handle_multiple="expand_rows",
         )
 
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
 
         assert result.success is True
         expanded_df = mock_context["datasets"]["expanded"]
@@ -256,7 +284,14 @@ class TestMetaboliteExtractIdentifiersAction:
             handle_multiple="list",
         )
 
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
 
         assert result.success is True
         listed_df = mock_context["datasets"]["listed"]
@@ -287,7 +322,14 @@ class TestMetaboliteExtractIdentifiersAction:
             handle_multiple="first",
         )
 
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
 
         assert result.success is True
         first_df = mock_context["datasets"]["first_only"]
@@ -316,7 +358,14 @@ class TestMetaboliteExtractIdentifiersAction:
             output_key="null_handled",
         )
 
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
 
         assert result.success is True
         handled_df = mock_context["datasets"]["null_handled"]
@@ -353,7 +402,14 @@ class TestMetaboliteExtractIdentifiersAction:
             validate_formats=True,
         )
 
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
 
         assert result.success is True
         validated_df = mock_context["datasets"]["validated"]
@@ -384,7 +440,14 @@ class TestMetaboliteExtractIdentifiersAction:
             normalize_ids=False,
         )
 
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
 
         assert result.success is True
         not_validated_df = mock_context["datasets"]["not_validated"]
@@ -407,7 +470,14 @@ class TestMetaboliteExtractIdentifiersAction:
             output_key="stats_test",
         )
 
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
 
         assert result.success is True
         assert "metabolite_extraction_stats" in result.statistics
@@ -437,7 +507,14 @@ class TestMetaboliteExtractIdentifiersAction:
 
         mock_context["datasets"] = {}  # No datasets
 
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
 
         assert result.success is False
         assert "not found" in result.error.lower()
@@ -458,7 +535,14 @@ class TestMetaboliteExtractIdentifiersAction:
             output_key="output",
         )
 
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
 
         # Should handle gracefully - create output with NaN values
         assert result.success is True
@@ -498,7 +582,14 @@ class TestMetaboliteExtractIdentifiersAction:
         )
 
         start_time = time.time()
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
         execution_time = time.time() - start_time
 
         assert result.success is True
@@ -562,7 +653,14 @@ class TestMetaboliteExtractIdentifiersAction:
             handle_multiple="first",
         )
 
-        result = await action.execute_typed(params, mock_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="metabolite",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=mock_context
+        )
 
         assert result.success is True
         output_df = mock_context["datasets"]["complex_multi"]
