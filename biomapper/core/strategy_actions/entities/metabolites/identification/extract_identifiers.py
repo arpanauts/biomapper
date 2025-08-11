@@ -18,10 +18,12 @@ from biomapper.core.strategy_actions.registry import register_action
 
 class ActionResult(BaseModel):
     """Action result for metabolite identifier extraction."""
+
     success: bool
     message: str = ""
     error: str = ""
     statistics: Dict[str, Any] = Field(default_factory=dict)
+
 
 logger = logging.getLogger(__name__)
 
@@ -71,24 +73,37 @@ class MetaboliteExtractIdentifiersAction(
     def get_params_model(self) -> type[MetaboliteExtractIdentifiersParams]:
         """Get the Pydantic model for parameters."""
         return MetaboliteExtractIdentifiersParams
-    
+
     def get_result_model(self) -> type[ActionResult]:
         """Get the Pydantic model for results."""
         return ActionResult
 
     async def execute_typed(
-        self, params: MetaboliteExtractIdentifiersParams, context: Dict[str, Any]
+        self,
+        current_identifiers: List[str],
+        current_ontology_type: str,
+        params: MetaboliteExtractIdentifiersParams,
+        source_endpoint: Any,
+        target_endpoint: Any,
+        context: Any,
     ) -> ActionResult:
         """Execute the metabolite identifier extraction."""
         try:
+            # Get datasets from context
+            context_dict = (
+                context if isinstance(context, dict) else context.custom_action_data
+            )
+            if "datasets" not in context_dict:
+                context_dict = {"datasets": context_dict}
+
             # Get input dataset
-            if params.input_key not in context.get("datasets", {}):
+            if params.input_key not in context_dict.get("datasets", {}):
                 return ActionResult(
                     success=False,
                     error=f"Input dataset '{params.input_key}' not found in context",
                 )
 
-            input_df = context["datasets"][params.input_key].copy()
+            input_df = context_dict["datasets"][params.input_key].copy()
             logger.info(f"Processing {len(input_df)} rows for identifier extraction")
 
             # Initialize result dataframe with all original columns
@@ -169,7 +184,7 @@ class MetaboliteExtractIdentifiersAction(
                     }
 
             # Store result in context
-            context["datasets"][params.output_key] = result_df
+            context_dict["datasets"][params.output_key] = result_df
 
             logger.info(f"Extracted identifiers: {statistics['identifiers_extracted']}")
 
@@ -182,8 +197,7 @@ class MetaboliteExtractIdentifiersAction(
         except Exception as e:
             logger.error(f"Error extracting identifiers: {str(e)}")
             return ActionResult(
-                success=False,
-                error=f"Failed to extract identifiers: {str(e)}"
+                success=False, error=f"Failed to extract identifiers: {str(e)}"
             )
 
     def _extract_identifiers_from_row(

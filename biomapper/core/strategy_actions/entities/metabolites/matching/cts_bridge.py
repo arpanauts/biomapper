@@ -378,8 +378,18 @@ class MetaboliteCtsBridgeAction(
         """Get the parameter model class."""
         return MetaboliteCtsBridgeParams
 
+    def get_result_model(self) -> type[ActionResult]:
+        """Get the result model class."""
+        return ActionResult
+
     async def execute_typed(
-        self, params: MetaboliteCtsBridgeParams, context: Dict[str, Any]
+        self,
+        current_identifiers: List[str],
+        current_ontology_type: str,
+        params: MetaboliteCtsBridgeParams,
+        source_endpoint: Any,
+        target_endpoint: Any,
+        context: Any,
     ) -> ActionResult:
         """Execute CTS bridge metabolite matching."""
 
@@ -388,8 +398,14 @@ class MetaboliteCtsBridgeAction(
         )
 
         # Get datasets from context
-        source_df = context["datasets"][params.source_key].copy()
-        target_df = context["datasets"][params.target_key].copy()
+        context_dict = (
+            context if isinstance(context, dict) else context.custom_action_data
+        )
+        if "datasets" not in context_dict:
+            context_dict = {"datasets": context_dict}
+
+        source_df = context_dict["datasets"][params.source_key].copy()
+        target_df = context_dict["datasets"][params.target_key].copy()
 
         # Extract unique identifiers
         source_ids = source_df[params.source_id_column].dropna().unique().tolist()
@@ -415,17 +431,17 @@ class MetaboliteCtsBridgeAction(
             matches = matches[matches["confidence"] >= params.confidence_threshold]
 
         # Store results
-        context["datasets"][params.output_key] = matches
+        context_dict["datasets"][params.output_key] = matches
 
         # Calculate statistics
         successful_translations = len([t for t in translations.values() if t])
         failed_translations = len(source_ids) - successful_translations
 
         # Update context statistics
-        if "statistics" not in context:
-            context["statistics"] = {}
+        if "statistics" not in context_dict:
+            context_dict["statistics"] = {}
 
-        context["statistics"]["cts_bridge"] = {
+        context_dict["statistics"]["cts_bridge"] = {
             "total_source": len(source_ids),
             "total_target": len(target_ids),
             "successful_translations": successful_translations,
