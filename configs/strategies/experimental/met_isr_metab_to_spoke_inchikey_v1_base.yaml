@@ -1,0 +1,118 @@
+name: Israeli10k Metabolomics to SPOKE via InChIKey
+description: Maps Israeli10k metabolomics to SPOKE metabolites via InChIKey bridge
+
+metadata:
+  id: "met_isr_metab_to_spoke_inchikey_v1_base"
+  name: "Israeli10k Metabolomics to SPOKE via InChIKey"
+  version: "1.0.0"
+  created: "2025-01-08"
+  author: "biomapper-team"
+  entity_type: "metabolites"
+  source_dataset: "israeli10k"
+  target_dataset: "spoke"
+  bridge_type: ["inchikey", "cts"]
+  
+  quality_tier: "experimental"
+  validation_status: "pending"
+  expected_match_rate: 0.72
+  actual_match_rate: null
+  
+  source_files:
+    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_metabolomics_metadata.csv"
+      last_updated: "2024-08-01"
+      row_count: 3421
+  target_files:
+    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/spoke_ontologies/spoke_metabolites.csv"
+      last_updated: "2024-09-15"
+      row_count: 25600
+  
+  description: "Maps Israeli10k metabolomics to SPOKE metabolites using InChIKey as primary bridge"
+  tags: ["metabolomics", "inchikey", "israeli10k", "spoke"]
+  dependencies: []
+  supersedes: null
+  citation: null
+
+parameters:
+  output_dir: "${OUTPUT_DIR:-/tmp/biomapper/metabolites}"
+  cache_dir: "${CACHE_DIR:-/tmp/biomapper/cache}"
+  use_cache: true
+  cache_ttl_days: 30
+
+steps:
+  - name: load_israeli10k
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${metadata.source_files[0].path}"
+        identifier_column: "compound_id"
+        output_key: "israeli10k_metabolites_raw"
+  
+  - name: load_spoke
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${metadata.target_files[0].path}"
+        identifier_column: "identifiers"
+        output_key: "spoke_metabolites_raw"
+  
+  - name: extract_israeli10k_ids
+    action:
+      type: METABOLITE_EXTRACT_IDENTIFIERS
+      params:
+        input_key: "israeli10k_metabolites_raw"
+        extract_hmdb: true
+        extract_inchikey: true
+        extract_chebi: false
+        extract_kegg: false
+        output_key: "israeli10k_metabolites"
+  
+  - name: extract_spoke_ids
+    action:
+      type: METABOLITE_EXTRACT_IDENTIFIERS
+      params:
+        input_key: "spoke_metabolites_raw"
+        identifiers_column: "identifiers"
+        extract_hmdb: true
+        extract_inchikey: true
+        extract_chebi: true
+        extract_kegg: true
+        output_key: "spoke_metabolites"
+  
+  - name: normalize_hmdb
+    action:
+      type: METABOLITE_NORMALIZE_HMDB
+      params:
+        input_key: "israeli10k_metabolites"
+        hmdb_column: "compound_id"
+        target_format: "HMDB0001234"
+        output_key: "israeli10k_normalized"
+  
+  - name: cts_bridge_inchikey
+    action:
+      type: METABOLITE_CTS_BRIDGE
+      params:
+        source_key: "israeli10k_normalized"
+        target_key: "spoke_metabolites"
+        source_id_type: "hmdb"
+        target_id_type: "inchikey"
+        chunk_size: 1000
+        parallel_requests: 5
+        cache_results: true
+        fallback_enabled: true
+        output_key: "cts_mapped"
+  
+  - name: calculate_overlap
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        dataset1_key: "israeli10k_normalized"
+        dataset2_key: "spoke_metabolites"
+        overlap_method: "inchikey"
+        output_key: "overlap_statistics"
+  
+  - name: export_mapping
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "cts_mapped"
+        output_path: "${parameters.output_dir}/israeli10k_spoke_metabolites.tsv"

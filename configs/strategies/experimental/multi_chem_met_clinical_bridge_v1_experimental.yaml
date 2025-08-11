@@ -1,0 +1,355 @@
+metadata:
+  id: "multi_chem_met_clinical_bridge_v1_experimental"
+  name: "Clinical Chemistry to Metabolomics Bridge"
+  version: "1.0.0"
+  created: "2025-01-08"
+  author: "biomapper-team"
+  entity_type: ["chemistry", "metabolites"]
+  source_dataset: ["clinical_labs", "metabolomics"]
+  target_dataset: "clinical_metabolomics_bridge"
+  bridge_type: ["clinical_correlation", "biochemical_pathway", "loinc"]
+  
+  quality_tier: "experimental"
+  validation_status: "pending"
+  expected_match_rate: 0.6  # Lower due to clinical-research gap
+  
+  description: |
+    Bridge clinical chemistry tests with detailed metabolomics data to create
+    clinically relevant metabolomic signatures. This strategy connects routine
+    clinical laboratory measurements with high-resolution metabolomics to 
+    identify metabolite biomarkers that correlate with standard clinical tests.
+    Enables translation between clinical practice and research metabolomics.
+  
+  use_cases:
+    - "Clinical metabolomics translation"
+    - "Biomarker validation against clinical standards"
+    - "Metabolomic signatures for clinical chemistry"
+    - "Precision medicine metabolomics"
+  
+  clinical_mappings:
+    glucose_metabolism:
+      clinical_tests: ["glucose", "HbA1c", "fructosamine"]
+      metabolites: ["glucose", "glucose-6-phosphate", "fructose", "mannose"]
+    lipid_metabolism:
+      clinical_tests: ["total_cholesterol", "LDL", "HDL", "triglycerides"]
+      metabolites: ["cholesterol", "palmitic_acid", "oleic_acid", "sphingomyelin"]
+    kidney_function:
+      clinical_tests: ["creatinine", "BUN", "uric_acid"]
+      metabolites: ["creatinine", "urea", "uric_acid", "creatine"]
+    liver_function:
+      clinical_tests: ["ALT", "AST", "bilirubin", "albumin"]
+      metabolites: ["bilirubin", "albumin", "amino_acids"]
+  
+  source_files:
+    # Clinical chemistry datasets
+    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/chemistries_metadata.tsv"
+      entity: "chemistry"
+      description: "Arivale clinical chemistry panel"
+    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_chemistries_metadata.csv"
+      entity: "chemistry"
+      description: "Israeli10k clinical chemistry tests"
+    # Metabolomics datasets
+    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/metabolomics_metadata.tsv"
+      entity: "metabolites"
+      description: "Arivale metabolomics measurements"
+    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_metabolomics_metadata.csv"
+      entity: "metabolites"
+      description: "Israeli10k metabolomics data"
+    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_NMR_Meta.tsv"
+      entity: "metabolites"
+      description: "UKBB NMR metabolomics"
+
+parameters:
+  output_dir: "${OUTPUT_DIR:-/tmp/biomapper/outputs}"
+  correlation_threshold: 0.6
+  clinical_significance_threshold: 0.05
+  min_sample_size: 100
+  biochemical_pathway_databases: ["kegg", "reactome", "hmdb"]
+  reference_ranges_source: "clinical_guidelines"
+
+steps:
+  # === CLINICAL CHEMISTRY PROCESSING ===
+  - name: load_arivale_chemistry
+    description: "Load Arivale clinical chemistry dataset"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${metadata.source_files[0].path}"
+        identifier_column: "test_name"
+        include_reference_ranges: true
+        output_key: "arv_chemistry_raw"
+  
+  - name: load_israeli10k_chemistry
+    description: "Load Israeli10k clinical chemistry dataset"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${metadata.source_files[1].path}"
+        identifier_column: "test_id"
+        include_units: true
+        output_key: "isr_chemistry_raw"
+  
+  - name: extract_loinc_codes
+    description: "Extract LOINC codes from clinical chemistry tests"
+    action:
+      type: CHEMISTRY_EXTRACT_LOINC
+      params:
+        input_keys: ["arv_chemistry_raw", "isr_chemistry_raw"]
+        test_name_column: "test_name"
+        extract_from_description: true
+        validate_loinc_format: true
+        include_component_mapping: true
+        output_key: "chemistry_loinc_extracted"
+  
+  - name: harmonize_clinical_chemistry
+    description: "Harmonize chemistry tests across different platforms"
+    action:
+      type: CHEMISTRY_VENDOR_HARMONIZATION
+      params:
+        input_key: "chemistry_loinc_extracted"
+        vendors: ["arivale", "israeli10k"]
+        harmonization_method: "loinc_based"
+        unit_standardization: true
+        reference_range_normalization: true
+        fuzzy_threshold: 0.9
+        output_key: "chemistry_harmonized"
+  
+  - name: standardize_chemistry_values
+    description: "Standardize clinical chemistry values and units"
+    action:
+      type: CHEMISTRY_FUZZY_TEST_MATCH
+      params:
+        input_key: "chemistry_harmonized"
+        standardization_rules: "${metadata.clinical_mappings}"
+        unit_conversion: true
+        reference_range_standardization: true
+        outlier_detection: true
+        output_key: "chemistry_standardized"
+  
+  # === METABOLOMICS PROCESSING ===
+  - name: load_arivale_metabolites
+    description: "Load Arivale metabolomics dataset"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${metadata.source_files[2].path}"
+        identifier_column: "metabolite_id"
+        include_concentrations: true
+        output_key: "arv_metabolites_raw"
+  
+  - name: load_israeli10k_metabolites
+    description: "Load Israeli10k metabolomics dataset"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${metadata.source_files[3].path}"
+        identifier_column: "hmdb_id"
+        include_pathway_annotations: true
+        output_key: "isr_metabolites_raw"
+  
+  - name: load_ukbb_nmr
+    description: "Load UKBB NMR metabolomics dataset"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${metadata.source_files[4].path}"
+        identifier_column: "biomarker"
+        include_nmr_specific: true
+        output_key: "ukb_nmr_raw"
+  
+  - name: extract_metabolite_identifiers
+    description: "Extract and standardize metabolite identifiers"
+    action:
+      type: METABOLITE_EXTRACT_IDENTIFIERS
+      params:
+        input_keys: ["arv_metabolites_raw", "isr_metabolites_raw", "ukb_nmr_raw"]
+        extract_hmdb: true
+        extract_kegg: true
+        extract_pubchem: true
+        extract_inchikey: true
+        include_biochemical_classes: true
+        output_key: "metabolites_extracted"
+  
+  - name: normalize_metabolites
+    description: "Normalize metabolite identifiers and annotations"
+    action:
+      type: METABOLITE_NORMALIZE_HMDB
+      params:
+        input_key: "metabolites_extracted"
+        target_format: "hmdb_standard"
+        include_pathway_mapping: true
+        include_biochemical_classification: true
+        validate_against_hmdb: true
+        output_key: "metabolites_normalized"
+  
+  # === CLINICAL-METABOLOMICS BRIDGE ===
+  - name: chemistry_metabolite_mapping
+    description: "Map clinical chemistry tests to corresponding metabolites"
+    action:
+      type: METABOLITE_CTS_BRIDGE
+      params:
+        chemistry_key: "chemistry_standardized"
+        metabolite_key: "metabolites_normalized"
+        bridge_method: "biochemical_mapping"
+        mapping_rules: "${metadata.clinical_mappings}"
+        pathway_databases: "${parameters.biochemical_pathway_databases}"
+        confidence_threshold: 0.7
+        output_key: "chem_met_mapped"
+  
+  - name: clinical_correlation_analysis
+    description: "Calculate correlations between clinical tests and metabolites"
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        dataset1_key: "chemistry_standardized"
+        dataset2_key: "metabolites_normalized"
+        correlation_method: "spearman"
+        min_correlation: "${parameters.correlation_threshold}"
+        significance_threshold: "${parameters.clinical_significance_threshold}"
+        adjust_for_demographics: true
+        covariates: ["age", "sex", "BMI"]
+        min_sample_size: "${parameters.min_sample_size}"
+        output_key: "clinical_metabolite_correlations"
+  
+  - name: pathway_based_bridging
+    description: "Bridge through biochemical pathways"
+    action:
+      type: METABOLITE_API_ENRICHMENT
+      params:
+        chemistry_key: "chemistry_standardized"
+        metabolite_key: "metabolites_normalized"
+        enrichment_type: "pathway_bridge"
+        pathway_databases: "${parameters.biochemical_pathway_databases}"
+        include_enzyme_annotations: true
+        include_transport_processes: true
+        output_key: "pathway_bridge"
+  
+  # === CLINICAL VALIDATION ===
+  - name: clinical_significance_analysis
+    description: "Assess clinical significance of metabolite-chemistry correlations"
+    action:
+      type: SEMANTIC_METABOLITE_MATCH
+      params:
+        source_key: "clinical_metabolite_correlations"
+        validation_mode: "clinical"
+        reference_ranges_key: "chemistry_standardized"
+        clinical_thresholds: true
+        disease_associations: true
+        literature_validation: true
+        output_key: "clinically_validated_associations"
+  
+  - name: biomarker_discovery
+    description: "Identify metabolite biomarkers for clinical chemistry tests"
+    action:
+      type: COMBINE_METABOLITE_MATCHES
+      params:
+        input_keys: ["chem_met_mapped", "pathway_bridge", "clinically_validated_associations"]
+        combination_method: "clinical_evidence_weighted"
+        biomarker_selection_criteria:
+          correlation_strength: 0.7
+          clinical_significance: 0.01
+          pathway_evidence: true
+          literature_support: true
+        output_key: "metabolite_biomarkers"
+  
+  # === CLINICAL INTERPRETATION ===
+  - name: generate_clinical_profiles
+    description: "Generate clinical interpretation profiles"
+    action:
+      type: METABOLITE_API_ENRICHMENT
+      params:
+        input_key: "metabolite_biomarkers"
+        enrichment_type: "clinical_interpretation"
+        include_diagnostic_implications: true
+        include_therapeutic_targets: true
+        include_disease_associations: true
+        reference_database: "clinical_knowledge_base"
+        output_key: "clinical_profiles"
+  
+  - name: reference_range_analysis
+    description: "Analyze metabolite ranges corresponding to clinical chemistry ranges"
+    action:
+      type: CALCULATE_THREE_WAY_OVERLAP
+      params:
+        dataset1_key: "chemistry_standardized"
+        dataset2_key: "metabolites_normalized"
+        dataset3_key: "clinical_profiles"
+        analysis_type: "reference_range"
+        include_normal_ranges: true
+        include_pathological_ranges: true
+        statistical_modeling: "quantile_regression"
+        output_key: "metabolite_reference_ranges"
+  
+  # === REPORTING ===
+  - name: generate_clinical_bridge_report
+    description: "Generate comprehensive clinical chemistry-metabolomics bridge report"
+    action:
+      type: GENERATE_METABOLOMICS_REPORT
+      params:
+        dataset_key: "metabolite_biomarkers"
+        report_type: "clinical_bridge"
+        include_clinical_correlations: true
+        include_pathway_diagrams: true
+        include_biomarker_panels: true
+        include_reference_ranges: true
+        correlation_data_key: "clinical_metabolite_correlations"
+        pathway_data_key: "pathway_bridge"
+        clinical_profiles_key: "clinical_profiles"
+        reference_ranges_key: "metabolite_reference_ranges"
+        output_path: "${parameters.output_dir}/clinical_metabolomics_bridge_report.html"
+  
+  - name: export_biomarker_panels
+    description: "Export metabolite biomarker panels for clinical tests"
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "metabolite_biomarkers"
+        output_path: "${parameters.output_dir}/clinical_metabolite_biomarkers.tsv"
+        format: "tsv"
+        include_clinical_annotations: true
+        include_correlation_statistics: true
+        
+  - name: export_clinical_correlations
+    description: "Export clinical chemistry-metabolite correlations"
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "clinical_metabolite_correlations"
+        output_path: "${parameters.output_dir}/clinical_metabolite_correlations.json"
+        format: "json"
+        include_statistical_metrics: true
+        
+  - name: export_reference_ranges
+    description: "Export metabolite reference ranges"
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "metabolite_reference_ranges"
+        output_path: "${parameters.output_dir}/metabolite_reference_ranges.tsv"
+        format: "tsv"
+        include_confidence_intervals: true
+
+expected_outputs:
+  primary:
+    - path: "${parameters.output_dir}/clinical_metabolite_biomarkers.tsv"
+      description: "Metabolite biomarkers mapped to clinical chemistry tests"
+      entity_types: ["chemistry", "metabolites", "biomarkers"]
+  
+  correlations:
+    - path: "${parameters.output_dir}/clinical_metabolite_correlations.json"
+      description: "Statistical correlations between clinical tests and metabolites"
+      
+  reference_data:
+    - path: "${parameters.output_dir}/metabolite_reference_ranges.tsv"
+      description: "Reference ranges for clinically relevant metabolites"
+  
+  reports:
+    - path: "${parameters.output_dir}/clinical_metabolomics_bridge_report.html"
+      description: "Comprehensive clinical-metabolomics bridge analysis report"
+
+validation:
+  min_significant_correlations: 20
+  max_execution_time_minutes: 25
+  required_correlation_strength: 0.6
+  min_biomarker_panels: 5
+  clinical_validation_required: true

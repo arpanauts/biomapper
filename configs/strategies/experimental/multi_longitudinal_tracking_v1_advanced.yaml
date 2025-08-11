@@ -1,0 +1,434 @@
+metadata:
+  id: "multi_longitudinal_tracking_v1_advanced"
+  name: "Longitudinal Multi-Omics Tracking"
+  version: "1.0.0" 
+  created: "2025-01-08"
+  author: "biomapper-team"
+  entity_type: ["proteins", "metabolites", "chemistry"]
+  source_dataset: ["longitudinal_cohort"]
+  target_dataset: "temporal_multi_omics"
+  bridge_type: ["temporal", "trajectory", "change_detection"]
+  
+  quality_tier: "experimental"
+  validation_status: "pending"
+  expected_match_rate: 0.75  # Higher due to longitudinal consistency
+  
+  description: |
+    Track changes in multi-omics data over time to identify temporal patterns,
+    trajectories, and significant longitudinal changes. This strategy analyzes
+    proteins, metabolites, and clinical chemistry across multiple timepoints
+    to understand molecular dynamics, aging effects, intervention responses,
+    and disease progression patterns.
+  
+  use_cases:
+    - "Aging and longevity research"
+    - "Intervention response tracking"
+    - "Disease progression monitoring"
+    - "Precision medicine optimization"
+    - "Biomarker temporal stability"
+  
+  temporal_framework:
+    timepoints: ["baseline", "3_months", "6_months", "12_months", "24_months"]
+    minimum_timepoints: 3
+    maximum_gap_months: 18
+    alignment_method: "subject_id"
+    missing_data_strategy: "interpolation"
+  
+  analysis_types:
+    trend_analysis:
+      method: "linear_mixed_models"
+      covariates: ["age", "sex", "BMI", "medication"]
+    change_detection:
+      threshold_type: "fold_change"
+      significance_level: 0.05
+      multiple_testing_correction: "fdr"
+    trajectory_clustering:
+      algorithm: "kmeans"
+      distance_metric: "dtw"  # Dynamic Time Warping
+      n_clusters_range: [3, 10]
+  
+  source_files:
+    # Longitudinal protein data
+    - path: "/procedure/data/longitudinal/proteomics_t0_baseline.tsv"
+      entity: "proteins"
+      timepoint: "baseline"
+      description: "Baseline protein measurements"
+    - path: "/procedure/data/longitudinal/proteomics_t1_3months.tsv"
+      entity: "proteins"
+      timepoint: "3_months"
+      description: "3-month protein measurements"
+    - path: "/procedure/data/longitudinal/proteomics_t2_6months.tsv"
+      entity: "proteins"
+      timepoint: "6_months"
+      description: "6-month protein measurements"
+    - path: "/procedure/data/longitudinal/proteomics_t3_12months.tsv"
+      entity: "proteins"
+      timepoint: "12_months"
+      description: "12-month protein measurements"
+    # Longitudinal metabolomics data
+    - path: "/procedure/data/longitudinal/metabolomics_t0_baseline.tsv"
+      entity: "metabolites"
+      timepoint: "baseline"
+      description: "Baseline metabolomics measurements"
+    - path: "/procedure/data/longitudinal/metabolomics_t1_3months.tsv"
+      entity: "metabolites"
+      timepoint: "3_months"
+      description: "3-month metabolomics measurements"
+    - path: "/procedure/data/longitudinal/metabolomics_t2_6months.tsv"
+      entity: "metabolites"
+      timepoint: "6_months"
+      description: "6-month metabolomics measurements"
+    - path: "/procedure/data/longitudinal/metabolomics_t3_12months.tsv"
+      entity: "metabolites"
+      timepoint: "12_months"
+      description: "12-month metabolomics measurements"
+    # Longitudinal clinical chemistry
+    - path: "/procedure/data/longitudinal/chemistry_t0_baseline.tsv"
+      entity: "chemistry"
+      timepoint: "baseline"
+      description: "Baseline clinical chemistry"
+    - path: "/procedure/data/longitudinal/chemistry_t1_3months.tsv"
+      entity: "chemistry"
+      timepoint: "3_months"
+      description: "3-month clinical chemistry"
+    - path: "/procedure/data/longitudinal/chemistry_t2_6months.tsv"
+      entity: "chemistry"
+      timepoint: "6_months"
+      description: "6-month clinical chemistry"
+    - path: "/procedure/data/longitudinal/chemistry_t3_12months.tsv"
+      entity: "chemistry"
+      timepoint: "12_months"
+      description: "12-month clinical chemistry"
+
+parameters:
+  output_dir: "${OUTPUT_DIR:-/tmp/biomapper/outputs}"
+  timepoints: ["baseline", "3_months", "6_months", "12_months"]
+  change_threshold: 1.5  # fold change
+  statistical_test: "paired_t_test"
+  fdr_correction: true
+  min_subjects_per_timepoint: 50
+  trajectory_clustering_k: 5
+  smoothing_method: "loess"
+
+steps:
+  # === LONGITUDINAL DATA LOADING ===
+  - name: load_protein_timeseries
+    description: "Load protein measurements across all timepoints"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_paths:
+          - "${metadata.source_files[0].path}"  # baseline
+          - "${metadata.source_files[1].path}"  # 3m
+          - "${metadata.source_files[2].path}"  # 6m
+          - "${metadata.source_files[3].path}"  # 12m
+        identifier_column: "uniprot"
+        subject_id_column: "subject_id"
+        timepoint_column: "timepoint"
+        value_column: "protein_level"
+        longitudinal_format: true
+        output_key: "proteins_longitudinal_raw"
+  
+  - name: load_metabolite_timeseries
+    description: "Load metabolite measurements across all timepoints"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_paths:
+          - "${metadata.source_files[4].path}"  # baseline
+          - "${metadata.source_files[5].path}"  # 3m
+          - "${metadata.source_files[6].path}"  # 6m
+          - "${metadata.source_files[7].path}"  # 12m
+        identifier_column: "hmdb_id"
+        subject_id_column: "subject_id"
+        timepoint_column: "timepoint"
+        value_column: "concentration"
+        longitudinal_format: true
+        output_key: "metabolites_longitudinal_raw"
+  
+  - name: load_chemistry_timeseries
+    description: "Load clinical chemistry across all timepoints"
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_paths:
+          - "${metadata.source_files[8].path}"   # baseline
+          - "${metadata.source_files[9].path}"   # 3m
+          - "${metadata.source_files[10].path}"  # 6m
+          - "${metadata.source_files[11].path}"  # 12m
+        identifier_column: "test_name"
+        subject_id_column: "subject_id"
+        timepoint_column: "timepoint"
+        value_column: "test_value"
+        longitudinal_format: true
+        output_key: "chemistry_longitudinal_raw"
+  
+  # === TEMPORAL ALIGNMENT AND NORMALIZATION ===
+  - name: align_protein_timepoints
+    description: "Align protein data across timepoints"
+    action:
+      type: PROTEIN_NORMALIZE_ACCESSIONS
+      params:
+        input_key: "proteins_longitudinal_raw"
+        alignment_method: "${metadata.temporal_framework.alignment_method}"
+        handle_missing: "${metadata.temporal_framework.missing_data_strategy}"
+        minimum_timepoints: "${metadata.temporal_framework.minimum_timepoints}"
+        max_gap_months: "${metadata.temporal_framework.maximum_gap_months}"
+        output_key: "proteins_aligned"
+  
+  - name: align_metabolite_timepoints
+    description: "Align metabolite data across timepoints"
+    action:
+      type: METABOLITE_NORMALIZE_HMDB
+      params:
+        input_key: "metabolites_longitudinal_raw"
+        alignment_method: "${metadata.temporal_framework.alignment_method}"
+        handle_missing: "${metadata.temporal_framework.missing_data_strategy}"
+        minimum_timepoints: "${metadata.temporal_framework.minimum_timepoints}"
+        normalize_concentrations: true
+        output_key: "metabolites_aligned"
+  
+  - name: align_chemistry_timepoints
+    description: "Align clinical chemistry across timepoints"
+    action:
+      type: CHEMISTRY_VENDOR_HARMONIZATION
+      params:
+        input_key: "chemistry_longitudinal_raw"
+        alignment_method: "${metadata.temporal_framework.alignment_method}"
+        handle_missing: "${metadata.temporal_framework.missing_data_strategy}"
+        standardize_units: true
+        reference_range_normalization: true
+        output_key: "chemistry_aligned"
+  
+  # === CHANGE DETECTION ===
+  - name: detect_protein_changes
+    description: "Detect significant changes in protein levels over time"
+    action:
+      type: PROTEIN_MULTI_BRIDGE
+      params:
+        input_key: "proteins_aligned"
+        analysis_type: "longitudinal_change"
+        change_threshold: "${parameters.change_threshold}"
+        statistical_test: "${parameters.statistical_test}"
+        fdr_correction: "${parameters.fdr_correction}"
+        covariates: ["age", "sex", "BMI"]
+        output_key: "protein_changes"
+  
+  - name: detect_metabolite_changes
+    description: "Detect significant changes in metabolite levels over time"
+    action:
+      type: METABOLITE_CTS_BRIDGE
+      params:
+        input_key: "metabolites_aligned"
+        analysis_type: "longitudinal_change"
+        change_threshold: "${parameters.change_threshold}"
+        statistical_test: "${parameters.statistical_test}"
+        fdr_correction: "${parameters.fdr_correction}"
+        pathway_context: true
+        output_key: "metabolite_changes"
+  
+  - name: detect_chemistry_changes
+    description: "Detect significant changes in clinical chemistry over time"
+    action:
+      type: CHEMISTRY_FUZZY_TEST_MATCH
+      params:
+        input_key: "chemistry_aligned"
+        analysis_type: "longitudinal_change"
+        change_threshold: "${parameters.change_threshold}"
+        statistical_test: "${parameters.statistical_test}"
+        clinical_significance_thresholds: true
+        output_key: "chemistry_changes"
+  
+  # === TRAJECTORY ANALYSIS ===
+  - name: cluster_protein_trajectories
+    description: "Cluster protein trajectories to identify patterns"
+    action:
+      type: SEMANTIC_METABOLITE_MATCH
+      params:
+        source_key: "protein_changes"
+        analysis_type: "trajectory_clustering"
+        clustering_method: "${metadata.analysis_types.trajectory_clustering.algorithm}"
+        distance_metric: "${metadata.analysis_types.trajectory_clustering.distance_metric}"
+        n_clusters: "${parameters.trajectory_clustering_k}"
+        smoothing_method: "${parameters.smoothing_method}"
+        output_key: "protein_trajectory_clusters"
+  
+  - name: cluster_metabolite_trajectories
+    description: "Cluster metabolite trajectories to identify patterns"
+    action:
+      type: SEMANTIC_METABOLITE_MATCH
+      params:
+        source_key: "metabolite_changes"
+        analysis_type: "trajectory_clustering"
+        clustering_method: "${metadata.analysis_types.trajectory_clustering.algorithm}"
+        distance_metric: "${metadata.analysis_types.trajectory_clustering.distance_metric}"
+        n_clusters: "${parameters.trajectory_clustering_k}"
+        smoothing_method: "${parameters.smoothing_method}"
+        include_pathway_context: true
+        output_key: "metabolite_trajectory_clusters"
+  
+  - name: cluster_chemistry_trajectories
+    description: "Cluster clinical chemistry trajectories"
+    action:
+      type: CHEMISTRY_FUZZY_TEST_MATCH
+      params:
+        input_key: "chemistry_changes"
+        analysis_type: "trajectory_clustering"
+        clustering_method: "${metadata.analysis_types.trajectory_clustering.algorithm}"
+        n_clusters: "${parameters.trajectory_clustering_k}"
+        clinical_interpretation: true
+        output_key: "chemistry_trajectory_clusters"
+  
+  # === CROSS-ENTITY TEMPORAL CORRELATION ===
+  - name: temporal_multi_omics_correlation
+    description: "Calculate temporal correlations across entity types"
+    action:
+      type: CALCULATE_THREE_WAY_OVERLAP
+      params:
+        dataset1_key: "protein_trajectory_clusters"
+        dataset2_key: "metabolite_trajectory_clusters"
+        dataset3_key: "chemistry_trajectory_clusters"
+        correlation_type: "temporal"
+        lag_analysis: true
+        max_lag_timepoints: 2
+        output_key: "temporal_correlations"
+  
+  - name: identify_coordinated_changes
+    description: "Identify coordinated changes across omics layers"
+    action:
+      type: COMBINE_METABOLITE_MATCHES
+      params:
+        input_keys: ["protein_changes", "metabolite_changes", "chemistry_changes"]
+        combination_method: "temporal_coordination"
+        coordination_threshold: 0.7
+        time_window_months: 6
+        pathway_context: true
+        output_key: "coordinated_multi_omics_changes"
+  
+  # === TREND ANALYSIS ===
+  - name: linear_mixed_model_analysis
+    description: "Perform linear mixed model analysis for trend detection"
+    action:
+      type: METABOLITE_API_ENRICHMENT
+      params:
+        input_key: "coordinated_multi_omics_changes"
+        analysis_type: "linear_mixed_models"
+        fixed_effects: ["timepoint", "age", "sex"]
+        random_effects: ["subject_id"]
+        covariates: ["BMI", "medication_status"]
+        trend_detection: true
+        output_key: "trend_analysis"
+  
+  - name: aging_signature_analysis
+    description: "Analyze aging-related molecular signatures"
+    action:
+      type: SEMANTIC_METABOLITE_MATCH
+      params:
+        source_key: "trend_analysis"
+        analysis_type: "aging_signatures"
+        age_stratification: true
+        age_groups: ["young", "middle_aged", "older"]
+        molecular_clock_analysis: true
+        output_key: "aging_signatures"
+  
+  # === BIOMARKER STABILITY ANALYSIS ===
+  - name: biomarker_stability_assessment
+    description: "Assess temporal stability of potential biomarkers"
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        dataset1_key: "protein_trajectory_clusters"
+        dataset2_key: "metabolite_trajectory_clusters"
+        stability_metrics: ["coefficient_of_variation", "intraclass_correlation"]
+        timepoint_consistency: true
+        biomarker_ranking: true
+        output_key: "biomarker_stability"
+  
+  # === INTERVENTION RESPONSE ANALYSIS ===
+  - name: intervention_response_analysis
+    description: "Analyze molecular responses to interventions over time"
+    action:
+      type: METABOLITE_CTS_BRIDGE
+      params:
+        input_key: "coordinated_multi_omics_changes"
+        analysis_type: "intervention_response"
+        intervention_timepoints: ["baseline", "3_months"]
+        response_metrics: ["effect_size", "time_to_peak", "duration"]
+        dose_response_analysis: true
+        output_key: "intervention_responses"
+  
+  # === REPORTING ===
+  - name: generate_longitudinal_report
+    description: "Generate comprehensive longitudinal multi-omics report"
+    action:
+      type: GENERATE_METABOLOMICS_REPORT
+      params:
+        dataset_key: "coordinated_multi_omics_changes"
+        report_type: "longitudinal_multi_omics"
+        include_trajectory_plots: true
+        include_heatmaps: true
+        include_correlation_networks: true
+        include_trend_analysis: true
+        trajectory_data_key: "protein_trajectory_clusters"
+        metabolite_trajectory_key: "metabolite_trajectory_clusters"
+        correlation_data_key: "temporal_correlations"
+        trend_data_key: "trend_analysis"
+        aging_signatures_key: "aging_signatures"
+        stability_data_key: "biomarker_stability"
+        intervention_data_key: "intervention_responses"
+        output_path: "${parameters.output_dir}/longitudinal_multi_omics_report.html"
+  
+  - name: export_trajectory_clusters
+    description: "Export trajectory cluster assignments"
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "protein_trajectory_clusters"
+        output_path: "${parameters.output_dir}/protein_trajectory_clusters.tsv"
+        format: "tsv"
+        include_cluster_statistics: true
+        
+  - name: export_significant_changes
+    description: "Export significant longitudinal changes"
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "coordinated_multi_omics_changes"
+        output_path: "${parameters.output_dir}/significant_longitudinal_changes.json"
+        format: "json"
+        include_statistical_metrics: true
+        
+  - name: export_biomarker_stability
+    description: "Export biomarker stability metrics"
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "biomarker_stability"
+        output_path: "${parameters.output_dir}/biomarker_temporal_stability.tsv"
+        format: "tsv"
+        include_ranking: true
+
+expected_outputs:
+  primary:
+    - path: "${parameters.output_dir}/significant_longitudinal_changes.json"
+      description: "Significant changes detected across all omics layers over time"
+      entity_types: ["proteins", "metabolites", "chemistry", "temporal"]
+  
+  trajectories:
+    - path: "${parameters.output_dir}/protein_trajectory_clusters.tsv"
+      description: "Protein trajectory cluster assignments and patterns"
+      
+  stability:
+    - path: "${parameters.output_dir}/biomarker_temporal_stability.tsv"
+      description: "Temporal stability metrics for potential biomarkers"
+  
+  reports:
+    - path: "${parameters.output_dir}/longitudinal_multi_omics_report.html"
+      description: "Comprehensive longitudinal analysis report with visualizations"
+
+validation:
+  min_trajectories_identified: 10
+  max_execution_time_minutes: 35
+  min_subjects_with_complete_data: 30
+  required_timepoints: 3
+  min_significant_changes: 50

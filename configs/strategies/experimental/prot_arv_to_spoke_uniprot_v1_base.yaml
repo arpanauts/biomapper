@@ -1,0 +1,107 @@
+name: "Arivale Proteins to SPOKE via UniProt"
+description: "Map Arivale proteomics data to SPOKE protein ontology using UniProt accessions"
+
+metadata:
+  # Required fields
+  id: "prot_arv_to_spoke_uniprot_v1_base"
+  name: "Arivale Proteins to SPOKE via UniProt"
+  version: "1.0.0"
+  created: "2025-01-08"
+  author: "biomapper-team"
+  entity_type: "proteins"
+  source_dataset: "arivale"
+  target_dataset: "spoke"
+  bridge_type: ["uniprot"]
+  
+  # Quality tracking
+  quality_tier: "experimental"
+  validation_status: "pending"
+  expected_match_rate: 0.85
+  actual_match_rate: null
+  
+  # Data tracking
+  source_files:
+    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/proteomics_metadata.tsv"
+      last_updated: "2024-06-01"
+      row_count: 1197
+  target_files:
+    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/spoke_ontologies/spoke_proteins.csv"
+      last_updated: "2024-10-01"
+      row_count: 20000
+  
+  # Optional fields
+  description: "Maps Arivale proteomics data to SPOKE protein ontology using UniProt accessions"
+  tags: ["proteomics", "uniprot", "spoke", "arivale"]
+  dependencies: []
+  supersedes: null
+  citation: null
+
+parameters:
+  output_dir: "/tmp/biomapper_results/prot_arv_to_spoke"
+
+steps:
+  - name: load_arivale
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/proteomics_metadata.tsv"
+        identifier_column: "uniprot"
+        output_key: "arivale_proteins"
+  
+  - name: load_spoke
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/spoke_ontologies/spoke_proteins.csv"
+        identifier_column: "xrefs"
+        output_key: "spoke_proteins_raw"
+  
+  - name: extract_spoke_uniprot
+    action:
+      type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
+      params:
+        input_key: "spoke_proteins_raw"
+        xrefs_column: "xrefs"
+        remove_isoforms: true
+        output_key: "spoke_proteins"
+  
+  - name: normalize_arivale
+    action:
+      type: PROTEIN_NORMALIZE_ACCESSIONS
+      params:
+        input_key: "arivale_proteins"
+        output_key: "arivale_normalized"
+  
+  - name: filter_spoke
+    action:
+      type: FILTER_DATASET
+      params:
+        input_key: "spoke_proteins"
+        filter_criteria:
+          has_uniprot: true
+        output_key: "spoke_filtered"
+  
+  - name: multi_bridge
+    action:
+      type: PROTEIN_MULTI_BRIDGE
+      params:
+        source_key: "arivale_normalized"
+        target_key: "spoke_filtered"
+        bridge_types: ["uniprot", "gene_symbol", "ensembl"]
+        max_attempts: 3
+        output_key: "mapped_proteins"
+  
+  - name: calculate_overlap
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        dataset1_key: "arivale_normalized"
+        dataset2_key: "spoke_filtered"
+        output_key: "overlap_statistics"
+  
+  - name: export_mapping
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "mapped_proteins"
+        output_path: "${parameters.output_dir}/arivale_spoke_proteins.tsv"
