@@ -9,11 +9,11 @@ This action normalizes UniProt accession identifiers by:
 """
 import re
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import pandas as pd
 from pydantic import BaseModel, Field
 
-from biomapper.core.strategy_actions.base import BaseStrategyAction
+from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
 from biomapper.core.strategy_actions.registry import register_action
 
 logger = logging.getLogger(__name__)
@@ -41,9 +41,26 @@ class ProteinNormalizeAccessionsParams(BaseModel):
     )
 
 
+class ActionResult(BaseModel):
+    """Standard action result for protein accession normalization."""
+
+    success: bool
+    message: Optional[str] = None
+    error: Optional[str] = None
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+
 @register_action("PROTEIN_NORMALIZE_ACCESSIONS")
-class ProteinNormalizeAccessionsAction(BaseStrategyAction):
+class ProteinNormalizeAccessionsAction(
+    TypedStrategyAction[ProteinNormalizeAccessionsParams, ActionResult]
+):
     """Action to normalize UniProt accession formats for consistent matching."""
+
+    def get_params_model(self) -> type[ProteinNormalizeAccessionsParams]:
+        return ProteinNormalizeAccessionsParams
+
+    def get_result_model(self) -> type[ActionResult]:
+        return ActionResult
 
     # UniProt format regex:
     # Standard format: [A-Z][0-9]{5} (P12345, Q67890) - 6 chars
@@ -65,15 +82,9 @@ class ProteinNormalizeAccessionsAction(BaseStrategyAction):
         re.compile(r"^\|([A-Z0-9]+)\|.*$"),  # Edge case: |P12345|...
     ]
 
-    async def execute(
-        self,
-        current_identifiers: List[str],
-        current_ontology_type: str,
-        action_params: Dict[str, Any],
-        source_endpoint: Any,
-        target_endpoint: Any,
-        context: Dict[str, Any],
-    ) -> Dict[str, Any]:
+    async def execute_typed(  # type: ignore[override]
+        self, params: ProteinNormalizeAccessionsParams, context: Dict[str, Any]
+    ) -> ActionResult:
         """Execute the normalization action.
 
         This method applies the complete UniProt normalization pipeline:
@@ -83,8 +94,6 @@ class ProteinNormalizeAccessionsAction(BaseStrategyAction):
         4. Isoform handling (-1, -2, etc.)
         5. Format validation
         """
-        # Parse parameters using Pydantic for validation
-        params = ProteinNormalizeAccessionsParams(**action_params)
         logger.info(f"Starting PROTEIN_NORMALIZE_ACCESSIONS with params: {params}")
 
         # Initialize datasets if not present
@@ -95,7 +104,10 @@ class ProteinNormalizeAccessionsAction(BaseStrategyAction):
 
         # Validate input dataset exists
         if params.input_key not in context["datasets"]:
-            raise KeyError(f"Input dataset '{params.input_key}' not found in context")
+            return ActionResult(
+                success=False,
+                error=f"Input dataset '{params.input_key}' not found in context"
+            )
 
         input_df = context["datasets"][params.input_key].copy()
 
@@ -104,7 +116,10 @@ class ProteinNormalizeAccessionsAction(BaseStrategyAction):
             col for col in params.id_columns if col not in input_df.columns
         ]
         if missing_columns:
-            raise KeyError(f"Columns not found in dataset: {missing_columns}")
+            return ActionResult(
+                success=False,
+                error=f"Columns not found in dataset: {missing_columns}"
+            )
 
         # Track normalization statistics
         stats = {
@@ -152,23 +167,20 @@ class ProteinNormalizeAccessionsAction(BaseStrategyAction):
 
         logger.info(f"Normalization complete. Statistics: {stats}")
 
-        return {
-            "input_identifiers": current_identifiers,
-            "output_identifiers": current_identifiers,  # Identifiers don't change, just format
-            "output_ontology_type": current_ontology_type,
-            "provenance": [
-                {
+        return ActionResult(
+            success=True,
+            message=f"Normalized {stats['total_processed']} values across {len(params.id_columns)} columns",
+            data={
+                "output_key": params.output_key,
+                "statistics": stats,
+                "processed_columns": params.id_columns,
+                "provenance": {
                     "action": "PROTEIN_NORMALIZE_ACCESSIONS",
                     "timestamp": pd.Timestamp.now().isoformat(),
                     "details": stats,
                 }
-            ],
-            "details": {
-                "output_key": params.output_key,
-                "statistics": stats,
-                "processed_columns": params.id_columns,
-            },
-        }
+            }
+        )
 
     def _normalize_column(
         self,

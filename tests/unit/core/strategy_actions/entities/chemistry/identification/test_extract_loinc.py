@@ -12,7 +12,7 @@ from unittest.mock import patch
 from biomapper.core.strategy_actions.entities.chemistry.identification.extract_loinc import (
     ChemistryExtractLoincAction,
     ChemistryExtractLoincParams,
-    ChemistryExtractLoincResult,
+    ActionResult,
     validate_loinc_format,
     validate_loinc_checksum,
     map_test_name_to_loinc,
@@ -423,7 +423,7 @@ class TestChemistryExtractLoincAction:
         """Test action can be created."""
         action = ChemistryExtractLoincAction()
         assert action is not None
-        assert hasattr(action, "execute")
+        assert hasattr(action, "execute_typed")
 
     @pytest.mark.asyncio
     async def test_execute_success(self):
@@ -444,12 +444,12 @@ class TestChemistryExtractLoincAction:
             input_key="test_input", output_key="test_output", loinc_column="loinc_code"
         )
 
-        result = await action.execute(params.model_dump(), context)
+        result = await action.execute_typed(params, context)
 
-        assert isinstance(result, ChemistryExtractLoincResult)
+        assert isinstance(result, ActionResult)
         assert result.success is True
-        assert result.total_rows == 2
-        assert result.rows_with_loinc > 0
+        assert result.data["total_rows"] == 2
+        assert result.data["rows_with_loinc"] > 0
         assert "test_output" in context["datasets"]
 
     @pytest.mark.asyncio
@@ -463,8 +463,9 @@ class TestChemistryExtractLoincAction:
             input_key="missing_dataset", output_key="test_output"
         )
 
-        with pytest.raises(ValueError, match="Dataset 'missing_dataset' not found"):
-            await action.execute(params.model_dump(), context)
+        result = await action.execute_typed(params, context)
+        assert result.success is False
+        assert "Dataset 'missing_dataset' not found" in result.error
 
     @pytest.mark.asyncio
     async def test_execute_with_vendor_mapping(self):
@@ -494,7 +495,7 @@ class TestChemistryExtractLoincAction:
         ) as mock_load:
             mock_load.return_value = {"QD123": "2345-7", "LC456": "2093-3"}
 
-            result = await action.execute(params.model_dump(), context)
+            result = await action.execute_typed(params, context)
 
             assert result.success is True
             assert "vendor_output" in context["datasets"]
@@ -615,12 +616,12 @@ class TestIntegrationWithStrategy:
             add_extraction_log=True,
         )
 
-        result = await action.execute(params.model_dump(), context)
+        result = await action.execute_typed(params, context)
 
         # Verify results
         assert result.success is True
-        assert result.total_rows == 3
-        assert result.rows_with_loinc >= 2
+        assert result.data["total_rows"] == 3
+        assert result.data["rows_with_loinc"] >= 2
 
         # Verify context updates
         assert "chemistry_with_loinc" in context["datasets"]

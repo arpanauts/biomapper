@@ -10,6 +10,7 @@ import pandas as pd
 from typing import Dict, Any, Optional, List, Literal
 from pydantic import BaseModel, Field
 
+from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
 from biomapper.core.strategy_actions.registry import register_action
 
 
@@ -486,27 +487,26 @@ class ChemistryExtractLoincParams(BaseModel):
     )
 
 
-class ChemistryExtractLoincResult(BaseModel):
-    """Result of LOINC extraction."""
+class ActionResult(BaseModel):
+    """Standard action result for LOINC extraction."""
 
     success: bool
-    total_rows: int
-    rows_with_loinc: int
-    valid_loinc_codes: int
-    invalid_loinc_codes: int
-    extracted_from_name: int
-    vendor_mapped: int
-    extraction_sources: Dict[str, int]
-    validation_errors: Optional[List[str]] = None
+    message: Optional[str] = None
+    error: Optional[str] = None
+    data: Dict[str, Any] = Field(default_factory=dict)
 
 
 @register_action("CHEMISTRY_EXTRACT_LOINC")
-class ChemistryExtractLoincAction:
+class ChemistryExtractLoincAction(
+    TypedStrategyAction[ChemistryExtractLoincParams, ActionResult]
+):
     """Extract and validate LOINC codes from clinical chemistry data."""
 
-    def __init__(self, db_session: Any = None, *args: Any, **kwargs: Any) -> None:
-        """Initialize the action with logging."""
-        self.db_session = db_session
+    def get_params_model(self) -> type[ChemistryExtractLoincParams]:
+        return ChemistryExtractLoincParams
+
+    def get_result_model(self) -> type[ActionResult]:
+        return ActionResult
 
     def extract_loinc_batch(
         self, df: pd.DataFrame, params: ChemistryExtractLoincParams
@@ -606,42 +606,43 @@ class ChemistryExtractLoincAction:
 
         return result_df
 
-    async def execute(
-        self, action_params: Dict[str, Any], context: Dict[str, Any]
-    ) -> ChemistryExtractLoincResult:
+    async def execute_typed(  # type: ignore[override]
+        self, params: ChemistryExtractLoincParams, context: Dict[str, Any]
+    ) -> ActionResult:
         """Execute LOINC extraction from chemistry data.
 
         Args:
-            action_params: Extraction parameters
+            params: Extraction parameters
             context: Execution context
 
         Returns:
             Extraction result
         """
-        # Parse and validate parameters
-        try:
-            params = ChemistryExtractLoincParams(**action_params)
-        except Exception as e:
-            raise ValueError(f"Invalid parameters: {e}")
 
         # Get input dataset
         if params.input_key not in context.get("datasets", {}):
-            raise ValueError(f"Dataset '{params.input_key}' not found")
+            return ActionResult(
+                success=False,
+                error=f"Dataset '{params.input_key}' not found"
+            )
 
         df = context["datasets"][params.input_key].copy()
 
         if df.empty:
             # Handle empty dataset
             context["datasets"][params.output_key] = df
-            return ChemistryExtractLoincResult(
+            return ActionResult(
                 success=True,
-                total_rows=0,
-                rows_with_loinc=0,
-                valid_loinc_codes=0,
-                invalid_loinc_codes=0,
-                extracted_from_name=0,
-                vendor_mapped=0,
-                extraction_sources={},
+                message="Empty dataset provided",
+                data={
+                    "total_rows": 0,
+                    "rows_with_loinc": 0,
+                    "valid_loinc_codes": 0,
+                    "invalid_loinc_codes": 0,
+                    "extracted_from_name": 0,
+                    "vendor_mapped": 0,
+                    "extraction_sources": {},
+                }
             )
 
         # Extract LOINC codes
@@ -688,13 +689,16 @@ class ChemistryExtractLoincAction:
             "extraction_sources": extraction_stats,
         }
 
-        return ChemistryExtractLoincResult(
+        return ActionResult(
             success=True,
-            total_rows=total_rows,
-            rows_with_loinc=rows_with_loinc,
-            valid_loinc_codes=valid_loinc,
-            invalid_loinc_codes=invalid_loinc,
-            extracted_from_name=extracted_from_name,
-            vendor_mapped=vendor_mapped,
-            extraction_sources=extraction_stats,
+            message=f"Extracted {rows_with_loinc} LOINC codes from {total_rows} rows",
+            data={
+                "total_rows": total_rows,
+                "rows_with_loinc": rows_with_loinc,
+                "valid_loinc_codes": valid_loinc,
+                "invalid_loinc_codes": invalid_loinc,
+                "extracted_from_name": extracted_from_name,
+                "vendor_mapped": vendor_mapped,
+                "extraction_sources": extraction_stats,
+            }
         )
