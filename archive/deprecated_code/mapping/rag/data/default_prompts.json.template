@@ -1,0 +1,18 @@
+{
+    "compound_mapping": {
+        "template": "Given the following compound description: {query}\nAnd the following relevant context:\n{context}\nMap this compound to a standardized identifier. Your response should be precise and include only the identifier.",
+        "version": "1.0",
+        "metrics": {
+            "accuracy": 0.85,
+            "latency": 1200
+        }
+    },
+    "context_relevance": {
+        "template": "Rate the relevance of this context:\n{context}\nto this query:\n{query}\non a scale of 0-1.",
+        "version": "1.0",
+        "metrics": {
+            "accuracy": 0.9,
+            "latency": 800
+        }
+    }
+}
