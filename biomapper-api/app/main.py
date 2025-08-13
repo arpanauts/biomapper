@@ -20,6 +20,25 @@ from app.services.mapper_service import MapperService
 from app.services.resource_manager import ResourceManager
 from app.config.resources import RESOURCE_CONFIGURATION
 
+# Import actions to ensure registration
+# This ensures all actions are registered before the API starts
+try:
+    # Protein actions
+    from biomapper.core.strategy_actions.entities.proteins.annotation import (
+        extract_uniprot_from_xrefs,
+        normalize_accessions,
+    )
+    from biomapper.core.strategy_actions.entities.proteins.matching import multi_bridge
+    
+    # IO actions
+    from biomapper.core.strategy_actions.io import sync_to_google_drive_v2
+    
+    logger_temp = logging.getLogger(__name__)
+    logger_temp.info("Strategy actions imported successfully")
+except ImportError as e:
+    logger_temp = logging.getLogger(__name__)
+    logger_temp.warning(f"Some strategy actions could not be imported: {e}")
+
 # Configure logging before creating the FastAPI app
 configure_logging()
 logger = logging.getLogger(__name__)
