@@ -19,4 +19,3 @@ class BaseDataProcessor(ABC):
         Yields:
             Lists of processed data items
         """
-        pass

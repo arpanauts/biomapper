@@ -57,12 +57,10 @@ class SPOKEMapper(Generic[T], ABC):
     @abstractmethod
     async def standardize(self, input_value: str, **kwargs: Any) -> T:
         """Standardize input value before SPOKE mapping."""
-        pass
 
     @abstractmethod
     async def _get_spoke_query_params(self, std_result: T) -> List[Dict[str, Any]]:
         """Get SPOKE query parameters from standardized result."""
-        pass
 
     async def map_entity(
         self, input_value: str, node_type: Optional[SPOKENodeType] = None, **kwargs: Any

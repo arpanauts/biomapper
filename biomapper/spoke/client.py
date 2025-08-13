@@ -26,8 +26,6 @@ class SPOKEConfig:
 class SPOKEError(Exception):
     """Base exception for SPOKE client errors."""
 
-    pass
-
 
 class SPOKEDBClient:
     """Client for interacting with SPOKE graph database."""

@@ -67,7 +67,6 @@ class HMDBProcessor(BaseDataProcessor):
     async def process_documents(self) -> AsyncGenerator[DomainDocument, None]:
         """Process HMDB XML file as a stream of documents."""
         # Original method implementation
-        pass
 
     async def process_batch(
         self, batch_size: int = 100

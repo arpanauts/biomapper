@@ -12,8 +12,6 @@ import requests
 class RaMPAPIError(Exception):
     """Custom exception for RaMP API errors."""
 
-    pass
-
 
 class AnalyteType(Enum):
     """Enumeration for analyte types in RaMP queries."""
