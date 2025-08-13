@@ -36,7 +36,6 @@ class BaseStrategyAction(ABC):
                 - provenance: List of provenance records
                 - details: Additional details about the execution
         """
-        pass
 
 
 # Alias for backward compatibility

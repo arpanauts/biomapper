@@ -1,10 +1,8 @@
 """Minimal YAML strategy execution service."""
 import logging
-import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional, cast
 import yaml
-from jinja2 import Template
 from pydantic import ValidationError
 
 from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
@@ -12,6 +10,7 @@ from biomapper.core.models.execution_context import (
     StrategyExecutionContext,
     ProvenanceRecord,
 )
+from biomapper.core.infrastructure.parameter_resolver import ParameterResolver
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -25,16 +24,18 @@ class MinimalStrategyService:
         self.strategies_dir = Path(strategies_dir)
         self.strategies = self._load_strategies()
         self.action_registry = self._build_action_registry()
+        self.parameter_resolver = ParameterResolver(base_dir=str(self.strategies_dir))
 
     def _load_strategies(self) -> Dict[str, Dict[str, Any]]:
-        """Load all YAML strategies from directory."""
+        """Load all YAML strategies from directory and subdirectories."""
         strategies = {}
 
         if not self.strategies_dir.exists():
             logger.warning(f"Strategies directory not found: {self.strategies_dir}")
             return strategies
 
-        for yaml_file in self.strategies_dir.glob("*.yaml"):
+        # Load from top-level directory and all subdirectories
+        for yaml_file in self.strategies_dir.rglob("*.yaml"):
             try:
                 with open(yaml_file, "r") as f:
                     strategy_data = yaml.safe_load(f)
@@ -46,45 +47,92 @@ class MinimalStrategyService:
 
         return strategies
 
-    def _substitute_parameters(self, obj: Any, parameters: Dict[str, Any]) -> Any:
+    def _substitute_parameters(
+        self,
+        obj: Any,
+        parameters: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Any:
         """Recursively substitute parameter placeholders in a nested structure.
 
         Args:
             obj: The object to process (dict, list, str, or other)
             parameters: The parameters dictionary for substitution
+            metadata: Optional metadata dictionary for substitution
 
         Returns:
             The object with all parameter placeholders substituted
         """
+        # Build a temporary strategy-like structure for the parameter resolver
+        temp_strategy = {
+            "parameters": parameters,
+            "metadata": metadata or {},
+            "steps": [],  # Just a placeholder
+        }
+
+        # Use the parameter resolver to handle all substitutions
         if isinstance(obj, str):
             # Check if the string contains parameter placeholders
             if "${" in obj:
-                # Use Jinja2 template for substitution
-                # Convert ${parameters.key} to {{ parameters.key }}
-                template_str = re.sub(r"\$\{([^}]+)\}", r"{{ \1 }}", obj)
-                template = Template(template_str)
                 try:
-                    return template.render(parameters=parameters)
+                    # Use parameter resolver's internal method
+                    context = self.parameter_resolver._build_resolution_context(
+                        temp_strategy
+                    )
+                    return self.parameter_resolver._resolve_value(
+                        obj, context, "direct_call"
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to substitute parameters in '{obj}': {e}")
                     return obj
             return obj
         elif isinstance(obj, dict):
             return {
-                key: self._substitute_parameters(value, parameters)
+                key: self._substitute_parameters(value, parameters, metadata)
                 for key, value in obj.items()
             }
         elif isinstance(obj, list):
-            return [self._substitute_parameters(item, parameters) for item in obj]
+            return [
+                self._substitute_parameters(item, parameters, metadata) for item in obj
+            ]
         else:
             return obj
 
     def _build_action_registry(self) -> Dict[str, type[TypedStrategyAction]]:
         """Build registry of available actions."""
-        # Import to ensure all actions are registered
+        # Import the action registry first
         from biomapper.core.strategy_actions.registry import ACTION_REGISTRY
 
-        # Use the central action registry which has all registered actions
+        # Import specific action modules individually to handle missing dependencies gracefully
+        action_modules = [
+            "load_dataset_identifiers",
+            "merge_with_uniprot_resolution",
+            "calculate_set_overlap",
+            "merge_datasets",
+            "export_dataset",
+            "calculate_three_way_overlap",
+            "baseline_fuzzy_match",
+            "build_nightingale_reference",
+            "cts_enriched_match",
+            "generate_enhancement_report",
+            "generate_metabolomics_report",
+            "nightingale_nmr_match",
+            "vector_enhanced_match",
+            "semantic_metabolite_match",
+            "metabolite_api_enrichment",
+            "combine_metabolite_matches",
+            "chemistry_to_phenotype_bridge",
+        ]
+
+        for module_name in action_modules:
+            try:
+                __import__(f"biomapper.core.strategy_actions.{module_name}")
+                logger.debug(f"Successfully imported action module: {module_name}")
+            except ImportError as e:
+                logger.warning(f"Could not import action module {module_name}: {e}")
+                continue
+
+        # Use the central action registry which now has all registered actions
         logger.info(f"Loaded {len(ACTION_REGISTRY)} actions from registry")
         return ACTION_REGISTRY
 
@@ -321,7 +369,11 @@ class MinimalStrategyService:
             action_type = action_config.get("type")
             # Substitute parameters in action params
             raw_params = action_config.get("params", {})
-            action_params = self._substitute_parameters(raw_params, parameters)
+            # Get metadata from strategy config for substitution
+            metadata = strategy.get("metadata", {})
+            action_params = self._substitute_parameters(
+                raw_params, parameters, metadata
+            )
 
             logger.info(f"Executing step '{step_name}' with action '{action_type}'")
 

@@ -28,31 +28,21 @@ logger = logging.getLogger(__name__)
 class CTSError(Exception):
     """Base exception for CTS-related errors."""
 
-    pass
-
 
 class CTSAPIError(CTSError):
     """CTS API returned an error."""
-
-    pass
 
 
 class CTSTimeoutError(CTSError):
     """CTS API request timed out."""
 
-    pass
-
 
 class CTSRateLimitError(CTSError):
     """CTS API rate limit exceeded."""
 
-    pass
-
 
 class FallbackServiceError(CTSError):
     """Fallback service failed."""
-
-    pass
 
 
 # Parameter and Result Models

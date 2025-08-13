@@ -109,7 +109,10 @@ Client Request → FastAPI Server → MapperService → MinimalStrategyService
 
 - **YAML Strategies**: Configuration files in `configs/strategies/`
   - Define workflows as sequences of actions
-  - Support variable substitution (e.g., `${DATA_DIR}`)
+  - Support variable substitution for both parameters and metadata:
+    - `${parameters.key}` - Access strategy parameters
+    - `${metadata.source_files[0].path}` - Access metadata fields
+    - `${env.VAR_NAME}` or `${VAR_NAME}` - Environment variables
   - Loaded directly by API at runtime without database intermediary
 
 ## Development Guidelines
@@ -198,6 +201,10 @@ The biomapper orchestration system supports these core actions (auto-registered)
 - `MERGE_DATASETS`: Combine multiple datasets with deduplication
 - `FILTER_DATASET`: Apply filtering criteria to datasets
 - `EXPORT_DATASET`: Export results to various formats
+- `CUSTOM_TRANSFORM`: Apply Python expressions to transform dataset columns
+
+**IO Operations:**
+- `SYNC_TO_GOOGLE_DRIVE`: Upload analysis results to Google Drive
 
 **Mapping Operations:**
 - `MERGE_WITH_UNIPROT_RESOLUTION`: Map identifiers to UniProt accessions
@@ -215,6 +222,83 @@ The biomapper orchestration system supports these core actions (auto-registered)
 - `GENERATE_METABOLOMICS_REPORT`: Create comprehensive analysis reports
 
 See strategy configuration examples in `configs/strategies/` for usage patterns.
+
+### SYNC_TO_GOOGLE_DRIVE Action
+
+The `SYNC_TO_GOOGLE_DRIVE` action provides seamless integration with Google Drive for uploading analysis results:
+
+**Features:**
+- Automatic upload of all pipeline output files
+- Support for custom file selection and filtering
+- Timestamped subfolder creation
+- Conflict resolution strategies (rename, overwrite, skip)
+- Chunked upload for large files
+- Exponential backoff retry logic
+- Soft failure mode to prevent pipeline interruption
+
+**Setup:**
+1. Create a Google Cloud service account
+2. Download the JSON credentials file
+3. Set environment variable: `export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json`
+
+**Example Usage:**
+```yaml
+- name: sync_results_to_drive
+  action:
+    type: SYNC_TO_GOOGLE_DRIVE
+    params:
+      drive_folder_id: "1A2B3C4D5E6F"  # Target folder ID from Google Drive
+      sync_context_outputs: true        # Auto-sync all output files
+      create_subfolder: true            # Create timestamped subfolder
+      subfolder_name: "run_${env.RUN_ID}"  # Optional custom name
+      file_patterns: ["*.csv", "*.json"]   # Include only these patterns
+      exclude_patterns: ["*temp*"]         # Exclude these patterns
+      conflict_resolution: "rename"        # rename, overwrite, or skip
+      chunk_size: 10485760               # 10MB chunks for large files
+      max_retries: 3                     # Retry failed uploads
+      hard_failure: false                # Don't fail pipeline on error
+      verbose: true                      # Enable progress logging
+```
+
+### CUSTOM_TRANSFORM Action
+
+The `CUSTOM_TRANSFORM` action provides flexible data transformation using Python expressions:
+
+**Features:**
+- Apply arbitrary Python expressions to dataset columns
+- Support for conditional logic and complex transformations
+- Create new columns while preserving originals
+- Configurable error handling (keep_original, null, raise)
+- Safe evaluation with restricted namespace
+
+**Example Usage:**
+```yaml
+- name: transform_protein_data
+  action:
+    type: CUSTOM_TRANSFORM
+    params:
+      input_key: protein_data
+      output_key: transformed_proteins
+      transformations:
+        # Simple string transformation
+        - column: uniprot_id
+          expression: "value.upper().strip()"
+        
+        # Conditional splitting
+        - column: gene_symbol
+          expression: "value.split('|')[0] if '|' in value else value"
+          new_column: primary_gene
+        
+        # Type conversion with null handling
+        - column: concentration
+          expression: "float(value) if value else 0.0"
+          on_error: null
+        
+        # Complex expression with numpy
+        - column: values
+          expression: "np.log10(float(value)) if value else np.nan"
+          new_column: log_values
+```
 
 ## Important Notes
 

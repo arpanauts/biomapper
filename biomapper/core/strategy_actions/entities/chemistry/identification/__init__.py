@@ -18,6 +18,5 @@ Development:
 """
 
 # Import all identification actions to trigger registration
-from .extract_loinc import *
 
 __all__ = []  # Actions register themselves

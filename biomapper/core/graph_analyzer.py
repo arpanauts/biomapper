@@ -78,7 +78,6 @@ class KnowledgeGraphAnalyzer(abc.ABC):
         Returns:
             Dictionary mapping node type names to their metadata
         """
-        pass
 
     @abc.abstractmethod
     async def discover_relationship_types(self) -> Dict[str, RelationshipMetadata]:
@@ -87,7 +86,6 @@ class KnowledgeGraphAnalyzer(abc.ABC):
         Returns:
             Dictionary mapping relationship type names to their metadata
         """
-        pass
 
     @abc.abstractmethod
     async def identify_ontology_fields(
@@ -98,7 +96,6 @@ class KnowledgeGraphAnalyzer(abc.ABC):
         Returns:
             Dictionary mapping node type names to lists of (field_name, confidence) tuples
         """
-        pass
 
     @abc.abstractmethod
     async def sample_node_data(
@@ -113,7 +110,6 @@ class KnowledgeGraphAnalyzer(abc.ABC):
         Returns:
             List of node data dictionaries
         """
-        pass
 
     @abc.abstractmethod
     async def sample_relationship_data(
@@ -128,7 +124,6 @@ class KnowledgeGraphAnalyzer(abc.ABC):
         Returns:
             List of relationship data dictionaries
         """
-        pass
 
     async def generate_schema_mapping(self, graph_name: str) -> GraphSchemaMapping:
         """Generate schema mapping configuration.

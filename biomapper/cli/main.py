@@ -21,7 +21,6 @@ logging.basicConfig(
 @click.version_option(package_name="biomapper")  # Reads version from pyproject.toml
 def cli():
     """Biomapper: Unified toolkit for biological data mapping & harmonization."""
-    pass
 
 
 # Register command groups from modules

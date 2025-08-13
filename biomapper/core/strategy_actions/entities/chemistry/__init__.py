@@ -26,5 +26,8 @@ Usage:
 """
 
 # Import all chemistry action categories to trigger registration
+from .identification import extract_loinc
+from .matching import fuzzy_test_match
+from .harmonization import vendor_harmonization
 
 __all__ = []  # Actions register themselves

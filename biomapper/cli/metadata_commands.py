@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 @click.group("metadata")
 def metadata_cli():
     """Commands for managing the Resource Metadata System."""
-    pass
 
 
 @metadata_cli.command("init")

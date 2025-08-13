@@ -24,6 +24,5 @@ Development:
 """
 
 # Import all matching actions to trigger registration
-from .fuzzy_test_match import *
 
 __all__ = []  # Actions register themselves

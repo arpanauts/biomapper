@@ -64,12 +64,10 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
     @abstractmethod
     def get_params_model(self) -> Type[TParams]:
         """Return the Pydantic model class for action parameters."""
-        pass
 
     @abstractmethod
     def get_result_model(self) -> Type[TResult]:
         """Return the Pydantic model class for action results."""
-        pass
 
     @abstractmethod
     async def execute_typed(
@@ -95,7 +93,6 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
         Returns:
             Typed result object
         """
-        pass
 
     async def execute(
         self,

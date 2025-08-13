@@ -1,8 +1,7 @@
 """General utilities for strategy actions."""
 
-# Future imports for utility modules
-# from . import data_processing
-# from . import io_helpers
-# from . import logging
+# Import utility modules to trigger action registration
+from .data_processing import custom_transform
+from .data_processing import custom_transform_expression
 
 __all__ = []

@@ -5,7 +5,6 @@ Multi-bridge identifier resolution with fallback mechanisms for metabolite mappi
 Tries multiple bridge types in priority order with confidence scoring and fallback options.
 """
 
-import asyncio
 import logging
 import time
 from typing import Any, Dict, List, Optional, Literal

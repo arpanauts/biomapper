@@ -14,8 +14,6 @@ import json
 class ExpressionError(Exception):
     """Error raised during expression evaluation."""
 
-    pass
-
 
 class SafeExpressionEvaluator:
     """

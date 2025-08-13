@@ -1067,7 +1067,6 @@ For questions or support, please contact the Biomapper development team.
         """Convert markdown to HTML with styling."""
         try:
             import markdown
-            from markdown.extensions import tables, toc, fenced_code
         except ImportError:
             logger.error("Markdown library not installed. Run: poetry add markdown")
             raise

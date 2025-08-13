@@ -25,6 +25,5 @@ Development:
 """
 
 # Import all harmonization actions to trigger registration
-from .vendor_harmonization import *
 
 __all__: list[str] = []  # Actions register themselves

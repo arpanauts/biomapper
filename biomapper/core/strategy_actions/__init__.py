@@ -31,6 +31,9 @@ from . import workflows
 from . import io
 from . import reports
 
+# Import chemistry_to_phenotype_bridge action
+from .chemistry_to_phenotype_bridge import ChemistryToPhenotypeBridgeAction
+
 # Import existing actions for backward compatibility
 # (These will be migrated to appropriate entity directories)
 from .load_dataset_identifiers import (
