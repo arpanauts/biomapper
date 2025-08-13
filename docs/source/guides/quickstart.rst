@@ -1,82 +1,108 @@
 Quickstart Guide
 ================
 
-Get up and running with Biomapper in 5 minutes.
+Get BioMapper running in 5 minutes.
 
 Prerequisites
 -------------
 
 * Python 3.11+
 * Poetry package manager
+* Git
 
 Installation
 ------------
 
-1. Clone the repository:
+.. code-block:: bash
 
-   .. code-block:: bash
+   # Clone and install
+   git clone https://github.com/biomapper/biomapper.git
+   cd biomapper
+   poetry install --with dev,docs,api
+   poetry shell
 
-       git clone https://github.com/your-org/biomapper.git
-       cd biomapper
-
-2. Install dependencies:
-
-   .. code-block:: bash
-
-       poetry install --with dev,docs,api
-
-3. Activate the environment:
-
-   .. code-block:: bash
-
-       poetry shell
-
-Start the API Server
---------------------
+Start the API
+-------------
 
 .. code-block:: bash
 
-    cd biomapper-api
-    poetry run uvicorn main:app --reload
+   cd biomapper-api
+   poetry run uvicorn app.main:app --reload --port 8000
 
-The API will be available at http://localhost:8000
+API will be available at http://localhost:8000/docs
 
-Your First Mapping
-------------------
+Your First Strategy
+-------------------
 
-1. Create a strategy file ``test_mapping.yaml``:
+1. **Create a YAML strategy** (``test_strategy.yaml``):
 
-   .. code-block:: yaml
+.. code-block:: yaml
 
-       name: "TEST_MAPPING"
-       description: "Test protein mapping"
-       
-       steps:
-         - name: load_data
-           action:
-             type: LOAD_DATASET_IDENTIFIERS
-             params:
-               file_path: "/path/to/your/proteins.csv"
-               identifier_column: "uniprot"
-               output_key: "proteins"
+   name: protein_harmonization
+   description: Harmonize protein identifiers
+   
+   parameters:
+     input_file: "/data/proteins.csv"
+     output_dir: "/results"
+   
+   steps:
+     - name: load_proteins
+       action:
+         type: LOAD_DATASET_IDENTIFIERS
+         params:
+           file_path: "${parameters.input_file}"
+           identifier_column: "uniprot_id"
+           output_key: "proteins"
+     
+     - name: export_results
+       action:
+         type: EXPORT_DATASET_V2
+         params:
+           input_key: "proteins"
+           output_file: "${parameters.output_dir}/harmonized.csv"
+           format: "csv"
 
-2. Execute using the Python client:
+2. **Execute with Python client**:
 
-   .. code-block:: python
+.. code-block:: python
 
-       import asyncio
-       from biomapper_client import BiomapperClient
-       
-       async def main():
-           async with BiomapperClient() as client:
-               result = await client.execute_strategy_file("test_mapping.yaml")
-               print(f"Loaded {result['results']['proteins']['count']} proteins")
-       
-       asyncio.run(main())
+   from biomapper_client import BiomapperClient
+   
+   # Simple synchronous execution
+   client = BiomapperClient(base_url="http://localhost:8000")
+   result = client.run("protein_harmonization", parameters={
+       "input_file": "/path/to/your/data.csv",
+       "output_dir": "/path/to/output"
+   })
+   print(f"Success: {result['success']}")
+
+3. **Or use the CLI**:
+
+.. code-block:: bash
+
+   poetry run python scripts/run_strategy.py \
+     --strategy test_strategy.yaml \
+     --param input_file=/data/proteins.csv \
+     --param output_dir=/results
+
+Verify Installation
+-------------------
+
+.. code-block:: bash
+
+   # Run tests
+   poetry run pytest tests/unit/
+   
+   # Check API health
+   curl http://localhost:8000/health
+   
+   # View API docs
+   open http://localhost:8000/docs
 
 Next Steps
 ----------
 
-* Read the :doc:`../usage` guide for detailed examples
-* Learn about :doc:`../configuration` for complex strategies  
-* Explore the :doc:`../api/rest_endpoints` reference
+* :doc:`installation` - Detailed setup instructions
+* :doc:`first_mapping` - Complete mapping example
+* :doc:`../usage` - Advanced usage patterns
+* :doc:`../configuration` - Strategy configuration

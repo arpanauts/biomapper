@@ -1,83 +1,137 @@
-Architecture Overview
-====================
+BioMapper Architecture
+======================
 
-Biomapper is built around a streamlined architecture focused on YAML-based strategies and core action types.
+BioMapper uses a modern, extensible architecture designed for biological data harmonization at scale.
 
-Core Components
----------------
+Core Design Principles
+----------------------
 
-**YAML Strategy System**
-  Configuration-driven workflow definition using simple YAML files.
-
-**Core Action Types**
-  Three core actions that handle most biological data mapping scenarios:
-  
-  * LOAD_DATASET_IDENTIFIERS
-  * MERGE_WITH_UNIPROT_RESOLUTION  
-  * CALCULATE_SET_OVERLAP
-
-**REST API**
-  FastAPI-based service for remote strategy execution.
-
-**Python Client**
-  Convenient async client library for API interaction.
-
-**Minimal Strategy Service**
-  Lightweight service that loads and executes YAML strategies without database dependencies.
+* **Modularity** - Each action is independent and reusable
+* **Type Safety** - Pydantic models ensure data validation
+* **Extensibility** - New actions self-register without core changes
+* **Reproducibility** - YAML strategies ensure consistent execution
 
 System Architecture
 -------------------
 
 .. code-block:: text
 
-    ┌─────────────────┐    ┌─────────────────┐
-    │  Client Script  │    │  Python Client  │
-    │                 │    │   (async/await) │
-    └─────────┬───────┘    └─────────┬───────┘
-              │                      │
-              └──────┬───────────────┘
-                     │ HTTP requests
-                     ▼
-              ┌─────────────────┐
-              │   REST API      │
-              │   (FastAPI)     │
-              └─────────┬───────┘
+    ┌─────────────────────────────────────────────────────┐
+    │                   Client Layer                      │
+    │  • BiomapperClient (Python)                        │
+    │  • CLI Scripts                                     │
+    │  • Jupyter Notebooks                               │
+    └───────────────────┬─────────────────────────────────┘
+                        │ HTTP/REST
+    ┌───────────────────▼─────────────────────────────────┐
+    │                    API Layer                        │
+    │  • FastAPI Server (port 8000)                      │
+    │  • MapperService (job orchestration)               │
+    │  • Background job processing                        │
+    │  • SQLite persistence (biomapper.db)               │
+    └───────────────────┬─────────────────────────────────┘
                         │
-                        ▼
-              ┌─────────────────┐
-              │ Strategy        │
-              │ Service         │
-              └─────────┬───────┘
-                        │
-                        ▼
-              ┌─────────────────┐
-              │ Action Registry │
-              │ & Execution     │
-              └─────────────────┘
+    ┌───────────────────▼─────────────────────────────────┐
+    │                   Core Layer                        │
+    │  • MinimalStrategyService (execution engine)       │
+    │  • ACTION_REGISTRY (global action registry)        │
+    │  • TypedStrategyAction (base class)                │
+    │  • Execution Context (shared state)                │
+    └─────────────────────────────────────────────────────┘
+
+Component Details
+-----------------
+
+**ACTION_REGISTRY**
+  Global dictionary mapping action names to classes. Actions self-register at import time using the ``@register_action`` decorator.
+
+**MinimalStrategyService**
+  Lightweight execution engine that:
+  
+  * Loads YAML strategies from ``configs/strategies/``
+  * Executes actions sequentially
+  * Manages execution context throughout workflow
+  * No database dependencies
+
+**Execution Context**
+  Shared state dictionary containing:
+  
+  * ``datasets`` - Named data collections
+  * ``current_identifiers`` - Active identifier set
+  * ``statistics`` - Accumulated metrics
+  * ``output_files`` - Generated file paths
+
+**TypedStrategyAction**
+  Base class providing:
+  
+  * Pydantic parameter validation
+  * Standardized execution interface
+  * Type-safe result handling
+  * Automatic error handling
 
 Data Flow
 ---------
 
-1. **Strategy Loading**: YAML files define the workflow
-2. **Context Creation**: Shared dictionary for data passing
-3. **Action Execution**: Sequential step processing  
-4. **Result Aggregation**: Combined results with metadata
-5. **Response Formatting**: JSON response with timing metrics
+1. **Strategy Definition** - User creates YAML workflow
+2. **Client Request** - BiomapperClient sends strategy to API
+3. **Job Creation** - MapperService creates background job
+4. **Strategy Loading** - MinimalStrategyService loads YAML
+5. **Action Execution** - Each action processes data sequentially
+6. **Context Updates** - Actions read/write shared context
+7. **Result Persistence** - Results saved to SQLite
+8. **Client Response** - Results returned via REST/SSE
 
-Key Design Principles
----------------------
+Action Organization
+-------------------
 
-**Simplicity First**
-  Minimal viable functionality without unnecessary complexity.
+Actions are organized by biological entity type:
 
-**Configuration Over Code**  
-  Define workflows in YAML rather than writing Python code.
+.. code-block:: text
 
-**Type Safety**
-  Pydantic models ensure data validation throughout.
+    strategy_actions/
+    ├── entities/
+    │   ├── proteins/        # UniProt, Ensembl
+    │   ├── metabolites/     # HMDB, InChIKey, CHEBI
+    │   └── chemistry/       # LOINC, clinical tests
+    ├── algorithms/          # Reusable algorithms
+    ├── utils/              # General utilities
+    └── io/                 # Import/export actions
 
-**API-First Design**
-  All functionality accessible via REST API.
+Example Action
+--------------
 
-**No Database Dependencies**
-  Strategies execute without persistent storage requirements.
+.. code-block:: python
+
+    from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
+    from biomapper.core.strategy_actions.registry import register_action
+    from pydantic import BaseModel
+    
+    class MyActionParams(BaseModel):
+        input_key: str
+        threshold: float = 0.8
+    
+    @register_action("MY_ACTION")
+    class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
+        def get_params_model(self):
+            return MyActionParams
+        
+        async def execute_typed(self, params, context):
+            # Process data from context
+            data = context["datasets"][params.input_key]
+            # ... processing logic ...
+            return ActionResult(success=True)
+
+Key Patterns
+------------
+
+**Registry Pattern**
+  Actions self-register, eliminating manual registration and enabling plugin-style extensibility.
+
+**Strategy Pattern**
+  YAML configurations define workflows as pluggable action sequences.
+
+**Pipeline Pattern**
+  Actions process data through shared context, enabling complex multi-step workflows.
+
+**Type Safety Pattern**
+  Pydantic models provide compile-time and runtime validation throughout the system.
