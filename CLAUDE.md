@@ -2,322 +2,292 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Development Environment
+## Essential Commands
 
-### Setup
 ```bash
-# Install Poetry (if not installed)
-curl -sSL https://install.python-poetry.org | python3 -
-
-# Install dependencies
+# Setup and environment
 poetry install --with dev,docs,api
-
-# Activate virtual environment
 poetry shell
-```
 
-### Essential Commands
-```bash
 # Run tests
-poetry run pytest
-poetry run pytest tests/unit/  # Unit tests only
-poetry run pytest tests/integration/  # Integration tests only
-poetry run pytest -k "test_name"  # Run specific test
+poetry run pytest                           # All tests with coverage
+poetry run pytest tests/unit/               # Unit tests only
+poetry run pytest tests/integration/        # Integration tests only
+poetry run pytest -k "test_name"            # Run specific test by name
+poetry run pytest -xvs tests/path/test.py   # Debug single test with output
 
-# Linting and formatting
-poetry run ruff check .  # Check for linting issues
-poetry run ruff check . --fix  # Fix auto-fixable issues
-poetry run ruff format .  # Format code
+# Code quality (run before committing)
+poetry run ruff format .                    # Format code
+poetry run ruff check . --fix               # Fix auto-fixable linting issues
+poetry run mypy biomapper biomapper-api biomapper_client  # Type checking
 
-# Type checking
-poetry run mypy biomapper biomapper-api biomapper_client
+# Development server
+cd biomapper-api && poetry run uvicorn app.main:app --reload --port 8000
 
-# Run API server
-cd biomapper-api && poetry run uvicorn app.main:app --reload
-
-# Database migrations
-poetry run alembic upgrade head  # Apply migrations
+# Database operations
+poetry run alembic upgrade head             # Apply migrations
 poetry run alembic revision -m "description"  # Create new migration
 
-# Build documentation
-cd docs && poetry run make html
+# Makefile shortcuts
+make test                                   # Run tests with coverage
+make format                                 # Format code with ruff
+make lint-fix                              # Auto-fix linting issues
+make typecheck                             # Run mypy type checking
+make check                                 # Run all checks (format, lint, typecheck, test, docs)
+make docs                                  # Build documentation
+make clean                                 # Clean cache files
 
 # CLI usage
 poetry run biomapper --help
 poetry run biomapper health
 poetry run biomapper metadata list
 
-# Makefile shortcuts (alternative to poetry run)
-make test           # Run all tests with coverage
-make lint           # Check for linting issues
-make lint-fix       # Auto-fix linting issues
-make format         # Format code with ruff
-make typecheck      # Run mypy type checking
-make check          # Run all checks (format, lint, typecheck, test, docs)
-make docs           # Build documentation
-make clean          # Clean all cache files
+# CI diagnostics
+python scripts/ci_diagnostics.py           # Check for common CI issues
+make ci-test-local                         # Test in Docker CI environment
 ```
 
 ## Architecture Overview
 
-Biomapper is a modular biological data harmonization toolkit built around an extensible action system and YAML-based strategy configuration.
-
-### System Architecture Flow
 ```
-Client Request → FastAPI Server → MapperService → MinimalStrategyService
-                                                   ↓
-                                  ACTION_REGISTRY (Global Dict)
-                                                   ↓
-                            Individual Action Classes (self-registered)
-                                                   ↓
-                                  Execution Context (Dict[str, Any])
+Client Request → BiomapperClient → FastAPI Server → MapperService → MinimalStrategyService
+                                                                     ↓
+                                                    ACTION_REGISTRY (Global Dict)
+                                                                     ↓
+                                              Self-Registering Action Classes
+                                                                     ↓
+                                                 Execution Context (shared state)
 ```
 
-### Three Main Components
+### Core Components
 
-1. **biomapper/** - Core library with mapping logic and orchestration
-   - Self-registering action system using `@register_action` decorator
-   - `MinimalStrategyService` for lightweight strategy execution
-   - Pydantic models for type safety and validation
+**biomapper/** - Core library with mapping logic
+- Actions self-register via `@register_action("ACTION_NAME")` decorator
+- `MinimalStrategyService` provides lightweight strategy execution
+- Execution context flows as `Dict[str, Any]` with keys: `current_identifiers`, `datasets`, `statistics`, `output_files`
 
-2. **biomapper-api/** - FastAPI service exposing REST endpoints
-   - Direct YAML loading from `configs/` directory at runtime
-   - Job persistence in SQLite (`biomapper.db`)
-   - Background job execution with checkpointing
+**biomapper-api/** - FastAPI service exposing REST endpoints
+- Direct YAML loading from `configs/` directory at runtime
+- SQLite job persistence (`biomapper.db`) with checkpointing
+- Background job execution with real-time SSE progress updates
 
-3. **biomapper_client/** - Python client for the API
-   - Clean interface for strategy execution
-   - No direct imports from core library
-   - Used by all wrapper scripts
+**biomapper_client/** - Python client for the API
+- Primary interface via `BiomapperClient` in `client_v2.py`
+- Synchronous wrapper: `client.run("strategy_name")`
+- No direct imports from core library
 
-### Core Architecture Components
+## Creating New Strategy Actions
 
-- **ACTION_REGISTRY**: Global dictionary mapping action names to classes
-  - Actions self-register via `@register_action("ACTION_NAME")` decorator
-  - Located in `biomapper/core/strategy_actions/registry.py`
-  - Loaded dynamically by `MinimalStrategyService`
+Follow TDD approach - write tests first:
 
-- **Execution Context**: Simple dictionary flowing through action pipeline
-  - Contains: `current_identifiers`, `datasets`, `statistics`, `output_files`
-  - Each action reads from and modifies this shared state
-  - Enables actions to build upon previous results
+```python
+from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
+from biomapper.core.strategy_actions.registry import register_action
+from pydantic import BaseModel, Field
 
-- **Strategy Actions**: Self-contained processing units in `biomapper/core/strategy_actions/`
-  - Inherit from `TypedStrategyAction` for type safety
-  - Use Pydantic models for parameters and results
-  - Register themselves automatically when imported
+class MyActionParams(BaseModel):
+    input_key: str = Field(..., description="Input dataset key")
+    threshold: float = Field(0.8, description="Processing threshold")
+    output_key: str = Field(..., description="Output dataset key")
 
-- **YAML Strategies**: Configuration files in `configs/strategies/`
-  - Define workflows as sequences of actions
-  - Support variable substitution for both parameters and metadata:
-    - `${parameters.key}` - Access strategy parameters
-    - `${metadata.source_files[0].path}` - Access metadata fields
-    - `${env.VAR_NAME}` or `${VAR_NAME}` - Environment variables
-  - Loaded directly by API at runtime without database intermediary
+@register_action("MY_ACTION")
+class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
+    def get_params_model(self) -> type[MyActionParams]:
+        return MyActionParams
+    
+    async def execute_typed(self, params: MyActionParams, context: Dict) -> ActionResult:
+        # Access input data
+        input_data = context["datasets"].get(params.input_key)
+        
+        # Process data
+        processed = process_data(input_data, params.threshold)
+        
+        # Store output
+        context["datasets"][params.output_key] = processed
+        
+        return ActionResult(
+            success=True,
+            message=f"Processed {len(processed)} items"
+        )
+```
 
-## Development Guidelines
+Action will auto-register - no executor modifications needed.
 
-### Code Standards
+## Enhanced Action Organization
 
-1. **Type Hints**: All functions must have complete type annotations
-2. **Docstrings**: Use Google-style docstrings for all public methods
-3. **Error Handling**: Use custom exceptions from `biomapper.core.exceptions`
-4. **Async/Await**: Use async patterns for I/O operations
-5. **Configuration**: Use Pydantic models for all configuration
+Actions are organized by biological entity and function:
 
-### Testing Requirements
+```
+strategy_actions/
+├── entities/                    # Entity-specific actions
+│   ├── proteins/                # UniProt, Ensembl, gene symbols
+│   │   ├── annotation/          # ID extraction & normalization
+│   │   └── matching/            # Cross-dataset resolution
+│   ├── metabolites/             # HMDB, InChIKey, CHEBI, KEGG
+│   │   ├── identification/      # ID extraction & normalization
+│   │   ├── matching/            # CTS, semantic, vector matching
+│   │   └── enrichment/          # External API integration
+│   └── chemistry/               # LOINC, clinical tests
+│       ├── identification/      # LOINC extraction
+│       └── matching/            # Fuzzy test matching
+├── algorithms/                  # Reusable algorithms
+├── utils/                       # General utilities
+├── workflows/                   # High-level orchestration
+├── io/                         # Data input/output
+└── reports/                    # Analysis & reporting
+```
 
-- Minimum 80% test coverage required
-- Use pytest fixtures for common test data
-- Mock external services in unit tests
-- Integration tests should use test databases/APIs
-- Follow Test-Driven Development (TDD) for new features
-- Write failing tests first, then implement minimal code to pass
+## Creating YAML Strategies
 
-### Creating a New Strategy Action
+Place strategies in `configs/strategies/`:
 
-1. **Write failing tests first** (TDD approach)
-2. Create action class in `biomapper/core/strategy_actions/`
-3. Inherit from `TypedStrategyAction` for type safety
-4. Define Pydantic models for parameters and results:
-   ```python
-   from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
-   from biomapper.core.strategy_actions.registry import register_action
-   from pydantic import BaseModel
-   
-   class MyActionParams(BaseModel):
-       required_field: str
-       optional_field: int = 100
-   
-   @register_action("MY_ACTION")
-   class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
-       def get_params_model(self) -> type[MyActionParams]:
-           return MyActionParams
-       
-       async def execute_typed(self, params: MyActionParams, context: Dict) -> ActionResult:
-           # Type-safe implementation
-           pass
-   ```
-5. Action will auto-register via decorator - no need to modify executor
-6. Add comprehensive unit tests in `tests/unit/core/strategy_actions/`
-7. Update documentation if needed
+```yaml
+name: MY_STRATEGY
+description: Clear description of purpose
+parameters:
+  data_file: "/path/to/data.tsv"
+  output_dir: "${OUTPUT_DIR:-/tmp/results}"
+  
+steps:
+  - name: load_data
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.data_file}"
+        identifier_column: id
+        output_key: loaded_data
+        
+  - name: process
+    action:
+      type: MY_ACTION
+      params:
+        input_key: loaded_data
+        threshold: 0.85
+        output_key: processed_data
+```
 
-### Creating a New YAML Strategy
+Variable substitution supports:
+- `${parameters.key}` - Strategy parameters
+- `${metadata.field}` - Metadata fields
+- `${env.VAR}` or `${VAR}` - Environment variables
 
-1. Create YAML file in `configs/strategies/`:
-   ```yaml
-   name: MY_NEW_STRATEGY
-   description: Clear description of what this strategy accomplishes
-   parameters:
-     data_file: "/path/to/data.tsv"
-     output_dir: "/path/to/output"
-   steps:
-     - name: load_data
-       action:
-         type: LOAD_DATASET_IDENTIFIERS
-         params:
-           file_path: "${parameters.data_file}"
-           identifier_column: id_column
-           output_key: loaded_data
-   ```
-2. API will auto-load on next request (no restart needed)
-3. Test via BiomapperClient: `client.execute_strategy("MY_NEW_STRATEGY")`
+## Available Actions
 
-### API Development
+**Data Operations:**
+- `LOAD_DATASET_IDENTIFIERS` - Load biological identifiers from TSV/CSV
+- `MERGE_DATASETS` - Combine datasets with deduplication
+- `FILTER_DATASET` - Apply filtering criteria
+- `EXPORT_DATASET` - Export to various formats
+- `CUSTOM_TRANSFORM` - Apply Python expressions to columns
+
+**Mapping Operations:**
+- `MERGE_WITH_UNIPROT_RESOLUTION` - Map to UniProt accessions
+- `CALCULATE_SET_OVERLAP` - Jaccard similarity analysis
+- `CALCULATE_THREE_WAY_OVERLAP` - Three-dataset comparison
+
+**Metabolomics:**
+- `NIGHTINGALE_NMR_MATCH` - Nightingale NMR reference matching
+- `CTS_ENRICHED_MATCH` - Chemical Translation Service matching
+- `METABOLITE_API_ENRICHMENT` - External API enrichment
+- `SEMANTIC_METABOLITE_MATCH` - AI-powered semantic matching
+- `VECTOR_ENHANCED_MATCH` - Vector similarity matching
+- `COMBINE_METABOLITE_MATCHES` - Merge multiple approaches
+- `GENERATE_METABOLOMICS_REPORT` - Comprehensive reports
+
+**IO Operations:**
+- `SYNC_TO_GOOGLE_DRIVE` - Upload results to Google Drive with chunked transfer
+
+**Protein Operations:**
+- `PROTEIN_EXTRACT_UNIPROT_FROM_XREFS` - Extract UniProt IDs from compound fields
+- `PROTEIN_NORMALIZE_ACCESSIONS` - Standardize protein identifiers
+
+**Chemistry Operations:**
+- `CHEMISTRY_EXTRACT_LOINC` - Extract LOINC codes from clinical data
+
+## Testing Strategy
+
+Follow Test-Driven Development (TDD):
+
+1. Write failing tests first
+2. Implement minimal code to pass
+3. Refactor while keeping tests green
+
+```bash
+# Test specific action
+poetry run pytest -xvs tests/unit/core/strategy_actions/test_my_action.py
+
+# Test with coverage
+poetry run pytest --cov=biomapper --cov-report=html
+
+# Debug test failures
+poetry run pytest -xvs --pdb tests/unit/
+```
+
+## Type Safety Migration
+
+Project is migrating to full type safety using TypedStrategyAction pattern:
+- Business logic actions use TypedStrategyAction with Pydantic models
+- Infrastructure actions (like chunk_processor) remain flexible
+- Backward compatibility maintained with `extra="allow"` in Pydantic models
+- All new actions must use typed pattern
+
+## Key Implementation Patterns
+
+### Context Flow
+Actions receive and modify shared `context` dictionary:
+- `context["datasets"][key]` - Access datasets from previous actions
+- `context["statistics"]` - Accumulate statistics
+- `context["output_files"]` - Track generated files
+- `context["current_identifiers"]` - Active identifier set
+
+### Error Handling
+```python
+from biomapper.core.exceptions import ValidationError, ProcessingError
+
+try:
+    result = process_data(input_data)
+except ValidationError as e:
+    return ActionResult(success=False, message=str(e))
+```
+
+### Parameter Validation
+```python
+from pydantic import BaseModel, Field, validator
+
+class MyParams(BaseModel):
+    file_path: str = Field(..., description="Input file path")
+    threshold: float = Field(0.8, ge=0.0, le=1.0)
+    
+    @validator("file_path")
+    def validate_path(cls, v):
+        if not Path(v).exists():
+            raise ValueError(f"File not found: {v}")
+        return v
+```
+
+## API Development
 
 When working on biomapper-api:
 - Use dependency injection for database sessions
 - Implement proper error handling with HTTPException
 - Add OpenAPI documentation to endpoints
-- Use Pydantic models for request/response validation
 - Follow RESTful conventions
-
-## Key Action Types
-
-The biomapper orchestration system supports these core actions (auto-registered):
-
-**Data Operations:**
-- `LOAD_DATASET_IDENTIFIERS`: Load biological identifiers from TSV/CSV files
-- `MERGE_DATASETS`: Combine multiple datasets with deduplication
-- `FILTER_DATASET`: Apply filtering criteria to datasets
-- `EXPORT_DATASET`: Export results to various formats
-- `CUSTOM_TRANSFORM`: Apply Python expressions to transform dataset columns
-
-**IO Operations:**
-- `SYNC_TO_GOOGLE_DRIVE`: Upload analysis results to Google Drive
-
-**Mapping Operations:**
-- `MERGE_WITH_UNIPROT_RESOLUTION`: Map identifiers to UniProt accessions
-- `EXECUTE_MAPPING_PATH`: Run predefined mapping workflows
-- `CALCULATE_SET_OVERLAP`: Calculate Jaccard similarity between datasets
-- `CALCULATE_THREE_WAY_OVERLAP`: Specialized 3-way dataset analysis
-
-**Metabolomics-Specific:**
-- `NIGHTINGALE_NMR_MATCH`: Match using Nightingale NMR reference
-- `CTS_ENRICHED_MATCH`: Enhanced matching via Chemical Translation Service
-- `METABOLITE_API_ENRICHMENT`: Enrich using external metabolite APIs
-- `SEMANTIC_METABOLITE_MATCH`: AI-powered semantic matching
-- `VECTOR_ENHANCED_MATCH`: Vector similarity-based matching
-- `COMBINE_METABOLITE_MATCHES`: Merge multiple matching approaches
-- `GENERATE_METABOLOMICS_REPORT`: Create comprehensive analysis reports
-
-See strategy configuration examples in `configs/strategies/` for usage patterns.
-
-### SYNC_TO_GOOGLE_DRIVE Action
-
-The `SYNC_TO_GOOGLE_DRIVE` action provides seamless integration with Google Drive for uploading analysis results:
-
-**Features:**
-- Automatic upload of all pipeline output files
-- Support for custom file selection and filtering
-- Timestamped subfolder creation
-- Conflict resolution strategies (rename, overwrite, skip)
-- Chunked upload for large files
-- Exponential backoff retry logic
-- Soft failure mode to prevent pipeline interruption
-
-**Setup:**
-1. Create a Google Cloud service account
-2. Download the JSON credentials file
-3. Set environment variable: `export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json`
-
-**Example Usage:**
-```yaml
-- name: sync_results_to_drive
-  action:
-    type: SYNC_TO_GOOGLE_DRIVE
-    params:
-      drive_folder_id: "1A2B3C4D5E6F"  # Target folder ID from Google Drive
-      sync_context_outputs: true        # Auto-sync all output files
-      create_subfolder: true            # Create timestamped subfolder
-      subfolder_name: "run_${env.RUN_ID}"  # Optional custom name
-      file_patterns: ["*.csv", "*.json"]   # Include only these patterns
-      exclude_patterns: ["*temp*"]         # Exclude these patterns
-      conflict_resolution: "rename"        # rename, overwrite, or skip
-      chunk_size: 10485760               # 10MB chunks for large files
-      max_retries: 3                     # Retry failed uploads
-      hard_failure: false                # Don't fail pipeline on error
-      verbose: true                      # Enable progress logging
-```
-
-### CUSTOM_TRANSFORM Action
-
-The `CUSTOM_TRANSFORM` action provides flexible data transformation using Python expressions:
-
-**Features:**
-- Apply arbitrary Python expressions to dataset columns
-- Support for conditional logic and complex transformations
-- Create new columns while preserving originals
-- Configurable error handling (keep_original, null, raise)
-- Safe evaluation with restricted namespace
-
-**Example Usage:**
-```yaml
-- name: transform_protein_data
-  action:
-    type: CUSTOM_TRANSFORM
-    params:
-      input_key: protein_data
-      output_key: transformed_proteins
-      transformations:
-        # Simple string transformation
-        - column: uniprot_id
-          expression: "value.upper().strip()"
-        
-        # Conditional splitting
-        - column: gene_symbol
-          expression: "value.split('|')[0] if '|' in value else value"
-          new_column: primary_gene
-        
-        # Type conversion with null handling
-        - column: concentration
-          expression: "float(value) if value else 0.0"
-          on_error: null
-        
-        # Complex expression with numpy
-        - column: values
-          expression: "np.log10(float(value)) if value else np.nan"
-          new_column: log_values
-```
+- Use Pydantic models for request/response validation
 
 ## Important Notes
 
-- **ALWAYS USE POETRY ENVIRONMENT** - Never use pip directly
-- **Action Registration** - Actions self-register via `@register_action` decorator
-- **No Database Loading** - Strategies load directly from YAML files at runtime
-- **Configuration files** in `configs/` are version-controlled examples
-- **Environment-specific settings** use `.env` files (not committed)
-- **The project uses strict MyPy settings** - resolve all type errors
-- **ChromaDB** requires specific system dependencies on some platforms
-- **Integration tests** may require external services (document in PR)
-- **Follow TDD approach** for all new features and refactoring
-- **Maintain backward compatibility** during type safety migration
+- **ALWAYS USE POETRY** - Never use pip directly
+- **Type Safety** - Resolve all mypy errors before committing
+- **Action Registration** - Actions self-register via decorator
+- **Direct YAML Loading** - No database intermediary for strategies
+- **Test Coverage** - Minimum 80% required
+- **ChromaDB** - May require specific system dependencies
+- **Environment Variables** - Use `.env` files (not committed)
+- **Backward Compatibility** - Maintain during type safety migration
 
-## Current Architecture State (August 2025)
+## Current Focus Areas
 
-- **Simplified Execution**: `MinimalStrategyService` provides lightweight strategy execution
-- **Direct YAML Loading**: No database intermediary, strategies loaded from `configs/` at runtime
-- **Self-Registering Actions**: Actions register themselves via decorator pattern
-- **API-First Architecture**: All scripts use `BiomapperClient`, no direct core imports
-- **Type Safety Migration**: Moving from `Dict[str, Any]` to typed Pydantic models
-- **Job Persistence**: SQLite database (`biomapper.db`) for execution state and checkpoints
+1. **Type Safety Migration** - Converting final 2-3 actions to TypedStrategyAction
+2. **Enhanced Organization** - Entity-based action structure
+3. **Performance Optimization** - Chunking for large datasets
+4. **External Integrations** - Google Drive sync, API enrichments
