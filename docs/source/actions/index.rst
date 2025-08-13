@@ -38,8 +38,6 @@ BioMapper provides 30+ self-registering actions for biological data processing.
    :caption: Chemistry Actions
    
    chemistry_extract_loinc
-   chemistry_fuzzy_test_match
-   chemistry_vendor_harmonization
 
 .. toctree::
    :maxdepth: 1
@@ -112,6 +110,36 @@ Metabolite Actions
      - AI-powered semantic matching
    * - ``VECTOR_ENHANCED_MATCH``
      - Vector embedding similarity matching
+
+Chemistry Actions
+~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Action
+     - Description
+   * - ``CHEMISTRY_EXTRACT_LOINC``
+     - Extract and validate LOINC codes from clinical chemistry data
+
+Analysis Actions
+~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Action
+     - Description
+   * - ``CALCULATE_SET_OVERLAP``
+     - Calculate Jaccard similarity and set overlaps
+   * - ``CALCULATE_THREE_WAY_OVERLAP``
+     - Three-way dataset intersection analysis
+   * - ``CALCULATE_MAPPING_QUALITY``
+     - Comprehensive quality assessment for identifier mappings
+   * - ``GENERATE_METABOLOMICS_REPORT``
+     - Generate detailed metabolomics analysis reports
 
 Usage Example
 -------------
