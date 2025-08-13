@@ -1,7 +1,7 @@
 BioMapper Documentation
 =======================
 
-**BioMapper** is a modular bioinformatics platform for harmonizing biological data across databases and platforms.
+**BioMapper** is a YAML-based workflow platform built on a self-registering action system. While designed for biological data harmonization, its architecture supports any workflow that can be expressed as a sequence of actions operating on shared data.
 
 .. code-block:: bash
 
@@ -9,17 +9,20 @@ BioMapper Documentation
    poetry install --with dev,docs,api
    poetry shell
    
-   # Start API
+   # Optional: Start API Server
    cd biomapper-api && uvicorn app.main:app --reload
 
 Key Features
 ------------
 
-* **🧬 Multi-Entity Support** - Proteins, metabolites, chemistry data
-* **📝 YAML Workflows** - Define pipelines without coding  
-* **🔌 Self-Registering Actions** - Extensible plugin architecture
-* **🚀 REST API** - Execute strategies remotely
+* **📝 YAML Strategies** - Define workflows as YAML configurations
+* **🔌 Self-Registering Actions** - Extensible plugin architecture  
+* **🧬 Biological Data Focus** - Specialized actions for proteins, metabolites, chemistry
+* **🔄 General Workflow Support** - Any sequential data processing pipeline
+* **🚀 Multiple Interfaces** - Python library, REST API, CLI
 * **✅ Type Safety** - Pydantic validation throughout
+
+**Note on the API:** The REST API uses standard JSON for HTTP communication but executes YAML-defined strategies. Think of it as a JSON wrapper around YAML workflows.
 
 .. toctree::
    :maxdepth: 2

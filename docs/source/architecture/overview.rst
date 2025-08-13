@@ -1,7 +1,7 @@
 BioMapper Architecture
 ======================
 
-BioMapper uses a modern, extensible architecture designed for biological data harmonization at scale.
+BioMapper is a workflow platform with an extensible architecture designed for data processing pipelines, with specialized support for biological data harmonization.
 
 Core Design Principles
 ----------------------

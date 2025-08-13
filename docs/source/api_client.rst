@@ -1,12 +1,12 @@
 Python Client Reference
 =======================
 
-The ``biomapper_client`` package provides a convenient Python interface to the Biomapper REST API.
+The ``biomapper_client`` package provides a convenient Python interface to the BioMapper REST API.
 
 Installation
 ------------
 
-The client is included with the main biomapper installation:
+The client is included with the main BioMapper installation:
 
 .. code-block:: bash
 
@@ -17,13 +17,28 @@ Basic Usage
 
 .. code-block:: python
 
-    import asyncio
     from biomapper_client import BiomapperClient
     
+    # Simple synchronous usage (recommended)
+    client = BiomapperClient("http://localhost:8000")
+    result = client.run("protein_harmonization", parameters={
+        "input_file": "/data/proteins.csv",
+        "output_dir": "/results"
+    })
+    print(f"Success: {result['success']}")
+    
+    # Async usage for advanced scenarios
+    import asyncio
+    
     async def main():
-        # Connect to local server
-        async with BiomapperClient("http://localhost:8000") as client:
-            result = await client.execute_strategy_file("strategy.yaml")
+        async with BiomapperClient() as client:
+            context = {
+                "current_identifiers": [],
+                "datasets": {},
+                "statistics": {},
+                "output_files": []
+            }
+            result = await client.execute_strategy("protein_harmonization", context)
             print(result)
     
     asyncio.run(main())
@@ -31,131 +46,178 @@ Basic Usage
 Client Configuration
 --------------------
 
-The client accepts several configuration options:
+The client automatically configures itself with sensible defaults:
 
 .. code-block:: python
 
     client = BiomapperClient(
-        base_url="http://localhost:8000",  # API server URL
-        timeout=10800.0,                   # 3 hour timeout (for large datasets)
+        base_url="http://localhost:8000",  # API server URL (default)
+        # timeout is automatically set to 3 hours for large datasets
     )
-
-Methods
--------
-
-execute_strategy_file(file_path)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Execute a strategy from a YAML file.
-
-**Parameters:**
-* ``file_path`` (str): Path to YAML strategy file
-
-**Returns:**
-* ``dict``: Strategy execution results
-
-.. code-block:: python
-
-    result = await client.execute_strategy_file("my_strategy.yaml")
-
-execute_strategy_yaml(yaml_content)  
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Execute a strategy from YAML string content.
-
-**Parameters:**
-* ``yaml_content`` (str): YAML strategy as string
-
-**Returns:**
-* ``dict``: Strategy execution results
-
-.. code-block:: python
-
-    strategy_yaml = '''
-    name: "INLINE_STRATEGY"
-    description: "Strategy defined inline"
-    steps: []
-    '''
     
-    result = await client.execute_strategy_yaml(strategy_yaml)
+    # The client handles both sync and async usage
+    # Sync: client.run("strategy_name") 
+    # Async: await client.execute_strategy("strategy_name", context)
+
+Core Methods
+------------
+
+run(strategy_name, parameters=None, wait=True)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Synchronous method** for simple strategy execution. This is the recommended method for most users.
+
+**Parameters:**
+* ``strategy_name`` (str): Name of the strategy to execute
+* ``parameters`` (dict): Optional parameter overrides for the strategy
+* ``wait`` (bool): If True, wait for completion (default)
+
+**Returns:**
+* ``dict``: Strategy execution results
+
+.. code-block:: python
+
+    # Simple execution
+    result = client.run("protein_harmonization")
+    
+    # With parameters
+    result = client.run("protein_harmonization", parameters={
+        "input_file": "/data/proteins.csv",
+        "threshold": 0.9
+    })
+
+execute_strategy(strategy_name, context)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Asynchronous method** for advanced users who need full control.
+
+**Parameters:**
+* ``strategy_name`` (str): Name of the strategy to execute
+* ``context`` (dict): Execution context with datasets, identifiers, etc.
+
+**Returns:**
+* ``dict``: Strategy execution results
+
+.. code-block:: python
+
+    async with BiomapperClient() as client:
+        context = {
+            "current_identifiers": [],
+            "datasets": {"input_data": [...]},
+            "statistics": {},
+            "output_files": [],
+            "metadata": {"source": "experiment_001"}
+        }
+        result = await client.execute_strategy("protein_harmonization", context)
 
 Error Handling
 --------------
 
-The client raises exceptions for various error conditions:
+The client provides custom exceptions for different error scenarios:
 
 .. code-block:: python
 
-    from biomapper_client import BiomapperClient
-    import httpx
+    from biomapper_client import BiomapperClient, ApiError, NetworkError
     
+    # Synchronous error handling
+    try:
+        result = client.run("protein_harmonization")
+    except ApiError as e:
+        print(f"API error (status {e.status_code}): {e}")
+    except NetworkError as e:
+        print(f"Network error: {e}")
+    
+    # Asynchronous error handling
     async def robust_execution():
         try:
             async with BiomapperClient() as client:
-                result = await client.execute_strategy_file("strategy.yaml")
+                context = {"datasets": {}, "statistics": {}, "output_files": []}
+                result = await client.execute_strategy("protein_harmonization", context)
                 return result
-                
-        except httpx.TimeoutException:
-            print("Strategy execution timed out")
-        except httpx.HTTPStatusError as e:
-            print(f"HTTP error: {e.response.status_code}")
-        except FileNotFoundError:
-            print("Strategy file not found")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
+        except ApiError as e:
+            if e.status_code == 404:
+                print("Strategy not found")
+            elif e.status_code == 422:
+                print("Validation error:", e.response_body)
+            else:
+                print(f"API error: {e}")
+        except NetworkError as e:
+            print(f"Network or timeout error: {e}")
 
 Advanced Usage
 --------------
 
-Custom Headers
-~~~~~~~~~~~~~~
+Running Multiple Strategies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-    # Future feature - authentication headers
-    headers = {"Authorization": "Bearer token123"}
-    async with BiomapperClient(headers=headers) as client:
-        result = await client.execute_strategy_file("strategy.yaml")
-
-Multiple Strategies
-~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
+    # Synchronous execution of multiple strategies
     strategies = [
-        "ukbb_hpa_mapping.yaml",
-        "arivale_qin_mapping.yaml", 
-        "kg2c_spoke_mapping.yaml"
+        "protein_harmonization",
+        "metabolomics_baseline", 
+        "chemistry_normalization"
     ]
     
-    results = []
-    async with BiomapperClient() as client:
-        for strategy in strategies:
-            result = await client.execute_strategy_file(strategy)
-            results.append(result)
-            
-    # Analyze all results
-    for i, result in enumerate(results):
-        print(f"Strategy {strategies[i]}: {result['status']}")
+    client = BiomapperClient()
+    results = {}
+    
+    for strategy_name in strategies:
+        print(f"Running {strategy_name}...")
+        results[strategy_name] = client.run(strategy_name)
+        print(f"Completed with status: {results[strategy_name]['status']}")
+    
+    # Process results
+    for name, result in results.items():
+        if result['status'] == 'success':
+            print(f"{name}: Processed {len(result['results']['datasets'])} datasets")
+
+Using with Jupyter Notebooks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+    # In Jupyter notebooks, use the synchronous interface
+    from biomapper_client import BiomapperClient
+    
+    client = BiomapperClient()
+    
+    # Run with progress display (great for notebooks)
+    result = client.run("metabolomics_harmonization", 
+                       parameters={"threshold": 0.95})
+    
+    # Access results
+    if result['status'] == 'success':
+        datasets = result['results']['datasets']
+        stats = result['results'].get('statistics', {})
+        print(f"Processed {stats.get('total_records', 0)} records")
 
 Response Format
 ---------------
 
-All client methods return a dictionary with this structure:
+The ``run()`` method returns a dictionary with execution results:
 
 .. code-block:: python
 
     {
         "status": "success",           # "success" or "error"
         "results": {                   # Strategy execution results
-            "datasets": {              # Loaded datasets
-                "dataset_name": [...] 
+            "datasets": {              # Named datasets from the workflow
+                "proteins": [...],
+                "normalized": [...],
+                "harmonized": [...] 
             },
-            "metadata": {              # Dataset metadata
-                "dataset_name": {...}
-            }
+            "statistics": {            # Accumulated statistics
+                "total_records": 1000,
+                "processing_time": 45.2,
+                "success_rate": 0.98
+            },
+            "output_files": [          # Generated files
+                "/results/harmonized.csv",
+                "/results/report.html"
+            ]
         },
-        "execution_time": 1.23        # Execution time in seconds
+        "execution_time": 45.2         # Total execution time in seconds
     }
 
 For error responses:
@@ -164,53 +226,83 @@ For error responses:
 
     {
         "status": "error",
-        "message": "Detailed error description",
-        "error_type": "ValidationError"
+        "detail": "Strategy 'unknown_strategy' not found",
+        "error_type": "StrategyNotFoundError",
+        "traceback": "..."            # Stack trace for debugging
     }
 
 Best Practices
 --------------
 
-1. **Always use async context manager**:
+1. **Use the synchronous interface for simplicity**:
    
    .. code-block:: python
    
+       # Recommended for most users
+       client = BiomapperClient()
+       result = client.run("strategy_name")
+
+2. **Only use async when you need concurrency**:
+   
+   .. code-block:: python
+   
+       # For advanced users running multiple strategies in parallel
        async with BiomapperClient() as client:
-           # Use client here
-           pass
+           tasks = [client.execute_strategy(name, context) for name in strategies]
+           results = await asyncio.gather(*tasks)
 
-2. **Handle timeouts for large datasets**:
+3. **Check execution status before processing results**:
    
    .. code-block:: python
    
-       client = BiomapperClient(timeout=21600)  # 6 hours
+       result = client.run("protein_harmonization")
+       if result["status"] == "success":
+           datasets = result["results"]["datasets"]
+           # Process datasets
+       else:
+           print(f"Strategy failed: {result.get('detail')}")
 
-3. **Check execution status**:
+4. **Use parameters to override strategy defaults**:
    
    .. code-block:: python
    
-       result = await client.execute_strategy_file("strategy.yaml")
-       if result["status"] != "success":
-           print(f"Strategy failed: {result.get('message')}")
-
-4. **Log execution times**:
-   
-   .. code-block:: python
-   
-       result = await client.execute_strategy_file("strategy.yaml")
-       print(f"Strategy completed in {result['execution_time']:.2f} seconds")
+       # Override default parameters defined in YAML
+       result = client.run("metabolomics_baseline", parameters={
+           "input_file": "/custom/path/data.csv",
+           "threshold": 0.95,
+           "output_dir": "/custom/output"
+       })
 
 Troubleshooting
 ---------------
 
 **Connection refused**
-  Ensure the API server is running on the specified URL.
+  Ensure the API server is running:
+  
+  .. code-block:: bash
+  
+      cd biomapper-api
+      poetry run uvicorn app.main:app --reload --port 8000
 
 **Timeout errors**
-  Increase the timeout for large datasets or complex strategies.
+  The client automatically sets a 3-hour timeout for large datasets. For extremely large datasets (>100K rows), consider breaking into smaller batches.
 
-**File not found**
-  Check that strategy file paths are correct and files exist.
+**Strategy not found**
+  Check that the strategy exists in ``configs/strategies/`` or verify the strategy name:
+  
+  .. code-block:: bash
+  
+      ls configs/strategies/*.yaml
 
-**YAML parsing errors**
-  Validate YAML syntax before execution.
+**API errors (400/422)**
+  These indicate validation errors. Check the error detail for specific parameter issues:
+  
+  .. code-block:: python
+  
+      try:
+          result = client.run("strategy_name")
+      except ApiError as e:
+          print(f"Validation error: {e.response_body}")
+
+**Network errors**
+  Check your network connection and ensure the API server URL is correct.

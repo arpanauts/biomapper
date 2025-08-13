@@ -1,7 +1,7 @@
 API Reference
 =============
 
-BioMapper provides a comprehensive REST API for strategy execution and job management.
+BioMapper provides a REST API for workflow execution. The API uses standard JSON for request/response bodies, but strategies themselves are defined in YAML format.
 
 .. toctree::
    :maxdepth: 2
@@ -47,17 +47,29 @@ Health Check
 Execute Strategy
 ~~~~~~~~~~~~~~~~
 
+**How it works:**
+- The REST API uses JSON for HTTP request/response bodies (standard for REST APIs)
+- Strategies are defined in YAML format (stored as files or embedded in JSON)
+- The API can either reference pre-defined YAML files or accept YAML content
+
 .. code-block:: bash
 
    POST /api/v2/strategies/execute
+   Content-Type: application/json
    
-   # Request Body
+   # Option 1: Execute pre-defined YAML strategy by name
    {
-     "strategy_name": "protein_harmonization",
+     "strategy_name": "protein_harmonization",  # References a .yaml file
      "parameters": {
        "input_file": "/data/proteins.csv",
        "output_dir": "/results"
      }
+   }
+   
+   # Option 2: Submit YAML strategy content directly (as a string in JSON)
+   {
+     "strategy_yaml": "name: custom_workflow\nsteps:\n  - action:\n      type: LOAD_DATASET_IDENTIFIERS\n      params:\n        file_path: /data/input.csv",
+     "parameters": {}
    }
    
    # Response
