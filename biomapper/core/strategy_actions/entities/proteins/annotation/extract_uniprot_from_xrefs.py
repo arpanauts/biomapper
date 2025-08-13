@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Literal
 from pydantic import BaseModel, Field, validator
 
 from biomapper.core.strategy_actions.registry import register_action
+from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
 
 
 class ExtractUniProtFromXrefsResult(BaseModel):
@@ -34,6 +35,9 @@ class ExtractUniProtFromXrefsParams(BaseModel):
     )
     output_column: str = Field(
         default="uniprot_id", description="Name of the output column for UniProt IDs"
+    )
+    output_key: str = Field(
+        default=None, description="Optional output dataset key. If not provided, modifies dataset in-place"
     )
     handle_multiple: Literal["list", "first", "expand_rows"] = Field(
         default="list",
@@ -58,7 +62,9 @@ class ExtractUniProtFromXrefsParams(BaseModel):
 
 
 @register_action("PROTEIN_EXTRACT_UNIPROT_FROM_XREFS")
-class ProteinExtractUniProtFromXrefsAction:
+class ProteinExtractUniProtFromXrefsAction(
+    TypedStrategyAction[ExtractUniProtFromXrefsParams, ExtractUniProtFromXrefsResult]
+):
     """
     Extract UniProt accession IDs from xrefs fields in protein datasets.
 
@@ -79,9 +85,16 @@ class ProteinExtractUniProtFromXrefsAction:
     def get_params_model(self) -> type[ExtractUniProtFromXrefsParams]:
         """Return the parameters model for this action."""
         return ExtractUniProtFromXrefsParams
+    
+    def get_result_model(self) -> type[ExtractUniProtFromXrefsResult]:
+        """Return the result model for this action."""
+        return ExtractUniProtFromXrefsResult
 
-    def execute_typed(
-        self, params: ExtractUniProtFromXrefsParams, context: Dict[str, Any]
+    async def execute_typed(
+        self, 
+        params: ExtractUniProtFromXrefsParams, 
+        context: Any,  # Changed to Any to accept both dict and context objects
+        **kwargs  # Accept additional kwargs from TypedStrategyAction
     ) -> ExtractUniProtFromXrefsResult:
         """
         Execute the UniProt extraction from xrefs.
@@ -96,11 +109,41 @@ class ProteinExtractUniProtFromXrefsAction:
         Raises:
             KeyError: If dataset_key or xrefs_column not found
         """
+        # Work directly with context - support dict, MockContext, and StrategyExecutionContext
+        # Check if it's a dict or MockContext (has _dict attribute)
+        if isinstance(context, dict):
+            ctx = context
+            if "datasets" not in ctx:
+                ctx["datasets"] = {}
+            if "statistics" not in ctx:
+                ctx["statistics"] = {}
+        elif hasattr(context, '_dict'):
+            # MockContext - use the underlying dict
+            ctx = context._dict
+            if "datasets" not in ctx:
+                ctx["datasets"] = {}
+            if "statistics" not in ctx:
+                ctx["statistics"] = {}
+        else:
+            # For StrategyExecutionContext, adapt it
+            from biomapper.core.context_adapter import adapt_context
+            ctx = adapt_context(context)
+            if "datasets" not in ctx:
+                ctx["datasets"] = {}
+        
         # Validate input
-        if params.dataset_key not in context["datasets"]:
+        if params.dataset_key not in ctx["datasets"]:
             raise KeyError(f"Dataset key '{params.dataset_key}' not found in context")
 
-        df = context["datasets"][params.dataset_key].copy()
+        # Get dataset - handle both DataFrame and list of dicts
+        dataset = ctx["datasets"][params.dataset_key]
+        if isinstance(dataset, pd.DataFrame):
+            df = dataset.copy()
+        elif isinstance(dataset, list):
+            # Convert list of dicts to DataFrame
+            df = pd.DataFrame(dataset)
+        else:
+            raise TypeError(f"Dataset must be DataFrame or list of dicts, got {type(dataset)}")
 
         if params.xrefs_column not in df.columns:
             raise KeyError(f"Column '{params.xrefs_column}' not found in dataset")
@@ -126,8 +169,10 @@ class ProteinExtractUniProtFromXrefsAction:
             else:  # first or expand_rows modes
                 df = df[df[params.output_column].notna()]
 
-        # Update context
-        context["datasets"][params.dataset_key] = df
+        # Update context - either use output_key or modify in-place
+        output_key = params.output_key if params.output_key else params.dataset_key
+        # Store as list of dicts for consistency with LoadDatasetIdentifiersAction
+        ctx["datasets"][output_key] = df.to_dict("records")
 
         # Update statistics
         total_rows = len(df)
@@ -147,18 +192,19 @@ class ProteinExtractUniProtFromXrefsAction:
             else 0.0,
         }
 
-        if "statistics" not in context:
-            context["statistics"] = {}
-        context["statistics"]["uniprot_extraction"] = stats
+        if "statistics" not in ctx:
+            ctx["statistics"] = {}
+        ctx["statistics"]["uniprot_extraction"] = stats
 
         return ExtractUniProtFromXrefsResult(
             success=True,
             message=f"Extracted UniProt IDs from {total_rows} rows, {rows_with_uniprot} with valid IDs",
-            data={params.dataset_key: df},
+            data={output_key: df},
             metadata={
                 "action": "PROTEIN_EXTRACT_UNIPROT_FROM_XREFS",
                 "parameters": params.dict(),
                 "statistics": stats,
+                "output_key": output_key,
             },
         )
 

@@ -1,12 +1,13 @@
 """Export dataset action for saving results to various formats."""
-from typing import Dict, Any
+from typing import Any
 from pathlib import Path
 import pandas as pd
 from pydantic import BaseModel, Field
 
 from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
 from biomapper.core.strategy_actions.registry import register_action
-from biomapper.core.models.action_results import ActionResult
+# Don't use the complex ActionResult from models
+# from biomapper.core.models.action_results import ActionResult
 
 
 class ExportDatasetParams(BaseModel):
@@ -22,32 +23,58 @@ class ExportDatasetParams(BaseModel):
     )
 
 
+class ActionResult(BaseModel):
+    """Simple action result for export operations."""
+    
+    success: bool = Field(..., description="Whether the action succeeded")
+    message: str | None = Field(default=None, description="Optional message")
+    error: str | None = Field(default=None, description="Error message if failed")
+    data: dict[str, Any] = Field(default_factory=dict, description="Additional data")
+
+
 @register_action("EXPORT_DATASET")
 class ExportDatasetAction(TypedStrategyAction[ExportDatasetParams, ActionResult]):
     """Export dataset to file in specified format."""
 
     def get_params_model(self) -> type[ExportDatasetParams]:
         return ExportDatasetParams
+    
+    def get_result_model(self) -> type[ActionResult]:
+        return ActionResult
 
     async def execute_typed(
-        self, params: ExportDatasetParams, context: Dict[str, Any]
+        self, params: ExportDatasetParams, context: Any, **kwargs
     ) -> ActionResult:
         """Export dataset from context to file."""
         try:
+            # Work directly with context - support dict, MockContext, and StrategyExecutionContext
+            if isinstance(context, dict):
+                ctx = context
+            elif hasattr(context, '_dict'):
+                # MockContext - use the underlying dict
+                ctx = context._dict
+            else:
+                # For StrategyExecutionContext, adapt it
+                from biomapper.core.context_adapter import adapt_context
+                ctx = adapt_context(context)
+            
             # Get data from context
-            if params.input_key not in context.get("datasets", {}):
+            if params.input_key not in ctx.get("datasets", {}):
                 return ActionResult(
                     success=False,
                     error=f"Dataset '{params.input_key}' not found in context",
                 )
 
-            data = context["datasets"][params.input_key]
+            data = ctx["datasets"][params.input_key]
 
             # Convert to DataFrame if needed
-            if not isinstance(data, pd.DataFrame):
+            if isinstance(data, pd.DataFrame):
+                df = data
+            elif isinstance(data, list):
+                # List of dicts from other actions
                 df = pd.DataFrame(data)
             else:
-                df = data
+                df = pd.DataFrame(data)
 
             # Filter columns if specified
             if params.columns:
@@ -71,9 +98,9 @@ class ExportDatasetAction(TypedStrategyAction[ExportDatasetParams, ActionResult]
                 )
 
             # Update context with output file info
-            if "output_files" not in context:
-                context["output_files"] = {}
-            context["output_files"][params.input_key] = str(output_path)
+            if "output_files" not in ctx:
+                ctx["output_files"] = {}
+            ctx["output_files"][params.input_key] = str(output_path)
 
             return ActionResult(
                 success=True,

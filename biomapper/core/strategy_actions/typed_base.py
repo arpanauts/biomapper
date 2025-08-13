@@ -147,6 +147,12 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
             "LoadDatasetIdentifiersAction",
             "MergeWithUniprotResolutionAction",
             "CalculateSetOverlapAction",
+            "MergeDatasetsAction",
+            # Add protein actions that work with dict context
+            "ProteinExtractUniProtFromXrefsAction",
+            "ProteinNormalizeAccessionsAction",
+            # Add other actions that work with dict context
+            "ExportDatasetAction",
         ]
 
         if is_mvp_action:
@@ -163,8 +169,14 @@ class TypedStrategyAction(BaseStrategyAction, Generic[TParams, TResult], ABC):
                     if "custom_action_data" not in self._dict:
                         self._dict["custom_action_data"] = {}
                     self._dict["custom_action_data"][key] = value
+                    # Also set at top level for compatibility
+                    self._dict[key] = value
 
                 def get_action_data(self, key: str, default: Any = None) -> Any:
+                    # First check top level
+                    if key in self._dict:
+                        return self._dict[key]
+                    # Then check custom_action_data
                     return self._dict.get("custom_action_data", {}).get(key, default)
 
                 @property

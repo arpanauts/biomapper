@@ -83,7 +83,7 @@ class ProteinNormalizeAccessionsAction(
     ]
 
     async def execute_typed(  # type: ignore[override]
-        self, params: ProteinNormalizeAccessionsParams, context: Dict[str, Any]
+        self, params: ProteinNormalizeAccessionsParams, context: Any, **kwargs
     ) -> ActionResult:
         """Execute the normalization action.
 
@@ -96,20 +96,49 @@ class ProteinNormalizeAccessionsAction(
         """
         logger.info(f"Starting PROTEIN_NORMALIZE_ACCESSIONS with params: {params}")
 
-        # Initialize datasets if not present
-        if "datasets" not in context:
-            context["datasets"] = {}
-        if "statistics" not in context:
-            context["statistics"] = {}
+        # Work directly with context - support dict, MockContext, and StrategyExecutionContext
+        # Check if it's a dict or MockContext (has _dict attribute)
+        if isinstance(context, dict):
+            ctx = context
+            if "datasets" not in ctx:
+                ctx["datasets"] = {}
+            if "statistics" not in ctx:
+                ctx["statistics"] = {}
+        elif hasattr(context, '_dict'):
+            # MockContext - use the underlying dict
+            ctx = context._dict
+            if "datasets" not in ctx:
+                ctx["datasets"] = {}
+            if "statistics" not in ctx:
+                ctx["statistics"] = {}
+        else:
+            # For StrategyExecutionContext, adapt it
+            from biomapper.core.context_adapter import adapt_context
+            ctx = adapt_context(context)
+            if "datasets" not in ctx:
+                ctx["datasets"] = {}
+            if "statistics" not in ctx:
+                ctx["statistics"] = {}
 
         # Validate input dataset exists
-        if params.input_key not in context["datasets"]:
+        if params.input_key not in ctx["datasets"]:
             return ActionResult(
                 success=False,
                 error=f"Input dataset '{params.input_key}' not found in context"
             )
 
-        input_df = context["datasets"][params.input_key].copy()
+        # Get dataset - handle both DataFrame and list of dicts
+        dataset = ctx["datasets"][params.input_key]
+        if isinstance(dataset, pd.DataFrame):
+            input_df = dataset.copy()
+        elif isinstance(dataset, list):
+            # Convert list of dicts to DataFrame
+            input_df = pd.DataFrame(dataset)
+        else:
+            return ActionResult(
+                success=False,
+                error=f"Dataset must be DataFrame or list of dicts, got {type(dataset)}"
+            )
 
         # Validate columns exist
         missing_columns = [
@@ -157,13 +186,13 @@ class ProteinNormalizeAccessionsAction(
             for key, value in col_stats.items():
                 stats[key] += value
 
-        # Store results in context
-        context["datasets"][params.output_key] = input_df
+        # Store results in context as list of dicts for consistency
+        ctx["datasets"][params.output_key] = input_df.to_dict("records")
 
         # Update context statistics
-        if "normalization_stats" not in context["statistics"]:
-            context["statistics"]["normalization_stats"] = {}
-        context["statistics"]["normalization_stats"].update(stats)
+        if "normalization_stats" not in ctx["statistics"]:
+            ctx["statistics"]["normalization_stats"] = {}
+        ctx["statistics"]["normalization_stats"].update(stats)
 
         logger.info(f"Normalization complete. Statistics: {stats}")
 

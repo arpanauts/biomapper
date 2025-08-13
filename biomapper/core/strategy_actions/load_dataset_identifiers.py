@@ -86,11 +86,21 @@ class LoadDatasetIdentifiersAction(
     ) -> StandardActionResult:
         """Execute the action to load dataset identifiers."""
 
-        # Initialize datasets and metadata in custom action data
-        if "datasets" not in context.custom_action_data:
-            context.set_action_data("datasets", {})
-        if "metadata" not in context.custom_action_data:
-            context.set_action_data("metadata", {})
+        # Work directly with context - support both dict and StrategyExecutionContext
+        # For dict context, store directly
+        if isinstance(context, dict):
+            ctx = context
+            if "datasets" not in ctx:
+                ctx["datasets"] = {}
+            if "metadata" not in ctx:
+                ctx["metadata"] = {}
+        else:
+            # For StrategyExecutionContext, use custom_action_data
+            if "datasets" not in context.custom_action_data:
+                context.set_action_data("datasets", {})
+            if "metadata" not in context.custom_action_data:
+                context.set_action_data("metadata", {})
+            ctx = context  # Will handle differently below
 
         logger.info(f"Loading dataset from {params.file_path}")
 
@@ -195,10 +205,13 @@ class LoadDatasetIdentifiersAction(
             # Convert to list of dictionaries for storage
             dataset = df.to_dict("records")
 
-            # Store in context
-            datasets = context.get_action_data("datasets", {})
-            datasets[params.output_key] = dataset
-            context.set_action_data("datasets", datasets)
+            # Store dataset in context - handle both dict and StrategyExecutionContext
+            if isinstance(ctx, dict):
+                ctx["datasets"][params.output_key] = dataset
+            else:
+                datasets = ctx.get_action_data("datasets", {})
+                datasets[params.output_key] = dataset
+                ctx.set_action_data("datasets", datasets)
 
             # Create metadata
             metadata = {
@@ -219,9 +232,13 @@ class LoadDatasetIdentifiersAction(
                     "filter_mode": params.filter_mode,
                 }
 
-            metadata_dict = context.get_action_data("metadata", {})
-            metadata_dict[params.output_key] = metadata
-            context.set_action_data("metadata", metadata_dict)
+            # Store metadata in context - handle both dict and StrategyExecutionContext
+            if isinstance(ctx, dict):
+                ctx["metadata"][params.output_key] = metadata
+            else:
+                metadata_dict = ctx.get_action_data("metadata", {})
+                metadata_dict[params.output_key] = metadata
+                ctx.set_action_data("metadata", metadata_dict)
 
             logger.info(
                 f"Successfully loaded {len(dataset)} rows into context key '{params.output_key}'"
