@@ -51,7 +51,6 @@ mapping_cache.db-*
 metamapper.db-*
 *.prof
 pytest_output.txt
-/qdrant_storage
 !mappings_list.csv
 
 # IDE specific files
@@ -278,4 +277,7 @@ qdrant_indexing_log.txt
 
 # Ignore temporary scripts
 temp_merge_script.sh
+
+# Google Credentials
+google-credentials.json
 

@@ -1,143 +1,158 @@
-name: CHEM_ISR_TO_SPOKE_LOINC_V1_BASE
+name: chem_isr_to_spoke_loinc_v1_base
 description: Maps Israeli10k chemistry tests to SPOKE clinical labs with vendor harmonization
-
 metadata:
-  # Required fields
-  id: "chem_isr_to_spoke_loinc_v1_base"
-  name: "Israeli10k Chemistry to SPOKE Labs via LOINC"
-  version: "1.0.0"
-  created: "2025-08-07"
-  author: "biomapper-team"
-  entity_type: "chemistry"
-  source_dataset: "israeli10k"
-  target_dataset: "spoke"
-  bridge_type: ["loinc", "fuzzy", "harmonization"]
-  
-  # Quality tracking
-  quality_tier: "experimental"
-  validation_status: "pending"
+  id: chem_isr_to_spoke_loinc_v1_base
+  name: Israeli10k Chemistry to SPOKE Labs via LOINC
+  version: 1.0.0
+  created: '2025-08-07'
+  author: biomapper-team
+  entity_type: chemistry
+  source_dataset: israeli10k
+  target_dataset: spoke
+  bridge_type:
+  - loinc
+  - fuzzy
+  - harmonization
+  quality_tier: experimental
+  validation_status: pending
   expected_match_rate: 0.65
   actual_match_rate: null
-  
-  # Data tracking
   source_files:
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_chemistries_metadata.csv"
-      last_updated: "2024-06-01"
-      row_count: 156
-      vendor: "israeli10k"
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_chemistries_metadata.csv
+    last_updated: '2024-06-01'
+    row_count: 156
+    vendor: israeli10k
   target_files:
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/spoke_ontologies/spoke_clinical_labs.csv"
-      last_updated: "2024-10-01"
-      row_count: 15000
-      standard: "loinc"
-  
-  # Optional fields
-  description: "Maps Israeli10k chemistry tests to SPOKE with vendor harmonization and Hebrew translation support"
-  tags: ["chemistry", "loinc", "clinical_labs", "israeli10k", "spoke", "hebrew", "harmonization"]
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/spoke_ontologies/spoke_clinical_labs.csv
+    last_updated: '2024-10-01'
+    row_count: 15000
+    standard: loinc
+  description: Maps Israeli10k chemistry tests to SPOKE with vendor harmonization
+    and Hebrew translation support
+  tags:
+  - chemistry
+  - loinc
+  - clinical_labs
+  - israeli10k
+  - spoke
+  - hebrew
+  - harmonization
   dependencies: []
   supersedes: null
   citation: null
-  
-  # Chemistry-specific metadata
   test_categories:
-    - "metabolic_panel"
-    - "lipid_panel" 
-    - "complete_blood_count"
-    - "liver_function"
-    - "kidney_function"
-    - "inflammatory_markers"
-
+  - metabolic_panel
+  - lipid_panel
+  - complete_blood_count
+  - liver_function
+  - kidney_function
+  - inflammatory_markers
 parameters:
-  output_dir: "/tmp/biomapper_output"
-  match_threshold: 0.80
+  output_dir: /tmp/biomapper_output
+  match_threshold: 0.8
   use_abbreviations: true
-
 steps:
-  - name: load_israeli10k_chemistry
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[0].path}"
-        identifier_column: "test_id"
-        output_key: "israeli10k_chemistry_raw"
-  
-  - name: load_spoke_labs
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.target_files[0].path}"
-        identifier_column: "loinc_code"
-        output_key: "spoke_labs_raw"
-  
-  - name: extract_israeli10k_loinc
-    action:
-      type: CHEMISTRY_EXTRACT_LOINC
-      params:
-        input_key: "israeli10k_chemistry_raw"
-        test_id_column: "test_id"
-        test_name_column: "test_name_hebrew"
-        vendor: "israeli10k"
-        translate_hebrew: true
-        output_key: "israeli10k_chemistry"
-  
-  - name: extract_spoke_loinc
-    action:
-      type: CHEMISTRY_EXTRACT_LOINC
-      params:
-        input_key: "spoke_labs_raw"
-        loinc_column: "loinc_code"
-        validate_format: true
-        output_key: "spoke_labs"
-  
-  - name: filter_valid_loinc
-    action:
-      type: FILTER_DATASET
-      params:
-        input_key: "spoke_labs"
-        filter_criteria:
-          has_valid_loinc: true
-          loinc_pattern: "^\\d{1,5}-\\d$"
-        output_key: "spoke_filtered"
-  
-  - name: vendor_harmonization
-    action:
-      type: CHEMISTRY_VENDOR_HARMONIZATION
-      params:
-        input_key: "israeli10k_chemistry"
-        vendor: "israeli10k"
-        harmonization_rules:
-          glucose: ["glucose", "blood sugar", "GLU"]
-          cholesterol: ["cholesterol", "CHOL", "total cholesterol"]
-          hemoglobin: ["hemoglobin", "HGB", "Hb"]
-          triglycerides: ["triglycerides", "TG", "TRIG"]
-          ldl_cholesterol: ["LDL cholesterol", "LDL-C", "LDL"]
-          hdl_cholesterol: ["HDL cholesterol", "HDL-C", "HDL"]
-          creatinine: ["creatinine", "CREAT", "CR"]
-          urea: ["urea", "BUN", "blood urea nitrogen"]
-        output_key: "israeli10k_harmonized"
-  
-  - name: fuzzy_test_match
-    action:
-      type: CHEMISTRY_FUZZY_TEST_MATCH
-      params:
-        source_key: "israeli10k_harmonized"
-        target_key: "spoke_filtered"
-        test_name_column: "harmonized_name"
-        match_threshold: "${parameters.match_threshold}"
-        use_abbreviations: "${parameters.use_abbreviations}"
-        output_key: "fuzzy_matched"
-  
-  - name: calculate_overlap
-    action:
-      type: CALCULATE_SET_OVERLAP
-      params:
-        dataset1_key: "israeli10k_harmonized"
-        dataset2_key: "spoke_filtered"
-        output_key: "overlap_statistics"
-  
-  - name: export_mapping
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "fuzzy_matched"
-        output_path: "${parameters.output_dir}/israeli10k_spoke_chemistry.tsv"
+- name: load_israeli10k_chemistry
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[0].path}
+      identifier_column: test_id
+      output_key: israeli10k_chemistry_raw
+- name: load_spoke_labs
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.target_files[0].path}
+      identifier_column: loinc_code
+      output_key: spoke_labs_raw
+- name: extract_israeli10k_loinc
+  action:
+    type: CHEMISTRY_EXTRACT_LOINC
+    params:
+      input_key: israeli10k_chemistry_raw
+      test_id_column: test_id
+      test_name_column: test_name_hebrew
+      vendor: israeli10k
+      translate_hebrew: true
+      output_key: israeli10k_chemistry
+- name: extract_spoke_loinc
+  action:
+    type: CHEMISTRY_EXTRACT_LOINC
+    params:
+      input_key: spoke_labs_raw
+      loinc_column: loinc_code
+      validate_format: true
+      output_key: spoke_labs
+- name: filter_valid_loinc
+  action:
+    type: FILTER_DATASET
+    params:
+      input_key: spoke_labs
+      filter_criteria:
+        has_valid_loinc: true
+        loinc_pattern: ^\d{1,5}-\d$
+      output_key: spoke_filtered
+- name: vendor_harmonization
+  action:
+    type: CHEMISTRY_VENDOR_HARMONIZATION
+    params:
+      input_key: israeli10k_chemistry
+      vendor: israeli10k
+      harmonization_rules:
+        glucose:
+        - glucose
+        - blood sugar
+        - GLU
+        cholesterol:
+        - cholesterol
+        - CHOL
+        - total cholesterol
+        hemoglobin:
+        - hemoglobin
+        - HGB
+        - Hb
+        triglycerides:
+        - triglycerides
+        - TG
+        - TRIG
+        ldl_cholesterol:
+        - LDL cholesterol
+        - LDL-C
+        - LDL
+        hdl_cholesterol:
+        - HDL cholesterol
+        - HDL-C
+        - HDL
+        creatinine:
+        - creatinine
+        - CREAT
+        - CR
+        urea:
+        - urea
+        - BUN
+        - blood urea nitrogen
+      output_key: israeli10k_harmonized
+- name: fuzzy_test_match
+  action:
+    type: CHEMISTRY_FUZZY_TEST_MATCH
+    params:
+      source_key: israeli10k_harmonized
+      target_key: spoke_filtered
+      test_name_column: harmonized_name
+      match_threshold: ${parameters.match_threshold}
+      use_abbreviations: ${parameters.use_abbreviations}
+      output_key: fuzzy_matched
+- name: calculate_overlap
+  action:
+    type: CALCULATE_SET_OVERLAP
+    params:
+      dataset1_key: israeli10k_harmonized
+      dataset2_key: spoke_filtered
+      output_key: overlap_statistics
+- name: export_mapping
+  action:
+    type: EXPORT_DATASET
+    params:
+      dataset_key: fuzzy_matched
+      output_path: ${parameters.output_dir}/israeli10k_spoke_chemistry.tsv

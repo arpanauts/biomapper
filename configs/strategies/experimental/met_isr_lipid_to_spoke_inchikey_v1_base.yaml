@@ -1,120 +1,116 @@
-name: Israeli10k Lipidomics to SPOKE via InChIKey
-description: Maps Israeli10k lipidomics to SPOKE metabolites with specialized lipid handling
-
+name: met_isr_lipid_to_spoke_inchikey_v1_base
+description: Maps Israeli10k lipidomics to SPOKE metabolites with specialized lipid
+  handling
 metadata:
-  id: "met_isr_lipid_to_spoke_inchikey_v1_base"
-  name: "Israeli10k Lipidomics to SPOKE via InChIKey"
-  version: "1.0.0"
-  created: "2025-01-08"
-  author: "biomapper-team"
-  entity_type: "metabolites"
-  source_dataset: "israeli10k"
-  target_dataset: "spoke"
-  bridge_type: ["inchikey", "cts"]
-  
-  quality_tier: "experimental"
-  validation_status: "pending"
+  id: met_isr_lipid_to_spoke_inchikey_v1_base
+  name: Israeli10k Lipidomics to SPOKE via InChIKey
+  version: 1.0.0
+  created: '2025-01-08'
+  author: biomapper-team
+  entity_type: metabolites
+  source_dataset: israeli10k
+  target_dataset: spoke
+  bridge_type:
+  - inchikey
+  - cts
+  quality_tier: experimental
+  validation_status: pending
   expected_match_rate: 0.68
   actual_match_rate: null
-  
   source_files:
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_lipidomics_metadata.csv"
-      last_updated: "2024-08-01"
-      row_count: 2834
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_lipidomics_metadata.csv
+    last_updated: '2024-08-01'
+    row_count: 2834
   target_files:
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/spoke_ontologies/spoke_metabolites.csv"
-      last_updated: "2024-09-15"
-      row_count: 25600
-  
-  description: "Maps Israeli10k lipidomics to SPOKE metabolites with specialized lipid nomenclature handling"
-  tags: ["lipidomics", "inchikey", "israeli10k", "spoke", "lipids"]
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/spoke_ontologies/spoke_metabolites.csv
+    last_updated: '2024-09-15'
+    row_count: 25600
+  description: Maps Israeli10k lipidomics to SPOKE metabolites with specialized lipid
+    nomenclature handling
+  tags:
+  - lipidomics
+  - inchikey
+  - israeli10k
+  - spoke
+  - lipids
   dependencies: []
   supersedes: null
   citation: null
-
 parameters:
-  output_dir: "${OUTPUT_DIR:-/tmp/biomapper/metabolites}"
-  cache_dir: "${CACHE_DIR:-/tmp/biomapper/cache}"
+  output_dir: ${OUTPUT_DIR:-/tmp/biomapper/metabolites}
+  cache_dir: ${CACHE_DIR:-/tmp/biomapper/cache}
   use_cache: true
   cache_ttl_days: 30
-
 steps:
-  - name: load_israeli10k_lipids
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[0].path}"
-        identifier_column: "lipid_id"
-        output_key: "israeli10k_lipids_raw"
-  
-  - name: load_spoke
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.target_files[0].path}"
-        identifier_column: "identifiers"
-        output_key: "spoke_metabolites_raw"
-  
-  - name: extract_israeli10k_lipid_ids
-    action:
-      type: METABOLITE_EXTRACT_IDENTIFIERS
-      params:
-        input_key: "israeli10k_lipids_raw"
-        extract_hmdb: true
-        extract_inchikey: true
-        extract_chebi: false
-        extract_kegg: false
-        lipid_specific_parsing: true
-        output_key: "israeli10k_lipids"
-  
-  - name: extract_spoke_ids
-    action:
-      type: METABOLITE_EXTRACT_IDENTIFIERS
-      params:
-        input_key: "spoke_metabolites_raw"
-        identifiers_column: "identifiers"
-        extract_hmdb: true
-        extract_inchikey: true
-        extract_chebi: true
-        extract_kegg: true
-        output_key: "spoke_metabolites"
-  
-  - name: normalize_hmdb
-    action:
-      type: METABOLITE_NORMALIZE_HMDB
-      params:
-        input_key: "israeli10k_lipids"
-        hmdb_column: "lipid_id"
-        target_format: "HMDB0001234"
-        output_key: "israeli10k_lipids_normalized"
-  
-  - name: cts_bridge_lipids
-    action:
-      type: METABOLITE_CTS_BRIDGE
-      params:
-        source_key: "israeli10k_lipids_normalized"
-        target_key: "spoke_metabolites"
-        source_id_type: "hmdb"
-        target_id_type: "inchikey"
-        chunk_size: 500
-        parallel_requests: 3
-        cache_results: true
-        lipid_mode: true
-        fallback_enabled: true
-        output_key: "cts_mapped"
-  
-  - name: calculate_overlap
-    action:
-      type: CALCULATE_SET_OVERLAP
-      params:
-        dataset1_key: "israeli10k_lipids_normalized"
-        dataset2_key: "spoke_metabolites"
-        overlap_method: "inchikey"
-        output_key: "overlap_statistics"
-  
-  - name: export_mapping
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "cts_mapped"
-        output_path: "${parameters.output_dir}/israeli10k_spoke_lipidomics.tsv"
+- name: load_israeli10k_lipids
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[0].path}
+      identifier_column: lipid_id
+      output_key: israeli10k_lipids_raw
+- name: load_spoke
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.target_files[0].path}
+      identifier_column: identifiers
+      output_key: spoke_metabolites_raw
+- name: extract_israeli10k_lipid_ids
+  action:
+    type: METABOLITE_EXTRACT_IDENTIFIERS
+    params:
+      input_key: israeli10k_lipids_raw
+      extract_hmdb: true
+      extract_inchikey: true
+      extract_chebi: false
+      extract_kegg: false
+      lipid_specific_parsing: true
+      output_key: israeli10k_lipids
+- name: extract_spoke_ids
+  action:
+    type: METABOLITE_EXTRACT_IDENTIFIERS
+    params:
+      input_key: spoke_metabolites_raw
+      identifiers_column: identifiers
+      extract_hmdb: true
+      extract_inchikey: true
+      extract_chebi: true
+      extract_kegg: true
+      output_key: spoke_metabolites
+- name: normalize_hmdb
+  action:
+    type: METABOLITE_NORMALIZE_HMDB
+    params:
+      input_key: israeli10k_lipids
+      hmdb_column: lipid_id
+      target_format: HMDB0001234
+      output_key: israeli10k_lipids_normalized
+- name: cts_bridge_lipids
+  action:
+    type: METABOLITE_CTS_BRIDGE
+    params:
+      source_key: israeli10k_lipids_normalized
+      target_key: spoke_metabolites
+      source_id_type: hmdb
+      target_id_type: inchikey
+      chunk_size: 500
+      parallel_requests: 3
+      cache_results: true
+      lipid_mode: true
+      fallback_enabled: true
+      output_key: cts_mapped
+- name: calculate_overlap
+  action:
+    type: CALCULATE_SET_OVERLAP
+    params:
+      dataset1_key: israeli10k_lipids_normalized
+      dataset2_key: spoke_metabolites
+      overlap_method: inchikey
+      output_key: overlap_statistics
+- name: export_mapping
+  action:
+    type: EXPORT_DATASET
+    params:
+      dataset_key: cts_mapped
+      output_path: ${parameters.output_dir}/israeli10k_spoke_lipidomics.tsv

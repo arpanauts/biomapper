@@ -1,0 +1,158 @@
+name: CHEM_UKB_NMR_TO_SPOKE_NIGHTINGALE_V1_BASE
+description: Maps UKBB NMR biomarkers to SPOKE clinical labs via Nightingale reference
+
+metadata:
+  # Required fields
+  id: "chem_ukb_nmr_to_spoke_nightingale_v1_base"
+  name: "UKBB NMR to SPOKE Labs via Nightingale"
+  version: "1.0.0"
+  created: "2025-08-07"
+  author: "biomapper-team"
+  entity_type: "chemistry"
+  source_dataset: "ukbb_nmr"
+  target_dataset: "spoke"
+  bridge_type: ["nightingale", "loinc", "fuzzy"]
+  
+  # Quality tracking
+  quality_tier: "experimental"
+  validation_status: "pending"
+  expected_match_rate: 0.80
+  actual_match_rate: null
+  
+  # Data tracking
+  source_files:
+    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_NMR_Meta.tsv"
+      last_updated: "2024-05-01"
+      row_count: 249
+      platform: "nightingale_nmr"
+  target_files:
+    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/spoke_ontologies/spoke_clinical_labs.csv"
+      last_updated: "2024-10-01"
+      row_count: 15000
+      standard: "loinc"
+  
+  # Optional fields
+  description: "Maps UKBB NMR biomarkers to clinical labs using Nightingale reference mapping"
+  tags: ["chemistry", "nmr", "nightingale", "clinical_labs", "ukbb", "spoke", "biomarkers"]
+  dependencies: ["nightingale_loinc_mapping.csv"]
+  supersedes: null
+  citation: "Nightingale Health NMR platform"
+  
+  # Chemistry-specific metadata
+  test_categories:
+    - "lipoproteins"
+    - "cholesterol_subfractions"
+    - "triglycerides"
+    - "amino_acids"
+    - "glycolysis_metabolites"
+    - "fatty_acids"
+
+parameters:
+  output_dir: "/tmp/biomapper_output"
+  use_loinc_primary: true
+  fallback_to_name: true
+  reference_file: "/procedure/data/local_data/references/nightingale_loinc_mapping.csv"
+
+steps:
+  - name: load_ukbb_nmr
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${metadata.source_files[0].path}"
+        identifier_column: "biomarker"
+        output_key: "ukbb_nmr_raw"
+  
+  - name: load_spoke_labs
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${metadata.target_files[0].path}"
+        identifier_column: "loinc_code"
+        output_key: "spoke_labs_raw"
+  
+  - name: extract_clinical_biomarkers
+    action:
+      type: CHEMISTRY_EXTRACT_LOINC
+      params:
+        input_key: "ukbb_nmr_raw"
+        biomarker_column: "biomarker"
+        filter_clinical_only: true
+        clinical_markers:
+          - "Total_C"
+          - "LDL_C"
+          - "HDL_C"
+          - "Triglycerides"
+          - "Glucose"
+          - "Lactate"
+          - "Pyruvate"
+          - "Citrate"
+          - "Alanine"
+          - "Glutamine"
+          - "Histidine"
+          - "Isoleucine"
+          - "Leucine"
+          - "Valine"
+          - "Phenylalanine"
+          - "Tyrosine"
+          - "Acetate"
+          - "Acetoacetate"
+          - "Acetone"
+          - "Albumin"
+          - "Creatinine"
+        output_key: "clinical_biomarkers"
+  
+  - name: extract_spoke_loinc
+    action:
+      type: CHEMISTRY_EXTRACT_LOINC
+      params:
+        input_key: "spoke_labs_raw"
+        loinc_column: "loinc_code"
+        validate_format: true
+        output_key: "spoke_labs"
+  
+  - name: nightingale_to_loinc
+    action:
+      type: NIGHTINGALE_NMR_MATCH
+      params:
+        input_key: "clinical_biomarkers"
+        biomarker_column: "biomarker"
+        target_format: "loinc"
+        reference_file: "${parameters.reference_file}"
+        mapping_rules:
+          Total_C: ["2093-3", "14647-2"]  # Total cholesterol
+          LDL_C: ["18262-6", "13457-7"]   # LDL cholesterol
+          HDL_C: ["2085-9", "14646-4"]    # HDL cholesterol
+          Triglycerides: ["2571-8", "14927-8"]  # Triglycerides
+          Glucose: ["2345-7", "14749-6"]  # Glucose
+          Lactate: ["2524-7", "14685-2"]  # Lactate
+          Pyruvate: ["5823-1"]            # Pyruvate
+          Alanine: ["1889-8"]             # Alanine
+          Creatinine: ["2160-0"]          # Creatinine
+        output_key: "nightingale_loinc"
+  
+  - name: fuzzy_test_match
+    action:
+      type: CHEMISTRY_FUZZY_TEST_MATCH
+      params:
+        source_key: "nightingale_loinc"
+        target_key: "spoke_labs"
+        use_loinc_primary: "${parameters.use_loinc_primary}"
+        fallback_to_name: "${parameters.fallback_to_name}"
+        match_threshold: 0.85
+        output_key: "matched_labs"
+  
+  - name: calculate_overlap
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        dataset1_key: "clinical_biomarkers"
+        dataset2_key: "spoke_labs"
+        output_key: "overlap_statistics"
+  
+  - name: export_mapping
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "matched_labs"
+        output_path: "${parameters.output_dir}/ukbb_nmr_spoke_chemistry.tsv"
+        include_nightingale_mapping: true

@@ -1,0 +1,128 @@
+name: UKBB NMR to KG2c via Nightingale Reference
+description: Maps UKBB NMR metabolites to KG2c using Nightingale reference biomarker matching
+
+metadata:
+  id: "met_ukb_nmr_to_kg2c_nightingale_v1_base"
+  name: "UKBB NMR to KG2c via Nightingale Reference"
+  version: "1.0.0"
+  created: "2025-01-08"
+  author: "biomapper-team"
+  entity_type: "metabolites"
+  source_dataset: "ukbb"
+  target_dataset: "kg2c"
+  bridge_type: ["nightingale", "hmdb", "cts"]
+  
+  quality_tier: "experimental"
+  validation_status: "pending"
+  expected_match_rate: 0.82
+  actual_match_rate: null
+  
+  source_files:
+    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_NMR_Meta.tsv"
+      last_updated: "2024-09-01"
+      row_count: 249
+  target_files:
+    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/kg2.10.2c_ontologies/kg2c_metabolites.csv"
+      last_updated: "2024-10-01"
+      row_count: 28000
+  
+  description: "Maps UKBB NMR metabolites to KG2c using Nightingale biomarker reference with CTS bridge enhancement"
+  tags: ["nmr", "nightingale", "ukbb", "kg2c", "biomarkers"]
+  dependencies: []
+  supersedes: null
+  citation: null
+
+parameters:
+  output_dir: "${OUTPUT_DIR:-/tmp/biomapper/metabolites}"
+  cache_dir: "${CACHE_DIR:-/tmp/biomapper/cache}"
+  use_cache: true
+  cache_ttl_days: 30
+  nightingale_reference_file: "/procedure/data/local_data/references/nightingale_nmr_reference.csv"
+
+steps:
+  - name: load_ukbb_nmr
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${metadata.source_files[0].path}"
+        identifier_column: "biomarker"
+        output_key: "ukbb_nmr_raw"
+  
+  - name: load_kg2c
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${metadata.target_files[0].path}"
+        identifier_column: "xrefs"
+        output_key: "kg2c_metabolites_raw"
+  
+  - name: extract_ukbb_ids
+    action:
+      type: METABOLITE_EXTRACT_IDENTIFIERS
+      params:
+        input_key: "ukbb_nmr_raw"
+        biomarker_column: "biomarker"
+        extract_hmdb: true
+        extract_inchikey: false
+        nmr_specific: true
+        output_key: "ukbb_nmr_metabolites"
+  
+  - name: extract_kg2c_ids
+    action:
+      type: METABOLITE_EXTRACT_IDENTIFIERS
+      params:
+        input_key: "kg2c_metabolites_raw"
+        xrefs_column: "xrefs"
+        extract_hmdb: true
+        extract_inchikey: true
+        extract_chebi: true
+        extract_kegg: true
+        output_key: "kg2c_metabolites"
+  
+  - name: nightingale_match
+    action:
+      type: NIGHTINGALE_NMR_MATCH
+      params:
+        input_key: "ukbb_nmr_metabolites"
+        biomarker_column: "biomarker"
+        reference_file: "${parameters.nightingale_reference_file}"
+        match_threshold: 0.85
+        fuzzy_matching: true
+        output_key: "nightingale_matched"
+  
+  - name: normalize_hmdb
+    action:
+      type: METABOLITE_NORMALIZE_HMDB
+      params:
+        input_key: "nightingale_matched"
+        hmdb_column: "hmdb_id"
+        target_format: "HMDB0001234"
+        output_key: "ukbb_normalized"
+  
+  - name: cts_bridge
+    action:
+      type: METABOLITE_CTS_BRIDGE
+      params:
+        source_key: "ukbb_normalized"
+        target_key: "kg2c_metabolites"
+        source_id_type: "hmdb"
+        target_id_type: "inchikey"
+        chunk_size: 100
+        parallel_requests: 3
+        cache_results: true
+        output_key: "cts_mapped"
+  
+  - name: calculate_overlap
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        dataset1_key: "ukbb_normalized"
+        dataset2_key: "kg2c_metabolites"
+        output_key: "overlap_statistics"
+  
+  - name: export_mapping
+    action:
+      type: EXPORT_DATASET
+      params:
+        dataset_key: "cts_mapped"
+        output_path: "${parameters.output_dir}/ukbb_nmr_kg2c_metabolites.tsv"
