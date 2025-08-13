@@ -7,7 +7,7 @@ Written using TDD approach - tests first, implementation second.
 
 import pytest
 import pandas as pd
-from typing import Dict, Any, List
+from typing import Dict, Any
 from unittest.mock import Mock, AsyncMock, patch
 
 from biomapper.core.strategy_actions.entities.metabolites.matching.multi_bridge import (

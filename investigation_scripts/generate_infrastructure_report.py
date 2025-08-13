@@ -3,23 +3,23 @@
 Generate comprehensive infrastructure dependencies report for biomapper.
 """
 
-from pathlib import Path
 from datetime import datetime
-import json
+
 
 def read_report_file(file_path: str) -> str:
     """Read a report file and return its contents."""
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             return f.read()
     except FileNotFoundError:
         return f"Report file not found: {file_path}"
     except Exception as e:
         return f"Error reading {file_path}: {e}"
 
+
 def generate_executive_summary() -> str:
     """Generate executive summary of infrastructure issues."""
-    
+
     return """# Biomapper Infrastructure Dependencies Investigation Report
 
 **Generated**: {timestamp}
@@ -68,25 +68,26 @@ This comprehensive investigation has identified **critical infrastructure depend
 
 """.format(timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"))
 
+
 def generate_comprehensive_report() -> str:
     """Generate the comprehensive infrastructure report."""
-    
+
     report_files = {
-        'qdrant': '/tmp/qdrant_dependency_report.md',
-        'vector_assessment': '/tmp/vector_store_assessment.md', 
-        'file_paths': '/tmp/file_path_analysis_report.md',
-        'api_dependencies': '/tmp/api_dependency_report.md',
-        'reference_audit': '/tmp/reference_audit_report.md'
+        "qdrant": "/tmp/qdrant_dependency_report.md",
+        "vector_assessment": "/tmp/vector_store_assessment.md",
+        "file_paths": "/tmp/file_path_analysis_report.md",
+        "api_dependencies": "/tmp/api_dependency_report.md",
+        "reference_audit": "/tmp/reference_audit_report.md",
     }
-    
+
     # Read all individual reports
     reports = {}
     for name, file_path in report_files.items():
         reports[name] = read_report_file(file_path)
-    
+
     # Generate comprehensive report
     comprehensive_report = generate_executive_summary()
-    
+
     comprehensive_report += """
 ---
 
@@ -95,7 +96,7 @@ def generate_comprehensive_report() -> str:
 The following sections contain detailed analysis results for each infrastructure component investigated.
 
 """
-    
+
     # Add Qdrant analysis
     comprehensive_report += """
 ## 1. Qdrant Vector Database Analysis
@@ -105,9 +106,9 @@ The following sections contain detailed analysis results for each infrastructure
 **Affected Strategies**: 4 strategies requiring vector operations
 
 """
-    comprehensive_report += reports['qdrant']
-    
-    # Add Vector Store Assessment  
+    comprehensive_report += reports["qdrant"]
+
+    # Add Vector Store Assessment
     comprehensive_report += """
 
 ---
@@ -118,8 +119,8 @@ The following sections contain detailed analysis results for each infrastructure
 **Recommendation**: Implement in-memory fallback (Score: 9.5/10)
 
 """
-    comprehensive_report += reports['vector_assessment']
-    
+    comprehensive_report += reports["vector_assessment"]
+
     # Add File Path Analysis
     comprehensive_report += """
 
@@ -132,8 +133,8 @@ The following sections contain detailed analysis results for each infrastructure
 **Issues Found**: 71 path problems across strategies
 
 """
-    comprehensive_report += reports['file_paths']
-    
+    comprehensive_report += reports["file_paths"]
+
     # Add API Dependencies
     comprehensive_report += """
 
@@ -146,8 +147,8 @@ The following sections contain detailed analysis results for each infrastructure
 **Failed APIs**: Chemical Translation Service (CTS)
 
 """
-    comprehensive_report += reports['api_dependencies']
-    
+    comprehensive_report += reports["api_dependencies"]
+
     # Add Reference File Audit
     comprehensive_report += """
 
@@ -160,8 +161,8 @@ The following sections contain detailed analysis results for each infrastructure
 **Critical Files**: 316 missing critical references
 
 """
-    comprehensive_report += reports['reference_audit']
-    
+    comprehensive_report += reports["reference_audit"]
+
     # Add implementation plan
     comprehensive_report += """
 
@@ -314,30 +315,31 @@ mkdir -p /tmp/biomapper/output
 
 *This report provides the foundation for making biomapper production-ready by addressing all identified infrastructure dependencies.*
 """
-    
+
     return comprehensive_report
+
 
 def main():
     """Main function to generate comprehensive report."""
-    
+
     print("Generating comprehensive infrastructure dependencies report...")
-    
+
     report = generate_comprehensive_report()
-    
+
     # Save to multiple locations for accessibility
     output_files = [
-        '/tmp/biomapper_infrastructure_dependencies_report.md',
-        '/home/ubuntu/biomapper/configs/INFRASTRUCTURE_REPORT.md'
+        "/tmp/biomapper_infrastructure_dependencies_report.md",
+        "/home/ubuntu/biomapper/configs/INFRASTRUCTURE_REPORT.md",
     ]
-    
+
     for output_file in output_files:
         try:
-            with open(output_file, 'w') as f:
+            with open(output_file, "w") as f:
                 f.write(report)
             print(f"Report saved to: {output_file}")
         except Exception as e:
             print(f"Could not save to {output_file}: {e}")
-    
+
     print("\nComprehensive infrastructure dependencies report generated!")
     print("=" * 60)
     print("EXECUTIVE SUMMARY:")
@@ -346,6 +348,7 @@ def main():
     print("🎯 4 major infrastructure categories need fixes")
     print("⏱️  Estimated resolution: 2-3 weeks")
     print("=" * 60)
+
 
 if __name__ == "__main__":
     main()

@@ -130,7 +130,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
 
         assert result.success is True
@@ -162,7 +162,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
 
         assert result.success is True
@@ -203,7 +203,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
 
         assert result.success is True
@@ -252,7 +252,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
 
         assert result.success is True
@@ -290,7 +290,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
 
         assert result.success is True
@@ -328,7 +328,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
 
         assert result.success is True
@@ -364,7 +364,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
 
         assert result.success is True
@@ -408,7 +408,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
 
         assert result.success is True
@@ -446,7 +446,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
 
         assert result.success is True
@@ -476,7 +476,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
 
         assert result.success is True
@@ -513,7 +513,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
 
         assert result.success is False
@@ -541,7 +541,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
 
         # Should handle gracefully - create output with NaN values
@@ -588,7 +588,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
         execution_time = time.time() - start_time
 
@@ -659,7 +659,7 @@ class TestMetaboliteExtractIdentifiersAction:
             params=params,
             source_endpoint=None,
             target_endpoint=None,
-            context=mock_context
+            context=mock_context,
         )
 
         assert result.success is True
