@@ -1,7 +1,7 @@
 API Reference
 =============
 
-BioMapper provides a REST API for workflow execution. The API uses standard JSON for request/response bodies, but strategies themselves are defined in YAML format.
+BioMapper provides a comprehensive REST API for biological data harmonization workflow execution. The API uses standard JSON for request/response bodies, with strategies defined in YAML format for human readability and maintainability.
 
 .. toctree::
    :maxdepth: 2
@@ -23,9 +23,9 @@ Quick Start
 
 **Access API Documentation:**
 
-* Interactive docs: http://localhost:8000/docs
-* ReDoc: http://localhost:8000/redoc
-* OpenAPI schema: http://localhost:8000/openapi.json
+* Interactive docs: http://localhost:8000/api/docs
+* OpenAPI schema: http://localhost:8000/api/openapi.json
+* Root endpoint: http://localhost:8000/
 
 Core Endpoints
 --------------
@@ -35,13 +35,17 @@ Health Check
 
 .. code-block:: bash
 
-   GET /health
+   GET /api/health
    
    # Response
    {
      "status": "healthy",
      "version": "0.5.2",
-     "timestamp": "2024-08-13T10:00:00Z"
+     "timestamp": "2024-08-13T10:00:00Z",
+     "resources": {
+       "database": "connected",
+       "mapper_service": "initialized"
+     }
    }
 
 Execute Strategy
@@ -66,9 +70,19 @@ Execute Strategy
      }
    }
    
-   # Option 2: Submit YAML strategy content directly (as a string in JSON)
+   # Option 2: Submit strategy content directly (as a dict in JSON)
    {
-     "strategy_yaml": "name: custom_workflow\nsteps:\n  - action:\n      type: LOAD_DATASET_IDENTIFIERS\n      params:\n        file_path: /data/input.csv",
+     "strategy": {
+       "name": "custom_workflow",
+       "steps": [
+         {
+           "action": {
+             "type": "LOAD_DATASET_IDENTIFIERS",
+             "params": {"file_path": "/data/input.csv"}
+           }
+         }
+       ]
+     },
      "parameters": {}
    }
    
@@ -84,18 +98,17 @@ Get Job Status
 
 .. code-block:: bash
 
-   GET /api/v2/jobs/{job_id}
+   GET /api/jobs/{job_id}/status
    
    # Response
    {
-     "job_id": "job_123",
+     "job_id": "550e8400-e29b-41d4-a716-446655440000",
      "status": "completed",
      "progress": 100,
-     "result": {
-       "success": true,
-       "datasets": {...},
-       "statistics": {...}
-     }
+     "current_step": "export_results",
+     "total_steps": 5,
+     "started_at": "2024-08-13T10:00:00Z",
+     "completed_at": "2024-08-13T10:01:00Z"
    }
 
 Python Client Usage
@@ -143,11 +156,11 @@ Asynchronous
 Authentication
 --------------
 
-Currently, BioMapper API does not require authentication for local deployments. For production deployments, consider implementing:
+Currently, BioMapper API does not require authentication for local deployments. The API supports optional API key authentication through the ``BIOMAPPER_API_KEY`` environment variable. For production deployments, consider implementing:
 
-* API key authentication
-* OAuth2 with JWT tokens
-* Basic authentication with HTTPS
+* API key authentication (partially supported)
+* OAuth2 with JWT tokens (future)
+* Basic authentication with HTTPS (future)
 
 Rate Limiting
 -------------
@@ -196,17 +209,19 @@ Error Response Format:
      ]
    }
 
-WebSocket Support
------------------
+Real-time Updates Support
+-------------------------
 
-Real-time progress updates via Server-Sent Events (SSE):
+Progress updates via Server-Sent Events (SSE) and WebSocket connections:
 
 .. code-block:: python
 
    import requests
+   import json
    
+   # SSE endpoint for real-time progress
    response = requests.get(
-       f"http://localhost:8000/api/v2/jobs/{job_id}/stream",
+       f"http://localhost:8000/api/jobs/{job_id}/events",
        stream=True
    )
    
@@ -214,3 +229,19 @@ Real-time progress updates via Server-Sent Events (SSE):
        if line:
            event = json.loads(line.decode('utf-8'))
            print(f"Progress: {event['progress']}%")
+           print(f"Current step: {event.get('current_step', 'N/A')}")
+
+---
+
+Verification Sources
+~~~~~~~~~~~~~~~~~~~~
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+
+- ``biomapper-api/app/main.py`` (API initialization and route configuration)
+- ``biomapper-api/app/api/routes/strategies_v2_simple.py`` (V2 strategy execution endpoints)
+- ``biomapper-api/app/api/routes/jobs.py`` (Job management endpoints)
+- ``biomapper-api/pyproject.toml`` (API dependencies and version)
+- ``biomapper_client/biomapper_client/client_v2.py`` (Client implementation)
+- ``CLAUDE.md`` (Project conventions and commands)

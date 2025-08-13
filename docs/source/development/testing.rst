@@ -226,7 +226,7 @@ API Integration Test
    # tests/integration/api/test_strategy_execution.py
    import pytest
    from fastapi.testclient import TestClient
-   from biomapper_api.main import app
+   from app.main import app
    
    @pytest.mark.integration
    def test_execute_strategy_endpoint():
@@ -478,3 +478,18 @@ Best Practices
 8. **Use Markers** - Mark slow tests, integration tests
 9. **Clean Up** - Remove temp files, close connections
 10. **Document Complex Tests** - Add comments for complex logic
+
+---
+
+Verification Sources
+--------------------
+
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+
+- ``/home/ubuntu/biomapper/tests/`` (test suite structure)
+- ``/home/ubuntu/biomapper/pyproject.toml`` (test dependencies and configuration)
+- ``/home/ubuntu/biomapper/CLAUDE.md`` (test commands and practices)
+- ``/home/ubuntu/biomapper/Makefile`` (test-related make commands)
+- ``/home/ubuntu/biomapper/.github/workflows/`` (CI configuration)

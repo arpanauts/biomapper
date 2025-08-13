@@ -1,28 +1,53 @@
 BioMapper Documentation
 =======================
 
-**BioMapper** is a YAML-based workflow platform built on a self-registering action system. While designed for biological data harmonization, its architecture supports any workflow that can be expressed as a sequence of actions operating on shared data.
+BioMapper is a YAML-based workflow platform built on a self-registering action system. While originally designed for biological data harmonization (proteins, metabolites, chemistry), its extensible architecture supports any workflow that can be expressed as a sequence of actions operating on shared execution context.
+
+🎯 **Key Features**
+-------------------
+
+* **Self-registering action system** - Actions automatically register via decorators
+* **Type-safe parameters** - Pydantic models provide validation and IDE support  
+* **YAML workflow definition** - Declarative strategies without coding
+* **Real-time progress tracking** - SSE events for long-running jobs
+* **Extensible architecture** - Easy to add new actions and entity types
+* **AI-ready design** - Built for integration with Claude Code and LLM assistance
+
+🚀 **Quick Start**
+------------------
 
 .. code-block:: bash
 
-   # Quick Install
+   # Install with Poetry
    poetry install --with dev,docs,api
    poetry shell
    
-   # Optional: Start API Server
+   # Run a strategy
+   poetry run python scripts/run_strategy.py --strategy test_metabolite_simple
+   
+   # Or start the API server
    cd biomapper-api && uvicorn app.main:app --reload
 
-Key Features
-------------
+.. code-block:: python
 
-* **📝 YAML Strategies** - Define workflows as YAML configurations
-* **🔌 Self-Registering Actions** - Extensible plugin architecture  
-* **🧬 Biological Data Focus** - Specialized actions for proteins, metabolites, chemistry
-* **🔄 General Workflow Support** - Any sequential data processing pipeline
-* **🚀 Multiple Interfaces** - Python library, REST API, CLI
-* **✅ Type Safety** - Pydantic validation throughout
+   # Python client usage
+   from biomapper_client import BiomapperClient
+   
+   client = BiomapperClient()
+   result = client.run("test_metabolite_simple", parameters={
+       "input_file": "/data/metabolites.csv"
+   })
 
-**Note on the API:** The REST API uses standard JSON for HTTP communication but executes YAML-defined strategies. Think of it as a JSON wrapper around YAML workflows.
+🏗️ **Architecture**
+--------------------
+
+BioMapper follows a modern microservices architecture with three layers:
+
+1. **Client Layer** - Python client library for programmatic access
+2. **API Layer** - FastAPI service with job management and SSE progress
+3. **Core Layer** - Self-registering actions and strategy execution engine
+
+The system uses a **registry pattern** where actions self-register at import time, a **strategy pattern** for YAML-based workflow configuration, and a **pipeline pattern** for data flow through shared execution context.
 
 .. toctree::
    :maxdepth: 2

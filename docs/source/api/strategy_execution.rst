@@ -6,7 +6,7 @@ Detailed guide for executing YAML strategies through the BioMapper API.
 Overview
 --------
 
-BioMapper strategies are YAML-defined workflows that execute as background jobs. The API provides comprehensive job management including execution, monitoring, pausing, and checkpointing.
+BioMapper strategies are YAML-defined workflows that execute as background jobs. The API provides comprehensive job management including execution, monitoring, pausing, and checkpointing. Strategies are executed using the MinimalStrategyService with a shared execution context that flows through all actions.
 
 Strategy Definition
 -------------------
@@ -65,6 +65,10 @@ Execution Workflow
           "parameters": {
               "input_file": "/data/mydata.csv",
               "threshold": 0.9
+          },
+          "options": {
+              "checkpoint_enabled": false,
+              "timeout_seconds": 3600
           }
       })
       job_id = response.json()["job_id"]
@@ -78,16 +82,18 @@ Execution Workflow
 
 3. **Strategy Loading**
    
-   - YAML file loaded from ``configs/strategies/``
+   - YAML file loaded from ``/home/ubuntu/biomapper/configs/strategies/`` (configurable)
    - Parameters substituted (``${parameters.key}``)
-   - Environment variables resolved (``${env.VAR}``)
+   - Environment variables resolved (``${env.VAR}`` or ``${VAR}``)
+   - Default values supported (``${parameters.key:-default}``)
    - Strategy validated for required fields
 
 4. **Action Execution**
    
-   - Actions executed sequentially
+   - Actions executed sequentially by MinimalStrategyService
    - Each action receives shared execution context
-   - Context contains: ``datasets``, ``statistics``, ``output_files``
+   - Context contains: ``datasets``, ``statistics``, ``output_files``, ``current_identifiers``
+   - Actions self-register via ``@register_action`` decorator
    - Actions modify context in-place
 
 5. **Progress Tracking**
@@ -99,8 +105,9 @@ Execution Workflow
       print(f"Progress: {status.json()['progress']}%")
       
       # Or use SSE for real-time updates
-      for event in client.stream(f"/api/jobs/{job_id}/stream"):
+      for event in client.stream(f"/api/jobs/{job_id}/events"):
           print(f"Step: {event['current_step']}")
+          print(f"Progress: {event['progress']}%")
 
 6. **Result Retrieval**
    
@@ -351,8 +358,9 @@ Real-time progress via Server-Sent Events:
    import json
    import requests
    
+   # SSE endpoint for streaming updates
    response = requests.get(
-       f"http://localhost:8000/api/jobs/{job_id}/stream",
+       f"http://localhost:8000/api/jobs/{job_id}/events",
        stream=True
    )
    
@@ -363,6 +371,9 @@ Real-time progress via Server-Sent Events:
                print(f"Progress: {event['percentage']}%")
            elif event["type"] == "step_complete":
                print(f"Completed: {event['step_name']}")
+   
+   # WebSocket endpoint also available:
+   # ws://localhost:8000/api/jobs/{job_id}/ws
 
 Best Practices
 --------------
@@ -415,3 +426,19 @@ Example: Complete Workflow
    
    # Run the workflow
    result = asyncio.run(run_workflow())
+
+---
+
+Verification Sources
+~~~~~~~~~~~~~~~~~~~~
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+
+- ``biomapper-api/app/api/routes/strategies_v2_simple.py`` (Strategy execution endpoints)
+- ``biomapper-api/app/api/routes/jobs.py`` (Job management and control)
+- ``biomapper-api/app/services/persistent_execution_engine.py`` (Execution engine implementation)
+- ``biomapper/core/minimal_strategy_service.py`` (Strategy loading and execution)
+- ``biomapper/core/strategy_actions/registry.py`` (Action registration system)
+- ``biomapper_client/biomapper_client/client_v2.py`` (Client progress tracking)
+- ``CLAUDE.md`` (Strategy execution patterns)

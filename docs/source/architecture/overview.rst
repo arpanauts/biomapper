@@ -1,15 +1,17 @@
-BioMapper Architecture
-======================
+BioMapper Architecture Overview
+===============================
 
-BioMapper is a workflow platform with an extensible architecture designed for data processing pipelines, with specialized support for biological data harmonization.
+BioMapper is a YAML-based workflow platform built on a self-registering action system. While originally designed for biological data harmonization (proteins, metabolites, chemistry), its extensible architecture supports any workflow that can be expressed as a sequence of actions operating on shared execution context.
 
 Core Design Principles
 ----------------------
 
-* **Modularity** - Each action is independent and reusable
-* **Type Safety** - Pydantic models ensure data validation
-* **Extensibility** - New actions self-register without core changes
-* **Reproducibility** - YAML strategies ensure consistent execution
+* **Modularity** - Each action is independent, reusable, and self-contained
+* **Type Safety** - Pydantic models provide runtime validation and compile-time type checking
+* **Extensibility** - New actions self-register via decorators without modifying core code
+* **Reproducibility** - YAML strategies ensure consistent, version-controlled execution
+* **Fault Tolerance** - Job persistence and checkpointing enable recovery from failures
+* **AI-Ready** - Built for integration with Claude Code and LLM-assisted development
 
 System Architecture
 -------------------
@@ -45,13 +47,14 @@ Component Details
 **ACTION_REGISTRY**
   Global dictionary mapping action names to classes. Actions self-register at import time using the ``@register_action`` decorator.
 
-**MinimalStrategyService**
+**MinimalStrategyService** (``biomapper/core/services/strategy_service_v2_minimal.py``)
   Lightweight execution engine that:
   
-  * Loads YAML strategies from ``configs/strategies/``
-  * Executes actions sequentially
+  * Loads YAML strategies from ``configs/strategies/`` at runtime
+  * Executes actions sequentially with error handling
   * Manages execution context throughout workflow
-  * No database dependencies
+  * Supports variable substitution (parameters, environment, metadata)
+  * No database dependencies - pure business logic
 
 **Execution Context**
   Shared state dictionary containing:
@@ -61,13 +64,14 @@ Component Details
   * ``statistics`` - Accumulated metrics
   * ``output_files`` - Generated file paths
 
-**TypedStrategyAction**
-  Base class providing:
+**TypedStrategyAction** (``biomapper/core/strategy_actions/typed_base.py``)
+  Generic base class providing:
   
-  * Pydantic parameter validation
-  * Standardized execution interface
-  * Type-safe result handling
-  * Automatic error handling
+  * Pydantic parameter validation with field descriptions
+  * Standardized async execution interface
+  * Type-safe result handling with ActionResult
+  * Automatic error handling and context preservation
+  * Backward compatibility with dict-based interface
 
 Data Flow
 ---------
@@ -97,41 +101,87 @@ Actions are organized by biological entity type:
     ├── utils/              # General utilities
     └── io/                 # Import/export actions
 
-Example Action
---------------
+Example Action Implementation
+-----------------------------
 
 .. code-block:: python
 
     from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
     from biomapper.core.strategy_actions.registry import register_action
-    from pydantic import BaseModel
+    from pydantic import BaseModel, Field
+    from typing import Dict, Any
     
     class MyActionParams(BaseModel):
-        input_key: str
-        threshold: float = 0.8
+        input_key: str = Field(..., description="Input dataset key")
+        threshold: float = Field(0.8, ge=0.0, le=1.0, description="Filter threshold")
+        output_key: str = Field(..., description="Output dataset key")
     
     @register_action("MY_ACTION")
     class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
-        def get_params_model(self):
+        """Process biological data with threshold filtering."""
+        
+        def get_params_model(self) -> type[MyActionParams]:
             return MyActionParams
         
-        async def execute_typed(self, params, context):
-            # Process data from context
-            data = context["datasets"][params.input_key]
-            # ... processing logic ...
-            return ActionResult(success=True)
+        async def execute_typed(
+            self, 
+            params: MyActionParams, 
+            context: Dict[str, Any]
+        ) -> ActionResult:
+            # Access input data from shared context
+            input_data = context["datasets"].get(params.input_key, [])
+            
+            # Apply threshold filtering
+            filtered = [item for item in input_data 
+                       if item.get("score", 0) >= params.threshold]
+            
+            # Store results in context for next action
+            context["datasets"][params.output_key] = filtered
+            
+            return ActionResult(
+                success=True,
+                message=f"Filtered {len(input_data)} to {len(filtered)} items",
+                data={"filtered_count": len(filtered)}
+            )
 
-Key Patterns
-------------
+Key Architectural Patterns
+--------------------------
 
 **Registry Pattern**
-  Actions self-register, eliminating manual registration and enabling plugin-style extensibility.
+  Actions self-register at import time via ``@register_action`` decorator, eliminating manual registration and enabling plugin-style extensibility.
 
 **Strategy Pattern**
-  YAML configurations define workflows as pluggable action sequences.
+  YAML configurations define workflows as pluggable action sequences, separating business logic from orchestration.
 
 **Pipeline Pattern**
-  Actions process data through shared context, enabling complex multi-step workflows.
+  Actions process data through shared execution context, enabling complex multi-step workflows with data persistence between steps.
 
 **Type Safety Pattern**
-  Pydantic models provide compile-time and runtime validation throughout the system.
+  Pydantic models provide compile-time type hints and runtime validation throughout the system, catching errors early.
+
+**Repository Pattern**
+  SQLite persistence layer abstracts job storage, enabling checkpoint recovery and progress tracking.
+
+Performance Considerations
+--------------------------
+
+* **Chunking** - Large datasets processed in configurable chunks (default 1000 rows)
+* **Async Execution** - Actions run asynchronously for better throughput
+* **Caching** - Results cached in SQLite for recovery and reuse
+* **SSE Streaming** - Real-time progress updates without polling
+* **Memory Management** - Streaming file operations for large datasets
+
+---
+
+Verification Sources
+--------------------
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+
+* ``biomapper/core/services/strategy_service_v2_minimal.py`` (Core execution engine)
+* ``biomapper/core/strategy_actions/typed_base.py`` (Base action class)
+* ``biomapper/core/strategy_actions/registry.py`` (Action registry)
+* ``biomapper-api/app/core/mapper_service.py`` (Job orchestration)
+* ``README.md`` (Architecture overview)
+* ``CLAUDE.md`` (Design patterns and guidelines)

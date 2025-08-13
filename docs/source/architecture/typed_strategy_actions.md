@@ -1,6 +1,6 @@
 # Typed Strategy Actions
 
-This document describes the typed strategy action system in Biomapper, which provides type-safe, validated, and IDE-friendly strategy actions while maintaining backward compatibility with existing YAML strategies.
+This document describes the typed strategy action system in BioMapper, which provides type-safe, validated, and IDE-friendly strategy actions while maintaining backward compatibility with existing YAML strategies.
 
 ## Overview
 
@@ -293,4 +293,18 @@ if 'error' in result['details']:
 
 The typed strategy action system provides a modern, type-safe approach to implementing strategy actions while maintaining full backward compatibility. It improves developer experience, reduces errors, and provides better tooling support, all while ensuring existing YAML strategies continue to work unchanged.
 
-The incremental migration approach allows for gradual adoption, and the clear benefits make it an attractive upgrade path for the Biomapper ecosystem.
+The self-registering action pattern combined with Pydantic validation creates a robust, extensible system that's both powerful for developers and accessible for researchers creating YAML workflows.
+
+---
+
+## Verification Sources
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+
+* `biomapper/core/strategy_actions/typed_base.py` (TypedStrategyAction implementation)
+* `biomapper/core/strategy_actions/registry.py` (Action registration system)
+* `biomapper/core/strategy_actions/entities/` (Entity-specific typed actions)
+* `tests/unit/core/strategy_actions/` (Action unit tests)
+* `CLAUDE.md` (Migration patterns and guidelines)
+* `README.md` (Type safety migration status)

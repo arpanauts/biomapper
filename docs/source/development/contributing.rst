@@ -13,23 +13,23 @@ Getting Started
       # Fork on GitHub, then clone
       git clone https://github.com/YOUR_USERNAME/biomapper.git
       cd biomapper
-      git remote add upstream https://github.com/biomapper/biomapper.git
+      git remote add upstream https://github.com/arpanauts/biomapper.git
 
 2. **Set Up Development Environment**
 
    .. code-block:: bash
    
-      # Install Poetry
+      # Install Poetry (if not already installed)
       curl -sSL https://install.python-poetry.org | python3 -
       
-      # Install dependencies
+      # Install all dependencies including dev, docs, and api extras
       poetry install --with dev,docs,api
       
-      # Activate environment
+      # Activate the virtual environment
       poetry shell
       
-      # Install pre-commit hooks
-      pre-commit install
+      # Verify installation
+      poetry run biomapper --help
 
 3. **Create Feature Branch**
 
@@ -72,8 +72,8 @@ Development Workflow
    # Fix linting issues
    poetry run ruff check . --fix
    
-   # Type checking
-   poetry run mypy biomapper
+   # Type checking (all packages)
+   poetry run mypy biomapper biomapper-api biomapper_client
    
    # Run tests
    poetry run pytest
@@ -95,9 +95,10 @@ Python Style
 ~~~~~~~~~~~~
 
 * Follow PEP 8
-* Use ruff for formatting
-* Maximum line length: 100 characters
+* Use ruff for formatting and linting
+* Maximum line length: 120 characters (as configured in ruff)
 * Use descriptive variable names
+* Python 3.11+ features are encouraged
 
 Type Hints
 ~~~~~~~~~~
@@ -359,3 +360,18 @@ Thank You!
 ----------
 
 Your contributions make BioMapper better for everyone. We appreciate your time and effort!
+
+---
+
+Verification Sources
+--------------------
+
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+
+- ``/home/ubuntu/biomapper/README.md`` (installation and setup instructions)
+- ``/home/ubuntu/biomapper/CLAUDE.md`` (development commands and practices)
+- ``/home/ubuntu/biomapper/pyproject.toml`` (dependency versions and configuration)
+- ``/home/ubuntu/biomapper/Makefile`` (available make commands)
+- ``/home/ubuntu/biomapper/biomapper/core/strategy_actions/`` (action implementation patterns)

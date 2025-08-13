@@ -20,9 +20,9 @@ Interactive Documentation
 
 FastAPI automatically generates interactive API documentation:
 
-* **Swagger UI**: http://localhost:8000/docs (recommended)
-* **ReDoc**: http://localhost:8000/redoc
-* **OpenAPI Schema**: http://localhost:8000/openapi.json
+* **Swagger UI**: http://localhost:8000/api/docs (recommended)
+* **OpenAPI Schema**: http://localhost:8000/api/openapi.json
+* **Root API**: http://localhost:8000/ (welcome message)
 
 Authentication
 --------------
@@ -35,7 +35,7 @@ Core Endpoints
 Health Check
 ~~~~~~~~~~~~
 
-Check if the API server is running.
+Check if the API server is running and verify service status.
 
 .. code-block:: http
 
@@ -43,8 +43,20 @@ Check if the API server is running.
    
    Response:
    {
-     "message": "BioMapper API is running",
-     "version": "0.5.2"
+     "message": "Welcome to Biomapper API. Visit /api/docs for documentation."
+   }
+   
+   GET /api/health
+   
+   Response:
+   {
+     "status": "healthy",
+     "version": "0.5.2",
+     "services": {
+       "database": "connected",
+       "mapper_service": "initialized",
+       "resource_manager": "running"
+     }
    }
 
 Strategy Execution (v2)
@@ -81,13 +93,18 @@ Execute a strategy by name or with inline YAML.
              "type": "LOAD_DATASET_IDENTIFIERS",
              "params": {
                "file_path": "/data/input.csv",
-               "output_key": "data"
+               "output_key": "data",
+               "identifier_column": "id"
              }
            }
          }
        ]
      },
-     "parameters": {}
+     "parameters": {},
+     "options": {
+       "checkpoint_enabled": false,
+       "timeout_seconds": 3600
+     }
    }
    
    Response:
@@ -270,7 +287,7 @@ Get Resource Status
 
 .. code-block:: http
 
-   GET /resources/status
+   GET /api/resources/status
    
    Response:
    {
@@ -283,6 +300,10 @@ Get Resource Status
        "status": "running",
        "entries": 1234,
        "size_mb": 45.6
+     },
+     "database": {
+       "status": "connected",
+       "jobs_count": 42
      }
    }
 
@@ -344,18 +365,19 @@ Default limits (configurable):
 * 10 concurrent strategy executions
 * 1GB maximum request body size
 
-WebSocket/SSE Support
----------------------
+Real-time Updates Support
+-------------------------
 
-For real-time progress updates, the API supports Server-Sent Events:
+For real-time progress updates, the API supports both Server-Sent Events (SSE) and WebSocket connections:
 
 .. code-block:: python
 
    import requests
+   import json
    
-   # Stream job progress
+   # SSE endpoint for streaming progress
    response = requests.get(
-       f"http://localhost:8000/api/jobs/{job_id}/stream",
+       f"http://localhost:8000/api/jobs/{job_id}/events",
        stream=True
    )
    
@@ -363,6 +385,10 @@ For real-time progress updates, the API supports Server-Sent Events:
        if line:
            event = json.loads(line)
            print(f"Progress: {event['progress']}%")
+           print(f"Step: {event.get('current_step', 'N/A')}")
+   
+   # WebSocket endpoint also available at:
+   # ws://localhost:8000/api/jobs/{job_id}/ws
 
 Python Client Usage
 -------------------
@@ -384,4 +410,20 @@ The ``biomapper_client`` package provides a convenient Python interface:
        job = await client.execute_strategy("protein_harmonization")
        result = await client.wait_for_job(job.id)
 
-See :doc:`../api_client` for detailed client documentation.
+See :doc:`client_reference` for detailed client documentation.
+
+---
+
+Verification Sources
+~~~~~~~~~~~~~~~~~~~~
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+
+- ``biomapper-api/app/main.py`` (FastAPI app configuration and middleware)
+- ``biomapper-api/app/api/routes/strategies_v2_simple.py`` (V2 strategy execution routes)
+- ``biomapper-api/app/api/routes/jobs.py`` (Job management endpoints)
+- ``biomapper-api/app/api/routes/health.py`` (Health check endpoint)
+- ``biomapper-api/app/api/routes/resources.py`` (Resource management endpoints)
+- ``biomapper-api/pyproject.toml`` (API dependencies)
+- ``pyproject.toml`` (Main project configuration)

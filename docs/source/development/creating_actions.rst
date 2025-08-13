@@ -113,15 +113,18 @@ Step 3: Implement the Action
 
 .. code-block:: python
 
-   from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
+   from biomapper.core.strategy_actions.typed_base import (
+       TypedStrategyAction,
+       StandardActionResult
+   )
    from biomapper.core.strategy_actions.registry import register_action
-   from biomapper.core.models import ActionResult
+   from typing import Dict, Any, List
    import logging
    
    logger = logging.getLogger(__name__)
    
    @register_action("MY_ACTION")
-   class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
+   class MyAction(TypedStrategyAction[MyActionParams, StandardActionResult]):
        """
        Filter biological data based on score threshold.
        
@@ -142,12 +145,12 @@ Step 3: Implement the Action
            self, 
            params: MyActionParams, 
            context: Dict[str, Any]
-       ) -> ActionResult:
+       ) -> StandardActionResult:
            """Execute the filtering action."""
            try:
                # Get input data
                if params.input_key not in context.get("datasets", {}):
-                   return ActionResult(
+                   return StandardActionResult(
                        success=False,
                        message=f"Input key '{params.input_key}' not found"
                    )
@@ -185,7 +188,7 @@ Step 3: Implement the Action
                
                logger.info(f"Filtered {len(input_data)} to {len(filtered)} items")
                
-               return ActionResult(
+               return StandardActionResult(
                    success=True,
                    message=f"Filtered {len(filtered)} items with threshold {params.threshold}",
                    data={
@@ -197,7 +200,7 @@ Step 3: Implement the Action
                
            except Exception as e:
                logger.error(f"Error in MyAction: {str(e)}")
-               return ActionResult(
+               return StandardActionResult(
                    success=False,
                    message=f"Action failed: {str(e)}"
                )
@@ -376,3 +379,18 @@ Need Help?
 * Check existing actions in ``biomapper/core/strategy_actions/``
 * Review tests in ``tests/unit/core/strategy_actions/``
 * See ``CLAUDE.md`` for AI assistance with development
+
+---
+
+Verification Sources
+--------------------
+
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+
+- ``/home/ubuntu/biomapper/biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction base class)
+- ``/home/ubuntu/biomapper/biomapper/core/strategy_actions/registry.py`` (action registration system)
+- ``/home/ubuntu/biomapper/biomapper/core/strategy_actions/load_dataset_identifiers.py`` (example action implementation)
+- ``/home/ubuntu/biomapper/biomapper/core/models/action_results.py`` (result models)
+- ``/home/ubuntu/biomapper/CLAUDE.md`` (creating actions guide)

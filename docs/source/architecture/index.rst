@@ -12,78 +12,98 @@ Comprehensive documentation of BioMapper's architecture and design patterns.
    yaml_strategies
    typed_strategy_actions
    testing
+   yaml_strategy_schema
+   uniprot_historical_id_resolution
 
 Core Concepts
 -------------
 
 **Three-Layer Architecture:**
 
-1. **Client Layer** - User interfaces (Python client, CLI, notebooks)
-2. **API Layer** - REST API with job management
-3. **Core Layer** - Business logic and action execution
+1. **Client Layer** - Python client library (``biomapper_client``), CLI tools, and Jupyter notebooks
+2. **API Layer** - FastAPI REST service with background job management and SSE progress tracking
+3. **Core Layer** - Business logic with self-registering actions and strategy execution engine
 
 **Key Design Patterns:**
 
-* **Registry Pattern** - Self-registering actions
-* **Strategy Pattern** - YAML-based workflows
-* **Pipeline Pattern** - Shared execution context
-* **Type Safety** - Pydantic validation throughout
+* **Registry Pattern** - Actions self-register via ``@register_action`` decorator at import time
+* **Strategy Pattern** - YAML configurations define workflows as sequences of pluggable actions
+* **Pipeline Pattern** - Actions process data through shared execution context
+* **Type Safety** - Pydantic models provide runtime validation and compile-time type checking
 
 Quick Architecture Overview
 ---------------------------
 
 .. code-block:: text
 
-    User → BiomapperClient → FastAPI → MinimalStrategyService
-                                ↓               ↓
-                          MapperService   ACTION_REGISTRY
-                                ↓               ↓
-                          SQLite DB      Action Classes
-                                         (self-registered)
+    Client Request → BiomapperClient → FastAPI Server → MapperService → MinimalStrategyService
+                                                                     ↓
+                                                    ACTION_REGISTRY (Global Dict)
+                                                                     ↓
+                                              Self-Registering Action Classes
+                                                                     ↓
+                                                 Execution Context (Dict[str, Any])
 
 Component Responsibilities
 --------------------------
 
-**BiomapperClient**
-  Python client library providing synchronous and async interfaces.
+**BiomapperClient** (``biomapper_client/client_v2.py``)
+  Python client library providing synchronous wrapper and async interfaces. Primary entry point for programmatic access.
 
-**FastAPI Server**
-  REST API handling HTTP requests, validation, and response formatting.
+**FastAPI Server** (``biomapper-api/app/main.py``)
+  REST API handling HTTP requests, validation, response formatting, and Server-Sent Events (SSE) for progress tracking.
 
-**MapperService**
-  Orchestrates job execution, manages background tasks, handles persistence.
+**MapperService** (``biomapper-api/app/core/mapper_service.py``)
+  Orchestrates job execution, manages background tasks, handles SQLite persistence, and checkpoint recovery.
 
-**MinimalStrategyService**
-  Core execution engine that loads YAML strategies and executes actions.
+**MinimalStrategyService** (``biomapper/core/services/strategy_service_v2_minimal.py``)
+  Core execution engine that loads YAML strategies from ``configs/strategies/`` and executes actions sequentially.
 
-**ACTION_REGISTRY**
-  Global dictionary where actions self-register at import time.
+**ACTION_REGISTRY** (``biomapper/core/strategy_actions/registry.py``)
+  Global dictionary where actions self-register at import time using the ``@register_action`` decorator.
 
 **Execution Context**
-  Shared state passed between actions containing datasets and metadata.
+  Shared state (``Dict[str, Any]``) passed between actions containing:
+  
+  * ``datasets`` - Named datasets from previous actions
+  * ``current_identifiers`` - Active identifier set
+  * ``statistics`` - Accumulated metrics
+  * ``output_files`` - Generated file paths
 
 Action System
 -------------
 
 Actions are the fundamental units of work in BioMapper:
 
-* **Self-Registration** - Use ``@register_action`` decorator
-* **Type Safety** - Inherit from ``TypedStrategyAction``
-* **Parameter Validation** - Pydantic models for inputs
-* **Entity Organization** - Grouped by biological entity type
+* **Self-Registration** - Use ``@register_action("ACTION_NAME")`` decorator
+* **Type Safety** - Inherit from ``TypedStrategyAction[ParamsModel, ResultModel]``
+* **Parameter Validation** - Pydantic models for inputs with field descriptions
+* **Entity Organization** - Grouped by biological entity type (proteins, metabolites, chemistry)
 
-Example action structure:
+Example action implementation:
 
 .. code-block:: python
 
+    from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
+    from biomapper.core.strategy_actions.registry import register_action
+    from pydantic import BaseModel, Field
+    
+    class MyActionParams(BaseModel):
+        input_key: str = Field(..., description="Input dataset key")
+        threshold: float = Field(0.8, ge=0.0, le=1.0)
+        output_key: str = Field(..., description="Output dataset key")
+    
     @register_action("MY_ACTION")
-    class MyAction(TypedStrategyAction[ParamsModel, ResultModel]):
-        def get_params_model(self):
-            return ParamsModel
+    class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
+        def get_params_model(self) -> type[MyActionParams]:
+            return MyActionParams
         
-        async def execute_typed(self, params, context):
-            # Action implementation
-            return ResultModel(success=True)
+        async def execute_typed(self, params: MyActionParams, context: Dict) -> ActionResult:
+            # Access input data
+            input_data = context["datasets"].get(params.input_key)
+            # Process and store results
+            context["datasets"][params.output_key] = processed_data
+            return ActionResult(success=True, message="Processed successfully")
 
 YAML Strategy System
 --------------------
@@ -168,3 +188,20 @@ Future Architecture Goals
 3. **Stream Processing** - Real-time data stream support
 4. **GraphQL API** - Alternative API interface
 5. **Kubernetes Support** - Cloud-native deployment
+
+---
+
+Verification Sources
+--------------------
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+
+* ``biomapper/core/strategy_actions/registry.py`` (Action registry implementation)
+* ``biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction base class)
+* ``biomapper/core/services/strategy_service_v2_minimal.py`` (Strategy execution engine)
+* ``biomapper-api/app/main.py`` (FastAPI server implementation)
+* ``biomapper_client/client_v2.py`` (Client library implementation)
+* ``README.md`` (Project overview and installation)
+* ``CLAUDE.md`` (Developer guidelines and patterns)
+* ``pyproject.toml`` (Dependencies and configuration)

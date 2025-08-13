@@ -1,14 +1,22 @@
 BiomapperClient API Reference
 ==============================
 
-The ``BiomapperClient`` class provides the main interface for interacting with the BioMapper API.
+The ``BiomapperClient`` class provides the main interface for interacting with the BioMapper API. It supports both synchronous and asynchronous operation modes.
 
-.. class:: BiomapperClient(base_url="http://localhost:8000")
+.. class:: BiomapperClient(base_url="http://localhost:8000", api_key=None, timeout=300, auto_retry=True, max_retries=3)
 
-   Main client for BioMapper API interaction.
+   Enhanced Biomapper API client for strategy execution.
    
    :param base_url: Base URL of the BioMapper API server
    :type base_url: str
+   :param api_key: Optional API key for authentication
+   :type api_key: str
+   :param timeout: Request timeout in seconds (default: 300)
+   :type timeout: int
+   :param auto_retry: Whether to automatically retry failed requests
+   :type auto_retry: bool
+   :param max_retries: Maximum number of retries
+   :type max_retries: int
 
    **Example:**
    
@@ -25,7 +33,7 @@ The ``BiomapperClient`` class provides the main interface for interacting with t
 Synchronous Methods
 -------------------
 
-.. method:: run(strategy_name, parameters=None, wait=True)
+.. method:: run(strategy_name, parameters=None, options=None, watch=False)
 
    Execute a strategy synchronously (recommended for most users).
    
@@ -33,8 +41,10 @@ Synchronous Methods
    :type strategy_name: str
    :param parameters: Optional parameter overrides
    :type parameters: dict
-   :param wait: Wait for completion (default: True)
-   :type wait: bool
+   :param options: Execution options (checkpoint_enabled, timeout_seconds, etc.)
+   :type options: dict
+   :param watch: Display real-time progress (default: False)
+   :type watch: bool
    :returns: Strategy execution results
    :rtype: dict
    
@@ -50,16 +60,29 @@ Synchronous Methods
 Asynchronous Methods
 --------------------
 
-.. method:: async execute_strategy(strategy_name, context)
+.. method:: async execute_strategy(strategy_name, parameters=None, options=None)
 
-   Execute a strategy asynchronously with full context control.
+   Execute a strategy asynchronously.
    
-   :param strategy_name: Name of the strategy to execute
-   :type strategy_name: str
-   :param context: Execution context dictionary
-   :type context: dict
-   :returns: Strategy execution results
-   :rtype: dict
+   :param strategy_name: Name of the strategy to execute or inline strategy dict
+   :type strategy_name: Union[str, dict]
+   :param parameters: Optional parameter overrides
+   :type parameters: dict
+   :param options: Execution options
+   :type options: ExecutionOptions
+   :returns: Job object with execution details
+   :rtype: Job
+
+.. method:: async wait_for_job(job_id, poll_interval=1.0)
+
+   Wait for a job to complete.
+   
+   :param job_id: Job identifier
+   :type job_id: str
+   :param poll_interval: Seconds between status checks
+   :type poll_interval: float
+   :returns: Final job result
+   :rtype: StrategyResult
    
    **Required context structure:**
    
@@ -114,30 +137,33 @@ The client supports both synchronous and asynchronous context managers:
 Exception Classes
 -----------------
 
-.. class:: ApiError(status_code, message, response_body=None)
+.. class:: ApiError
 
-   Raised when the API returns a non-200 status code.
-   
-   :param status_code: HTTP status code
-   :type status_code: int
-   :param message: Error message
-   :type message: str
-   :param response_body: Optional response body
-   :type response_body: Any
+   Raised when the API returns a non-success status code.
 
-.. class:: NetworkError(message)
+.. class:: NetworkError
 
    Raised for network-related issues (connection, timeout).
-   
-   :param message: Error description
-   :type message: str
 
-.. class:: BiomapperClientError(message)
+.. class:: ValidationError
 
-   Base exception for all client errors.
-   
-   :param message: Error description
-   :type message: str
+   Raised when request validation fails.
+
+.. class:: StrategyNotFoundError
+
+   Raised when a requested strategy doesn't exist.
+
+.. class:: JobNotFoundError
+
+   Raised when a job ID is not found.
+
+.. class:: TimeoutError
+
+   Raised when operation exceeds timeout.
+
+.. class:: FileUploadError
+
+   Raised when file upload fails.
 
 Utility Functions
 -----------------
@@ -230,9 +256,13 @@ The client can be configured through environment variables:
    * - ``BIOMAPPER_API_URL``
      - Override default API URL
    * - ``BIOMAPPER_API_KEY``
-     - API key for authentication (future)
+     - API key for authentication
    * - ``BIOMAPPER_TIMEOUT``
      - Request timeout in seconds
+   * - ``BIOMAPPER_MAX_RETRIES``
+     - Maximum retry attempts
+   * - ``BIOMAPPER_AUTO_RETRY``
+     - Enable/disable auto-retry (true/false)
 
 Thread Safety
 -------------
@@ -255,10 +285,27 @@ Version Compatibility
 - Client version: 0.1.0
 - Compatible API versions: 0.5.0+
 - Python: 3.9+
+- Dependencies: httpx, pydantic 2.11+
 
 See Also
 --------
 
-- :doc:`../api_client` - User guide for the Python client
 - :doc:`rest_endpoints` - REST API endpoint reference
 - :doc:`strategy_execution` - Strategy execution details
+- :doc:`index` - API overview and quick start
+
+---
+
+Verification Sources
+~~~~~~~~~~~~~~~~~~~~
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+
+- ``biomapper_client/biomapper_client/client_v2.py`` (BiomapperClient implementation)
+- ``biomapper_client/biomapper_client/models.py`` (Client data models)
+- ``biomapper_client/biomapper_client/exceptions.py`` (Exception classes)
+- ``biomapper_client/biomapper_client/progress.py`` (Progress tracking)
+- ``biomapper_client/pyproject.toml`` (Client dependencies and version)
+- ``biomapper-api/app/models/strategy_execution.py`` (API response models)
+- ``CLAUDE.md`` (Client usage patterns)
