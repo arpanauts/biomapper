@@ -27,7 +27,7 @@ Biomapper uses YAML-based strategies executed through a REST API. Here's the bas
 
 ```bash
 cd biomapper-api
-poetry run uvicorn main:app --reload
+poetry run uvicorn app.main:app --reload --port 8000
 ```
 
 The API will be available at http://localhost:8000
@@ -56,14 +56,21 @@ steps:
 Using the Python client:
 
 ```python
-import asyncio
 from biomapper_client import BiomapperClient
+
+# Simple synchronous execution (recommended)
+client = BiomapperClient(base_url="http://localhost:8000")
+result = client.run("my_strategy.yaml")
+print(f"Status: {result['status']}")
+print(f"Job ID: {result.get('job_id')}")
+
+# Or async with progress tracking
+import asyncio
 
 async def main():
     async with BiomapperClient() as client:
         result = await client.execute_strategy_file("my_strategy.yaml")
         print(f"Status: {result['status']}")
-        print(f"Results: {result['results']}")
 
 asyncio.run(main())
 ```
@@ -71,20 +78,41 @@ asyncio.run(main())
 Or use curl:
 
 ```bash
-curl -X POST http://localhost:8000/api/strategies/PROTEIN_ANALYSIS/execute
+curl -X POST http://localhost:8000/api/strategies/v2/execute \
+  -H "Content-Type: application/json" \
+  -d @my_strategy.yaml
 ```
 
 ## Core Concepts
 
 ### Actions
 
-Biomapper currently ships with three foundational actions, with the architecture designed to support additional specialized actions:
+Biomapper ships with 35 self-registering actions organized by domain:
 
-- **LOAD_DATASET_IDENTIFIERS**: Load data from CSV/TSV files
-- **MERGE_WITH_UNIPROT_RESOLUTION**: Merge datasets with UniProt resolution  
-- **CALCULATE_SET_OVERLAP**: Calculate overlap statistics and Venn diagrams
+**Core Data Operations:**
+- **LOAD_DATASET_IDENTIFIERS**: Load biological identifiers from CSV/TSV files
+- **MERGE_DATASETS**: Combine multiple datasets with deduplication
+- **FILTER_DATASET**: Apply filtering criteria to datasets
+- **EXPORT_DATASET_V2**: Export results to TSV/CSV/JSON formats
+- **CUSTOM_TRANSFORM_EXPRESSION**: Apply Python expressions to transform data
 
-The extensible action system allows for easy development of new actions to support more sophisticated mapping approaches as requirements evolve.
+**Protein Mapping:**
+- **PROTEIN_EXTRACT_UNIPROT_FROM_XREFS**: Extract UniProt IDs from compound reference fields
+- **PROTEIN_NORMALIZE_ACCESSIONS**: Standardize protein accession formats
+- **MERGE_WITH_UNIPROT_RESOLUTION**: Map identifiers to UniProt accessions
+
+**Metabolite Mapping:**
+- **METABOLITE_CTS_BRIDGE**: Chemical Translation Service API integration
+- **NIGHTINGALE_NMR_MATCH**: Nightingale NMR platform matching
+- **SEMANTIC_METABOLITE_MATCH**: AI-powered semantic matching
+- **VECTOR_ENHANCED_MATCH**: Vector embedding similarity matching
+
+**Analysis:**
+- **CALCULATE_SET_OVERLAP**: Calculate Jaccard similarity between datasets
+- **CALCULATE_THREE_WAY_OVERLAP**: Three-way dataset comparison
+- **GENERATE_METABOLOMICS_REPORT**: Comprehensive metabolomics reports
+
+The self-registering action system allows easy development of new actions.
 
 ### YAML Strategies
 
@@ -203,12 +231,15 @@ Verify your installation works:
 
 ```bash
 # Check API health
-curl http://localhost:8000/api/health
+curl http://localhost:8000/health
 
-# List available strategies
-curl http://localhost:8000/api/strategies/
+# View API documentation
+open http://localhost:8000/docs
 
-# Run tests
+# Run tests with coverage
+poetry run pytest --cov=biomapper
+
+# Run quick unit tests
 poetry run pytest tests/unit/
 ```
 
@@ -218,3 +249,14 @@ poetry run pytest tests/unit/
 - Check [Action Reference](../actions/) for complete parameter documentation
 - View [API Documentation](../api/) for REST endpoint details
 - Try the [First Mapping Tutorial](first_mapping.rst) for a complete example
+
+---
+## Verification Sources
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+- `biomapper-api/app/main.py` (API endpoint definitions)
+- `biomapper/core/strategy_actions/registry.py` (action registration)
+- `biomapper_client/client_v2.py` (client implementation)
+- `pyproject.toml` (dependency versions)
+- `CLAUDE.md` (project conventions)

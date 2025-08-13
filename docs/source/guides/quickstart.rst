@@ -16,7 +16,7 @@ Installation
 .. code-block:: bash
 
    # Clone and install
-   git clone https://github.com/biomapper/biomapper.git
+   git clone https://github.com/your-org/biomapper.git
    cd biomapper
    poetry install --with dev,docs,api
    poetry shell
@@ -80,24 +80,39 @@ Your First Strategy
 
 .. code-block:: bash
 
-   poetry run python scripts/run_strategy.py \
-     --strategy test_strategy.yaml \
+   # Using the biomapper CLI
+   poetry run biomapper execute test_strategy.yaml \
      --param input_file=/data/proteins.csv \
      --param output_dir=/results
+   
+   # Or using the execute script
+   poetry run python scripts/client_scripts/execute_strategy.py test_strategy.yaml
 
 Verify Installation
 -------------------
 
 .. code-block:: bash
 
-   # Run tests
+   # Run tests with coverage
+   poetry run pytest --cov=biomapper
+   
+   # Quick unit tests only
    poetry run pytest tests/unit/
    
    # Check API health
    curl http://localhost:8000/health
    
-   # View API docs
+   # View interactive API docs
    open http://localhost:8000/docs
+
+Common Actions
+--------------
+
+* **LOAD_DATASET_IDENTIFIERS** - Load biological identifiers
+* **PROTEIN_EXTRACT_UNIPROT_FROM_XREFS** - Extract UniProt IDs
+* **METABOLITE_CTS_BRIDGE** - Chemical Translation Service
+* **CALCULATE_SET_OVERLAP** - Dataset comparison
+* **EXPORT_DATASET_V2** - Export results
 
 Next Steps
 ----------
@@ -106,3 +121,14 @@ Next Steps
 * :doc:`first_mapping` - Complete mapping example
 * :doc:`../usage` - Advanced usage patterns
 * :doc:`../configuration` - Strategy configuration
+* :doc:`../actions/index` - Complete action reference
+
+---
+## Verification Sources
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+- `biomapper-api/app/main.py` (API startup command)
+- `biomapper_client/client_v2.py` (client usage patterns)
+- `biomapper/core/strategy_actions/registry.py` (available actions)
+- `scripts/client_scripts/` (CLI scripts)

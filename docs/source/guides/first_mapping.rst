@@ -55,23 +55,30 @@ Method 1: Python Client
 
 .. code-block:: python
 
-    import asyncio
     from biomapper_client import BiomapperClient
+    
+    # Simple synchronous execution (recommended for beginners)
+    client = BiomapperClient(base_url="http://localhost:8000")
+    result = client.run("my_first_mapping.yaml")
+    
+    # Print results
+    print("Execution Status:", result['status'])
+    print("Job ID:", result.get('job_id'))
+    
+    # For async execution with progress tracking:
+    import asyncio
     
     async def main():
         async with BiomapperClient() as client:
             result = await client.execute_strategy_file("my_first_mapping.yaml")
             
-            # Print results
-            print("Execution Status:", result['status'])
-            print("Datasets loaded:", list(result['results']['datasets'].keys()))
-            
             # Access the loaded data
-            proteins = result['results']['datasets']['my_proteins']
-            print(f"Loaded {len(proteins)} proteins")
+            if 'datasets' in result.get('results', {}):
+                proteins = result['results']['datasets']['my_proteins']
+                print(f"Loaded {len(proteins)} proteins")
     
-    # Run the mapping
-    asyncio.run(main())
+    # Run async version if needed
+    # asyncio.run(main())
 
 Method 2: CLI Script
 ~~~~~~~~~~~~~~~~~~~~
@@ -147,18 +154,36 @@ Example with overlap calculation:
             identifier_column: "uniprot_id"
             output_key: "proteins_b"
       
+      - name: merge_datasets
+        action:
+          type: MERGE_DATASETS
+          params:
+            input_keys: ["proteins_a", "proteins_b"]
+            output_key: "merged_proteins"
+            id_column: "uniprot_id"
+      
       - name: compare_datasets
         action:
           type: CALCULATE_SET_OVERLAP
           params:
             dataset_a_key: "proteins_a"
             dataset_b_key: "proteins_b"
+            id_column: "uniprot_id"
             output_key: "overlap_analysis"
+            generate_venn: true
 
-Extensible Architecture
------------------------
+Available Actions
+-----------------
 
-The actions used in this tutorial (LOAD_DATASET_IDENTIFIERS, MERGE_WITH_UNIPROT_RESOLUTION, CALCULATE_SET_OVERLAP) are the three foundational actions that ship with Biomapper. However, the architecture is designed to be extensible - new specialized actions can be easily added to support more sophisticated mapping approaches as requirements evolve.
+Biomapper includes 35+ self-registering actions. Key ones for beginners:
+
+* **Data Loading**: LOAD_DATASET_IDENTIFIERS
+* **Protein Mapping**: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS, PROTEIN_NORMALIZE_ACCESSIONS, MERGE_WITH_UNIPROT_RESOLUTION
+* **Metabolite Mapping**: METABOLITE_CTS_BRIDGE, NIGHTINGALE_NMR_MATCH, SEMANTIC_METABOLITE_MATCH
+* **Analysis**: CALCULATE_SET_OVERLAP, CALCULATE_THREE_WAY_OVERLAP, GENERATE_METABOLOMICS_REPORT
+* **Export**: EXPORT_DATASET_V2, SYNC_TO_GOOGLE_DRIVE_V2
+
+The self-registering architecture makes it easy to add new actions.
 
 Continue Learning
 -----------------
@@ -166,4 +191,15 @@ Continue Learning
 * :doc:`../usage` - Comprehensive usage patterns  
 * :doc:`../configuration` - Advanced strategy configuration
 * :doc:`../architecture/action_system` - Learn how to develop new actions
-* :doc:`../actions/load_dataset_identifiers` - Detailed action reference
+* :doc:`../actions/index` - Complete action reference
+* :doc:`../api/client_reference` - Python client API
+
+---
+## Verification Sources
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+- `biomapper_client/client_v2.py` (client usage examples)
+- `biomapper/core/strategy_actions/analysis/calculate_set_overlap.py` (action parameters)
+- `scripts/client_scripts/execute_strategy.py` (CLI execution)
+- `configs/strategies/` (example strategies)
