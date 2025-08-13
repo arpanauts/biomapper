@@ -1,0 +1,89 @@
+# Google Drive Sync Template for Biomapper Strategies
+# This template shows different ways to configure Google Drive sync
+
+name: gdrive_sync_template
+description: Template showing Google Drive sync configuration options
+
+parameters:
+  # Option 1: Hardcode folder ID directly in strategy (project-specific)
+  project_folder_id: 1oQ7CczccH2a6oYYFMo_sf8fXtxF8au_D
+  
+  # Option 2: Use environment variable for flexibility
+  # User can set BIOMAPPER_GDRIVE_FOLDER in .env
+  default_folder_id: "${GOOGLE_DRIVE_FOLDER_ID:-1oQ7CczccH2a6oYYFMo_sf8fXtxF8au_D}"
+  
+  # Option 3: Different folders for different output types
+  results_folder_id: 1oQ7CczccH2a6oYYFMo_sf8fXtxF8au_D  # Main results
+  reports_folder_id: 1ABC_different_folder_for_reports     # Reports folder
+  archive_folder_id: 1XYZ_another_folder_for_archives      # Archive folder
+
+steps:
+  # ... your processing steps ...
+  
+  # Example 1: Simple sync - all outputs to one folder
+  - name: sync_all_outputs
+    action:
+      type: SYNC_TO_GOOGLE_DRIVE
+      params:
+        drive_folder_id: "${parameters.project_folder_id}"
+        credentials_path: "${GOOGLE_APPLICATION_CREDENTIALS}"
+        sync_context_outputs: true
+        create_subfolder: true
+        
+  # Example 2: Sync specific file types to different folders
+  - name: sync_results_only
+    action:
+      type: SYNC_TO_GOOGLE_DRIVE
+      params:
+        drive_folder_id: "${parameters.results_folder_id}"
+        credentials_path: "${GOOGLE_APPLICATION_CREDENTIALS}"
+        sync_context_outputs: true
+        create_subfolder: false  # Put directly in folder
+        file_patterns:
+          - "*_results.tsv"
+          - "*_harmonized.csv"
+          
+  # Example 3: Sync reports to separate folder
+  - name: sync_reports
+    action:
+      type: SYNC_TO_GOOGLE_DRIVE
+      params:
+        drive_folder_id: "${parameters.reports_folder_id}"
+        credentials_path: "${GOOGLE_APPLICATION_CREDENTIALS}"
+        sync_context_outputs: true
+        subfolder_name: "reports_${timestamp}"
+        file_patterns:
+          - "*.pdf"
+          - "*.html"
+          - "*_report.md"
+          
+  # Example 4: Archive raw data
+  - name: archive_raw_data
+    action:
+      type: SYNC_TO_GOOGLE_DRIVE
+      params:
+        drive_folder_id: "${parameters.archive_folder_id}"
+        credentials_path: "${GOOGLE_APPLICATION_CREDENTIALS}"
+        input_files:  # Specific files instead of context outputs
+          - "/tmp/biomapper/raw/dataset1.tsv"
+          - "/tmp/biomapper/raw/dataset2.tsv"
+        subfolder_name: "archive_${date}"
+        description: "Raw data archive for reproducibility"
+        
+  # Example 5: Conditional sync based on success
+  # (Would need to implement conditional execution in strategy runner)
+  - name: sync_if_successful
+    action:
+      type: SYNC_TO_GOOGLE_DRIVE
+      params:
+        drive_folder_id: "${parameters.default_folder_id}"
+        credentials_path: "${GOOGLE_APPLICATION_CREDENTIALS}"
+        sync_context_outputs: true
+        create_subfolder: true
+        description: "Successful harmonization run"
+        
+# Notes:
+# - Folder IDs are not sensitive - anyone with the ID still needs permissions
+# - You can share different folders with different people/teams
+# - Consider organizing by: project, date, data type, or processing stage
+# - The service account needs to be added to each folder/drive you want to use

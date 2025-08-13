@@ -1,0 +1,69 @@
+name: example_with_gdrive_sync
+description: Example strategy showing Google Drive sync integration
+metadata:
+  id: example_with_gdrive_sync
+  name: Example Strategy with Google Drive Sync
+  version: 1.0.0
+  entity_type: metabolites
+  quality_tier: example
+
+parameters:
+  # Input/output paths
+  source_file: /home/ubuntu/biomapper/data/test_data/test_metabolites.tsv
+  output_dir: /tmp/biomapper/results
+  
+  # Google Drive settings - not sensitive, safe to commit
+  gdrive_folder_id: 1oQ7CczccH2a6oYYFMo_sf8fXtxF8au_D  # Data Harmonization folder
+  gdrive_subfolder_name: metabolite_harmonization_${timestamp}
+  
+  # Processing parameters
+  cache_dir: /tmp/biomapper/cache
+
+steps:
+  - name: load_metabolites
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.source_file}"
+        identifier_column: metabolite_id
+        output_key: metabolites
+        additional_columns:
+          - name
+          - inchikey
+          - chebi_id
+          - kegg_id
+        
+  - name: normalize_identifiers
+    action:
+      type: METABOLITE_NORMALIZE_HMDB
+      params:
+        input_key: metabolites
+        output_key: normalized
+        id_column: metabolite_id
+        
+  - name: export_to_file
+    action:
+      type: EXPORT_DATASET
+      params:
+        input_key: normalized
+        output_file: "${parameters.output_dir}/normalized_metabolites_${timestamp}.tsv"
+        format: tsv
+        include_stats: true
+        
+  - name: sync_to_gdrive
+    action:
+      type: SYNC_TO_GOOGLE_DRIVE
+      params:
+        drive_folder_id: "${parameters.gdrive_folder_id}"
+        credentials_path: "${GOOGLE_APPLICATION_CREDENTIALS}"  # From .env
+        sync_context_outputs: true  # Sync all files from context['output_files']
+        create_subfolder: true
+        subfolder_name: "${parameters.gdrive_subfolder_name}"
+        description: "Metabolite harmonization results"
+        file_patterns:
+          - "*.tsv"
+          - "*.csv"
+          - "*.json"
+        exclude_patterns:
+          - "*.tmp"
+          - "*.log"

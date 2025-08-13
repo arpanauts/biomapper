@@ -1,0 +1,60 @@
+name: example_google_drive_sync
+description: Process metabolomics data and sync results to Google Drive
+parameters:
+  data_file: ${env.DATA_FILE}
+  output_dir: ${env.OUTPUT_DIR}
+  drive_folder_id: ${env.GOOGLE_DRIVE_FOLDER_ID}
+  credentials_path: ${env.GOOGLE_APPLICATION_CREDENTIALS}
+steps:
+- name: load_metabolites
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.data_file}
+      identifier_column: metabolite_id
+      output_key: metabolites
+- name: extract_identifiers
+  action:
+    type: METABOLITE_EXTRACT_IDENTIFIERS
+    params:
+      input_key: metabolites
+      output_key: extracted_metabolites
+      include_hmdb: true
+      include_kegg: true
+      include_chebi: true
+- name: match_metabolites
+  action:
+    type: NIGHTINGALE_NMR_MATCH
+    params:
+      input_key: extracted_metabolites
+      output_key: matched_metabolites
+      threshold: 0.8
+- name: export_results
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: matched_metabolites
+      output_file: ${parameters.output_dir}/metabolite_matches.csv
+      format: csv
+- name: sync_to_google_drive
+  action:
+    type: SYNC_TO_GOOGLE_DRIVE
+    params:
+      drive_folder_id: ${parameters.drive_folder_id}
+      credentials_path: ${parameters.credentials_path}
+      sync_context_outputs: true
+      create_subfolder: true
+      subfolder_name: metabolomics_run_${env.RUN_ID}
+      description: Metabolomics analysis results
+      file_patterns:
+      - '*.csv'
+      - '*.json'
+      - '*.md'
+      exclude_patterns:
+      - '*temp*'
+      - '*cache*'
+      conflict_resolution: rename
+      chunk_size: 10485760
+      max_retries: 3
+      hard_failure: false
+      verbose: true
