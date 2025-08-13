@@ -1,7 +1,7 @@
 Architecture Overview
 =====================
 
-Biomapper is built around an **extensible action-based architecture** that prioritizes simplicity and maintainability while allowing for sophisticated mapping approaches. The system currently ships with three foundational actions and is designed for easy expansion with additional specialized actions through YAML-based strategy configuration.
+Biomapper is built around an **extensible action-based architecture** that prioritizes simplicity and maintainability while allowing for sophisticated mapping approaches. The system currently ships with over 30 self-registering actions covering proteins, metabolites, chemistry, and general data operations, all configurable through YAML-based strategies.
 
 Core Architectural Principles
 ------------------------------
@@ -57,27 +57,50 @@ The ``MinimalStrategyService`` is the core orchestrator that:
 
 .. code-block:: python
 
-    from biomapper.core.minimal_strategy_service import MinimalStrategyService
+    from biomapper.core.services.strategy_service_v2_minimal import MinimalStrategyService
     
-    # Initialize with strategies directory
-    service = MinimalStrategyService("configs/")
+    # Initialize service (loads strategies from configs/strategies/)
+    service = MinimalStrategyService()
     
-    # Execute a strategy
-    result = await service.execute_strategy("UKBB_HPA_COMPARISON")
+    # Execute a strategy by name
+    context = {"datasets": {}, "statistics": {}, "output_files": []}
+    result = await service.execute_strategy("protein_mapping_template", context)
 
 Core Actions
 ~~~~~~~~~~~~
 
-The system currently includes three foundational actions, with the architecture designed to support additional specialized actions as mapping requirements grow:
+The system includes over 30 self-registering actions organized by category:
 
-**LOAD_DATASET_IDENTIFIERS**
-  Loads identifiers from CSV/TSV files with flexible column mapping and filtering options.
+**Data Operations**
+  - ``LOAD_DATASET_IDENTIFIERS``: Load biological identifiers from CSV/TSV files
+  - ``MERGE_DATASETS``: Combine multiple datasets with deduplication
+  - ``FILTER_DATASET``: Apply filtering criteria to datasets
+  - ``EXPORT_DATASET``: Export data to various formats
+  - ``CUSTOM_TRANSFORM``: Apply Python expressions to transform data
 
-**MERGE_WITH_UNIPROT_RESOLUTION**  
-  Merges datasets with historical UniProt identifier resolution using direct matching, composite handling, and API fallback.
+**Protein Actions**
+  - ``MERGE_WITH_UNIPROT_RESOLUTION``: Historical UniProt ID resolution
+  - ``PROTEIN_EXTRACT_UNIPROT``: Extract UniProt IDs from compound fields
+  - ``PROTEIN_NORMALIZE_ACCESSIONS``: Standardize protein identifiers
+  - ``PROTEIN_MULTI_BRIDGE``: Cross-dataset protein resolution
 
-**CALCULATE_SET_OVERLAP**
-  Calculates comprehensive overlap statistics and generates Venn diagrams for dataset comparison.
+**Metabolite Actions**
+  - ``CTS_ENRICHED_MATCH``: Chemical Translation Service matching
+  - ``SEMANTIC_METABOLITE_MATCH``: AI-powered semantic matching
+  - ``VECTOR_ENHANCED_MATCH``: Vector similarity matching
+  - ``NIGHTINGALE_NMR_MATCH``: Nightingale NMR reference matching
+  - ``COMBINE_METABOLITE_MATCHES``: Merge multiple matching approaches
+
+**Chemistry Actions**
+  - ``CHEMISTRY_EXTRACT_LOINC``: Extract LOINC codes from clinical data
+  - ``CHEMISTRY_FUZZY_TEST_MATCH``: Fuzzy matching for test names
+  - ``CHEMISTRY_VENDOR_HARMONIZATION``: Harmonize vendor-specific data
+
+**Analysis Actions**
+  - ``CALCULATE_SET_OVERLAP``: Jaccard similarity and Venn diagrams
+  - ``CALCULATE_THREE_WAY_OVERLAP``: Three-dataset comparison
+  - ``CALCULATE_MAPPING_QUALITY``: Assess mapping quality metrics
+  - ``GENERATE_METABOLOMICS_REPORT``: Comprehensive analysis reports
 
 REST API (FastAPI)
 ~~~~~~~~~~~~~~~~~~~
@@ -91,22 +114,31 @@ The REST API provides HTTP endpoints for:
 
 .. code-block:: python
 
-    # API endpoint for strategy execution
-    @app.post("/strategies/{strategy_name}/execute")
-    async def execute_strategy(strategy_name: str):
-        service = MinimalStrategyService("configs/")
-        result = await service.execute_strategy(strategy_name)
+    # API endpoint for strategy execution (simplified)
+    @app.post("/api/v2/strategies/{strategy_name}/execute")
+    async def execute_strategy(
+        strategy_name: str,
+        request: StrategyExecutionRequest
+    ):
+        service = get_mapper_service()  # Dependency injection
+        result = await service.execute_strategy(
+            strategy_name, 
+            request.context,
+            request.parameters
+        )
         return result
 
 Python Client
 ~~~~~~~~~~~~~~
 
-The async Python client (``biomapper_client``) provides a convenient interface:
+The Python client (``biomapper_client``) provides both sync and async interfaces:
 
-- Async HTTP client using httpx
-- Automatic timeout handling (3+ hours for large datasets)
-- Proper error handling and retries
-- Context manager pattern
+- Synchronous ``run()`` method for simple usage
+- Async ``execute_strategy_async()`` for advanced users
+- Automatic timeout handling with configurable limits
+- Proper error handling and automatic retries
+- Context manager pattern for resource management
+- Progress tracking with SSE events
 
 Data Flow
 ---------
@@ -142,18 +174,35 @@ The simplified architecture reflects a focused directory structure:
 
     biomapper/
     ├── core/
-    │   ├── strategy_actions/           # Three core actions
-    │   │   ├── load_dataset_identifiers.py
-    │   │   ├── merge_with_uniprot_resolution.py
-    │   │   ├── calculate_set_overlap.py
-    │   │   ├── typed_base.py          # Base class
-    │   │   └── registry.py            # Action registration
-    │   ├── models/                    # Pydantic models
-    │   └── minimal_strategy_service.py # Main service
-    ├── biomapper-api/                 # REST API
-    ├── biomapper_client/             # Python client
-    ├── configs/                      # YAML strategies
-    └── tests/unit/core/strategy_actions/ # Tests
+    │   ├── strategy_actions/           # 30+ self-registering actions
+    │   │   ├── entities/               # Entity-specific actions
+    │   │   │   ├── proteins/           # UniProt, Ensembl, gene symbols
+    │   │   │   ├── metabolites/        # HMDB, InChIKey, CHEBI, KEGG
+    │   │   │   └── chemistry/          # LOINC, clinical tests
+    │   │   ├── algorithms/             # Reusable algorithms
+    │   │   ├── workflows/              # High-level orchestration
+    │   │   ├── io/                     # Data input/output
+    │   │   ├── reports/                # Analysis & reporting
+    │   │   ├── typed_base.py           # TypedStrategyAction base
+    │   │   └── registry.py             # Global ACTION_REGISTRY
+    │   ├── models/                     # Pydantic models
+    │   └── services/
+    │       └── strategy_service_v2_minimal.py  # Main executor
+    ├── biomapper-api/                  # FastAPI REST service
+    │   └── app/
+    │       ├── main.py                 # Application entry
+    │       ├── api/routes/             # API endpoints
+    │       └── services/               # Business logic
+    ├── biomapper_client/               # Python client library
+    │   └── biomapper_client/
+    │       ├── client_v2.py            # BiomapperClient
+    │       └── models.py               # Request/response models
+    ├── configs/                        # Configuration files
+    │   ├── strategies/                 # YAML strategy definitions
+    │   │   ├── templates/              # Reusable templates
+    │   │   └── experimental/           # Advanced strategies
+    │   └── clients/                    # External API configs
+    └── tests/                          # Comprehensive test suite
 
 YAML Strategy System
 --------------------
@@ -287,10 +336,27 @@ The architecture supports various deployment patterns:
 Performance Characteristics
 ---------------------------
 
-- **Memory Usage**: Datasets loaded entirely in memory for processing
-- **I/O Patterns**: Direct file read/write without database overhead
-- **Network**: UniProt API calls for unmatched identifiers (configurable)
-- **CPU**: Primarily pandas operations and CSV processing
-- **Time Complexity**: Linear with dataset size for most operations
+- **Memory Usage**: Datasets loaded in memory with chunking support for large files
+- **I/O Patterns**: Direct file read/write with streaming for large datasets
+- **Network**: External API calls (UniProt, CTS, etc.) with caching and retry logic
+- **CPU**: Pandas operations, vector computations, and semantic analysis
+- **Time Complexity**: Linear for most operations, with parallelization for independent tasks
+- **Concurrency**: Async/await throughout for non-blocking I/O operations
 
 The extensible action-based architecture provides excellent performance for common use cases while maintaining the flexibility to add sophisticated new actions for complex biological data mapping scenarios as they arise.
+
+---
+
+Verification Sources
+--------------------
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+
+- ``biomapper/core/strategy_actions/registry.py`` (Action registration system)
+- ``biomapper/core/services/strategy_service_v2_minimal.py`` (Strategy executor)
+- ``biomapper-api/app/main.py`` (API endpoints and routing)
+- ``biomapper_client/biomapper_client/client_v2.py`` (Client implementation)
+- ``configs/strategies/templates/*.yaml`` (Strategy templates)
+- ``README.md`` (Architecture overview)
+- ``CLAUDE.md`` (Current action list and patterns)

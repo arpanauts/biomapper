@@ -6,11 +6,16 @@ The ``biomapper_client`` package provides a convenient Python interface to the B
 Installation
 ------------
 
-The client is included with the main BioMapper installation:
+The client can be installed as a standalone package or with the main BioMapper installation:
 
 .. code-block:: bash
 
-    poetry install --with api
+    # Standalone client installation
+    cd biomapper_client
+    poetry install
+    
+    # Or as part of main BioMapper with API
+    poetry install --with api,dev
 
 Basic Usage
 -----------
@@ -21,11 +26,11 @@ Basic Usage
     
     # Simple synchronous usage (recommended)
     client = BiomapperClient("http://localhost:8000")
-    result = client.run("protein_harmonization", parameters={
+    result = client.run("protein_mapping_template", parameters={
         "input_file": "/data/proteins.csv",
         "output_dir": "/results"
     })
-    print(f"Success: {result['success']}")
+    print(f"Status: {result['status']}")
     
     # Async usage for advanced scenarios
     import asyncio
@@ -38,7 +43,7 @@ Basic Usage
                 "statistics": {},
                 "output_files": []
             }
-            result = await client.execute_strategy("protein_harmonization", context)
+            result = await client.execute_strategy_async("protein_mapping_template", context)
             print(result)
     
     asyncio.run(main())
@@ -52,7 +57,9 @@ The client automatically configures itself with sensible defaults:
 
     client = BiomapperClient(
         base_url="http://localhost:8000",  # API server URL (default)
-        # timeout is automatically set to 3 hours for large datasets
+        timeout=300,                       # Default timeout in seconds (5 minutes)
+        auto_retry=True,                   # Automatic retry on failures
+        max_retries=3                      # Maximum retry attempts
     )
     
     # The client handles both sync and async usage
@@ -62,34 +69,42 @@ The client automatically configures itself with sensible defaults:
 Core Methods
 ------------
 
-run(strategy_name, parameters=None, wait=True)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+run(strategy, parameters=None, context=None, wait=True, watch=False)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Synchronous method** for simple strategy execution. This is the recommended method for most users.
 
 **Parameters:**
-* ``strategy_name`` (str): Name of the strategy to execute
+* ``strategy`` (str|Path|dict): Strategy name, path to YAML file, or dict configuration
 * ``parameters`` (dict): Optional parameter overrides for the strategy
+* ``context`` (dict): Optional execution context
 * ``wait`` (bool): If True, wait for completion (default)
+* ``watch`` (bool): If True, print progress to stdout
 
 **Returns:**
 * ``dict``: Strategy execution results
 
 .. code-block:: python
 
-    # Simple execution
-    result = client.run("protein_harmonization")
+    # Simple execution with strategy name
+    result = client.run("protein_mapping_template")
     
     # With parameters
-    result = client.run("protein_harmonization", parameters={
-        "input_file": "/data/proteins.csv",
+    result = client.run("metabolite_mapping_template", parameters={
+        "input_file": "/data/metabolites.csv",
         "threshold": 0.9
     })
+    
+    # With path to custom YAML
+    result = client.run("/path/to/custom_strategy.yaml")
+    
+    # With progress display
+    result = client.run("chemistry_mapping_template", watch=True)
 
-execute_strategy(strategy_name, context)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+execute_strategy_async(strategy, context=None, parameters=None)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-**Asynchronous method** for advanced users who need full control.
+**Asynchronous method** for advanced users who need full control or concurrent execution.
 
 **Parameters:**
 * ``strategy_name`` (str): Name of the strategy to execute
@@ -117,11 +132,12 @@ The client provides custom exceptions for different error scenarios:
 
 .. code-block:: python
 
-    from biomapper_client import BiomapperClient, ApiError, NetworkError
+    from biomapper_client import BiomapperClient
+    from biomapper_client.exceptions import ApiError, NetworkError, ValidationError
     
     # Synchronous error handling
     try:
-        result = client.run("protein_harmonization")
+        result = client.run("protein_mapping_template")
     except ApiError as e:
         print(f"API error (status {e.status_code}): {e}")
     except NetworkError as e:
@@ -132,7 +148,7 @@ The client provides custom exceptions for different error scenarios:
         try:
             async with BiomapperClient() as client:
                 context = {"datasets": {}, "statistics": {}, "output_files": []}
-                result = await client.execute_strategy("protein_harmonization", context)
+                result = await client.execute_strategy_async("protein_mapping_template", context)
                 return result
         except ApiError as e:
             if e.status_code == 404:
@@ -154,9 +170,9 @@ Running Multiple Strategies
 
     # Synchronous execution of multiple strategies
     strategies = [
-        "protein_harmonization",
-        "metabolomics_baseline", 
-        "chemistry_normalization"
+        "protein_mapping_template",
+        "metabolite_mapping_template", 
+        "chemistry_mapping_template"
     ]
     
     client = BiomapperClient()
@@ -183,8 +199,9 @@ Using with Jupyter Notebooks
     client = BiomapperClient()
     
     # Run with progress display (great for notebooks)
-    result = client.run("metabolomics_harmonization", 
-                       parameters={"threshold": 0.95})
+    result = client.run("metabolite_mapping_template", 
+                       parameters={"threshold": 0.95},
+                       watch=True)
     
     # Access results
     if result['status'] == 'success':
@@ -248,14 +265,14 @@ Best Practices
    
        # For advanced users running multiple strategies in parallel
        async with BiomapperClient() as client:
-           tasks = [client.execute_strategy(name, context) for name in strategies]
+           tasks = [client.execute_strategy_async(name) for name in strategies]
            results = await asyncio.gather(*tasks)
 
 3. **Check execution status before processing results**:
    
    .. code-block:: python
    
-       result = client.run("protein_harmonization")
+       result = client.run("protein_mapping_template")
        if result["status"] == "success":
            datasets = result["results"]["datasets"]
            # Process datasets
@@ -267,7 +284,7 @@ Best Practices
    .. code-block:: python
    
        # Override default parameters defined in YAML
-       result = client.run("metabolomics_baseline", parameters={
+       result = client.run("metabolite_mapping_template", parameters={
            "input_file": "/custom/path/data.csv",
            "threshold": 0.95,
            "output_dir": "/custom/output"
@@ -285,14 +302,18 @@ Troubleshooting
       poetry run uvicorn app.main:app --reload --port 8000
 
 **Timeout errors**
-  The client automatically sets a 3-hour timeout for large datasets. For extremely large datasets (>100K rows), consider breaking into smaller batches.
+  The client has a default timeout of 300 seconds (5 minutes). For large datasets, you can increase it:
+  
+  .. code-block:: python
+  
+      client = BiomapperClient(timeout=3600)  # 1 hour timeout
 
 **Strategy not found**
-  Check that the strategy exists in ``configs/strategies/`` or verify the strategy name:
+  Check that the strategy exists in ``configs/strategies/`` or its subdirectories:
   
   .. code-block:: bash
   
-      ls configs/strategies/*.yaml
+      find configs/strategies -name "*.yaml" -type f
 
 **API errors (400/422)**
   These indicate validation errors. Check the error detail for specific parameter issues:
@@ -306,3 +327,19 @@ Troubleshooting
 
 **Network errors**
   Check your network connection and ensure the API server URL is correct.
+
+---
+
+Verification Sources
+--------------------
+*Last verified: 2025-08-13*
+
+This documentation was verified against the following project resources:
+
+- ``biomapper_client/biomapper_client/client_v2.py`` (BiomapperClient implementation)
+- ``biomapper_client/biomapper_client/exceptions.py`` (Exception definitions)
+- ``biomapper_client/biomapper_client/models.py`` (Data models)
+- ``biomapper-api/app/main.py`` (API server endpoints)
+- ``configs/strategies/templates/*.yaml`` (Strategy templates)
+- ``README.md`` (Installation instructions)
+- ``pyproject.toml`` (Package dependencies)
