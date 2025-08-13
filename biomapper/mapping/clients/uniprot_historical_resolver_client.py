@@ -380,7 +380,6 @@ class UniProtHistoricalResolverClient(CachedMappingClientMixin, BaseMappingClien
                     logger.info(
                         f"UniProtClient DEBUG: ID {acc_id} not found as primary (already marked obsolete)"
                     )
-                    pass
 
             # Log final results
             logger.info("UniProtClient DEBUG: _resolve_batch final results summary:")

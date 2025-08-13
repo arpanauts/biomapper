@@ -84,7 +84,6 @@ class BaseMappingClient(abc.ABC):
             - The first element is a list of mapped target identifiers or None if mapping failed
             - The second element is the component ID that yielded the match (for composite IDs) or None
         """
-        pass
 
     async def reverse_map_identifiers(
         self, identifiers: List[str], config: Optional[Dict[str, Any]] = None
@@ -143,7 +142,6 @@ class BaseMappingClient(abc.ABC):
         This method is called when the client is no longer needed.
         The default implementation does nothing.
         """
-        pass
 
 
 class CachedMappingClientMixin:
@@ -229,7 +227,6 @@ class CachedMappingClientMixin:
         This method is called during initialization to populate the cache
         with frequently used mappings. The default implementation does nothing.
         """
-        pass
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get statistics about the cache usage.
