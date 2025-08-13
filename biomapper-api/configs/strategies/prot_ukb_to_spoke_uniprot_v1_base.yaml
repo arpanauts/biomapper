@@ -1,0 +1,31 @@
+name: prot_ukb_to_spoke_uniprot_v1_base
+description: Map UKBB proteins to SPOKE via UniProt
+parameters:
+  ukbb_proteins_file: "/tmp/protein_test_data/ukbb_proteins.tsv"
+  output_dir: "/tmp/protein_test_results/ukb_spoke"
+  identifier_column: "protein_id"
+  description_column: "protein_description"
+steps:
+  - name: load_ukbb_proteins
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.ukbb_proteins_file}"
+        identifier_column: "${parameters.identifier_column}"
+        description_column: "${parameters.description_column}"
+        output_key: ukbb_proteins
+  - name: map_to_spoke
+    action:
+      type: EXECUTE_MAPPING_PATH
+      params:
+        input_key: ukbb_proteins
+        output_key: spoke_mapped
+        mapping_path: "uniprot_to_spoke"
+  - name: export_results
+    action:
+      type: EXPORT_DATASET
+      params:
+        input_key: spoke_mapped
+        output_dir: "${parameters.output_dir}"
+        output_filename: "ukbb_spoke_mapping.tsv"
+        format: tsv

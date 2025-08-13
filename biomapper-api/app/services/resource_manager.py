@@ -80,8 +80,6 @@ class ManagedResource(BaseModel):
 class ResourceUnavailableError(Exception):
     """Raised when a required resource is unavailable."""
 
-    pass
-
 
 class ResourceManager:
     """

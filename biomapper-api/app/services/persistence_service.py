@@ -799,29 +799,24 @@ class StorageBackend(ABC):
         self, job_id: uuid.UUID, step_index: int, data: bytes
     ) -> str:
         """Store checkpoint data, return path."""
-        pass
 
     @abstractmethod
     async def retrieve_checkpoint(self, path: str) -> bytes:
         """Retrieve checkpoint data."""
-        pass
 
     @abstractmethod
     async def store_result(
         self, job_id: uuid.UUID, step_index: int, key: str, data: bytes
     ) -> str:
         """Store result data."""
-        pass
 
     @abstractmethod
     async def retrieve_result(self, path: str) -> bytes:
         """Retrieve result data."""
-        pass
 
     @abstractmethod
     async def delete(self, path: str) -> bool:
         """Delete stored data."""
-        pass
 
 
 class FileSystemStorageBackend(StorageBackend):

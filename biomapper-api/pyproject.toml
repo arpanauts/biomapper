@@ -25,6 +25,7 @@ psutil = ">=7.0.0,<8.0.0"
 # Reference to local biomapper package in development mode
 biomapper = {path = "../", develop = true}
 pyyaml = "^6.0.2"
+fuzzywuzzy = "^0.18.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=7.4.3"

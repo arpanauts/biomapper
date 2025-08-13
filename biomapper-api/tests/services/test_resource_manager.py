@@ -23,13 +23,9 @@ from app.services.resource_manager import (
 class DockerException(Exception):
     """Mock Docker exception."""
 
-    pass
-
 
 class NotFound(DockerException):
     """Mock Docker NotFound exception."""
-
-    pass
 
 
 @pytest.fixture

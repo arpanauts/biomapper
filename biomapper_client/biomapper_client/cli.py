@@ -14,7 +14,6 @@ from .cli_utils import parse_parameters, print_result, ExecutionOptions
 @click.version_option()
 def cli():
     """Biomapper CLI - Execute biological data harmonization strategies."""
-    pass
 
 
 @cli.command()

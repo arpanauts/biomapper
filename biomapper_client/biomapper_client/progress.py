@@ -47,7 +47,7 @@ class ProgressTracker:
             Self for chaining
         """
         try:
-            from rich.progress import Progress, TaskID
+            from rich.progress import Progress
 
             progress = Progress(**kwargs)
             progress.start()
@@ -79,7 +79,7 @@ class ProgressTracker:
         """
         try:
             from IPython.display import display
-            from ipywidgets import HTML, HBox, IntProgress, Label
+            from ipywidgets import HBox, IntProgress, Label
 
             progress = IntProgress(
                 value=0,
@@ -219,7 +219,6 @@ class NoOpProgressTracker:
 
     def __init__(self, *args, **kwargs):
         """Initialize no-op tracker."""
-        pass
 
     def add_tqdm(self, **kwargs) -> "NoOpProgressTracker":
         """No-op."""
@@ -239,15 +238,12 @@ class NoOpProgressTracker:
 
     def update(self, *args, **kwargs) -> None:
         """No-op."""
-        pass
 
     def set_description(self, description: str) -> None:
         """No-op."""
-        pass
 
     def close(self) -> None:
         """No-op."""
-        pass
 
     def __enter__(self) -> "NoOpProgressTracker":
         """Enter context manager."""
@@ -255,7 +251,6 @@ class NoOpProgressTracker:
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Exit context manager."""
-        pass
 
     @property
     def percentage(self) -> float:

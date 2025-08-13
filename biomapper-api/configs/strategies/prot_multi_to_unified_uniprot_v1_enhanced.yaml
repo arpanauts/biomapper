@@ -1,0 +1,49 @@
+name: prot_multi_to_unified_uniprot_v1_enhanced
+description: Multi-dataset protein unification with enhanced matching
+parameters:
+  arivale_proteins_file: "/tmp/protein_test_data/arivale_proteins.tsv"
+  ukbb_proteins_file: "/tmp/protein_test_data/ukbb_proteins.tsv"
+  output_dir: "/tmp/protein_test_results/unified"
+  enable_semantic_matching: true
+  confidence_threshold: 0.8
+steps:
+  - name: load_arivale
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.arivale_proteins_file}"
+        identifier_column: "uniprot_id"
+        description_column: "protein_name"
+        output_key: arivale_data
+  - name: load_ukbb
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.ukbb_proteins_file}"
+        identifier_column: "protein_id"
+        description_column: "protein_description"
+        output_key: ukbb_data
+  - name: merge_datasets
+    action:
+      type: MERGE_DATASETS
+      params:
+        dataset_keys:
+          - arivale_data
+          - ukbb_data
+        output_key: merged_proteins
+        deduplicate: true
+  - name: uniprot_resolution
+    action:
+      type: MERGE_WITH_UNIPROT_RESOLUTION
+      params:
+        input_key: merged_proteins
+        output_key: unified_proteins
+        confidence_threshold: "${parameters.confidence_threshold}"
+  - name: export_unified
+    action:
+      type: EXPORT_DATASET
+      params:
+        input_key: unified_proteins
+        output_dir: "${parameters.output_dir}"
+        output_filename: "unified_proteins.tsv"
+        format: tsv

@@ -1,0 +1,38 @@
+name: prot_arv_ukb_comparison_uniprot_v1_base
+description: Cross-dataset comparison between Arivale and UKBB proteins
+parameters:
+  arivale_proteins_file: "/tmp/protein_test_data/arivale_proteins.tsv"
+  ukbb_proteins_file: "/tmp/protein_test_data/ukbb_proteins.tsv"
+  output_dir: "/tmp/protein_test_results/comparison"
+  arivale_id_column: "uniprot_id"
+  ukbb_id_column: "protein_id"
+steps:
+  - name: load_arivale
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.arivale_proteins_file}"
+        identifier_column: "${parameters.arivale_id_column}"
+        output_key: arivale_set
+  - name: load_ukbb
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.ukbb_proteins_file}"
+        identifier_column: "${parameters.ukbb_id_column}"
+        output_key: ukbb_set
+  - name: calculate_overlap
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        dataset1_key: arivale_set
+        dataset2_key: ukbb_set
+        output_key: overlap_results
+  - name: export_comparison
+    action:
+      type: EXPORT_DATASET
+      params:
+        input_key: overlap_results
+        output_dir: "${parameters.output_dir}"
+        output_filename: "arv_ukb_comparison.json"
+        format: json

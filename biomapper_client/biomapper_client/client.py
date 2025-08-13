@@ -7,8 +7,6 @@ import httpx
 class BiomapperClientError(Exception):
     """Base exception for BiomapperClient errors."""
 
-    pass
-
 
 class ApiError(BiomapperClientError):
     """Raised when the API returns a non-200 status code."""
@@ -23,8 +21,6 @@ class ApiError(BiomapperClientError):
 
 class NetworkError(BiomapperClientError):
     """Raised when there are network-related issues."""
-
-    pass
 
 
 class BiomapperClient:

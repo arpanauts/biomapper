@@ -22,8 +22,7 @@ class JupyterExecutor:
     def _ensure_widgets(self):
         """Ensure Jupyter widgets are available and initialized."""
         try:
-            from IPython.display import clear_output, display
-            from ipywidgets import HTML, HBox, IntProgress, Label, Output, VBox
+            from ipywidgets import IntProgress, Label, Output, VBox
 
             if self._widget is None:
                 self._output = Output()

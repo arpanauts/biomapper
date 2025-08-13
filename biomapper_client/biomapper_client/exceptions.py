@@ -6,43 +6,29 @@ from typing import Any, Dict, Optional
 class BiomapperClientError(Exception):
     """Base exception for client errors."""
 
-    pass
-
 
 class ConnectionError(BiomapperClientError):
     """Cannot connect to API."""
-
-    pass
 
 
 class AuthenticationError(BiomapperClientError):
     """Authentication failed."""
 
-    pass
-
 
 class StrategyNotFoundError(BiomapperClientError):
     """Strategy not found."""
-
-    pass
 
 
 class JobNotFoundError(BiomapperClientError):
     """Job not found."""
 
-    pass
-
 
 class ValidationError(BiomapperClientError):
     """Validation error."""
 
-    pass
-
 
 class TimeoutError(BiomapperClientError):
     """Operation timed out."""
-
-    pass
 
 
 class ExecutionError(BiomapperClientError):
@@ -68,16 +54,10 @@ class ApiError(BiomapperClientError):
 class NetworkError(BiomapperClientError):
     """Network-related error."""
 
-    pass
-
 
 class CheckpointError(BiomapperClientError):
     """Checkpoint-related error."""
 
-    pass
-
 
 class FileUploadError(BiomapperClientError):
     """File upload error."""
-
-    pass
