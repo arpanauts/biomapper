@@ -1,8 +1,8 @@
-# Biomapper Test Architecture
+# BioMapper Test Architecture
 
 ## Overview
 
-The test suite for Biomapper follows a focused approach that mirrors the simplified architecture. Tests are primarily concentrated on the core action system and API functionality, with comprehensive unit tests for the three core actions.
+The BioMapper test suite follows Test-Driven Development (TDD) principles with comprehensive coverage of the 37+ self-registering actions. Tests are organized by entity type mirroring the action structure, with a minimum 80% coverage requirement enforced in CI/CD.
 
 ## Directory Structure
 
@@ -14,108 +14,154 @@ tests/
 │       │   ├── test_action_models.py
 │       │   ├── test_action_results.py
 │       │   └── test_execution_context.py
-│       └── strategy_actions/       # Core action tests
-│           ├── test_load_dataset_identifiers.py
-│           ├── test_merge_with_uniprot_resolution.py
-│           └── test_calculate_set_overlap.py
-├── manual/                         # Manual integration tests
-│   ├── test_data_loading.py       # Test data loading scenarios
-│   ├── test_simple_ukbb_hpa.py    # Simple strategy test
-│   └── test_timing.py             # Timing metrics test
-├── monitoring/                     # System monitoring tests
-├── utils/                         # Utility function tests
-└── conftest.py                    # Test configuration and fixtures
+│       └── strategy_actions/       # Action tests (37+ files)
+│           ├── entities/           # Entity-specific tests
+│           │   ├── proteins/       # Protein action tests
+│           │   │   ├── test_protein_normalize_accessions.py
+│           │   │   └── test_protein_multi_bridge.py
+│           │   ├── metabolites/    # Metabolite action tests
+│           │   │   ├── test_nightingale_nmr_match.py
+│           │   │   └── test_semantic_metabolite_match.py
+│           │   └── chemistry/      # Chemistry action tests
+│           │       └── test_chemistry_extract_loinc.py
+│           ├── io/                 # IO action tests
+│           │   ├── test_load_dataset_identifiers.py
+│           │   └── test_export_dataset_v2.py
+│           ├── algorithms/         # Algorithm tests
+│           │   ├── test_calculate_set_overlap.py
+│           │   └── test_calculate_three_way_overlap.py
+│           └── test_registry.py    # Registry tests
+├── integration/                    # Integration tests
+│   ├── test_strategy_execution.py # End-to-end strategy tests
+│   ├── test_api_endpoints.py      # API endpoint tests
+│   └── test_client_integration.py # BiomapperClient tests
+├── api/                           # API-specific tests
+│   └── test_mapper_service.py    # Job orchestration tests
+└── conftest.py                   # Test configuration and fixtures
 ```
 
 ## Test Categories
 
 ### Unit Tests
 
-1. **Core Action Tests**
-   - Parameter validation (Pydantic models)
-   - Execution logic
-   - Error handling
-   - Data processing
-   - Context management
+1. **Action Tests (37+ actions)**
+   - Parameter validation with Pydantic models
+   - `execute_typed()` method implementation
+   - Context manipulation (`datasets`, `statistics`, `output_files`)
+   - Error handling and edge cases
+   - Backward compatibility with dict interface
 
-2. **Model Tests**
-   - Pydantic model validation
-   - Type checking
-   - Serialization/deserialization
-   - Field requirements
+2. **Registry Tests**
+   - Self-registration via `@register_action`
+   - ACTION_REGISTRY population
+   - Dynamic action lookup
+   - Import-time registration
 
-3. **Service Tests**
-   - Strategy loading
-   - Action registry
-   - Context handling
+3. **Model Tests**
+   - ActionResult validation
+   - Parameter model constraints
+   - Field validators
+   - Type coercion
 
 ### Integration Tests
 
-1. **Manual Tests**
-   - Strategy execution via API
-   - Client-server interaction
-   - End-to-end workflows
+1. **Strategy Execution Tests**
+   - Complete YAML strategy workflows
+   - Variable substitution (`${parameters.key}`, `${env.VAR}`)
+   - Multi-step action sequences
+   - Context flow between actions
 
-2. **API Tests** 
-   - HTTP endpoint functionality
-   - Request/response handling
-   - Error scenarios
+2. **API Tests**
+   - `/api/strategies/v2/` endpoint
+   - Job management with SQLite persistence
+   - Server-Sent Events streaming
+   - Background job processing
+   - Checkpoint recovery
 
-## Core Action Test Patterns
+3. **Client Tests**
+   - BiomapperClient.run() synchronous wrapper
+   - Error handling and retries
+   - Progress streaming
+   - Timeout management
 
-### Parameter Validation Tests
+## Test Patterns for Typed Actions
+
+### TDD Approach for New Actions
 
 ```python
-class TestLoadDatasetIdentifiersParams:
-    def test_valid_params(self):
-        """Test valid parameter combinations."""
-        params = LoadDatasetIdentifiersParams(
-            file_path="/path/to/file.csv",
-            identifier_column="id",
-            output_key="dataset"
+# Step 1: Write failing test first
+class TestProteinNormalizeAction:
+    def test_parameter_validation(self):
+        """Test Pydantic parameter validation."""
+        params = ProteinNormalizeParams(
+            input_key="raw_proteins",
+            output_key="normalized",
+            remove_isoforms=True,
+            validate_format=True
         )
-        assert params.file_path == "/path/to/file.csv"
-        assert params.identifier_column == "id"
+        assert params.input_key == "raw_proteins"
+        assert params.remove_isoforms is True
 
-    def test_missing_required_params(self):
-        """Test validation of required parameters."""
-        with pytest.raises(ValidationError):
-            LoadDatasetIdentifiersParams()
+    def test_invalid_params(self):
+        """Test validation errors."""
+        with pytest.raises(ValidationError) as exc:
+            ProteinNormalizeParams(
+                input_key="",  # Invalid: empty string
+                output_key="normalized"
+            )
+        assert "empty" in str(exc.value)
 ```
 
-### Action Execution Tests
+### Typed Action Execution Tests
 
 ```python
-class TestLoadDatasetIdentifiersAction:
-    async def test_load_simple_csv(self, temp_csv_file, mock_context):
-        """Test loading a simple CSV file."""
-        action = LoadDatasetIdentifiersAction()
-        params = LoadDatasetIdentifiersParams(
-            file_path=str(temp_csv_file),
-            identifier_column="id",
-            output_key="test_data"
+class TestProteinNormalizeAction:
+    @pytest.mark.asyncio
+    async def test_execute_typed(self, mock_context):
+        """Test typed execution with shared context."""
+        # Arrange
+        action = ProteinNormalizeAction()
+        mock_context["datasets"]["raw_proteins"] = [
+            {"identifier": "P12345-1"},
+            {"identifier": "Q67890"}
+        ]
+        params = ProteinNormalizeParams(
+            input_key="raw_proteins",
+            output_key="normalized",
+            remove_isoforms=True
         )
         
-        result = await action.execute(params, mock_context)
+        # Act
+        result = await action.execute_typed(params, mock_context)
         
+        # Assert
         assert result.success
-        assert "test_data" in mock_context.get_action_data("datasets", {})
+        assert "normalized" in mock_context["datasets"]
+        assert len(mock_context["datasets"]["normalized"]) == 2
+        assert mock_context["datasets"]["normalized"][0]["identifier"] == "P12345"
 ```
 
-### Error Handling Tests
+### Backward Compatibility Tests
 
 ```python
-async def test_file_not_found(self, mock_context):
-    """Test handling of missing files."""
-    action = LoadDatasetIdentifiersAction()
-    params = LoadDatasetIdentifiersParams(
-        file_path="/nonexistent/file.csv",
-        identifier_column="id", 
-        output_key="test"
-    )
-    
-    with pytest.raises(FileNotFoundError):
-        await action.execute(params, mock_context)
+class TestBackwardCompatibility:
+    @pytest.mark.asyncio
+    async def test_dict_interface(self, mock_context):
+        """Test legacy dict-based interface still works."""
+        action = ProteinNormalizeAction()
+        
+        # Legacy dict params
+        params_dict = {
+            "input_key": "raw_proteins",
+            "output_key": "normalized",
+            "remove_isoforms": True
+        }
+        
+        # Should work via execute() wrapper
+        result = await action.execute(params_dict, mock_context)
+        
+        assert result["success"] is True
+        assert "normalized" in result["message"]
 ```
 
 ## Test Fixtures
@@ -164,21 +210,21 @@ def sample_merged_data():
 
 ## Testing Strategy
 
-### MockContext Pattern
+### Shared Context Pattern
 
-Since the current architecture uses a simple dictionary-like context instead of the full StrategyExecutionContext, tests use a MockContext class that simulates the required interface:
+Actions receive and modify a shared `Dict[str, Any]` context:
 
 ```python
-class MockContext:
-    """Mock context that simulates StrategyExecutionContext for actions."""
-    def __init__(self):
-        self._data = {'custom_action_data': {}}
-    
-    def set_action_data(self, key: str, value) -> None:
-        self._data['custom_action_data'][key] = value
-    
-    def get_action_data(self, key: str, default=None):
-        return self._data.get('custom_action_data', {}).get(key, default)
+@pytest.fixture
+def mock_context():
+    """Standard context structure for action testing."""
+    return {
+        "datasets": {},           # Named datasets
+        "current_identifiers": [], # Active identifiers
+        "statistics": {},         # Accumulated metrics
+        "output_files": [],       # Generated files
+        "metadata": {}            # Strategy metadata
+    }
 ```
 
 ### CI/CD Integration
@@ -202,42 +248,52 @@ markers =
 
 ## Coverage Requirements
 
-### Core Actions
-- **100% coverage** for action parameter models
-- **95%+ coverage** for action execution logic
+### Minimum Standards
+- **80% overall coverage** enforced in CI/CD
+- **100% coverage** for TypedStrategyAction params
+- **95%+ coverage** for execute_typed() methods
 - All error paths tested
 - Edge cases verified
 
-### Models
-- **100% coverage** for Pydantic model validation
-- All field combinations tested
-- Type checking verified
+### Action-Specific Requirements
+- Each new action must have comprehensive tests
+- Test both typed and dict interfaces
+- Verify context manipulation
+- Test parameter validation
+- Cover error scenarios
 
-### Integration Points
-- API endpoint functionality verified
-- Client-server communication tested
-- Strategy execution validated
+### CI/CD Integration
+```yaml
+# .github/workflows/test.yml
+- name: Run tests with coverage
+  run: |
+    poetry run pytest --cov=biomapper --cov-report=html --cov-fail-under=80
+```
 
 ## Running Tests
 
-### Full Test Suite
+### Essential Commands
 ```bash
-poetry run pytest
-```
+# Full test suite with coverage
+poetry run pytest --cov=biomapper --cov-report=html
 
-### Unit Tests Only  
-```bash
+# Unit tests only
 poetry run pytest tests/unit/
-```
 
-### Specific Action Tests
-```bash
-poetry run pytest tests/unit/core/strategy_actions/test_load_dataset_identifiers.py -v
-```
+# Integration tests
+poetry run pytest tests/integration/
 
-### Skip Manual Tests (CI Mode)
-```bash
-CI=true poetry run pytest
+# Specific action test with verbose output
+poetry run pytest tests/unit/core/strategy_actions/entities/proteins/ -xvs
+
+# Run specific test by name
+poetry run pytest -k "test_protein_normalize"
+
+# Debug single test with output
+poetry run pytest -xvs tests/unit/core/strategy_actions/test_registry.py::test_action_registration
+
+# Check coverage for specific module
+poetry run pytest --cov=biomapper.core.strategy_actions --cov-report=term-missing
 ```
 
 ## Performance Testing
@@ -264,17 +320,48 @@ def test_large_dataset_performance(self):
     assert execution_time < 30.0  # Should complete within 30 seconds
 ```
 
+## Test Organization Best Practices
+
+### Directory Structure Mirrors Code
+```
+tests/unit/core/strategy_actions/entities/proteins/
+  ↓ mirrors ↓
+biomapper/core/strategy_actions/entities/proteins/
+```
+
+### Test Naming Conventions
+- Test files: `test_<action_name>.py`
+- Test classes: `Test<ActionName>`
+- Test methods: `test_<specific_scenario>`
+
+### Fixture Organization
+- Global fixtures in `conftest.py`
+- Entity-specific fixtures in subdirectory conftest
+- Action-specific fixtures in test file
+
 ## Future Enhancements
 
-### Planned Improvements
-- Property-based testing for edge cases
-- Performance regression testing
-- Automated integration test environment
-- Test data generation improvements
-- API load testing
+### In Progress
+- Complete migration to TypedStrategyAction tests
+- Automated strategy validation tests
+- Performance benchmarking suite
 
-### Monitoring Integration
-- Test execution metrics
-- Coverage trending
-- Performance benchmarks
-- Failure analysis
+### Planned
+- Property-based testing with Hypothesis
+- Mutation testing for coverage quality
+- Load testing for API endpoints
+- Integration with external services mocking
+
+---
+
+## Verification Sources
+*Last verified: 2025-08-14*
+
+This documentation was verified against the following project resources:
+
+- `/biomapper/tests/unit/core/strategy_actions/` (37+ action test files organized by entity)
+- `/biomapper/tests/integration/` (End-to-end strategy execution tests)
+- `/biomapper/tests/conftest.py` (Global test fixtures and configuration)
+- `/biomapper/.github/workflows/test.yml` (CI/CD test configuration with coverage requirements)
+- `/biomapper/pyproject.toml` (pytest and coverage configuration)
+- `/biomapper/CLAUDE.md` (TDD approach and testing requirements)

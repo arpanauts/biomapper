@@ -32,9 +32,10 @@ Actions self-register at import time using the ``@register_action`` decorator:
 
     from biomapper.core.strategy_actions.registry import register_action
     from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
+    from biomapper.core.strategy_actions.models import ActionResult
     
     @register_action("ACTION_NAME")
-    class MyAction(TypedStrategyAction[ParamsModel, ResultModel]):
+    class MyAction(TypedStrategyAction[ParamsModel, ActionResult]):
         pass
 
 The registry (``ACTION_REGISTRY``) is a global dictionary that enables dynamic action lookup based on YAML strategy configurations. No manual registration is required.
@@ -76,6 +77,8 @@ Follow Test-Driven Development (TDD) when creating new actions:
     from pydantic import BaseModel, Field
     from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
     from biomapper.core.strategy_actions.registry import register_action
+    from biomapper.core.strategy_actions.models import ActionResult
+    from typing import Dict, Any
     
     class MyActionParams(BaseModel):
         input_key: str = Field(..., description="Input dataset key")
@@ -92,15 +95,14 @@ Follow Test-Driven Development (TDD) when creating new actions:
         async def execute_typed(
             self, 
             params: MyActionParams, 
-            context: Dict[str, Any],
-            source_endpoint=None,
-            target_endpoint=None
+            context: Dict[str, Any]
         ) -> ActionResult:
             # Access input data
             input_data = context["datasets"].get(params.input_key, [])
             
-            # Process data
-            processed = self._process_data(input_data, params.threshold)
+            # Process data  
+            processed = [item for item in input_data 
+                        if item.get("score", 0) >= params.threshold]
             
             # Store results
             context["datasets"][params.output_key] = processed
@@ -125,19 +127,26 @@ Actions are organized by biological entity type:
 **Metabolite Actions** (``entities/metabolites/``)
   * ``METABOLITE_CTS_BRIDGE`` - Chemical Translation Service integration
   * ``METABOLITE_EXTRACT_IDENTIFIERS`` - Extract metabolite IDs from text
-  * ``METABOLITE_NORMALIZE_HMDB`` - Standardize HMDB formats
+  * ``METABOLITE_NORMALIZE_HMDB`` - Standardize HMDB formats  
+  * ``METABOLITE_MULTI_BRIDGE`` - Multi-database metabolite resolution
+  * ``NIGHTINGALE_NMR_MATCH`` - Nightingale NMR platform matching
   * ``SEMANTIC_METABOLITE_MATCH`` - AI-powered semantic matching
   * ``VECTOR_ENHANCED_MATCH`` - Vector embedding similarity
+  * ``METABOLITE_API_ENRICHMENT`` - External API enrichment
+  * ``COMBINE_METABOLITE_MATCHES`` - Merge multiple matching strategies
 
 **Chemistry Actions** (``entities/chemistry/``)
-  * ``CHEMISTRY_EXTRACT_LOINC`` - Extract LOINC codes
-  * ``CHEMISTRY_FUZZY_TEST_MATCH`` - Fuzzy clinical test matching
-  * ``CHEMISTRY_VENDOR_HARMONIZATION`` - Harmonize vendor codes
+  * ``CHEMISTRY_EXTRACT_LOINC`` - Extract LOINC codes from clinical data
+  * ``CHEMISTRY_FUZZY_TEST_MATCH`` - Fuzzy matching for clinical tests
+  * ``CHEMISTRY_VENDOR_HARMONIZATION`` - Harmonize vendor-specific codes
+  * ``CHEMISTRY_TO_PHENOTYPE_BRIDGE`` - Link chemistry to phenotypes
 
 **Analysis Actions** (``algorithms/``)
   * ``CALCULATE_SET_OVERLAP`` - Jaccard similarity with Venn diagrams
   * ``CALCULATE_THREE_WAY_OVERLAP`` - Three-dataset comparison
   * ``CALCULATE_MAPPING_QUALITY`` - Quality metrics assessment
+  * ``GENERATE_METABOLOMICS_REPORT`` - Comprehensive metabolomics reports
+  * ``GENERATE_ENHANCEMENT_REPORT`` - Validation and enhancement reports
 
 Benefits
 --------
@@ -149,18 +158,24 @@ Benefits
 * **Discoverability**: Entity-based organization improves navigation
 * **Error Handling**: Comprehensive validation and error reporting
 
+**Infrastructure Actions** (``io/`` and ``utils/``)
+  * ``SYNC_TO_GOOGLE_DRIVE_V2`` - Upload results to Google Drive with chunked transfer
+  * ``CHUNK_PROCESSOR`` - Process large datasets in configurable chunks
+  * ``BASELINE_FUZZY_MATCH`` - Fuzzy string matching utilities
+
 ---
 
 Verification Sources
 --------------------
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
 
-* ``biomapper/core/strategy_actions/registry.py`` (Registry implementation)
-* ``biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction base)
-* ``biomapper/core/strategy_actions/entities/`` (Entity-specific actions)
-* ``biomapper/core/strategy_actions/io/load_dataset_identifiers.py`` (Data loader)
-* ``biomapper/core/strategy_actions/data_operations/`` (Core data operations)
-* ``README.md`` (Available actions list)
-* ``CLAUDE.md`` (Action development patterns)
+- ``/biomapper/biomapper/core/strategy_actions/registry.py`` (Global ACTION_REGISTRY and register_action decorator)
+- ``/biomapper/biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction generic base class)
+- ``/biomapper/biomapper/core/strategy_actions/models.py`` (ActionResult model definition)
+- ``/biomapper/biomapper/core/strategy_actions/entities/`` (37 self-registering entity-specific actions)
+- ``/biomapper/biomapper/core/strategy_actions/io/load_dataset_identifiers.py`` (Generic CSV/TSV data loader)
+- ``/biomapper/biomapper/core/strategy_actions/data_operations/`` (Core data operations like merge and filter)
+- ``/biomapper/README.md`` (Complete list of available actions)
+- ``/biomapper/CLAUDE.md`` (Action development patterns and TDD approach)

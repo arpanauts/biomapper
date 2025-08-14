@@ -29,74 +29,104 @@ The typed strategy action system introduces a new base class `TypedStrategyActio
 
 ## Implementation Example
 
-### ExecuteMappingPathAction Refactor
+### Example: Creating a Typed Action
 
-The `ExecuteMappingPathAction` has been refactored to use the typed system:
+Here's how to create a typed action following the established patterns:
 
 ```python
-from typing import Type, List
+from typing import Type, Dict, Any, List
 from pydantic import BaseModel, Field, field_validator
+from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
+from biomapper.core.strategy_actions.models import ActionResult
+from biomapper.core.strategy_actions.registry import register_action
 
-class ExecuteMappingPathParams(BaseModel):
-    """Parameters for ExecuteMappingPathAction."""
+class ProteinNormalizeParams(BaseModel):
+    """Parameters for protein normalization action."""
     
-    path_name: str = Field(
+    input_key: str = Field(
         ...,
-        description="Name of the mapping path to execute",
+        description="Key to retrieve input dataset from context",
         min_length=1
     )
-    batch_size: int = Field(
-        default=250,
-        description="Batch size for processing identifiers",
-        gt=0,
-        le=1000
+    output_key: str = Field(
+        ...,
+        description="Key to store normalized dataset in context",
+        min_length=1
     )
-    min_confidence: float = Field(
-        default=0.0,
-        description="Minimum confidence score to accept a mapping",
-        ge=0.0,
-        le=1.0
+    remove_isoforms: bool = Field(
+        default=True,
+        description="Remove isoform suffixes (-1, -2, etc.)"
+    )
+    validate_format: bool = Field(
+        default=True,
+        description="Validate UniProt accession format"
     )
     
-    @field_validator('path_name')
+    @field_validator('input_key', 'output_key')
     @classmethod
-    def validate_path_name(cls, v: str) -> str:
-        """Ensure path name is not empty or just whitespace."""
+    def validate_keys(cls, v: str) -> str:
+        """Ensure keys are not empty or just whitespace."""
         if not v.strip():
-            raise ValueError("path_name cannot be empty or whitespace")
+            raise ValueError("Key cannot be empty or whitespace")
         return v.strip()
 
 
-class ExecuteMappingPathResult(StandardActionResult):
-    """Result of executing a mapping path."""
+@register_action("PROTEIN_NORMALIZE_ACCESSIONS")
+class ProteinNormalizeAction(TypedStrategyAction[ProteinNormalizeParams, ActionResult]):
+    """Normalize and validate UniProt accessions."""
     
-    path_source_type: str = Field(description="Source type of the mapping path")
-    path_target_type: str = Field(description="Target type of the mapping path")
-    total_input: int = Field(description="Total number of input identifiers")
-    total_mapped: int = Field(description="Total number of successfully mapped identifiers")
-    total_unmapped: int = Field(description="Total number of unmapped identifiers")
-
-
-class ExecuteMappingPathTypedAction(TypedStrategyAction[ExecuteMappingPathParams, ExecuteMappingPathResult]):
-    """Typed implementation of ExecuteMappingPathAction."""
-    
-    def get_params_model(self) -> Type[ExecuteMappingPathParams]:
-        return ExecuteMappingPathParams
-    
-    def get_result_model(self) -> Type[ExecuteMappingPathResult]:
-        return ExecuteMappingPathResult
+    def get_params_model(self) -> Type[ProteinNormalizeParams]:
+        return ProteinNormalizeParams
     
     async def execute_typed(
         self,
-        current_identifiers: List[str],
-        current_ontology_type: str,
-        params: ExecuteMappingPathParams,
-        source_endpoint: Endpoint,
-        target_endpoint: Endpoint,
-        context: StrategyExecutionContext
-    ) -> ExecuteMappingPathResult:
-        # Implementation with full type safety
-        # ...
+        params: ProteinNormalizeParams,
+        context: Dict[str, Any]
+    ) -> ActionResult:
+        # Access input data from context
+        input_data = context["datasets"].get(params.input_key, [])
+        if not input_data:
+            return ActionResult(
+                success=False,
+                message=f"No data found for key: {params.input_key}"
+            )
+        
+        # Normalize accessions
+        normalized = []
+        for item in input_data:
+            accession = item.get("identifier", "")
+            if params.remove_isoforms:
+                accession = accession.split("-")[0]
+            if params.validate_format:
+                # UniProt format: [OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2}
+                if self._is_valid_uniprot(accession):
+                    normalized.append({**item, "identifier": accession})
+            else:
+                normalized.append({**item, "identifier": accession})
+        
+        # Store results in context
+        context["datasets"][params.output_key] = normalized
+        
+        # Track statistics
+        context.setdefault("statistics", {}).update({
+            f"{params.output_key}_count": len(normalized),
+            f"{params.output_key}_removed": len(input_data) - len(normalized)
+        })
+        
+        return ActionResult(
+            success=True,
+            message=f"Normalized {len(normalized)} of {len(input_data)} accessions",
+            data={
+                "normalized_count": len(normalized),
+                "removed_count": len(input_data) - len(normalized)
+            }
+        )
+    
+    def _is_valid_uniprot(self, accession: str) -> bool:
+        """Validate UniProt accession format."""
+        import re
+        pattern = r'^([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2})$'
+        return bool(re.match(pattern, accession))
 ```
 
 ## Benefits
@@ -129,19 +159,22 @@ Actions can be migrated one at a time:
 ### Example Migration
 
 ```python
-# Old approach
-@register_action("EXECUTE_MAPPING_PATH")
-class ExecuteMappingPathAction(StrategyAction):
-    async def execute(self, ...):
+# Old approach (legacy)
+@register_action("MY_ACTION")
+class MyAction(BaseStrategyAction):
+    async def execute(self, params: Dict, context: Dict) -> Dict:
         # Dictionary-based implementation
-        pass
+        input_key = params.get("input_key")
+        # Manual validation needed
+        return {"success": True, "message": "Done"}
 
-# New approach
-@register_action("EXECUTE_MAPPING_PATH")
-class ExecuteMappingPathTypedAction(TypedStrategyAction[...]):
-    async def execute_typed(self, ...):
-        # Typed implementation
-        pass
+# New approach (typed)
+@register_action("MY_ACTION")
+class MyAction(TypedStrategyAction[MyParams, ActionResult]):
+    async def execute_typed(self, params: MyParams, context: Dict[str, Any]) -> ActionResult:
+        # Typed implementation with automatic validation
+        input_data = context["datasets"][params.input_key]  # Type-safe access
+        return ActionResult(success=True, message="Done")
 ```
 
 ## Usage Examples
@@ -150,50 +183,46 @@ class ExecuteMappingPathTypedAction(TypedStrategyAction[...]):
 
 ```python
 # Create typed parameters with validation
-params = ExecuteMappingPathParams(
-    path_name="uniprot_to_ensembl",
-    batch_size=100,
-    min_confidence=0.8
+params = ProteinNormalizeParams(
+    input_key="raw_proteins",
+    output_key="normalized_proteins",
+    remove_isoforms=True,
+    validate_format=True
 )
 
 # Execute with type safety
 result = await action.execute_typed(
-    current_identifiers=["P12345", "Q67890"],
-    current_ontology_type="PROTEIN_UNIPROT",
     params=params,
-    source_endpoint=source_endpoint,
-    target_endpoint=target_endpoint,
-    context=context
+    context=context  # Shared execution context
 )
 
 # Access typed result fields
-print(f"Mapped {result.total_mapped} of {result.total_input} identifiers")
-print(f"Path: {result.path_source_type} -> {result.path_target_type}")
+print(f"Success: {result.success}")
+print(f"Message: {result.message}")
+print(f"Normalized: {result.data['normalized_count']} proteins")
 ```
 
 ### Legacy Usage (Backward Compatible)
 
 ```python
-# Legacy dictionary-based parameters
+# Legacy dictionary-based parameters (still works)
 action_params = {
-    'path_name': 'uniprot_to_ensembl',
-    'batch_size': 100,
-    'min_confidence': 0.8
+    'input_key': 'raw_proteins',
+    'output_key': 'normalized_proteins',
+    'remove_isoforms': True,
+    'validate_format': True
 }
 
-# Execute with legacy interface
+# Execute with legacy interface (backward compatible)
 result = await action.execute(
-    current_identifiers=["P12345", "Q67890"],
-    current_ontology_type="PROTEIN_UNIPROT",
-    action_params=action_params,
-    source_endpoint=source_endpoint,
-    target_endpoint=target_endpoint,
+    params=action_params,
     context=context
 )
 
 # Access dictionary result
-print(f"Output IDs: {result['output_identifiers']}")
-print(f"Details: {result['details']}")
+print(f"Success: {result['success']}")
+print(f"Message: {result['message']}")
+print(f"Data: {result['data']}")
 ```
 
 ## YAML Strategy Compatibility
@@ -202,13 +231,14 @@ Existing YAML strategies work unchanged:
 
 ```yaml
 steps:
-  - name: "execute_mapping_path"
-    action: "EXECUTE_MAPPING_PATH"
-    description: "Map UniProt to Ensembl"
+  - name: "normalize_proteins"
+    action:
+      type: "PROTEIN_NORMALIZE_ACCESSIONS"
     params:
-      path_name: "uniprot_to_ensembl"
-      batch_size: 250
-      min_confidence: 0.75
+      input_key: "raw_proteins"
+      output_key: "normalized_proteins"
+      remove_isoforms: true
+      validate_format: true
 ```
 
 The typed action will:
@@ -225,12 +255,14 @@ The typed action will:
 ```python
 # Invalid parameters
 try:
-    params = ExecuteMappingPathParams(
-        path_name="",  # Invalid: empty string
-        batch_size=0   # Invalid: must be > 0
+    params = ProteinNormalizeParams(
+        input_key="",  # Invalid: empty string
+        output_key="normalized",
+        validate_format="yes"  # Invalid: must be bool
     )
 except ValidationError as e:
     print("Validation errors:", e.errors())
+    # Output: Shows field-specific validation errors with clear messages
 ```
 
 ### Runtime Errors
@@ -282,12 +314,12 @@ if 'error' in result['details']:
 4. **Advanced Validation**: More sophisticated parameter validation
 5. **IDE Extensions**: Enhanced IDE support for YAML strategies
 
-### Migration Timeline
+### Migration Status (as of 2025-08-14)
 
-- **Phase 1**: Core actions (ExecuteMappingPath, FilterByTargetPresence)
-- **Phase 2**: Utility actions (GenerateReport, ExportResults)
-- **Phase 3**: Advanced actions (BidirectionalMatch, OverlapAnalyzer)
-- **Phase 4**: Deprecate legacy base class
+- **Completed**: ~35 of 37 actions migrated to TypedStrategyAction
+- **In Progress**: Final 2-3 infrastructure actions (CHUNK_PROCESSOR remains flexible)
+- **Next Phase**: Schema generation for YAML validation
+- **Future**: Deprecate legacy BaseStrategyAction after full migration
 
 ## Conclusion
 
@@ -298,13 +330,14 @@ The self-registering action pattern combined with Pydantic validation creates a 
 ---
 
 ## Verification Sources
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
 
-* `biomapper/core/strategy_actions/typed_base.py` (TypedStrategyAction implementation)
-* `biomapper/core/strategy_actions/registry.py` (Action registration system)
-* `biomapper/core/strategy_actions/entities/` (Entity-specific typed actions)
-* `tests/unit/core/strategy_actions/` (Action unit tests)
-* `CLAUDE.md` (Migration patterns and guidelines)
-* `README.md` (Type safety migration status)
+- `/biomapper/biomapper/core/strategy_actions/typed_base.py` (TypedStrategyAction generic implementation with execute() wrapper)
+- `/biomapper/biomapper/core/strategy_actions/registry.py` (Global ACTION_REGISTRY and @register_action decorator)
+- `/biomapper/biomapper/core/strategy_actions/models.py` (ActionResult and StandardActionResult models)
+- `/biomapper/biomapper/core/strategy_actions/entities/proteins/` (Example typed protein actions)
+- `/biomapper/tests/unit/core/strategy_actions/` (Unit tests demonstrating both interfaces)
+- `/biomapper/CLAUDE.md` (Type safety migration approach and backward compatibility)
+- `/biomapper/README.md` (Current migration status: ~35 of 37 actions completed)

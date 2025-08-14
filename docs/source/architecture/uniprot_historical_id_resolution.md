@@ -1,6 +1,6 @@
 # UniProt Historical ID Resolution
 
-This document explains how the Biomapper framework handles historical, secondary, and demerged UniProt identifiers.
+This document explains how BioMapper handles historical, secondary, and demerged UniProt identifiers through the `MERGE_WITH_UNIPROT_RESOLUTION` action and related protein normalization actions.
 
 ## Background
 
@@ -22,18 +22,36 @@ The Biomapper framework handles these types of UniProt identifiers:
 3. **Demerged Accessions**: IDs that now point to multiple primary IDs after being split (e.g., P0CG05 → P0DOY2, P0DOY3)
 4. **Obsolete Accessions**: IDs that no longer exist in UniProt
 
-## Implementation Details
+## Implementation in BioMapper Actions
 
-The `UniProtHistoricalResolverClient` provides functionality to handle historical ID resolution:
+BioMapper provides several actions for UniProt ID handling:
+
+### PROTEIN_NORMALIZE_ACCESSIONS
+Standardizes UniProt accessions by removing isoform suffixes and validating format:
 
 ```python
-from biomapper.mapping.clients.uniprot_historical_resolver_client import UniProtHistoricalResolverClient
+- name: normalize_proteins
+  action:
+    type: PROTEIN_NORMALIZE_ACCESSIONS
+    params:
+      input_key: "raw_proteins"
+      output_key: "normalized_proteins"
+      remove_isoforms: true  # P01308-1 → P01308
+      validate_format: true   # Validates UniProt regex pattern
+```
 
-# Initialize the client
-client = UniProtHistoricalResolverClient()
+### MERGE_WITH_UNIPROT_RESOLUTION
+Merges datasets with historical UniProt ID resolution via API:
 
-# Resolve a list of potentially historical/secondary IDs
-results = await client.map_identifiers(["P01308", "Q99895", "P0CG05"])
+```python
+- name: merge_with_resolution
+  action:
+    type: MERGE_WITH_UNIPROT_RESOLUTION
+    params:
+      source_dataset_key: "dataset1"
+      target_dataset_key: "dataset2"
+      enable_api_resolution: true  # Enable UniProt API for unmatched IDs
+      confidence_threshold: 0.5
 ```
 
 ### How It Works
@@ -47,110 +65,204 @@ results = await client.map_identifiers(["P01308", "Q99895", "P0CG05"])
    - If no match is found, it marks the ID as obsolete
 4. The client includes rich metadata in the return value to indicate the resolution type
 
-### Return Format
+### Resolution Results in Context
 
-The client returns results in the standard Biomapper tuple format:
+The actions store resolution results in the shared execution context:
 
 ```python
-results = {
-    "P01308": (["P01308"], "primary"),  # Primary ID (unchanged)
-    "Q99895": (["P01308"], "secondary:P01308"),  # Secondary ID with resolution
-    "P0CG05": (["P0DOY2", "P0DOY3"], "demerged"),  # Demerged ID with multiple targets
-    "FAKEID": (None, "obsolete")  # Obsolete/non-existent ID
-}
+context["datasets"]["merged_dataset"] = [
+    {
+        "source_id": "P01308",
+        "target_id": "P01308",
+        "match_type": "primary",
+        "match_confidence": 1.0
+    },
+    {
+        "source_id": "Q99895",
+        "target_id": "P01308",
+        "match_type": "secondary",
+        "match_confidence": 0.9
+    },
+    {
+        "source_id": "P0CG05",
+        "target_id": "P0DOY2,P0DOY3",
+        "match_type": "demerged",
+        "match_confidence": 0.8
+    }
+]
 ```
 
-- The first element of the tuple is the list of resolved primary IDs (or None)
-- The second element is metadata about the resolution type
+## YAML Strategy Configuration
 
-## Mapping Configuration
+A complete protein harmonization strategy with UniProt resolution:
 
-The Biomapper framework includes a two-step process for UKBB to Arivale protein mapping:
+```yaml
+name: PROTEIN_HARMONIZATION_WITH_RESOLUTION
+description: Harmonize protein datasets with historical ID resolution
 
-1. **Direct Path** (Primary): Try to map the UniProt ID directly to Arivale
-   ```
-   UKBB UniProt ID → Arivale Protein ID
-   ```
+parameters:
+  source_file: "${SOURCE_FILE}"
+  target_file: "${TARGET_FILE}"
+  output_dir: "${OUTPUT_DIR:-/tmp/results}"
 
-2. **Fallback Path** (with Historical Resolution): If direct mapping fails, try historical resolution first
-   ```
-   UKBB UniProt ID → Historical Resolution → Arivale Protein ID
-   ```
+steps:
+  # Step 1: Load source proteins
+  - name: load_source
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.source_file}"
+        identifier_column: "uniprot_id"
+        output_key: "source_proteins_raw"
 
-### Configuration in the Database
+  # Step 2: Normalize source proteins
+  - name: normalize_source
+    action:
+      type: PROTEIN_NORMALIZE_ACCESSIONS
+      params:
+        input_key: "source_proteins_raw"
+        output_key: "source_proteins"
+        remove_isoforms: true
+        validate_format: true
 
-The metamapper database includes these configurations in the `MappingPath` table:
+  # Step 3: Load target proteins
+  - name: load_target
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.target_file}"
+        identifier_column: "protein_accession"
+        output_key: "target_proteins"
 
-1. Direct path (priority 1):
-   ```
-   UKBB_to_Arivale_Protein_via_UniProt
-   ```
+  # Step 4: Merge with UniProt resolution
+  - name: merge_with_resolution
+    action:
+      type: MERGE_WITH_UNIPROT_RESOLUTION
+      params:
+        source_dataset_key: "source_proteins"
+        target_dataset_key: "target_proteins"
+        source_id_column: "identifier"
+        target_id_column: "identifier"
+        output_key: "merged_proteins"
+        enable_api_resolution: true
+        confidence_threshold: 0.5
 
-2. Historical resolution path (priority 2):
-   ```
-   UKBB_to_Arivale_Protein_via_Historical_Resolution
-   ```
+  # Step 5: Calculate overlap statistics
+  - name: analyze_overlap
+    action:
+      type: CALCULATE_SET_OVERLAP
+      params:
+        merged_dataset_key: "merged_proteins"
+        source_name: "Source"
+        target_name: "Target"
+        output_key: "overlap_stats"
+        output_directory: "${parameters.output_dir}"
+```
 
-## Example Usage
+## Python Client Usage
 
-Here's how to execute a mapping that utilizes historical ID resolution:
+Execute the strategy using BiomapperClient:
 
 ```python
-from biomapper.core.mapping_executor import MappingExecutor
+from biomapper_client.client_v2 import BiomapperClient
 
-# Initialize the executor
-executor = MappingExecutor()
+client = BiomapperClient(base_url="http://localhost:8000")
 
-# Execute mapping with fallback to historical resolution
-result = await executor.execute_mapping(
-    source_endpoint_name="UKBB_Protein",
-    target_endpoint_name="Arivale_Protein",
-    source_identifiers=["P01308", "Q99895", "P0CG05"],
-    source_ontology_type="UNIPROTKB_AC",
-    target_ontology_type="ARIVALE_PROTEIN_ID",
+# Execute protein harmonization with UniProt resolution
+result = client.run(
+    strategy_name="PROTEIN_HARMONIZATION_WITH_RESOLUTION",
+    parameters={
+        "source_file": "/data/ukbb_proteins.tsv",
+        "target_file": "/data/hpa_proteins.csv",
+        "output_dir": "/results/protein_harmonization"
+    }
 )
+
+print(f"Job completed: {result['status']}")
+print(f"Merged proteins: {result['results']['merged_proteins_count']}")
+print(f"Resolution stats: {result['results']['resolution_stats']}")
 ```
 
-The MappingExecutor will:
-1. Try the direct path first (for performance)
-2. For any IDs that fail direct mapping, try the fallback path with historical resolution
-3. Combine and return the results
+## Testing Historical Resolution
 
-## Testing
+Test the MERGE_WITH_UNIPROT_RESOLUTION action:
 
-A test dataset is provided to verify historical ID resolution functionality:
+```python
+# tests/unit/core/strategy_actions/test_merge_with_uniprot_resolution.py
 
+class TestMergeWithUniprotResolution:
+    @pytest.mark.asyncio
+    async def test_secondary_id_resolution(self, mock_context):
+        """Test resolution of secondary UniProt IDs."""
+        # Setup test data with known secondary IDs
+        mock_context["datasets"]["source"] = [
+            {"identifier": "Q99895"},  # Secondary ID
+            {"identifier": "P01308"}   # Primary ID
+        ]
+        mock_context["datasets"]["target"] = [
+            {"identifier": "P01308"}   # Primary ID
+        ]
+        
+        action = MergeWithUniprotResolutionAction()
+        params = MergeWithUniprotResolutionParams(
+            source_dataset_key="source",
+            target_dataset_key="target",
+            source_id_column="identifier",
+            target_id_column="identifier",
+            output_key="merged",
+            enable_api_resolution=True
+        )
+        
+        result = await action.execute_typed(params, mock_context)
+        
+        assert result.success
+        merged = mock_context["datasets"]["merged"]
+        # Both Q99895 and P01308 should map to P01308
+        assert len([m for m in merged if m["target_id"] == "P01308"]) == 2
 ```
-/home/ubuntu/biomapper/data/ukbb_test_data_with_historical_ids.tsv
-```
 
-This dataset contains various test cases:
-- Primary IDs that should map directly
-- Secondary IDs that require resolution
-- Demerged IDs that map to multiple entries
-- Obsolete/non-existent IDs that should fail to map
+## Performance Considerations
 
-To run a test of the historical resolution functionality:
+### Batch Processing
+The MERGE_WITH_UNIPROT_RESOLUTION action automatically batches API requests:
+- Default batch size: 250 IDs
+- Configurable via `batch_size` parameter
+- Automatic retry on API failures
 
-```bash
-python /home/ubuntu/biomapper/test_ukbb_historical_mapping.py
-```
+### Caching
+- Results cached in execution context
+- SQLite persistence for job recovery
+- Consider using CHUNK_PROCESSOR for very large datasets
 
-## Limitations
+### API Rate Limits
+- UniProt API has rate limits
+- Action implements exponential backoff
+- Large datasets may take time to process
 
-1. The UniProt REST API may have rate limits, so large batches of IDs should be processed in smaller chunks.
-2. Some very old or specific accessions might not resolve correctly through the API.
-3. Performance can be impacted when large numbers of IDs require resolution through the API.
-4. The UniProt API's treatment of secondary and demerged IDs can change over time as the database is updated.
-5. Reference data used in tests may become outdated as UniProt updates its database.
+## Best Practices
 
-### API Compatibility Notes
+1. **Always normalize first**: Use PROTEIN_NORMALIZE_ACCESSIONS before merging
+2. **Set appropriate confidence thresholds**: Use 0.5-0.7 for historical matches
+3. **Monitor API resolution**: Check statistics for resolution success rates
+4. **Use chunking for large datasets**: Combine with CHUNK_PROCESSOR action
+5. **Validate results**: Use CALCULATE_SET_OVERLAP to verify mappings
 
-Our tests have shown that:
+## Related Actions
 
-1. **Primary IDs**: The API correctly identifies current primary accessions.
-2. **Secondary IDs**: Some IDs that were historically secondary may now appear as primary in the API.
-3. **Demerged IDs**: Some demerged IDs might be reused or become primary IDs in later releases.
+- `PROTEIN_EXTRACT_UNIPROT_FROM_XREFS`: Extract UniProt IDs from compound fields
+- `PROTEIN_MULTI_BRIDGE`: Multi-source protein identifier resolution
+- `CALCULATE_MAPPING_QUALITY`: Assess quality of UniProt mappings
+- `GENERATE_ENHANCEMENT_REPORT`: Detailed report on resolution statistics
 
-For the most accurate historical ID resolution, consider using the UniProt ID Mapping Service's
-batch job endpoint or maintaining a local mapping of secondary-to-primary IDs.
+---
+
+## Verification Sources
+*Last verified: 2025-08-14*
+
+This documentation was verified against the following project resources:
+
+- `/biomapper/biomapper/core/strategy_actions/entities/proteins/merge_with_uniprot_resolution.py` (Main resolution action implementation)
+- `/biomapper/biomapper/core/strategy_actions/entities/proteins/annotation/protein_normalize_accessions.py` (Normalization action)
+- `/biomapper/tests/unit/core/strategy_actions/test_merge_with_uniprot_resolution.py` (Unit tests with test cases)
+- `/biomapper/configs/strategies/experimental/` (Example strategies using UniProt resolution)
+- `/biomapper/CLAUDE.md` (Protein action documentation)

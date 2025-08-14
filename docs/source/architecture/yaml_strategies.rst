@@ -13,15 +13,18 @@ Every strategy follows this comprehensive pattern:
     name: "strategy_name"
     description: "Clear description of what this strategy accomplishes"
     
+    metadata:
+      id: "entity_source_to_target_bridge_v1_tier"
+      entity_type: "proteins|metabolites|chemistry"
+      quality_tier: "experimental|production|test"
+      version: "1.0.0"
+      author: "researcher@institution.edu"
+      tags: ["proteins", "uniprot", "harmonization"]
+    
     parameters:
       input_file: "${DATA_DIR}/input.tsv"
       output_dir: "${OUTPUT_DIR:-/tmp/results}"
       threshold: 0.85
-    
-    metadata:
-      version: "1.0.0"
-      author: "researcher@institution.edu"
-      tags: ["proteins", "uniprot", "harmonization"]
     
     steps:
       - name: load_data
@@ -100,11 +103,12 @@ Strategy Loading and Discovery
 The ``MinimalStrategyService`` loads strategies from multiple sources:
 
 1. **Config Directory** (``configs/strategies/``)
-   Automatically discovered at startup, organized by entity type:
+   Automatically discovered at startup, organized by quality tier:
    
-   * ``experimental/`` - Development and testing strategies
+   * ``experimental/`` - Active development and testing strategies
    * ``production/`` - Validated production workflows
    * ``templates/`` - Reusable strategy templates
+   * ``test/`` - Simple test strategies for validation
 
 2. **Direct File Paths**
    Absolute paths specified in API calls or client requests
@@ -119,22 +123,23 @@ Integration Points
 ------------------
 
 **REST API Endpoints**
-  * ``POST /strategies/execute`` - Execute strategy with parameters
-  * ``GET /strategies/list`` - List available strategies
-  * ``GET /strategies/{name}`` - Get strategy definition
-  * ``GET /jobs/{job_id}`` - Check job status
-  * ``GET /jobs/{job_id}/stream`` - SSE progress stream
+  * ``POST /api/strategies/v2/`` - Execute strategy with parameters
+  * ``GET /api/strategies/`` - List available strategies
+  * ``GET /api/strategies/{name}`` - Get strategy definition
+  * ``GET /api/jobs/{job_id}`` - Check job status and results
+  * ``GET /api/jobs/{job_id}/stream`` - Server-Sent Events progress stream
 
 **Python Client Library**
   .. code-block:: python
   
-      from biomapper_client import BiomapperClient
+      from biomapper_client.client_v2 import BiomapperClient
       
-      client = BiomapperClient()
+      client = BiomapperClient(base_url="http://localhost:8000")
       result = client.run("strategy_name", parameters={
           "input_file": "/data/proteins.csv",
           "threshold": 0.9
       })
+      print(f"Job completed: {result['status']}")
 
 **CLI Tools**
   .. code-block:: bash
@@ -158,13 +163,13 @@ Benefits
 
 Verification Sources
 --------------------
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
 
-* ``biomapper/core/services/strategy_service_v2_minimal.py`` (Strategy loader)
-* ``configs/strategies/`` (Example strategy files)
-* ``biomapper-api/app/api/strategies.py`` (API endpoints)
-* ``biomapper_client/client_v2.py`` (Client integration)
-* ``README.md`` (Strategy examples)
-* ``CLAUDE.md`` (Variable substitution patterns)
+- ``/biomapper/biomapper/core/services/strategy_service_v2_minimal.py`` (MinimalStrategyService with direct YAML loading)
+- ``/biomapper/configs/strategies/`` (Production strategy examples organized by tier)
+- ``/biomapper/biomapper-api/app/api/strategies.py`` (FastAPI strategy endpoints)
+- ``/biomapper/biomapper_client/client_v2.py`` (BiomapperClient synchronous wrapper)
+- ``/biomapper/README.md`` (Strategy execution examples)
+- ``/biomapper/CLAUDE.md`` (Variable substitution patterns and strategy organization)

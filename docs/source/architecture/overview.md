@@ -1,56 +1,107 @@
-# Biomapper Architecture
+# BioMapper Architecture
 
 ## Overview
 
-Biomapper is an extensible Python framework for biological data harmonization and ontology mapping. Built around YAML-based strategies and a registry of specialized actions, it provides flexible workflows for mapping biological entities like proteins, metabolites, and genes.
+BioMapper is a YAML-based workflow platform for biological data harmonization and ontology mapping. Built on a self-registering action system with 37+ specialized actions, it provides comprehensive workflows for mapping proteins, metabolites, chemistry data, and other biological entities.
 
-The architecture prioritizes simplicity and maintainability while enabling sophisticated mapping approaches through an extensible action system that can grow to meet evolving requirements.
+The architecture follows a three-layer design (Client → API → Core) with type-safe actions, automatic validation, and extensibility through simple decorator-based registration.
 
 ## Core Components
 
+### Self-Registering Action System
+Actions automatically register at import time using the `@register_action` decorator, eliminating manual registration. The global `ACTION_REGISTRY` enables dynamic action lookup from YAML strategies.
+
 ### YAML Strategy System
-Configuration-driven workflow definition using simple YAML files. Strategies define sequences of actions to be executed on biological data.
+Declarative workflow definition with variable substitution, metadata tracking, and parameter validation. Strategies execute sequentially with shared context between steps.
 
-### Foundational Action Types
-The system currently ships with three foundational actions that handle common biological data mapping scenarios, with the architecture designed to support additional specialized actions:
+### Available Actions (37+)
+Organized by biological entity type:
 
-- **LOAD_DATASET_IDENTIFIERS**: Load identifiers from CSV/TSV files with flexible column mapping
-- **MERGE_WITH_UNIPROT_RESOLUTION**: Merge datasets with historical UniProt identifier resolution  
-- **CALCULATE_SET_OVERLAP**: Calculate overlap statistics and generate Venn diagrams
+**Data Operations:**
+- `LOAD_DATASET_IDENTIFIERS` - Generic CSV/TSV loader
+- `MERGE_DATASETS` - Combine with deduplication
+- `FILTER_DATASET` - Complex filtering
+- `EXPORT_DATASET_V2` - Multi-format export
+- `CUSTOM_TRANSFORM_EXPRESSION` - Dynamic transformations
 
-### REST API
-FastAPI-based service for remote strategy execution, providing HTTP endpoints for strategy management and execution.
+**Protein Actions:**
+- `PROTEIN_NORMALIZE_ACCESSIONS` - Standardize UniProt IDs
+- `PROTEIN_EXTRACT_UNIPROT_FROM_XREFS` - Extract from compound fields
+- `PROTEIN_MULTI_BRIDGE` - Multi-source resolution
+- `MERGE_WITH_UNIPROT_RESOLUTION` - Historical ID mapping
 
-### Python Client
-Convenient async client library (`biomapper_client`) for API interaction with proper error handling and timeout management.
+**Metabolite Actions:**
+- `METABOLITE_CTS_BRIDGE` - Chemical Translation Service
+- `NIGHTINGALE_NMR_MATCH` - Nightingale platform matching
+- `SEMANTIC_METABOLITE_MATCH` - AI-powered matching
+- `VECTOR_ENHANCED_MATCH` - Vector similarity
+- `METABOLITE_API_ENRICHMENT` - External API integration
 
-### Minimal Strategy Service
-Lightweight service that loads and executes YAML strategies without database dependencies. Located at `biomapper/core/minimal_strategy_service.py`.
+**Chemistry Actions:**
+- `CHEMISTRY_EXTRACT_LOINC` - Extract LOINC codes
+- `CHEMISTRY_FUZZY_TEST_MATCH` - Fuzzy clinical test matching
+- `CHEMISTRY_VENDOR_HARMONIZATION` - Harmonize vendor codes
 
-## Current Directory Structure
+**Analysis & Reporting:**
+- `CALCULATE_SET_OVERLAP` - Jaccard similarity with Venn diagrams
+- `CALCULATE_THREE_WAY_OVERLAP` - Three-dataset comparison
+- `GENERATE_METABOLOMICS_REPORT` - Comprehensive reports
+
+### REST API Layer
+FastAPI service with:
+- Strategy execution endpoints (`/api/strategies/v2/`)
+- Job management with SQLite persistence
+- Background processing with checkpointing
+- Server-Sent Events for real-time progress
+- OpenAPI documentation
+
+### Python Client Library
+`BiomapperClient` in `biomapper_client/client_v2.py` provides:
+- Synchronous wrapper for async operations
+- Automatic retry and error handling
+- Progress streaming support
+- Simple interface: `client.run("strategy_name")`
+
+### Core Execution Engine
+`MinimalStrategyService` in `biomapper/core/services/strategy_service_v2_minimal.py`:
+- Direct YAML loading from `configs/strategies/`
+- Sequential action execution with error handling
+- Variable substitution (`${parameters.key}`, `${env.VAR}`)
+- Shared execution context management
+- No database dependencies
+
+## Directory Structure
 
 ```
 biomapper/
-├── core/
-│   ├── strategy_actions/           # Core action implementations
-│   │   ├── load_dataset_identifiers.py
-│   │   ├── merge_with_uniprot_resolution.py
-│   │   ├── calculate_set_overlap.py
-│   │   ├── typed_base.py          # Base class for type-safe actions
-│   │   └── registry.py            # Action registration system
-│   ├── models/                    # Pydantic models
-│   │   ├── execution_context.py   # Strategy execution context
-│   │   └── action_*.py           # Action parameter models
-│   └── minimal_strategy_service.py # Main strategy execution service
-├── biomapper-api/                 # REST API service
+├── biomapper/                     # Core library
+│   └── core/
+│       ├── strategy_actions/      # Self-registering actions
+│       │   ├── entities/          # Entity-specific actions
+│       │   │   ├── proteins/      # UniProt, Ensembl actions
+│       │   │   ├── metabolites/   # HMDB, CHEBI, KEGG actions
+│       │   │   └── chemistry/     # LOINC, clinical test actions
+│       │   ├── algorithms/        # Analysis algorithms
+│       │   ├── io/               # Import/export actions
+│       │   ├── utils/            # Utility actions
+│       │   ├── typed_base.py     # TypedStrategyAction base
+│       │   ├── registry.py       # Global ACTION_REGISTRY
+│       │   └── models.py         # ActionResult models
+│       └── services/
+│           └── strategy_service_v2_minimal.py  # Execution engine
+├── biomapper-api/                # FastAPI service
 │   └── app/
-│       ├── main.py               # FastAPI application
-│       ├── api/routes/           # API endpoints
-│       └── services/             # API business logic
-├── biomapper_client/             # Python client library
-│   └── biomapper_client/
-│       └── client.py            # Async HTTP client
-├── configs/                      # YAML strategy configurations
+│       ├── main.py              # Server configuration
+│       ├── api/                 # REST endpoints
+│       └── core/
+│           └── mapper_service.py # Job orchestration
+├── biomapper_client/            # Python client
+│   └── client_v2.py            # BiomapperClient
+├── configs/
+│   └── strategies/             # YAML strategies
+│       ├── experimental/       # Development strategies
+│       ├── production/         # Validated strategies
+│       └── templates/          # Reusable templates
 ├── tests/
 │   └── unit/core/strategy_actions/ # Unit tests for actions
 └── docs/                        # Documentation
@@ -59,90 +110,149 @@ biomapper/
 ## System Architecture
 
 ```
-┌─────────────────┐    ┌─────────────────┐
-│  Client Script  │    │  Python Client  │
-│                 │    │   (async/await) │
-└─────────┬───────┘    └─────────┬───────┘
-          │                      │
-          └──────┬───────────────┘
-                 │ HTTP requests
-                 ▼
-          ┌─────────────────┐
-          │   REST API      │
-          │   (FastAPI)     │
-          └─────────┬───────┘
+┌─────────────────────────────────────────────────────┐
+│                   Client Layer                      │
+│  • BiomapperClient (Python)                        │
+│  • CLI Scripts                                     │
+│  • Jupyter Notebooks                               │
+└───────────────────┬─────────────────────────────────┘
+                    │ HTTP/REST
+┌───────────────────▼─────────────────────────────────┐
+│                    API Layer                        │
+│  • FastAPI Server (port 8000)                      │
+│  • MapperService (job orchestration)               │
+│  • Background job processing                        │
+│  • SQLite persistence (biomapper.db)               │
+└───────────────────┬─────────────────────────────────┘
                     │
-                    ▼
-          ┌─────────────────┐
-          │ Strategy        │
-          │ Service         │
-          └─────────┬───────┘
-                    │
-                    ▼
-          ┌─────────────────┐
-          │ Core Actions    │
-          │ Registry        │
-          └─────────────────┘
+┌───────────────────▼─────────────────────────────────┐
+│                   Core Layer                        │
+│  • MinimalStrategyService (execution engine)       │
+│  • ACTION_REGISTRY (global action registry)        │
+│  • TypedStrategyAction (base class)                │
+│  • Execution Context (shared state)                │
+└─────────────────────────────────────────────────────┘
 ```
 
-## Data Flow
+## Execution Flow
 
-1. **Strategy Loading**: YAML files define the workflow steps and parameters
-2. **Context Creation**: Shared dictionary for data passing between actions
-3. **Action Execution**: Sequential step processing with type-safe parameters
-4. **Result Aggregation**: Combined results with metadata and timing metrics
-5. **Response Formatting**: JSON response with execution statistics
+1. **Client Request**: `BiomapperClient.run("strategy_name")`
+2. **Job Creation**: API creates background job with unique ID
+3. **Strategy Loading**: MinimalStrategyService loads YAML from configs/
+4. **Action Resolution**: ACTION_REGISTRY lookup for each step
+5. **Parameter Validation**: Pydantic models validate action params
+6. **Sequential Execution**: Actions execute via `execute_typed()`
+7. **Context Updates**: Each action modifies shared context
+8. **Checkpointing**: Progress saved to SQLite for recovery
+9. **Result Return**: Via REST response or SSE stream
 
 ## Key Design Principles
 
-### Simplicity First
-Minimal viable functionality without unnecessary complexity. Focus on the 80% use case rather than comprehensive coverage.
+### 1. Self-Registration
+- Actions register automatically via `@register_action` decorator
+- No manual registration or executor modifications needed
+- Plugin-style extensibility
 
-### Configuration Over Code  
-Define workflows in YAML rather than writing Python code. Makes the system accessible to non-programmers.
+### 2. Type Safety
+- Pydantic models for parameter validation
+- `TypedStrategyAction` generic base class
+- Compile-time type hints with runtime validation
+- Backward compatibility during migration
 
-### Type Safety
-Pydantic models ensure data validation throughout the system, preventing runtime errors and improving reliability.
+### 3. Shared Execution Context
+- Actions communicate through shared `Dict[str, Any]`
+- Standard keys: `datasets`, `statistics`, `output_files`
+- Data flows between steps via named keys
 
-### API-First Design
-All functionality accessible via REST API, enabling remote execution and integration with other systems.
+### 4. Entity-Based Organization
+- Actions organized by biological entity type
+- Clear navigation: `entities/proteins/`, `entities/metabolites/`
+- Reusable algorithms in dedicated directories
 
-### No Database Dependencies
-Strategies execute without persistent storage requirements, using file-based input/output.
+### 5. Test-Driven Development
+- Write tests first, then implementation
+- Minimum 80% coverage requirement
+- All new actions must use TypedStrategyAction pattern
 
-### Performance Tracking
-Built-in timing metrics for benchmarking and optimization analysis.
+## Creating New Actions
 
-## Action System
+```python
+from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
+from biomapper.core.strategy_actions.registry import register_action
+from biomapper.core.strategy_actions.models import ActionResult
+from pydantic import BaseModel, Field
 
-Actions are the core building blocks of mapping strategies. Each action:
+class MyActionParams(BaseModel):
+    input_key: str = Field(..., description="Input dataset key")
+    threshold: float = Field(0.8, ge=0.0, le=1.0)
+    output_key: str = Field(..., description="Output dataset key")
 
-- Inherits from `TypedStrategyAction` for type safety
-- Uses Pydantic models for parameter validation
-- Operates on a shared context dictionary
-- Returns structured results with metadata
-- Is automatically registered via decorators
+@register_action("MY_ACTION")
+class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
+    def get_params_model(self) -> type[MyActionParams]:
+        return MyActionParams
+    
+    async def execute_typed(self, params: MyActionParams, context: Dict) -> ActionResult:
+        # Access input data
+        input_data = context["datasets"].get(params.input_key, [])
+        
+        # Process data
+        processed = [item for item in input_data 
+                    if item.get("score", 0) >= params.threshold]
+        
+        # Store output
+        context["datasets"][params.output_key] = processed
+        
+        return ActionResult(
+            success=True,
+            message=f"Processed {len(processed)} items"
+        )
+```
 
-See [Action System](./action_system.rst) for detailed information.
+Action will auto-register - no other changes needed!
 
 ## Strategy Configuration
 
-Strategies are defined in YAML files with this structure:
+Strategies are defined in YAML files:
 
 ```yaml
 name: "STRATEGY_NAME"
 description: "Strategy description"
+
+metadata:
+  entity_type: "proteins|metabolites|chemistry"
+  quality_tier: "experimental|production|test"
+  version: "1.0.0"
+
+parameters:
+  input_file: "${DATA_DIR}/input.tsv"
+  output_dir: "${OUTPUT_DIR:-/tmp/results}"
 
 steps:
   - name: step_name
     action:
       type: ACTION_TYPE
       params:
-        parameter1: value1
-        parameter2: value2
+        input_key: "dataset_key"
+        output_key: "result_key"
 ```
 
 See [YAML Strategies](./yaml_strategies.rst) for complete documentation.
+
+## Performance Considerations
+
+- **Chunking**: Large datasets processed via CHUNK_PROCESSOR action
+- **Async Execution**: All actions implement async execute_typed()
+- **Caching**: SQLite persistence for job recovery
+- **Streaming**: SSE for real-time progress without polling
+- **Memory Management**: Iterative processing for large files
+
+## Current Status
+
+- **37+ Actions**: Comprehensive coverage of biological entities
+- **Type Safety Migration**: ~35 of 37 actions use TypedStrategyAction
+- **Production Ready**: Used in multiple research projects
+- **Active Development**: Regular additions based on research needs
 
 ## Deployment
 
@@ -151,24 +261,35 @@ The system runs as a containerized FastAPI service with:
 - Automatic API documentation via OpenAPI/Swagger
 - Health check endpoints
 - CORS support for web applications
+- SQLite job persistence
+- Background job processing
 
-## Future Considerations
+## Future Enhancements
 
-### Action System Expansion
-The extensible action architecture enables:
-- Easy addition of specialized action types for advanced mapping approaches
-- Integration with additional biological databases and APIs
-- Development of domain-specific mapping strategies
-- Community contributions of new action types
+### Planned Features
+- JSON schema generation for YAML validation
+- OpenAPI integration for auto-documentation
+- Web UI for strategy creation and monitoring
+- Advanced caching strategies
+- Parallel action execution support
 
-### Other Planned Enhancements
-- Performance optimizations for large datasets
-- Enhanced error reporting and debugging
-- Real-time progress tracking
+### Extensibility Points
+- Custom action types via registry
+- Alternative execution strategies
+- Different storage backends
+- Integration with external workflow systems
 
-### Scalability
-The current architecture supports horizontal scaling by:
-- Stateless API design
-- File-based configuration
-- No database dependencies
-- Async request handling
+---
+
+## Verification Sources
+*Last verified: 2025-08-14*
+
+This documentation was verified against the following project resources:
+
+- `/biomapper/biomapper/core/strategy_actions/` (37 self-registering actions organized by entity)
+- `/biomapper/biomapper/core/services/strategy_service_v2_minimal.py` (MinimalStrategyService implementation)
+- `/biomapper/biomapper-api/app/` (FastAPI service with job persistence)
+- `/biomapper/biomapper_client/client_v2.py` (BiomapperClient synchronous wrapper)
+- `/biomapper/configs/strategies/` (Production YAML strategy examples)
+- `/biomapper/CLAUDE.md` (Architecture patterns and guidelines)
+- `/biomapper/README.md` (High-level overview and action list)
