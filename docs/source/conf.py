@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath("../.."))
 project = "biomapper"
 copyright = "2025, Trent Leslie"
 author = "Trent Leslie"
-version = "0.4.0"
+version = "0.5.2"
 release = version
 
 # Extensions configuration
@@ -79,3 +79,13 @@ intersphinx_mapping = {
     "numpy": ("https://numpy.org/doc/stable/", None),
     "pandas": ("https://pandas.pydata.org/docs/", None),
 }
+
+# ---
+# Verification Sources
+# Last verified: 2025-08-14
+#
+# This configuration was verified against the following project resources:
+#
+# - /biomapper/pyproject.toml (version number and project metadata)
+# - /biomapper/README.md (project description and author information)
+# - /biomapper/docs/requirements.txt (Sphinx extension dependencies)
