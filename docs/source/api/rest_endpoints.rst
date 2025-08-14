@@ -51,7 +51,7 @@ Check if the API server is running and verify service status.
    Response:
    {
      "status": "healthy",
-     "version": "0.5.2",
+     "version": "0.2.0",
      "services": {
        "database": "connected",
        "mapper_service": "initialized",
@@ -112,6 +112,26 @@ Execute a strategy by name or with inline YAML.
      "job_id": "550e8400-e29b-41d4-a716-446655440000",
      "status": "running",
      "message": "Strategy execution started"
+   }
+
+Additional Strategy Endpoints
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: http
+
+   POST /api/jobs/execute
+   Content-Type: application/json
+   
+   # Full persistence support with checkpointing
+   {
+     "strategy": "protein_harmonization",
+     "parameters": {
+       "input_file": "/data/proteins.csv"
+     },
+     "options": {
+       "checkpoint_enabled": true,
+       "validate_prerequisites": true
+     }
    }
 
 Job Management Endpoints
@@ -416,14 +436,14 @@ See :doc:`client_reference` for detailed client documentation.
 
 Verification Sources
 ~~~~~~~~~~~~~~~~~~~~
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
 
-- ``biomapper-api/app/main.py`` (FastAPI app configuration and middleware)
-- ``biomapper-api/app/api/routes/strategies_v2_simple.py`` (V2 strategy execution routes)
-- ``biomapper-api/app/api/routes/jobs.py`` (Job management endpoints)
-- ``biomapper-api/app/api/routes/health.py`` (Health check endpoint)
-- ``biomapper-api/app/api/routes/resources.py`` (Resource management endpoints)
-- ``biomapper-api/pyproject.toml`` (API dependencies)
-- ``pyproject.toml`` (Main project configuration)
+- ``/biomapper/biomapper-api/app/main.py`` (FastAPI app configuration, routers, and middleware)
+- ``/biomapper/biomapper-api/app/api/routes/strategies_v2_simple.py`` (V2 strategy execution implementation)
+- ``/biomapper/biomapper-api/app/api/routes/jobs.py`` (Job management with persistence support)
+- ``/biomapper/biomapper-api/app/api/routes/health.py`` (Health check endpoint implementation)
+- ``/biomapper/biomapper-api/app/api/routes/resources.py`` (Resource management endpoints)
+- ``/biomapper/biomapper-api/app/models/strategy_execution.py`` (Request/response models)
+- ``/biomapper/biomapper-api/pyproject.toml`` (API dependencies and version)

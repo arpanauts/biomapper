@@ -40,11 +40,11 @@ Health Check
    # Response
    {
      "status": "healthy",
-     "version": "0.5.2",
-     "timestamp": "2024-08-13T10:00:00Z",
-     "resources": {
+     "version": "0.2.0",
+     "services": {
        "database": "connected",
-       "mapper_service": "initialized"
+       "mapper_service": "initialized",
+       "resource_manager": "running"
      }
    }
 
@@ -58,12 +58,12 @@ Execute Strategy
 
 .. code-block:: bash
 
-   POST /api/v2/strategies/execute
+   POST /api/strategies/v2/execute
    Content-Type: application/json
    
    # Option 1: Execute pre-defined YAML strategy by name
    {
-     "strategy_name": "protein_harmonization",  # References a .yaml file
+     "strategy": "protein_harmonization",  # References a .yaml file
      "parameters": {
        "input_file": "/data/proteins.csv",
        "output_dir": "/results"
@@ -129,8 +129,8 @@ Synchronous
        "output_dir": "/results"
    })
    
-   print(f"Success: {result['success']}")
-   print(f"Records processed: {result['statistics']['total_records']}")
+   print(f"Success: {result.success}")
+   print(f"Records processed: {result.results['statistics']['total_records']}")
 
 Asynchronous
 ~~~~~~~~~~~~
@@ -235,13 +235,14 @@ Progress updates via Server-Sent Events (SSE) and WebSocket connections:
 
 Verification Sources
 ~~~~~~~~~~~~~~~~~~~~
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
 
-- ``biomapper-api/app/main.py`` (API initialization and route configuration)
-- ``biomapper-api/app/api/routes/strategies_v2_simple.py`` (V2 strategy execution endpoints)
-- ``biomapper-api/app/api/routes/jobs.py`` (Job management endpoints)
-- ``biomapper-api/pyproject.toml`` (API dependencies and version)
-- ``biomapper_client/biomapper_client/client_v2.py`` (Client implementation)
-- ``CLAUDE.md`` (Project conventions and commands)
+- ``/biomapper/biomapper-api/app/main.py`` (API initialization, routers, and startup events)
+- ``/biomapper/biomapper-api/app/api/routes/strategies_v2_simple.py`` (V2 strategy execution endpoint implementation)
+- ``/biomapper/biomapper-api/app/api/routes/jobs.py`` (Job management and persistence endpoints)
+- ``/biomapper/biomapper-api/app/api/routes/health.py`` (Health check endpoint)
+- ``/biomapper/biomapper-api/pyproject.toml`` (API dependencies and version)
+- ``/biomapper/biomapper_client/biomapper_client/client_v2.py`` (BiomapperClient implementation)
+- ``/biomapper/CLAUDE.md`` (Project conventions, commands, and architecture)

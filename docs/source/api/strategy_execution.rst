@@ -82,11 +82,11 @@ Execution Workflow
 
 3. **Strategy Loading**
    
-   - YAML file loaded from ``/home/ubuntu/biomapper/configs/strategies/`` (configurable)
-   - Parameters substituted (``${parameters.key}``)
+   - YAML file loaded from ``configs/strategies/`` directory and subdirectories
+   - Parameters substituted using ParameterResolver (``${parameters.key}``)
    - Environment variables resolved (``${env.VAR}`` or ``${VAR}``)
    - Default values supported (``${parameters.key:-default}``)
-   - Strategy validated for required fields
+   - Strategy validated for required fields (name, steps)
 
 4. **Action Execution**
    
@@ -431,14 +431,15 @@ Example: Complete Workflow
 
 Verification Sources
 ~~~~~~~~~~~~~~~~~~~~
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
 
-- ``biomapper-api/app/api/routes/strategies_v2_simple.py`` (Strategy execution endpoints)
-- ``biomapper-api/app/api/routes/jobs.py`` (Job management and control)
-- ``biomapper-api/app/services/persistent_execution_engine.py`` (Execution engine implementation)
-- ``biomapper/core/minimal_strategy_service.py`` (Strategy loading and execution)
-- ``biomapper/core/strategy_actions/registry.py`` (Action registration system)
-- ``biomapper_client/biomapper_client/client_v2.py`` (Client progress tracking)
-- ``CLAUDE.md`` (Strategy execution patterns)
+- ``/biomapper/biomapper-api/app/api/routes/strategies_v2_simple.py`` (V2 strategy execution endpoints and job handling)
+- ``/biomapper/biomapper-api/app/api/routes/jobs.py`` (Job management with persistence and checkpointing)
+- ``/biomapper/biomapper-api/app/services/persistent_execution_engine.py`` (Execution engine with checkpoint support)
+- ``/biomapper/biomapper/core/minimal_strategy_service.py`` (MinimalStrategyService implementation and YAML loading)
+- ``/biomapper/biomapper/core/strategy_actions/registry.py`` (Self-registering action system)
+- ``/biomapper/biomapper/core/infrastructure/parameter_resolver.py`` (Parameter substitution logic)
+- ``/biomapper/biomapper_client/biomapper_client/client_v2.py`` (Client-side progress tracking and SSE)
+- ``/biomapper/CLAUDE.md`` (Strategy execution patterns and architecture)

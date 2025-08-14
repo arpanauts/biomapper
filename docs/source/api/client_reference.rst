@@ -33,20 +33,22 @@ The ``BiomapperClient`` class provides the main interface for interacting with t
 Synchronous Methods
 -------------------
 
-.. method:: run(strategy_name, parameters=None, options=None, watch=False)
+.. method:: run(strategy, parameters=None, context=None, wait=True, watch=False)
 
    Execute a strategy synchronously (recommended for most users).
    
-   :param strategy_name: Name of the strategy to execute
-   :type strategy_name: str
+   :param strategy: Name of the strategy, path to YAML file, or inline strategy dict
+   :type strategy: Union[str, Path, dict]
    :param parameters: Optional parameter overrides
    :type parameters: dict
-   :param options: Execution options (checkpoint_enabled, timeout_seconds, etc.)
-   :type options: dict
+   :param context: Optional execution context (defaults to empty context)
+   :type context: Union[dict, ExecutionContext]
+   :param wait: Whether to wait for completion (default: True)
+   :type wait: bool
    :param watch: Display real-time progress (default: False)
    :type watch: bool
-   :returns: Strategy execution results
-   :rtype: dict
+   :returns: Job object if wait=False, StrategyResult if wait=True
+   :rtype: Union[Job, StrategyResult]
    
    **Example:**
    
@@ -60,14 +62,16 @@ Synchronous Methods
 Asynchronous Methods
 --------------------
 
-.. method:: async execute_strategy(strategy_name, parameters=None, options=None)
+.. method:: async execute_strategy(strategy, parameters=None, context=None, options=None)
 
    Execute a strategy asynchronously.
    
-   :param strategy_name: Name of the strategy to execute or inline strategy dict
-   :type strategy_name: Union[str, dict]
+   :param strategy: Name of the strategy, path to YAML file, or inline strategy dict
+   :type strategy: Union[str, Path, dict]
    :param parameters: Optional parameter overrides
    :type parameters: dict
+   :param context: Optional execution context (defaults to empty context)
+   :type context: Union[dict, ExecutionContext]
    :param options: Execution options
    :type options: ExecutionOptions
    :returns: Job object with execution details
@@ -282,10 +286,10 @@ Performance Considerations
 Version Compatibility
 ---------------------
 
-- Client version: 0.1.0
-- Compatible API versions: 0.5.0+
-- Python: 3.9+
-- Dependencies: httpx, pydantic 2.11+
+- Client version: 0.2.0
+- Compatible API versions: 0.2.0+
+- Python: 3.11+
+- Dependencies: httpx, pydantic 2.0+
 
 See Also
 --------
@@ -298,14 +302,14 @@ See Also
 
 Verification Sources
 ~~~~~~~~~~~~~~~~~~~~
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
 
-- ``biomapper_client/biomapper_client/client_v2.py`` (BiomapperClient implementation)
-- ``biomapper_client/biomapper_client/models.py`` (Client data models)
-- ``biomapper_client/biomapper_client/exceptions.py`` (Exception classes)
-- ``biomapper_client/biomapper_client/progress.py`` (Progress tracking)
-- ``biomapper_client/pyproject.toml`` (Client dependencies and version)
-- ``biomapper-api/app/models/strategy_execution.py`` (API response models)
-- ``CLAUDE.md`` (Client usage patterns)
+- ``/biomapper/biomapper_client/biomapper_client/client_v2.py`` (BiomapperClient implementation and method signatures)
+- ``/biomapper/biomapper_client/biomapper_client/models.py`` (Client data models and execution context)
+- ``/biomapper/biomapper_client/biomapper_client/exceptions.py`` (Exception class definitions)
+- ``/biomapper/biomapper_client/biomapper_client/progress.py`` (Progress tracking implementation)
+- ``/biomapper/biomapper_client/pyproject.toml`` (Client dependencies and version)
+- ``/biomapper/biomapper-api/app/models/strategy_execution.py`` (API response models)
+- ``/biomapper/CLAUDE.md`` (Client usage patterns and architecture)
