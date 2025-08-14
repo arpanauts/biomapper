@@ -101,7 +101,14 @@ Basic Test Structure
            
            # Act
            action = MyAction()
-           result = await action.execute_typed(params, sample_context)
+           result = await action.execute_typed(
+               current_identifiers=[],
+               current_ontology_type="",
+               params=params,
+               source_endpoint=None,
+               target_endpoint=None,
+               context=sample_context
+           )
            
            # Assert
            assert result.success
@@ -144,11 +151,18 @@ Testing Error Handling
    @pytest.mark.asyncio
    async def test_missing_input_key():
        """Test handling of missing input data."""
-       params = MyActionParams(input_key="missing")
+       params = MyActionParams(input_key="missing", output_key="output")
        context = {"datasets": {}}
        
        action = MyAction()
-       result = await action.execute_typed(params, context)
+       result = await action.execute_typed(
+           current_identifiers=[],
+           current_ontology_type="",
+           params=params,
+           source_endpoint=None,
+           target_endpoint=None,
+           context=context
+       )
        
        assert not result.success
        assert "not found" in result.message.lower()
@@ -156,11 +170,18 @@ Testing Error Handling
    @pytest.mark.asyncio
    async def test_empty_dataset():
        """Test handling of empty dataset."""
-       params = MyActionParams(input_key="empty")
+       params = MyActionParams(input_key="empty", output_key="output")
        context = {"datasets": {"empty": []}}
        
        action = MyAction()
-       result = await action.execute_typed(params, context)
+       result = await action.execute_typed(
+           current_identifiers=[],
+           current_ontology_type="",
+           params=params,
+           source_endpoint=None,
+           target_endpoint=None,
+           context=context
+       )
        
        assert result.success  # Should handle gracefully
        assert context["datasets"][params.output_key] == []
@@ -484,12 +505,12 @@ Best Practices
 Verification Sources
 --------------------
 
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
 
-- ``/home/ubuntu/biomapper/tests/`` (test suite structure)
-- ``/home/ubuntu/biomapper/pyproject.toml`` (test dependencies and configuration)
-- ``/home/ubuntu/biomapper/CLAUDE.md`` (test commands and practices)
-- ``/home/ubuntu/biomapper/Makefile`` (test-related make commands)
-- ``/home/ubuntu/biomapper/.github/workflows/`` (CI configuration)
+- ``/biomapper/tests/unit/core/strategy_actions/test_load_dataset_identifiers.py`` (actual test implementation patterns)
+- ``/biomapper/pyproject.toml`` (pytest and coverage dependencies)
+- ``/biomapper/CLAUDE.md`` (TDD approach and test commands)
+- ``/biomapper/Makefile`` (make test command with coverage reporting)
+- ``/biomapper/biomapper/core/strategy_actions/typed_base.py`` (execute_typed method signature)

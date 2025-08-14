@@ -141,9 +141,17 @@ Step 3: Implement the Action
            """Return the parameters model class."""
            return MyActionParams
        
+       def get_result_model(self) -> type[StandardActionResult]:
+           """Return the result model class."""
+           return StandardActionResult
+       
        async def execute_typed(
            self, 
-           params: MyActionParams, 
+           current_identifiers: List[str],
+           current_ontology_type: str,
+           params: MyActionParams,
+           source_endpoint: Any,
+           target_endpoint: Any,
            context: Dict[str, Any]
        ) -> StandardActionResult:
            """Execute the filtering action."""
@@ -385,12 +393,12 @@ Need Help?
 Verification Sources
 --------------------
 
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
 
-- ``/home/ubuntu/biomapper/biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction base class)
-- ``/home/ubuntu/biomapper/biomapper/core/strategy_actions/registry.py`` (action registration system)
-- ``/home/ubuntu/biomapper/biomapper/core/strategy_actions/load_dataset_identifiers.py`` (example action implementation)
-- ``/home/ubuntu/biomapper/biomapper/core/models/action_results.py`` (result models)
-- ``/home/ubuntu/biomapper/CLAUDE.md`` (creating actions guide)
+- ``/biomapper/biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction base class with execute_typed signature)
+- ``/biomapper/biomapper/core/strategy_actions/registry.py`` (self-registering action system with @register_action decorator)
+- ``/biomapper/biomapper/core/strategy_actions/load_dataset_identifiers.py`` (real action implementation showing correct patterns)
+- ``/biomapper/CLAUDE.md`` (action organization and development patterns)
+- ``/biomapper/configs/strategies/`` (YAML strategy examples and usage)

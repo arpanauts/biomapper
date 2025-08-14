@@ -30,6 +30,9 @@ Getting Started
       
       # Verify installation
       poetry run biomapper --help
+      
+      # Start the API server (optional)
+      cd biomapper-api && poetry run uvicorn app.main:app --reload --port 8000
 
 3. **Create Feature Branch**
 
@@ -366,12 +369,13 @@ Your contributions make BioMapper better for everyone. We appreciate your time a
 Verification Sources
 --------------------
 
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
 
-- ``/home/ubuntu/biomapper/README.md`` (installation and setup instructions)
-- ``/home/ubuntu/biomapper/CLAUDE.md`` (development commands and practices)
-- ``/home/ubuntu/biomapper/pyproject.toml`` (dependency versions and configuration)
-- ``/home/ubuntu/biomapper/Makefile`` (available make commands)
-- ``/home/ubuntu/biomapper/biomapper/core/strategy_actions/`` (action implementation patterns)
+- ``/biomapper/README.md`` (installation instructions and project overview)
+- ``/biomapper/CLAUDE.md`` (development commands and CI integration)
+- ``/biomapper/pyproject.toml`` (Poetry dependency management and Python 3.11+ requirement)
+- ``/biomapper/Makefile`` (make check command and available development shortcuts)
+- ``/biomapper/biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction pattern for new actions)
+- ``/biomapper/biomapper/core/strategy_actions/registry.py`` (self-registering action system)
