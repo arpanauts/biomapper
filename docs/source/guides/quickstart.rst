@@ -16,7 +16,7 @@ Installation
 .. code-block:: bash
 
    # Clone and install
-   git clone https://github.com/your-org/biomapper.git
+   git clone https://github.com/arpanauts/biomapper.git
    cd biomapper
    poetry install --with dev,docs,api
    poetry shell
@@ -81,12 +81,9 @@ Your First Strategy
 .. code-block:: bash
 
    # Using the biomapper CLI
-   poetry run biomapper execute test_strategy.yaml \
-     --param input_file=/data/proteins.csv \
-     --param output_dir=/results
-   
-   # Or using the execute script
-   poetry run python scripts/client_scripts/execute_strategy.py test_strategy.yaml
+   poetry run biomapper run test_strategy.yaml \
+     --parameters '{"input_file": "/data/proteins.csv", "output_dir": "/results"}' \
+     --watch
 
 Verify Installation
 -------------------
@@ -125,10 +122,12 @@ Next Steps
 
 ---
 ## Verification Sources
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
-- `biomapper-api/app/main.py` (API startup command)
-- `biomapper_client/client_v2.py` (client usage patterns)
-- `biomapper/core/strategy_actions/registry.py` (available actions)
-- `scripts/client_scripts/` (CLI scripts)
+
+- `/biomapper/biomapper-api/app/main.py` (uvicorn server startup command)
+- `/biomapper/biomapper_client/biomapper_client/client_v2.py` (BiomapperClient.run() method)
+- `/biomapper/biomapper_client/biomapper_client/cli_v2.py` (biomapper run CLI command)
+- `/biomapper/biomapper/core/strategy_actions/registry.py` (action registration)
+- `/biomapper/pyproject.toml` (Python 3.11+ requirement, repository URL)

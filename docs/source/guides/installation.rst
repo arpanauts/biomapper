@@ -18,7 +18,7 @@ For developers wanting to contribute or modify Biomapper:
 .. code-block:: bash
 
     # Clone the repository
-    git clone https://github.com/your-org/biomapper.git
+    git clone https://github.com/arpanauts/biomapper.git
     cd biomapper
     
     # Install Poetry if not already installed
@@ -41,7 +41,7 @@ For production use (API server only):
 .. code-block:: bash
 
     # Clone the repository
-    git clone https://github.com/your-org/biomapper.git
+    git clone https://github.com/arpanauts/biomapper.git
     cd biomapper
     
     # Install only runtime dependencies
@@ -54,20 +54,18 @@ For production use (API server only):
 Docker Installation
 -------------------
 
-For containerized deployment:
+Docker support is currently available for CI/testing purposes:
 
 .. code-block:: bash
 
-    # Build the Docker image
-    docker build -t biomapper:latest .
+    # CI-specific Docker setup is available
+    # Production Docker support coming soon
     
-    # Run the container
-    docker run -p 8000:8000 biomapper:latest
-    
-    # Or use docker-compose
-    docker-compose up -d
+    # For CI testing:
+    docker build -f Dockerfile.ci -t biomapper-ci:latest .
+    docker-compose -f docker-compose.ci.yml up
 
-*Note: Docker support is experimental and subject to change.*
+*Note: Production Docker deployment is under development.*
 
 CLI Installation
 ----------------
@@ -108,10 +106,12 @@ Troubleshooting
 
 ---
 ## Verification Sources
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
-- `pyproject.toml` (dependency specifications)
-- `biomapper-api/app/main.py` (API server configuration)
-- `CLAUDE.md` (installation instructions)
-- `Makefile` (build commands)
+
+- `/biomapper/pyproject.toml` (Python 3.11+ requirement, dependency specifications)
+- `/biomapper/biomapper-api/app/main.py` (FastAPI server configuration)
+- `/biomapper/CLAUDE.md` (essential installation commands and environment setup)
+- `/biomapper/Makefile` (make test, make format, make lint-fix commands)
+- `/biomapper/Dockerfile.ci` (CI-specific Docker configuration)

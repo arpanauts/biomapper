@@ -6,7 +6,7 @@ Biomapper requires Python 3.11 or later. Clone the repository and install using 
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/biomapper.git
+git clone https://github.com/arpanauts/biomapper.git
 cd biomapper
 
 # Install Poetry if not already installed
@@ -69,25 +69,24 @@ import asyncio
 
 async def main():
     async with BiomapperClient() as client:
-        result = await client.execute_strategy_file("my_strategy.yaml")
+        result = await client.execute_strategy("my_strategy.yaml")
         print(f"Status: {result['status']}")
 
 asyncio.run(main())
 ```
 
-Or use curl:
+Or use the CLI:
 
 ```bash
-curl -X POST http://localhost:8000/api/strategies/v2/execute \
-  -H "Content-Type: application/json" \
-  -d @my_strategy.yaml
+# Using the biomapper CLI
+poetry run biomapper run my_strategy.yaml --watch
 ```
 
 ## Core Concepts
 
 ### Actions
 
-Biomapper ships with 35 self-registering actions organized by domain:
+Biomapper ships with 38 self-registering actions organized by domain:
 
 **Core Data Operations:**
 - **LOAD_DATASET_IDENTIFIERS**: Load biological identifiers from CSV/TSV files
@@ -252,11 +251,13 @@ poetry run pytest tests/unit/
 
 ---
 ## Verification Sources
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
-- `biomapper-api/app/main.py` (API endpoint definitions)
-- `biomapper/core/strategy_actions/registry.py` (action registration)
-- `biomapper_client/client_v2.py` (client implementation)
-- `pyproject.toml` (dependency versions)
-- `CLAUDE.md` (project conventions)
+
+- `/biomapper/biomapper-api/app/main.py` (FastAPI server and endpoint definitions)
+- `/biomapper/biomapper/core/strategy_actions/registry.py` (38 self-registering actions via @register_action)
+- `/biomapper/biomapper_client/biomapper_client/client_v2.py` (BiomapperClient with run() and execute_strategy() methods)
+- `/biomapper/biomapper_client/biomapper_client/cli_v2.py` (CLI run command implementation)
+- `/biomapper/pyproject.toml` (Python 3.11+ requirement, repository URL)
+- `/biomapper/CLAUDE.md` (essential commands and project conventions)

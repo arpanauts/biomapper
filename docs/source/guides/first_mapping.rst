@@ -70,7 +70,7 @@ Method 1: Python Client
     
     async def main():
         async with BiomapperClient() as client:
-            result = await client.execute_strategy_file("my_first_mapping.yaml")
+            result = await client.execute_strategy("my_first_mapping.yaml")
             
             # Access the loaded data
             if 'datasets' in result.get('results', {}):
@@ -80,12 +80,16 @@ Method 1: Python Client
     # Run async version if needed
     # asyncio.run(main())
 
-Method 2: CLI Script
-~~~~~~~~~~~~~~~~~~~~
+Method 2: CLI Command
+~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
-    poetry run python scripts/client_scripts/execute_strategy.py my_first_mapping.yaml
+    # Using the biomapper CLI
+    poetry run biomapper run my_first_mapping.yaml --watch
+    
+    # Or without progress tracking
+    poetry run biomapper run my_first_mapping.yaml
 
 Understanding Results
 ---------------------
@@ -175,7 +179,7 @@ Example with overlap calculation:
 Available Actions
 -----------------
 
-Biomapper includes 35+ self-registering actions. Key ones for beginners:
+Biomapper includes 38+ self-registering actions. Key ones for beginners:
 
 * **Data Loading**: LOAD_DATASET_IDENTIFIERS
 * **Protein Mapping**: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS, PROTEIN_NORMALIZE_ACCESSIONS, MERGE_WITH_UNIPROT_RESOLUTION
@@ -196,10 +200,12 @@ Continue Learning
 
 ---
 ## Verification Sources
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-14*
 
 This documentation was verified against the following project resources:
-- `biomapper_client/client_v2.py` (client usage examples)
-- `biomapper/core/strategy_actions/analysis/calculate_set_overlap.py` (action parameters)
-- `scripts/client_scripts/execute_strategy.py` (CLI execution)
-- `configs/strategies/` (example strategies)
+
+- `/biomapper/biomapper_client/biomapper_client/client_v2.py` (BiomapperClient class with run() and execute_strategy() methods)
+- `/biomapper/biomapper_client/biomapper_client/cli_v2.py` (CLI run command implementation)
+- `/biomapper/biomapper/core/strategy_actions/analysis/calculate_set_overlap.py` (CALCULATE_SET_OVERLAP action parameters)
+- `/biomapper/biomapper/core/strategy_actions/registry.py` (38 self-registering actions via @register_action decorator)
+- `/biomapper/README.md` (architecture overview and installation instructions)
