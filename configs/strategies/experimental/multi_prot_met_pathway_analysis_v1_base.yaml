@@ -1,312 +1,302 @@
 name: multi_prot_met_pathway_analysis_v1_base
 metadata:
-  id: "multi_prot_met_pathway_analysis_v1_base"
-  name: "Protein-Metabolite Pathway Analysis"
-  version: "1.0.0"
-  created: "2025-01-08"
-  author: "biomapper-team"
-  entity_type: ["proteins", "metabolites"]
-  source_dataset: ["multi_cohort"]
-  target_dataset: "pathway_enriched"
-  bridge_type: ["pathway", "interaction", "semantic"]
-  
-  quality_tier: "experimental"
-  validation_status: "pending"
+  id: multi_prot_met_pathway_analysis_v1_base
+  name: Protein-Metabolite Pathway Analysis
+  version: 1.0.0
+  created: '2025-01-08'
+  author: biomapper-team
+  entity_type:
+  - proteins
+  - metabolites
+  source_key:
+  - multi_cohort
+  target_key: pathway_enriched
+  bridge_type:
+  - pathway
+  - interaction
+  - semantic
+  quality_tier: experimental
+  validation_status: pending
   expected_match_rate: 0.7
-  
-  description: |
-    Analyze protein-metabolite relationships for pathway enrichment analysis.
-    This strategy integrates protein and metabolite datasets to identify
-    biological pathways and molecular interaction networks. Focuses on 
-    discovering functional relationships between different molecular layers
-    through pathway databases and interaction networks.
-  
+  description: "Analyze protein-metabolite relationships for pathway enrichment analysis.\n\
+    This strategy integrates protein and metabolite datasets to identify\nbiological\
+    \ pathways and molecular interaction networks. Focuses on \ndiscovering functional\
+    \ relationships between different molecular layers\nthrough pathway databases\
+    \ and interaction networks.\n"
   use_cases:
-    - "Multi-omics pathway enrichment"
-    - "Protein-metabolite interaction discovery"
-    - "Systems biology network analysis"
-    - "Functional annotation of omics data"
-  
+  - Multi-omics pathway enrichment
+  - Protein-metabolite interaction discovery
+  - Systems biology network analysis
+  - Functional annotation of omics data
   source_files:
-    # Protein datasets
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/proteomics_metadata.tsv"
-      entity: "proteins"
-      description: "Arivale protein expression data"
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
-      entity: "proteins"
-      description: "UKBB protein biomarkers"
-    # Metabolite datasets  
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/metabolomics_metadata.tsv"
-      entity: "metabolites"
-      description: "Arivale metabolomics measurements"
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_NMR_Meta.tsv"
-      entity: "metabolites"
-      description: "UKBB NMR metabolomics"
-
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/proteomics_metadata.tsv
+    entity: proteins
+    description: Arivale protein expression data
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv
+    entity: proteins
+    description: UKBB protein biomarkers
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/metabolomics_metadata.tsv
+    entity: metabolites
+    description: Arivale metabolomics measurements
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_NMR_Meta.tsv
+    entity: metabolites
+    description: UKBB NMR metabolomics
 parameters:
-  output_dir: "${OUTPUT_DIR:-/tmp/biomapper/outputs}"
-  pathway_databases: ["kegg", "reactome", "wikipathways"]
-  interaction_databases: ["string_db", "biogrid", "intact"]
+  output_dir: ${OUTPUT_DIR:-/tmp/biomapper/outputs}
+  pathway_databases:
+  - kegg
+  - reactome
+  - wikipathways
+  interaction_databases:
+  - string_db
+  - biogrid
+  - intact
   min_pathway_size: 5
   max_pathway_size: 500
   fdr_threshold: 0.05
-  enrichment_method: "hypergeometric"
-
+  enrichment_method: hypergeometric
 steps:
-  # === PROTEIN PROCESSING ===
-  - name: load_arivale_proteins
-    description: "Load Arivale protein expression dataset"
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[0].path}"
-        identifier_column: "uniprot"
-        output_key: "arv_proteins_raw"
-  
-  - name: load_ukbb_proteins  
-    description: "Load UKBB protein biomarker dataset"
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[1].path}"
-        identifier_column: "uniprot"
-        output_key: "ukb_proteins_raw"
-  
-  - name: extract_protein_identifiers
-    description: "Extract and validate protein identifiers"
-    action:
-      type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
-      params:
-        input_keys: ["arv_proteins_raw", "ukb_proteins_raw"]
-        xrefs_column: "uniprot"
-        remove_isoforms: true
-        validate_format: true
-        output_key: "proteins_extracted"
-  
-  - name: normalize_proteins
-    description: "Normalize protein accessions to standard format"
-    action:
-      type: PROTEIN_NORMALIZE_ACCESSIONS
-      params:
-        input_key: "proteins_extracted"
-        target_format: "uniprot_standard"
-        validate_against_uniprot: true
-        output_key: "proteins_normalized"
-  
-  # === METABOLITE PROCESSING ===
-  - name: load_arivale_metabolites
-    description: "Load Arivale metabolomics dataset"
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[2].path}"
-        identifier_column: "metabolite_id"
-        output_key: "arv_metabolites_raw"
-  
-  - name: load_ukbb_metabolites
-    description: "Load UKBB NMR metabolomics dataset"
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[3].path}"
-        identifier_column: "biomarker"
-        output_key: "ukb_metabolites_raw"
-  
-  - name: extract_metabolite_identifiers
-    description: "Extract metabolite identifiers from all sources"
-    action:
-      type: METABOLITE_EXTRACT_IDENTIFIERS
-      params:
-        input_keys: ["arv_metabolites_raw", "ukb_metabolites_raw"]
-        extract_hmdb: true
-        extract_kegg: true
-        extract_pubchem: true
-        extract_inchikey: true
-        output_key: "metabolites_extracted"
-  
-  - name: normalize_metabolites
-    description: "Normalize metabolite identifiers to HMDB standard"
-    action:
-      type: METABOLITE_NORMALIZE_HMDB
-      params:
-        input_key: "metabolites_extracted"
-        target_format: "hmdb_standard"
-        validate_format: true
-        include_kegg_mapping: true
-        output_key: "metabolites_normalized"
-  
-  # === PATHWAY INTEGRATION ===
-  - name: protein_metabolite_association
-    description: "Create protein-metabolite associations using pathway databases"
-    action:
-      type: PROTEIN_MULTI_BRIDGE
-      params:
-        protein_key: "proteins_normalized"
-        metabolite_key: "metabolites_normalized"
-        bridge_databases: "${parameters.pathway_databases}"
-        interaction_databases: "${parameters.interaction_databases}"
-        min_confidence: 0.7
-        include_indirect_associations: true
-        max_path_length: 3
-        output_key: "protein_metabolite_associations"
-  
-  - name: pathway_mapping
-    description: "Map proteins and metabolites to biological pathways"
-    action:
-      type: METABOLITE_CTS_BRIDGE
-      params:
-        protein_key: "proteins_normalized"
-        metabolite_key: "metabolites_normalized"
-        bridge_method: "pathway_based"
-        pathway_databases: "${parameters.pathway_databases}"
-        min_pathway_size: "${parameters.min_pathway_size}"
-        max_pathway_size: "${parameters.max_pathway_size}"
-        output_key: "pathway_mapped_entities"
-  
-  # === ENRICHMENT ANALYSIS ===
-  - name: pathway_enrichment_analysis
-    description: "Perform pathway enrichment analysis"
-    action:
-      type: SEMANTIC_METABOLITE_MATCH
-      params:
-        source_key: "pathway_mapped_entities"
-        enrichment_mode: true
-        enrichment_method: "${parameters.enrichment_method}"
-        background_set: "genome_wide"
-        min_pathway_size: "${parameters.min_pathway_size}"
-        max_pathway_size: "${parameters.max_pathway_size}"
-        fdr_threshold: "${parameters.fdr_threshold}"
-        output_key: "enriched_pathways"
-  
-  - name: interaction_network_analysis
-    description: "Analyze protein-metabolite interaction networks"
-    action:
-      type: PROTEIN_MULTI_BRIDGE
-      params:
-        input_key: "protein_metabolite_associations"
-        analysis_type: "network"
-        network_metrics: ["centrality", "clustering", "modularity"]
-        community_detection: true
-        hub_identification: true
-        output_key: "interaction_networks"
-  
-  # === FUNCTIONAL ANNOTATION ===
-  - name: go_term_enrichment
-    description: "Perform Gene Ontology term enrichment"
-    action:
-      type: METABOLITE_API_ENRICHMENT
-      params:
-        protein_key: "proteins_normalized"
-        metabolite_key: "metabolites_normalized"
-        ontology: "gene_ontology"
-        aspects: ["biological_process", "molecular_function", "cellular_component"]
-        enrichment_method: "fisher_exact"
-        fdr_correction: true
-        output_key: "go_enrichment"
-  
-  - name: kegg_pathway_analysis
-    description: "Detailed KEGG pathway analysis"
-    action:
-      type: METABOLITE_API_ENRICHMENT
-      params:
-        input_key: "pathway_mapped_entities"
-        database: "kegg"
-        analysis_type: "pathway"
-        include_metabolic_pathways: true
-        include_signaling_pathways: true
-        output_key: "kegg_analysis"
-  
-  # === CROSS-ENTITY CORRELATION ===
-  - name: correlation_analysis
-    description: "Calculate correlations between proteins and metabolites"
-    action:
-      type: CALCULATE_SET_OVERLAP
-      params:
-        dataset1_key: "proteins_normalized"
-        dataset2_key: "metabolites_normalized"
-        correlation_method: "spearman"
-        min_correlation: 0.5
-        adjust_for_covariates: true
-        covariates: ["batch", "platform"]
-        output_key: "protein_metabolite_correlations"
-  
-  - name: functional_module_detection
-    description: "Detect functional modules in multi-omics data"
-    action:
-      type: COMBINE_METABOLITE_MATCHES
-      params:
-        input_keys: ["enriched_pathways", "interaction_networks", "go_enrichment"]
-        combination_method: "network_based"
-        module_detection_algorithm: "leiden"
-        resolution_parameter: 1.0
-        output_key: "functional_modules"
-  
-  # === REPORTING ===
-  - name: generate_pathway_report
-    description: "Generate comprehensive pathway analysis report"
-    action:
-      type: GENERATE_METABOLOMICS_REPORT
-      params:
-        dataset_key: "enriched_pathways"
-        report_type: "pathway_analysis"
-        include_network_visualization: true
-        include_pathway_diagrams: true
-        include_enrichment_plots: true
-        include_correlation_heatmaps: true
-        pathway_data_key: "kegg_analysis"
-        network_data_key: "interaction_networks"
-        correlation_data_key: "protein_metabolite_correlations"
-        module_data_key: "functional_modules"
-        output_path: "${parameters.output_dir}/pathway_analysis_report.html"
-  
-  - name: export_pathway_results
-    description: "Export pathway analysis results"
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "enriched_pathways"
-        output_path: "${parameters.output_dir}/enriched_pathways.tsv"
-        format: "tsv"
-        include_metadata: true
-        
-  - name: export_interaction_network
-    description: "Export protein-metabolite interaction network"
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "interaction_networks"
-        output_path: "${parameters.output_dir}/protein_metabolite_network.json"
-        format: "json"
-        network_format: "cytoscape"
-        
-  - name: export_functional_modules
-    description: "Export identified functional modules"
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "functional_modules"
-        output_path: "${parameters.output_dir}/functional_modules.tsv"
-        format: "tsv"
-        include_module_annotations: true
-
+- name: load_arivale_proteins
+  description: Load Arivale protein expression dataset
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[0].path}
+      identifier_column: uniprot
+      output_key: arv_proteins_raw
+- name: load_ukbb_proteins
+  description: Load UKBB protein biomarker dataset
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[1].path}
+      identifier_column: uniprot
+      output_key: ukb_proteins_raw
+- name: extract_protein_identifiers
+  description: Extract and validate protein identifiers
+  action:
+    type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
+    params:
+      input_keys:
+      - arv_proteins_raw
+      - ukb_proteins_raw
+      xrefs_column: uniprot
+      remove_isoforms: true
+      validate_format: true
+      output_key: proteins_extracted
+- name: normalize_proteins
+  description: Normalize protein accessions to standard format
+  action:
+    type: PROTEIN_NORMALIZE_ACCESSIONS
+    params:
+      input_key: proteins_extracted
+      target_format: uniprot_standard
+      validate_against_uniprot: true
+      output_key: proteins_normalized
+- name: load_arivale_metabolites
+  description: Load Arivale metabolomics dataset
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[2].path}
+      identifier_column: metabolite_id
+      output_key: arv_metabolites_raw
+- name: load_ukbb_metabolites
+  description: Load UKBB NMR metabolomics dataset
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[3].path}
+      identifier_column: biomarker
+      output_key: ukb_metabolites_raw
+- name: extract_metabolite_identifiers
+  description: Extract metabolite identifiers from all sources
+  action:
+    type: METABOLITE_EXTRACT_IDENTIFIERS
+    params:
+      input_keys:
+      - arv_metabolites_raw
+      - ukb_metabolites_raw
+      extract_hmdb: true
+      extract_kegg: true
+      extract_pubchem: true
+      extract_inchikey: true
+      output_key: metabolites_extracted
+- name: normalize_metabolites
+  description: Normalize metabolite identifiers to HMDB standard
+  action:
+    type: METABOLITE_NORMALIZE_HMDB
+    params:
+      input_key: metabolites_extracted
+      target_format: hmdb_standard
+      validate_format: true
+      include_kegg_mapping: true
+      output_key: metabolites_normalized
+- name: protein_metabolite_association
+  description: Create protein-metabolite associations using pathway databases
+  action:
+    type: PROTEIN_MULTI_BRIDGE
+    params:
+      protein_key: proteins_normalized
+      metabolite_key: metabolites_normalized
+      bridge_databases: ${parameters.pathway_databases}
+      interaction_databases: ${parameters.interaction_databases}
+      min_confidence: 0.7
+      include_indirect_associations: true
+      max_path_length: 3
+      output_key: protein_metabolite_associations
+- name: pathway_mapping
+  description: Map proteins and metabolites to biological pathways
+  action:
+    type: METABOLITE_CTS_BRIDGE
+    params:
+      protein_key: proteins_normalized
+      metabolite_key: metabolites_normalized
+      bridge_method: pathway_based
+      pathway_databases: ${parameters.pathway_databases}
+      min_pathway_size: ${parameters.min_pathway_size}
+      max_pathway_size: ${parameters.max_pathway_size}
+      output_key: pathway_mapped_entities
+- name: pathway_enrichment_analysis
+  description: Perform pathway enrichment analysis
+  action:
+    type: SEMANTIC_METABOLITE_MATCH
+    params:
+      source_key: pathway_mapped_entities
+      enrichment_mode: true
+      enrichment_method: ${parameters.enrichment_method}
+      background_set: genome_wide
+      min_pathway_size: ${parameters.min_pathway_size}
+      max_pathway_size: ${parameters.max_pathway_size}
+      fdr_threshold: ${parameters.fdr_threshold}
+      output_key: enriched_pathways
+- name: interaction_network_analysis
+  description: Analyze protein-metabolite interaction networks
+  action:
+    type: PROTEIN_MULTI_BRIDGE
+    params:
+      input_key: protein_metabolite_associations
+      analysis_type: network
+      network_metrics:
+      - centrality
+      - clustering
+      - modularity
+      community_detection: true
+      hub_identification: true
+      output_key: interaction_networks
+- name: go_term_enrichment
+  description: Perform Gene Ontology term enrichment
+  action:
+    type: METABOLITE_API_ENRICHMENT
+    params:
+      protein_key: proteins_normalized
+      metabolite_key: metabolites_normalized
+      ontology: gene_ontology
+      aspects:
+      - biological_process
+      - molecular_function
+      - cellular_component
+      enrichment_method: fisher_exact
+      fdr_correction: true
+      output_key: go_enrichment
+- name: kegg_pathway_analysis
+  description: Detailed KEGG pathway analysis
+  action:
+    type: METABOLITE_API_ENRICHMENT
+    params:
+      input_key: pathway_mapped_entities
+      database: kegg
+      analysis_type: pathway
+      include_metabolic_pathways: true
+      include_signaling_pathways: true
+      output_key: kegg_analysis
+- name: correlation_analysis
+  description: Calculate correlations between proteins and metabolites
+  action:
+    type: CALCULATE_SET_OVERLAP
+    params:
+      input_key: proteins_normalized
+      dataset2_key: metabolites_normalized
+      correlation_method: spearman
+      min_correlation: 0.5
+      adjust_for_covariates: true
+      covariates:
+      - batch
+      - platform
+      output_key: protein_metabolite_correlations
+- name: functional_module_detection
+  description: Detect functional modules in multi-omics data
+  action:
+    type: COMBINE_METABOLITE_MATCHES
+    params:
+      input_keys:
+      - enriched_pathways
+      - interaction_networks
+      - go_enrichment
+      combination_method: network_based
+      module_detection_algorithm: leiden
+      resolution_parameter: 1.0
+      output_key: functional_modules
+- name: generate_pathway_report
+  description: Generate comprehensive pathway analysis report
+  action:
+    type: GENERATE_METABOLOMICS_REPORT
+    params:
+      input_key: enriched_pathways
+      report_type: pathway_analysis
+      include_network_visualization: true
+      include_pathway_diagrams: true
+      include_enrichment_plots: true
+      include_correlation_heatmaps: true
+      pathway_data_key: kegg_analysis
+      network_data_key: interaction_networks
+      correlation_data_key: protein_metabolite_correlations
+      module_data_key: functional_modules
+      output_path: ${parameters.output_dir}/pathway_analysis_report.html
+- name: export_pathway_results
+  description: Export pathway analysis results
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: enriched_pathways
+      output_path: ${parameters.output_dir}/enriched_pathways.tsv
+      format: tsv
+      include_metadata: true
+- name: export_interaction_network
+  description: Export protein-metabolite interaction network
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: interaction_networks
+      output_path: ${parameters.output_dir}/protein_metabolite_network.json
+      format: json
+      network_format: cytoscape
+- name: export_functional_modules
+  description: Export identified functional modules
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: functional_modules
+      output_path: ${parameters.output_dir}/functional_modules.tsv
+      format: tsv
+      include_module_annotations: true
 expected_outputs:
   primary:
-    - path: "${parameters.output_dir}/enriched_pathways.tsv"
-      description: "Statistically enriched biological pathways"
-      entity_types: ["pathways", "proteins", "metabolites"]
-  
+  - path: ${parameters.output_dir}/enriched_pathways.tsv
+    description: Statistically enriched biological pathways
+    entity_types:
+    - pathways
+    - proteins
+    - metabolites
   networks:
-    - path: "${parameters.output_dir}/protein_metabolite_network.json"
-      description: "Protein-metabolite interaction network in Cytoscape format"
-      
+  - path: ${parameters.output_dir}/protein_metabolite_network.json
+    description: Protein-metabolite interaction network in Cytoscape format
   modules:
-    - path: "${parameters.output_dir}/functional_modules.tsv"  
-      description: "Detected functional modules with annotations"
-  
+  - path: ${parameters.output_dir}/functional_modules.tsv
+    description: Detected functional modules with annotations
   reports:
-    - path: "${parameters.output_dir}/pathway_analysis_report.html"
-      description: "Comprehensive pathway analysis report with visualizations"
-
+  - path: ${parameters.output_dir}/pathway_analysis_report.html
+    description: Comprehensive pathway analysis report with visualizations
 validation:
   min_pathways_enriched: 10
   max_execution_time_minutes: 20

@@ -53,7 +53,7 @@ class BridgeAttempt(BaseModel):
 class ProteinMultiBridgeParams(BaseModel):
     """Parameters for PROTEIN_MULTI_BRIDGE action."""
 
-    source_dataset_key: str = Field(..., description="Source dataset key")
+    input_key: str = Field(..., description="Source dataset key")
     target_dataset_key: str = Field(..., description="Target dataset key")
     bridge_attempts: List[BridgeAttempt] = Field(
         ..., description="Bridge configurations in priority order"

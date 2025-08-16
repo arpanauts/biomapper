@@ -1,0 +1,156 @@
+name: google_drive_integration_test
+description: Test strategy to validate Google Drive sync integration with comprehensive
+  reporting and visualization
+parameters:
+  source_file: ${BIOMAPPER_ROOT}/data/test_data/sample_proteins.tsv
+  output_dir: ${OUTPUT_DIR:-/tmp/biomapper_gdrive_test}
+  drive_folder_id: ${GOOGLE_DRIVE_TEST_FOLDER_ID:-test_folder_id}
+  google_credentials: ${GOOGLE_APPLICATION_CREDENTIALS}
+steps:
+- name: load_test_proteins
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.source_file}
+      identifier_column: protein_id
+      output_key: proteins_raw
+- name: parse_composite_ids
+  action:
+    type: PARSE_COMPOSITE_IDENTIFIERS
+    params:
+      input_key: proteins_raw
+      id_field: protein_id
+      separators:
+      - ','
+      - ;
+      - '|'
+      output_key: proteins_parsed
+      track_expansion: true
+      trim_whitespace: true
+      preserve_order: true
+- name: create_mock_mappings
+  action:
+    type: CUSTOM_TRANSFORM
+    params:
+      input_key: proteins_parsed
+      output_key: mapping_results
+      expression: "import random\nresults = []\nfor i, row in enumerate(df.itertuples()):\n\
+        \    # Create mock mapping with varying confidence\n    confidence = random.uniform(0.7,\
+        \ 1.0)\n    method = random.choice(['direct', 'fuzzy', 'semantic'])\n    results.append({\n\
+        \        'source_id': row.protein_id,\n        'target_id': f'TARGET_{i:04d}',\n\
+        \        'confidence': confidence,\n        'method': method\n    })\nresults\n"
+- name: calculate_statistics
+  action:
+    type: CUSTOM_TRANSFORM
+    params:
+      input_key: mapping_results
+      output_key: mapping_stats
+      expression: "total = len(df)\nhigh_conf = len(df[df['confidence'] > 0.9])\n\
+        med_conf = len(df[(df['confidence'] > 0.8) & (df['confidence'] <= 0.9)])\n\
+        low_conf = len(df[df['confidence'] <= 0.8])\n\nmethod_stats = df.groupby('method').agg({\n\
+        \    'confidence': ['count', 'mean']\n}).to_dict()\n\n[{\n    'total_mappings':\
+        \ total,\n    'high_confidence': high_conf,\n    'medium_confidence': med_conf,\
+        \ \n    'low_confidence': low_conf,\n    'overall_success_rate': total / max(total,\
+        \ 1),\n    'method_performance': method_stats\n}]\n"
+- name: generate_html_report
+  action:
+    type: GENERATE_HTML_REPORT
+    params:
+      title: Google Drive Integration Test Report
+      subtitle: Biomapper Protein Mapping Analysis
+      sections:
+      - type: metadata
+        title: Report Information
+        data:
+          Strategy: google_drive_integration_test
+          Generated: '2024-01-15'
+          Purpose: Test Google Drive integration
+      - type: summary
+        title: Mapping Summary
+        data_key: statistics.composite_expansion
+      - type: table
+        title: Mapping Results Sample
+        data_key: datasets.mapping_results
+        columns:
+        - source_id
+        - target_id
+        - confidence
+        - method
+        max_rows: 20
+        sort_by: confidence
+        sort_order: desc
+      - type: table
+        title: Original Proteins
+        data_key: datasets.proteins_raw
+        max_rows: 10
+      output_path: ${parameters.output_dir}/gdrive_test_report.html
+      style_theme: professional
+      include_toc: true
+      include_footer: true
+- name: generate_visualizations
+  action:
+    type: GENERATE_MAPPING_VISUALIZATIONS
+    params:
+      charts:
+      - type: summary_cards
+        title: Key Metrics
+        data_key: datasets.mapping_stats
+        file_path: metrics_cards.html
+      - type: bar
+        title: Confidence Distribution
+        data_key: datasets.mapping_results
+        x_field: method
+        y_field: confidence
+        file_path: confidence_by_method.html
+      - type: pie
+        title: Method Usage
+        data_key: datasets.mapping_results
+        x_field: method
+        file_path: method_distribution.html
+      - type: scatter
+        title: Confidence Scatter
+        data_key: datasets.mapping_results
+        x_field: source_id
+        y_field: confidence
+        color_field: method
+        file_path: confidence_scatter.html
+      output_directory: ${parameters.output_dir}/visualizations
+      format: plotly
+      create_dashboard: true
+      dashboard_title: Google Drive Test Dashboard
+      include_statistics: true
+      responsive: true
+- name: export_mapping_results
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: mapping_results
+      output_path: ${parameters.output_dir}/mapping_results.csv
+      format: csv
+- name: export_statistics
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: mapping_stats
+      output_path: ${parameters.output_dir}/statistics.json
+      format: json
+- name: sync_to_google_drive
+  action:
+    type: SYNC_TO_GOOGLE_DRIVE_V2
+    params:
+      drive_folder_id: ${parameters.drive_folder_id}
+      credentials_path: ${parameters.google_credentials}
+      auto_organize: true
+      strategy_name: google_drive_integration_test
+      strategy_version: 1.0.0
+      create_subfolder: true
+      subfolder_name: integration_test_${TIMESTAMP}
+      sync_context_outputs: true
+      description: Biomapper Google Drive integration test - automated upload
+      file_patterns:
+      - '*.html'
+      - '*.csv'
+      - '*.json'
+      exclude_patterns:
+      - '*.tmp'
+      - '*.log'

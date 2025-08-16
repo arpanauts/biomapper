@@ -4,7 +4,8 @@ import logging
 import time
 from typing import Dict, Any, List, Optional, Tuple
 import pandas as pd
-from pydantic import BaseModel, Field
+from pydantic import Field
+from biomapper.core.standards import ActionParamsBase
 
 from biomapper.core.strategy_actions.typed_base import (
     TypedStrategyAction,
@@ -16,20 +17,22 @@ from biomapper.core.strategy_actions.registry import register_action
 from biomapper.mapping.clients.uniprot_historical_resolver_client import (
     UniProtHistoricalResolverClient,
 )
+from biomapper.core.standards.api_validator import APIMethodValidator
 
 logger = logging.getLogger(__name__)
 
 
-class MergeWithUniprotResolutionParams(BaseModel):
+class MergeWithUniprotResolutionParams(ActionParamsBase):
     """Parameters for MERGE_WITH_UNIPROT_RESOLUTION action."""
 
     # Input datasets
-    source_dataset_key: str = Field(..., description="First dataset from context")
+    input_key: str = Field(..., description="First dataset from context")
     target_dataset_key: str = Field(..., description="Second dataset from context")
 
     # Column specifications
     source_id_column: str = Field(..., description="ID column in source dataset")
     target_id_column: str = Field(..., description="ID column in target dataset")
+    target_xref_column: Optional[str] = Field(None, description="Column containing xrefs (e.g., 'xrefs' for KG2c)")
 
     # Composite handling
     composite_separator: str = Field("_", description="Separator for composite IDs")
@@ -80,6 +83,16 @@ class MergeWithUniprotResolutionAction(
             self._uniprot_client = UniProtHistoricalResolverClient(
                 cache_size=10000, timeout=30
             )
+            # Validate that the client has the expected methods
+            try:
+                APIMethodValidator.validate_client_interface(
+                    self._uniprot_client,
+                    required_methods=['map_identifiers'],
+                    optional_methods=['resolve_batch', '_fetch_uniprot_search_results']
+                )
+            except ValueError as e:
+                logger.error(f"UniProt client validation failed: {e}")
+                raise
         return self._uniprot_client
 
     async def execute_typed(
@@ -122,8 +135,9 @@ class MergeWithUniprotResolutionAction(
             target_data = datasets[params.target_dataset_key]
 
             # Convert to DataFrames for easier processing
-            source_df = pd.DataFrame(source_data)
-            target_df = pd.DataFrame(target_data)
+            # Use copy to ensure no reference issues
+            source_df = pd.DataFrame(source_data).copy()
+            target_df = pd.DataFrame(target_data).copy()
 
             # Handle empty datasets
             if source_df.empty and target_df.empty:
@@ -330,34 +344,162 @@ class MergeWithUniprotResolutionAction(
         target_df: pd.DataFrame,
         params: MergeWithUniprotResolutionParams,
     ) -> List[Dict[str, Any]]:
-        """Find direct matches between datasets."""
+        """Find direct matches between datasets using efficient indexing."""
         matches = []
-
+        
+        # Create indexes for fast lookup
+        # Build a mapping from target IDs to their row indices
+        target_id_to_indices = {}
+        
+        # Also build an index of extracted UniProt IDs from target
+        target_uniprot_to_indices = {}
+        
+        for target_idx, target_row in target_df.iterrows():
+            target_id = str(target_row[params.target_id_column])
+            
+            # Store original ID
+            if target_id not in target_id_to_indices:
+                target_id_to_indices[target_id] = []
+            target_id_to_indices[target_id].append((target_idx, target_row.copy()))
+            
+            # Extract UniProt ID if the ID column contains UniProtKB prefix
+            if target_id.startswith('UniProtKB:'):
+                uniprot_id = target_id.replace('UniProtKB:', '')
+                # Store with isoform
+                if uniprot_id not in target_uniprot_to_indices:
+                    target_uniprot_to_indices[uniprot_id] = []
+                target_uniprot_to_indices[uniprot_id].append((target_idx, target_row.copy()))
+                
+                # Also store base ID (without isoform suffix) for matching
+                base_id = uniprot_id.split('-')[0]
+                if base_id != uniprot_id:  # Only if it has an isoform suffix
+                    if base_id not in target_uniprot_to_indices:
+                        target_uniprot_to_indices[base_id] = []
+                    target_uniprot_to_indices[base_id].append((target_idx, target_row.copy()))
+            
+            # Also extract UniProt IDs from xrefs column if specified
+            if hasattr(params, 'target_xref_column') and params.target_xref_column:
+                xref_value = str(target_row.get(params.target_xref_column, ''))
+                if xref_value and xref_value != 'nan':
+                    # Extract all UniProt IDs from xrefs
+                    # Look for patterns like UniProtKB:P12345 or uniprot:P12345
+                    import re
+                    uniprot_pattern = re.compile(r'(?:UniProtKB|uniprot|UniProt)[:\s]+([A-Z][0-9][A-Z0-9]{3}[0-9](?:-\d+)?)')
+                    for match in uniprot_pattern.finditer(xref_value):
+                        uniprot_id = match.group(1)
+                        # Store with isoform
+                        if uniprot_id not in target_uniprot_to_indices:
+                            target_uniprot_to_indices[uniprot_id] = []
+                        # Store a copy of the row to avoid reference issues
+                        target_uniprot_to_indices[uniprot_id].append((target_idx, target_row.copy()))
+                        
+                        # Also store base ID (without isoform suffix) for matching
+                        base_id = uniprot_id.split('-')[0]
+                        if base_id != uniprot_id:  # Only if it has an isoform suffix
+                            if base_id not in target_uniprot_to_indices:
+                                target_uniprot_to_indices[base_id] = []
+                            target_uniprot_to_indices[base_id].append((target_idx, target_row.copy()))
+        
+        # Also build index for composite IDs in target
+        target_composite_parts = {}
+        for target_idx, target_row in target_df.iterrows():
+            target_id = str(target_row[params.target_id_column])
+            if params.composite_separator in target_id:
+                parts = target_id.split(params.composite_separator)
+                for part in parts:
+                    if part not in target_composite_parts:
+                        target_composite_parts[part] = []
+                    target_composite_parts[part].append((target_idx, target_id, target_row.copy()))
+        
+        # Now iterate through source only once
         for source_idx, source_row in source_df.iterrows():
-            source_id = source_row[params.source_id_column]
-
-            for target_idx, target_row in target_df.iterrows():
-                target_id = target_row[params.target_id_column]
-
-                # Find matches using composite logic
-                match_results = self._find_matches(
-                    source_id, target_id, params.composite_separator
-                )
-
-                for match_value, match_type in match_results:
-                    matches.append(
-                        {
+            source_id = str(source_row[params.source_id_column])
+            
+            # First check if source UniProt ID matches any extracted target UniProt IDs
+            if source_id in target_uniprot_to_indices:
+                for target_idx, target_row in target_uniprot_to_indices[source_id]:
+                    matches.append({
+                        "source_idx": source_idx,
+                        "target_idx": target_idx,
+                        "source_id": source_id,
+                        "target_id": str(target_row[params.target_id_column]),
+                        "match_value": source_id,
+                        "match_type": "direct",
+                        "match_confidence": 1.0,
+                        "api_resolved": False,
+                    })
+            
+            # Also check for exact match in case source has prefixed IDs (O(1) lookup)
+            elif source_id in target_id_to_indices:
+                for target_idx, target_row in target_id_to_indices[source_id]:
+                    matches.append({
+                        "source_idx": source_idx,
+                        "target_idx": target_idx,
+                        "source_id": source_id,
+                        "target_id": source_id,  # Exact match
+                        "match_value": source_id,
+                        "match_type": "direct",
+                        "match_confidence": 1.0,
+                        "api_resolved": False,
+                    })
+            
+            # Check composite matches
+            if params.composite_separator in source_id:
+                # Source is composite - check each part against target
+                parts = source_id.split(params.composite_separator)
+                for part in parts:
+                    # Check if part matches extracted UniProt IDs
+                    if part in target_uniprot_to_indices:
+                        for target_idx, target_row in target_uniprot_to_indices[part]:
+                            matches.append({
+                                "source_idx": source_idx,
+                                "target_idx": target_idx,
+                                "source_id": source_id,
+                                "target_id": str(target_row[params.target_id_column]),
+                                "match_value": part,
+                                "match_type": "composite",
+                                "match_confidence": 1.0,
+                                "api_resolved": False,
+                            })
+                    # Also check if part matches a full target ID
+                    elif part in target_id_to_indices:
+                        for target_idx, target_row in target_id_to_indices[part]:
+                            matches.append({
+                                "source_idx": source_idx,
+                                "target_idx": target_idx,
+                                "source_id": source_id,
+                                "target_id": part,
+                                "match_value": part,
+                                "match_type": "composite",
+                                "match_confidence": 1.0,
+                                "api_resolved": False,
+                            })
+            else:
+                # Source is single - check if it's in any composite target
+                if source_id in target_composite_parts:
+                    for target_idx, target_id, target_row in target_composite_parts[source_id]:
+                        matches.append({
                             "source_idx": source_idx,
                             "target_idx": target_idx,
                             "source_id": source_id,
                             "target_id": target_id,
-                            "match_value": match_value,
-                            "match_type": match_type,
+                            "match_value": source_id,
+                            "match_type": "composite",
                             "match_confidence": 1.0,
                             "api_resolved": False,
-                        }
-                    )
+                        })
 
+        # Debug logging for Q6EMK4
+        q6_matches = [m for m in matches if m['source_id'] == 'Q6EMK4']
+        if q6_matches:
+            logger.info(f"Q6EMK4 DEBUG: Found {len(q6_matches)} matches for Q6EMK4")
+            for m in q6_matches:
+                logger.info(f"  Q6EMK4 match: source_idx={m['source_idx']}, target_idx={m['target_idx']}, target_id={m['target_id']}")
+        else:
+            source_has_q6 = any(str(row.get('uniprot', '')) == 'Q6EMK4' for _, row in source_df.iterrows())
+            if source_has_q6:
+                logger.warning("Q6EMK4 DEBUG: Q6EMK4 is in source but NO MATCHES FOUND!")
+        
         logger.info(f"Found {len(matches)} direct matches")
         return matches
 
@@ -368,30 +510,150 @@ class MergeWithUniprotResolutionAction(
         direct_matches: List[Dict[str, Any]],
         params: MergeWithUniprotResolutionParams,
     ) -> Tuple[List[Dict[str, Any]], int]:
-        """Resolve unmatched IDs using UniProt API."""
-        # Get matched IDs
+        """Resolve unmatched SOURCE IDs using UniProt API.
+        
+        IMPORTANT: We only resolve unmapped source (e.g., Arivale) identifiers.
+        We do NOT attempt to resolve all target (e.g., KG2c) identifiers as that
+        would be inefficient and unnecessary.
+        """
+        if not params.use_api:
+            logger.info("API resolution disabled by parameters")
+            return [], 0
+            
+        # Get matched source IDs
         matched_source_ids = {match["source_id"] for match in direct_matches}
-        matched_target_ids = {match["target_id"] for match in direct_matches}
 
-        # Get all unique IDs
+        # Get all unique source IDs
         all_source_ids = set(source_df[params.source_id_column].dropna().astype(str))
-        all_target_ids = set(target_df[params.target_id_column].dropna().astype(str))
 
-        # Find unresolved IDs
+        # Find unresolved source IDs only
         unresolved_source = all_source_ids - matched_source_ids
-        unresolved_target = all_target_ids - matched_target_ids
 
-        if not unresolved_source and not unresolved_target:
-            logger.info("No unresolved IDs to process with API")
+        if not unresolved_source:
+            logger.info("All source IDs matched directly - no API resolution needed")
             return [], 0
 
         logger.info(
-            f"Resolving {len(unresolved_source)} source + {len(unresolved_target)} target IDs via API"
+            f"Resolving {len(unresolved_source)} unmatched source IDs via UniProt API"
         )
 
-        # For now, return empty list as we're focusing on structure
-        # TODO: Implement actual API resolution
-        return [], 0
+        # Get UniProt client
+        client = await self._get_uniprot_client()
+        
+        # Build index of target IDs for fast lookup
+        target_id_set = set(target_df[params.target_id_column].dropna().astype(str))
+        
+        # Also index composite parts in target
+        target_composite_parts = set()
+        for target_id in target_id_set:
+            if params.composite_separator in target_id:
+                parts = target_id.split(params.composite_separator)
+                target_composite_parts.update(parts)
+        
+        api_matches = []
+        api_calls_made = 0
+        
+        # Process in batches for efficiency
+        unresolved_list = list(unresolved_source)
+        for i in range(0, len(unresolved_list), params.api_batch_size):
+            batch = unresolved_list[i:i + params.api_batch_size]
+            
+            try:
+                # Resolve batch of IDs using the correct method signature
+                results = await client.map_identifiers(
+                    identifiers=batch,
+                    config={'bypass_cache': not params.api_cache_results}
+                )
+                api_calls_made += 1
+                
+                # PERFORMANCE FIX: Replace O(n^5) nested loops with O(n+m) efficient matching
+                from biomapper.core.algorithms.efficient_matching import EfficientMatcher
+                
+                # Build indices once for O(1) lookups (instead of O(n) DataFrame scans)
+                if not hasattr(self, '_source_index_cache'):
+                    # Build source index: source_id -> list of (index, row_data)
+                    self._source_index_cache = {}
+                    for idx, row in source_df.iterrows():
+                        source_id = str(row[params.source_id_column])
+                        if source_id not in self._source_index_cache:
+                            self._source_index_cache[source_id] = []
+                        self._source_index_cache[source_id].append((idx, row))
+                
+                if not hasattr(self, '_target_index_cache'):
+                    # Build target index: target_id -> list of (index, row_data)
+                    self._target_index_cache = {}
+                    for idx, row in target_df.iterrows():
+                        target_id = str(row[params.target_id_column])
+                        if target_id not in self._target_index_cache:
+                            self._target_index_cache[target_id] = []
+                        self._target_index_cache[target_id].append((idx, row))
+                
+                # Process resolved IDs efficiently - O(n+m) instead of O(n^5)
+                for source_id, (current_ids, metadata) in results.items():
+                    if current_ids:  # If we got resolved IDs
+                        # Get source indices once - O(1) lookup instead of O(n) scan
+                        source_entries = self._source_index_cache.get(source_id, [])
+                        
+                        for current_id in current_ids:
+                            # Check if resolved ID matches a target - O(1) lookup
+                            if current_id in target_id_set:
+                                # Get target indices once - O(1) lookup instead of O(n) scan
+                                target_entries = self._target_index_cache.get(current_id, [])
+                                
+                                # Create matches efficiently - now O(k*k) where k is small
+                                for source_idx, source_row in source_entries:
+                                    for target_idx, target_row in target_entries:
+                                        api_matches.append({
+                                            "source_idx": source_idx,
+                                            "target_idx": target_idx,
+                                            "source_id": source_id,
+                                            "target_id": current_id,
+                                            "match_value": current_id,
+                                            "match_type": "historical",
+                                            "match_confidence": 0.9 if metadata == "primary" else 0.85,
+                                            "api_resolved": True,
+                                        })
+                            
+                            # Also check if resolved ID is part of a composite target - O(1) lookup
+                            elif current_id in target_composite_parts:
+                                # Use efficient index lookup for composite targets
+                                if not hasattr(self, '_target_composite_index'):
+                                    # Build composite target index once: part -> list of (target_idx, target_id, target_row)
+                                    self._target_composite_index = {}
+                                    for target_idx, target_row in target_df.iterrows():
+                                        target_id = str(target_row[params.target_id_column])
+                                        if params.composite_separator in target_id:
+                                            parts = target_id.split(params.composite_separator)
+                                            for part in parts:
+                                                if part not in self._target_composite_index:
+                                                    self._target_composite_index[part] = []
+                                                self._target_composite_index[part].append((target_idx, target_id, target_row))
+                                
+                                # Get target entries for this resolved ID - O(1) lookup
+                                target_entries = self._target_composite_index.get(current_id, [])
+                                # Get source entries once - O(1) lookup 
+                                source_entries = self._source_index_cache.get(source_id, [])
+                                
+                                # Create matches efficiently - now O(k*k) where k is small
+                                for target_idx, target_id, target_row in target_entries:
+                                    for source_idx, source_row in source_entries:
+                                        api_matches.append({
+                                            "source_idx": source_idx,
+                                            "target_idx": target_idx,
+                                            "source_id": source_id,
+                                            "target_id": target_id,
+                                            "match_value": current_id,
+                                            "match_type": "historical_composite",
+                                            "match_confidence": 0.85,
+                                            "api_resolved": True,
+                                        })
+                
+            except Exception as e:
+                logger.warning(f"API resolution failed for batch: {e}")
+                # Continue with next batch
+        
+        logger.info(f"Found {len(api_matches)} matches via API ({api_calls_made} API calls)")
+        return api_matches, api_calls_made
 
     def _create_merged_dataset(
         self,
@@ -413,9 +675,16 @@ class MergeWithUniprotResolutionAction(
 
         # Filter matches by confidence threshold
         all_matches = []
+        q6_in_direct = any(m['source_id'] == 'Q6EMK4' for m in direct_matches)
+        q6_in_api = any(m['source_id'] == 'Q6EMK4' for m in api_matches)
+        logger.info(f"Q6EMK4 DEBUG: In direct_matches: {q6_in_direct}, In api_matches: {q6_in_api}")
+        
         for match in direct_matches + api_matches:
             if match["match_confidence"] >= params.confidence_threshold:
                 all_matches.append(match)
+        
+        q6_in_all = any(m['source_id'] == 'Q6EMK4' for m in all_matches)
+        logger.info(f"Q6EMK4 DEBUG: In all_matches after filtering: {q6_in_all}")
 
         # Get column names and handle conflicts
         source_cols = set(source_df.columns)
@@ -429,6 +698,14 @@ class MergeWithUniprotResolutionAction(
         # Create matched rows
         matched_source_indices = set()
         matched_target_indices = set()
+        
+        # Debug Q6EMK4
+        q6_source_idx = None
+        for idx, row in source_df.iterrows():
+            if str(row.get(params.source_id_column, '')) == 'Q6EMK4':
+                q6_source_idx = idx
+                logger.info(f"Q6EMK4 DEBUG: Q6EMK4 found at source index {idx} (type: {type(idx)})")
+                break
 
         for match in all_matches:
             source_idx = match["source_idx"]
@@ -436,7 +713,10 @@ class MergeWithUniprotResolutionAction(
 
             matched_source_indices.add(source_idx)
             matched_target_indices.add(target_idx)
-
+            
+            if match['source_id'] == 'Q6EMK4':
+                logger.info(f"Q6EMK4 DEBUG: Adding Q6EMK4 match - source_idx={source_idx} (type: {type(source_idx)}) to matched_source_indices")
+            
             # Create merged row
             merged_row = {}
 
@@ -471,6 +751,12 @@ class MergeWithUniprotResolutionAction(
 
             # Update stats
             match_stats[match["match_type"]] += 1
+        
+        # Final Q6EMK4 check
+        if q6_source_idx is not None:
+            logger.info(f"Q6EMK4 DEBUG FINAL: Q6EMK4 source_idx {q6_source_idx} in matched_source_indices: {q6_source_idx in matched_source_indices}")
+            if q6_source_idx not in matched_source_indices:
+                logger.warning(f"Q6EMK4 DEBUG: Q6EMK4 will be marked as source_only!")
 
         # Add unmatched source rows
         for source_idx, source_row in source_df.iterrows():

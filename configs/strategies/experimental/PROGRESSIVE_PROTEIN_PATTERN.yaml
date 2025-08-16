@@ -1,0 +1,251 @@
+name: PROGRESSIVE_PROTEIN_MAPPING
+description: Protein mapping with progressive enhancement and full provenance tracking
+metadata:
+  id: progressive_protein_mapping_v1
+  name: Progressive Protein Mapping with Provenance
+  version: 1.0.0
+  created: '2025-01-13'
+  author: biomapper-team
+  entity_type: proteins
+  mapping_stages:
+  - direct_match
+  - historical_resolution
+  - gene_symbol_bridge
+  - ensembl_bridge
+  - similarity_match
+parameters:
+  output_dir: ${OUTPUT_DIR:-/tmp/biomapper/proteins}
+  track_provenance: true
+  generate_statistics_per_step: true
+steps:
+- name: load_source
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${source_file}
+      identifier_column: uniprot
+      output_key: source_raw
+- name: load_target
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${target_file}
+      identifier_column: uniprot
+      output_key: target_raw
+- name: document_baseline
+  action:
+    type: CALCULATE_STATISTICS
+    params:
+      datasets:
+      - key: source_raw
+        label: Source Dataset
+      - key: target_raw
+        label: Target Dataset
+      output_key: baseline_stats
+      statistics:
+      - total_count
+      - unique_identifiers
+      - identifier_types
+- name: normalize_source
+  action:
+    type: PROTEIN_NORMALIZE_ACCESSIONS
+    params:
+      input_key: source_raw
+      output_key: source_normalized
+      track_changes: true
+- name: normalize_target
+  action:
+    type: PROTEIN_NORMALIZE_ACCESSIONS
+    params:
+      input_key: target_raw
+      output_key: target_normalized
+      track_changes: true
+- name: document_normalization_impact
+  action:
+    type: CALCULATE_STATISTICS
+    params:
+      datasets:
+      - key: source_normalized
+        label: Normalized Source
+        compare_to: source_raw
+      - key: target_normalized
+        label: Normalized Target
+        compare_to: target_raw
+      output_key: normalization_stats
+      statistics:
+      - changes_made
+      - duplicates_resolved
+      - format_corrections
+- name: direct_match
+  action:
+    type: CALCULATE_SET_OVERLAP
+    params:
+      input_key: source_normalized
+      dataset2_key: target_normalized
+      output_key: direct_matches
+      track_matched_ids: true
+      add_provenance: direct_uniprot_match
+- name: document_direct_match_rate
+  action:
+    type: GENERATE_STATISTICS_REPORT
+    params:
+      input_key: direct_matches
+      output_key: stage1_report
+      report:
+        stage: Direct UniProt Matching
+        matched_count: ${matched_count}
+        match_rate: ${match_percentage}%
+        unmatched_count: ${unmatched_count}
+        message: Baseline direct matching without any resolution
+- name: historical_resolution
+  action:
+    type: MERGE_WITH_UNIPROT_RESOLUTION
+    params:
+      input_key: source_normalized
+      target_dataset_key: target_normalized
+      previously_matched: direct_matches
+      use_api: true
+      api_batch_size: 100
+      output_key: historical_resolved
+      add_provenance: uniprot_historical_api
+      track_resolution_type: true
+- name: document_historical_improvement
+  action:
+    type: CALCULATE_IMPROVEMENT
+    params:
+      baseline_key: direct_matches
+      enhanced_key: historical_resolved
+      output_key: stage2_report
+      report:
+        stage: Historical Resolution
+        new_matches: ${new_match_count}
+        improvement_rate: +${improvement_percentage}%
+        cumulative_match_rate: ${total_match_percentage}%
+        resolution_types:
+          superseded: ${superseded_count}
+          secondary: ${secondary_count}
+          merged: ${merged_count}
+- name: gene_symbol_bridge
+  action:
+    type: PROTEIN_MULTI_BRIDGE
+    params:
+      source_key: source_normalized
+      target_key: target_normalized
+      previously_matched: historical_resolved
+      bridge_types:
+      - gene_symbol
+      only_unmatched: true
+      output_key: gene_bridged
+      add_provenance: gene_symbol_bridge
+      confidence_score: 0.85
+- name: document_gene_improvement
+  action:
+    type: CALCULATE_IMPROVEMENT
+    params:
+      baseline_key: historical_resolved
+      enhanced_key: gene_bridged
+      output_key: stage3_report
+      report:
+        stage: Gene Symbol Bridging
+        new_matches: ${new_match_count}
+        improvement_rate: +${improvement_percentage}%
+        cumulative_match_rate: ${total_match_percentage}%
+        confidence_distribution: ${confidence_histogram}
+- name: ensembl_bridge
+  action:
+    type: PROTEIN_MULTI_BRIDGE
+    params:
+      source_key: source_normalized
+      target_key: target_normalized
+      previously_matched: gene_bridged
+      bridge_types:
+      - ensembl
+      only_unmatched: true
+      output_key: ensembl_bridged
+      add_provenance: ensembl_bridge
+      confidence_score: 0.8
+- name: document_ensembl_improvement
+  action:
+    type: CALCULATE_IMPROVEMENT
+    params:
+      baseline_key: gene_bridged
+      enhanced_key: ensembl_bridged
+      output_key: stage4_report
+      report:
+        stage: Ensembl Bridging
+        new_matches: ${new_match_count}
+        improvement_rate: +${improvement_percentage}%
+        cumulative_match_rate: ${total_match_percentage}%
+- name: similarity_match
+  action:
+    type: PROTEIN_SIMILARITY_MATCH
+    params:
+      source_key: source_normalized
+      target_key: target_normalized
+      previously_matched: ensembl_bridged
+      only_unmatched: true
+      similarity_threshold: 0.95
+      use_sequence: false
+      output_key: similarity_matched
+      add_provenance: similarity_match
+      confidence_score: 0.7
+- name: document_similarity_improvement
+  action:
+    type: CALCULATE_IMPROVEMENT
+    params:
+      baseline_key: ensembl_bridged
+      enhanced_key: similarity_matched
+      output_key: stage5_report
+      report:
+        stage: Similarity Matching
+        new_matches: ${new_match_count}
+        improvement_rate: +${improvement_percentage}%
+        cumulative_match_rate: ${total_match_percentage}%
+- name: generate_provenance_report
+  action:
+    type: GENERATE_PROVENANCE_REPORT
+    params:
+      final_matches: similarity_matched
+      stages:
+      - stage1_report
+      - stage2_report
+      - stage3_report
+      - stage4_report
+      - stage5_report
+      output_key: full_provenance
+      report_includes:
+      - waterfall_chart
+      - provenance_distribution
+      - confidence_distribution
+      - unmapped_analysis
+- name: export_with_provenance
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: similarity_matched
+      output_format: tsv
+      output_path: ${parameters.output_dir}/mapped_proteins_with_provenance.tsv
+      include_columns:
+      - source_id
+      - target_id
+      - match_method
+      - confidence_score
+      - resolution_details
+      - match_stage
+- name: export_provenance_summary
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: full_provenance
+      output_format: json
+      output_path: ${parameters.output_dir}/provenance_report.json
+- name: export_waterfall_visualization
+  action:
+    type: GENERATE_VISUALIZATION
+    params:
+      input_key: full_provenance
+      viz_type: waterfall
+      output_path: ${parameters.output_dir}/progressive_improvement.png
+      title: Progressive Protein Mapping Enhancement
+      y_axis: Cumulative Match Rate (%)
+      x_axis: Mapping Stage

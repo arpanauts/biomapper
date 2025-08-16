@@ -27,7 +27,7 @@ class ExtractUniProtFromXrefsResult(BaseModel):
 class ExtractUniProtFromXrefsParams(BaseModel):
     """Parameters for PROTEIN_EXTRACT_UNIPROT_FROM_XREFS action."""
 
-    dataset_key: str = Field(
+    input_key: str = Field(
         ..., description="Key of the dataset in context to process"
     )
     xrefs_column: str = Field(
@@ -132,11 +132,11 @@ class ProteinExtractUniProtFromXrefsAction(
                 ctx["datasets"] = {}
         
         # Validate input
-        if params.dataset_key not in ctx["datasets"]:
-            raise KeyError(f"Dataset key '{params.dataset_key}' not found in context")
+        if params.input_key not in ctx["datasets"]:
+            raise KeyError(f"Dataset key '{params.input_key}' not found in context")
 
         # Get dataset - handle both DataFrame and list of dicts
-        dataset = ctx["datasets"][params.dataset_key]
+        dataset = ctx["datasets"][params.input_key]
         if isinstance(dataset, pd.DataFrame):
             df = dataset.copy()
         elif isinstance(dataset, list):
@@ -152,6 +152,13 @@ class ProteinExtractUniProtFromXrefsAction(
         df[params.output_column] = df[params.xrefs_column].apply(
             lambda x: self._extract_uniprot_ids(x, params.keep_isoforms)
         )
+        
+        # Debug: Check how many rows have multiple IDs
+        multi_id_rows = df[df[params.output_column].apply(lambda x: isinstance(x, list) and len(x) > 1)]
+        self.logger.info(f"Rows with multiple UniProt IDs: {len(multi_id_rows)}")
+        if len(multi_id_rows) > 0:
+            sample = multi_id_rows.head(3)[params.output_column].tolist()
+            self.logger.info(f"Sample multiple IDs: {sample[:3]}")
 
         # Handle multiple IDs according to user preference
         if params.handle_multiple == "first":
@@ -159,7 +166,9 @@ class ProteinExtractUniProtFromXrefsAction(
                 lambda ids: ids[0] if ids else None
             )
         elif params.handle_multiple == "expand_rows":
+            self.logger.info(f"Expanding rows for multiple IDs. Original rows: {len(df)}")
             df = self._expand_rows_for_multiple_ids(df, params.output_column)
+            self.logger.info(f"After expansion: {len(df)} rows")
         # For "list" mode, keep as-is (already lists)
 
         # Drop rows with no UniProt IDs if requested
@@ -170,7 +179,7 @@ class ProteinExtractUniProtFromXrefsAction(
                 df = df[df[params.output_column].notna()]
 
         # Update context - either use output_key or modify in-place
-        output_key = params.output_key if params.output_key else params.dataset_key
+        output_key = params.output_key if params.output_key else params.input_key
         # Store as list of dicts for consistency with LoadDatasetIdentifiersAction
         ctx["datasets"][output_key] = df.to_dict("records")
 

@@ -1,8 +1,34 @@
-# Strategy Actions - AI Assistant Instructions (Enhanced Organization)
+# Strategy Actions - AI Assistant Instructions (2025 Standardized Framework)
 
 ## Overview
 
-This directory contains the action type implementations for biomapper's mapping strategies using an enhanced organizational structure. Each action represents a specific operation that can be performed on identifiers during the mapping process. The organization is optimized for scalability, maintainability, and parallel development.
+This directory contains the action type implementations for biomapper's mapping strategies using the **2025 standardized framework**. Each action represents a specific operation that can be performed on identifiers during the mapping process. 
+
+**🎯 CRITICAL**: All actions MUST follow the 10 biomapper standardizations implemented in January 2025 to prevent pipeline failures and ensure reliability.
+
+## 🛡️ Required Standards Compliance
+
+Before implementing any action, ensure you follow ALL these standards:
+
+### 1. Parameter Naming Standard ✅
+- Use `input_key`, `output_key`, `file_path` (not `dataset_key`, `filepath`, etc.)
+- Validate with: `from biomapper.core.standards.parameter_validator import ParameterValidator`
+
+### 2. Context Type Handling ✅  
+- Always use: `from biomapper.core.standards.context_handler import UniversalContext`
+- Pattern: `ctx = UniversalContext.wrap(context)`
+
+### 3. Algorithm Complexity Standards ✅
+- Audit with: `python audits/complexity_audit.py` before implementation
+- Use: `from biomapper.core.algorithms.efficient_matching import EfficientMatcher`
+
+### 4. Identifier Normalization ✅
+- Always normalize biological IDs: `from biomapper.core.standards.identifier_registry import normalize_identifier`
+
+### 5. Pydantic Model Flexibility ✅
+- Inherit from: `from biomapper.core.standards.base_models import ActionParamsBase`
+
+### Additional Standards: File loading robustness, API validation, environment config, edge case debugging, three-level testing
 
 ## Enhanced Directory Structure
 
@@ -117,15 +143,21 @@ utils/data_processing/            # DataFrame manipulation
 workflows/                        # Multi-step orchestration
 ```
 
-### Step 2: Use Enhanced Base Classes
+### Step 2: Use Standardized Base Classes (2025 Framework)
 ```python
+# REQUIRED: Use standardized imports
 from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
 from biomapper.core.strategy_actions.registry import register_action
-from pydantic import BaseModel
+from biomapper.core.standards.base_models import ActionParamsBase  # STANDARD 5
+from biomapper.core.standards.context_handler import UniversalContext  # STANDARD 2
+from biomapper.core.standards.identifier_registry import normalize_identifier  # STANDARD 4
+from pydantic import Field
 
-class MyActionParams(BaseModel):
-    input_key: str = Field(..., description="Input dataset key")
-    output_key: str = Field(..., description="Output dataset key")
+# STANDARD 1: Parameter naming compliance
+class MyActionParams(ActionParamsBase):  # Inherits debug/trace/timeout
+    input_key: str = Field(..., description="Input dataset key")  # STANDARD NAME
+    output_key: str = Field(..., description="Output dataset key")  # STANDARD NAME
+    threshold: float = Field(0.8, description="Processing threshold")
 
 @register_action("MY_ENTITY_ACTION_NAME")
 class MyEntityAction(TypedStrategyAction[MyActionParams, ActionResult]):
@@ -133,8 +165,34 @@ class MyEntityAction(TypedStrategyAction[MyActionParams, ActionResult]):
         return MyActionParams
     
     async def execute_typed(self, params: MyActionParams, context: Dict) -> ActionResult:
-        # Type-safe implementation
-        pass
+        # STANDARD 2: Context handling
+        ctx = UniversalContext.wrap(context)
+        input_data = ctx.get_dataset(params.input_key)
+        
+        # STANDARD 4: Identifier normalization for biological data
+        if self._has_biological_identifiers(input_data):
+            input_data = self._normalize_identifiers(input_data)
+        
+        # STANDARD 3: Algorithm complexity - use efficient patterns
+        if len(input_data) > 1000:  # Large dataset
+            from biomapper.core.algorithms.efficient_matching import EfficientMatcher
+            processed_data = self._process_large_dataset_efficiently(input_data)
+        else:
+            processed_data = self._process_small_dataset(input_data)
+        
+        # Store results using standardized context
+        ctx.set_dataset(params.output_key, processed_data)
+        
+        return ActionResult(success=True, message=f"Processed {len(processed_data)} items")
+        
+    def _normalize_identifiers(self, data):
+        """Apply biological identifier normalization"""
+        for col in ['uniprot_id', 'protein_id', 'gene_id']:
+            if col in data.columns:
+                data[f'{col}_normalized'] = data[col].apply(
+                    lambda x: normalize_identifier(x).base_id if normalize_identifier(x) else x
+                )
+        return data
 ```
 
 ### Step 3: Leverage Shared Components
@@ -148,37 +206,97 @@ from ..utils.data_processing import chunk_processor
 from ..utils.logging import action_logger
 ```
 
-## Enhanced Testing Structure
+## Standardized Three-Level Testing Framework (2025)
 
-### Test Organization
+### REQUIRED: Follow Three-Level Testing Pattern
+All action tests MUST implement the standardized three-level framework:
+
+```python
+# tests/unit/core/strategy_actions/entities/proteins/test_my_action.py
+from biomapper.testing.base import ActionTestBase
+from biomapper.testing.data_generator import BiologicalDataGenerator
+from biomapper.testing.performance import PerformanceProfiler
+
+class TestMyAction(ActionTestBase):
+    
+    def test_level_1_minimal_data(self):
+        """Level 1: Unit test with minimal data (<1s execution)"""
+        # Generate realistic biological data (3-5 rows)
+        minimal_data = BiologicalDataGenerator.generate_uniprot_dataset(5)
+        
+        # Execute action with minimal context
+        result = await self.execute_action_with_data("MY_ACTION", minimal_data)
+        
+        # Basic functionality assertions
+        assert result.success
+        assert len(result.data) == 5
+        
+    def test_level_2_sample_data(self):
+        """Level 2: Integration test with sample data (<10s execution)"""
+        # Generate sample dataset (100-1000 rows)
+        sample_data = BiologicalDataGenerator.generate_uniprot_dataset(1000)
+        
+        # Test with performance profiling
+        with PerformanceProfiler() as profiler:
+            result = await self.execute_action_with_data("MY_ACTION", sample_data)
+        
+        # Performance and complexity assertions
+        assert result.success
+        self.assert_complexity_linear(profiler.execution_time, len(sample_data))
+        self.assert_memory_usage_reasonable(profiler.peak_memory)
+        
+    def test_level_3_production_subset(self):
+        """Level 3: Production subset test (<60s execution)"""
+        # Use real production data subset (1000+ rows)
+        prod_data = self.load_production_subset("arivale_proteins", 5000)
+        
+        # Execute with edge case monitoring
+        result = await self.execute_action_with_data("MY_ACTION", prod_data)
+        
+        # Real-world validation
+        assert result.success
+        assert result.data['edge_cases_handled'] > 0
+        self.validate_biological_data_integrity(result.data)
+        
+    def test_edge_cases_q6emk4_pattern(self):
+        """Test known edge cases like Q6EMK4"""
+        edge_case_data = BiologicalDataGenerator.generate_edge_cases(['Q6EMK4'])
+        result = await self.execute_action_with_data("MY_ACTION", edge_case_data)
+        # Validate edge case handling
+        assert 'Q6EMK4' in result.data['processed_identifiers']
+```
+
+### Test Organization (Standardized)
 ```
 tests/unit/core/strategy_actions/
 ├── entities/
 │   ├── proteins/
 │   │   ├── annotation/
-│   │   │   ├── test_extract_uniprot_from_xrefs.py
-│   │   │   └── test_normalize_accessions.py
+│   │   │   ├── test_extract_uniprot_from_xrefs.py  # Three-level tests
+│   │   │   └── test_normalize_accessions.py        # Three-level tests
 │   │   └── matching/
-│   │       └── test_multi_bridge.py
+│   │       └── test_multi_bridge.py                # Three-level tests
 │   ├── metabolites/
 │   └── chemistry/
 ├── algorithms/
 └── utils/
 ```
 
-### Testing Commands
+### Testing Commands (Enhanced)
 ```bash
-# Test specific action
+# Run three-level tests for specific action
+python scripts/run_three_level_tests.py proteins --action extract_uniprot
+
+# Run with performance benchmarking
+python scripts/run_three_level_tests.py proteins --performance
+
+# Run specific levels only
+python scripts/run_three_level_tests.py proteins --level 1  # Fast unit tests
+python scripts/run_three_level_tests.py proteins --level 2  # Integration tests  
+python scripts/run_three_level_tests.py proteins --level 3  # Production subset
+
+# Traditional pytest (still supported)
 poetry run pytest -xvs tests/unit/core/strategy_actions/entities/proteins/annotation/test_extract_uniprot.py
-
-# Test entity category
-poetry run pytest -xvs tests/unit/core/strategy_actions/entities/proteins/annotation/
-
-# Test entire entity
-poetry run pytest -xvs tests/unit/core/strategy_actions/entities/proteins/
-
-# Test all actions
-poetry run pytest -xvs tests/unit/core/strategy_actions/
 ```
 
 ## Import Strategy and Registration
@@ -382,22 +500,51 @@ class ProteinExtractUniprotFromXrefs(TypedStrategyAction):
 2. Add enhanced testing and validation
 3. Optimize import strategy
 
-## Code Review Checklist (Enhanced)
+## Code Review Checklist (2025 Standards Compliance)
 
-Before submitting a new action:
+Before submitting a new action, ensure ALL standards are followed:
 
+### 🎯 Critical Standards Compliance
+- [ ] **Parameter Naming (Standard 1)**: Uses `input_key`, `output_key`, `file_path` (validated)
+- [ ] **Context Handling (Standard 2)**: Uses `UniversalContext.wrap(context)`
+- [ ] **Algorithm Complexity (Standard 3)**: Audited with complexity checker, uses EfficientMatcher
+- [ ] **Identifier Normalization (Standard 4)**: Biological IDs normalized with registry
+- [ ] **File Loading (Standard 5)**: Uses `BiologicalFileLoader` for data ingestion
+- [ ] **API Validation (Standard 6)**: API clients validated with `APIMethodValidator`
+- [ ] **Environment Config (Standard 7)**: Uses `EnvironmentManager` for configuration
+- [ ] **Pydantic Models (Standard 8)**: Inherits from `ActionParamsBase` for flexibility
+- [ ] **Edge Case Handling (Standard 9)**: Known issues documented in registry
+- [ ] **Three-Level Testing (Standard 10)**: Level 1, 2, 3 tests implemented
+
+### 📋 Traditional Checks (Still Required)
 - [ ] **Organization**: Action placed in correct entity/category directory
 - [ ] **Typing**: Uses TypedStrategyAction with Pydantic models
 - [ ] **Registration**: Properly registered with @register_action decorator
 - [ ] **Imports**: Added to appropriate __init__.py files
-- [ ] **Testing**: Comprehensive tests in matching directory structure
 - [ ] **Documentation**: Entity-specific docstrings with examples
-- [ ] **Algorithms**: Uses shared algorithms where appropriate
-- [ ] **Utilities**: Leverages shared utilities for common operations
-- [ ] **Performance**: Considers chunking for large datasets
-- [ ] **Validation**: Pydantic models validate all parameters
 - [ ] **Error Handling**: Comprehensive error handling and logging
 - [ ] **Compatibility**: Maintains backward compatibility
+
+### 🚀 Performance and Quality
+- [ ] **Performance Benchmarked**: Level 2 tests include performance assertions
+- [ ] **Edge Cases Covered**: Q6EMK4-style issues tested and documented
+- [ ] **Memory Efficient**: Large datasets handled with chunking/efficient algorithms
+- [ ] **Biological Data Validated**: Real-world biological patterns tested
+
+### 🔍 Pre-Submission Commands
+```bash
+# 1. Validate parameter naming
+python -c "from biomapper.core.standards.parameter_validator import ParameterValidator; ParameterValidator.audit_action('MY_ACTION')"
+
+# 2. Check algorithm complexity
+python audits/complexity_audit.py --file my_action.py
+
+# 3. Run three-level tests
+python scripts/run_three_level_tests.py my_entity --action MY_ACTION
+
+# 4. Type checking
+poetry run mypy biomapper/core/strategy_actions/entities/my_entity/my_action.py
+```
 
 ## Getting Help with Enhanced Organization
 

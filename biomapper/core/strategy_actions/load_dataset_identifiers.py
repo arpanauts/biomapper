@@ -118,11 +118,21 @@ class LoadDatasetIdentifiersAction(
                 else:
                     file_type = "csv"
 
-            # Read file
+            # Read file using BiologicalFileLoader for robustness
+            from biomapper.core.standards import BiologicalFileLoader
+            
             if file_type == "tsv":
-                df = pd.read_csv(file_path, sep="\t", comment="#")
+                df = BiologicalFileLoader.load_tsv(
+                    file_path, 
+                    auto_detect=True,
+                    validate=True
+                )
             else:
-                df = pd.read_csv(file_path, comment="#")
+                df = BiologicalFileLoader.load_csv(
+                    file_path,
+                    auto_detect=True,
+                    validate=True
+                )
 
             logger.debug(f"Loaded {len(df)} rows from {file_path}")
 

@@ -7,8 +7,8 @@ metadata:
   created: '2025-01-08'
   author: biomapper-team
   entity_type: metabolites
-  source_dataset: multi-source
-  target_dataset: unified
+  source_key: multi-source
+  target_key: unified
   bridge_type:
   - multi-bridge
   - semantic
@@ -180,7 +180,7 @@ steps:
   action:
     type: CALCULATE_THREE_WAY_OVERLAP
     params:
-      dataset1_key: arivale_normalized
+      input_key: arivale_normalized
       dataset2_key: ukbb_normalized
       dataset3_key: israeli10k_metab_normalized
       comparison_field: hmdb_id
@@ -200,7 +200,7 @@ steps:
   action:
     type: EXPORT_DATASET
     params:
-      dataset_key: semantically_enhanced
+      input_key: semantically_enhanced
       output_path: ${parameters.output_dir}/unified_metabolites.tsv
       include_metadata: true
       include_source_info: true
@@ -208,6 +208,6 @@ steps:
   action:
     type: EXPORT_DATASET
     params:
-      dataset_key: three_way_statistics
+      input_key: three_way_statistics
       output_path: ${parameters.output_dir}/multi_source_statistics.tsv
       export_format: json

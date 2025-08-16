@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Optional, Literal
 from pydantic import BaseModel, Field
 from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
 from biomapper.core.strategy_actions.registry import register_action
+from biomapper.core.standards.context_handler import UniversalContext
 import os
 import logging
 from datetime import datetime
@@ -65,6 +66,20 @@ class SyncToGoogleDriveV2Params(BaseModel):
     description: Optional[str] = Field(
         default=None, description="Description for the upload batch"
     )
+    
+    # Additional parameters from YAML
+    local_directory: Optional[str] = Field(
+        default=None, description="Local directory to sync files from"
+    )
+    include_patterns: Optional[List[str]] = Field(
+        default=None, description="Patterns for files to include (alias for file_patterns)"
+    )
+    timestamp: Optional[str] = Field(
+        default=None, description="Timestamp for organizing uploads"
+    )
+    create_summary: bool = Field(
+        default=False, description="Create a summary file of uploaded items"
+    )
 
 
 @register_action("SYNC_TO_GOOGLE_DRIVE_V2")
@@ -78,20 +93,32 @@ class SyncToGoogleDriveV2Action(TypedStrategyAction[SyncToGoogleDriveV2Params, S
         return SyncActionResult
     
     async def execute_typed(
-        self, params: SyncToGoogleDriveV2Params, context: Dict[str, Any]
+        self,
+        current_identifiers: List[str],
+        current_ontology_type: str,
+        params: SyncToGoogleDriveV2Params,
+        source_endpoint: Any,
+        target_endpoint: Any,
+        context: Dict[str, Any]
     ) -> SyncActionResult:
         """Execute the sync with auto-organization."""
         try:
+            # Wrap context for uniform access
+            ctx = UniversalContext.wrap(context)
+            
             # Get strategy info from context if not provided
             if params.auto_organize:
                 if not params.strategy_name:
                     # Try to get from context (set by the strategy runner)
-                    params.strategy_name = context.get('strategy_name', 'unknown_strategy')
+                    params.strategy_name = ctx.get('strategy_name', 'unknown_strategy')
                 
                 if not params.strategy_version:
                     # Try to get from context metadata
-                    metadata = context.get('strategy_metadata', {})
-                    params.strategy_version = metadata.get('version', '1.0.0')
+                    metadata = ctx.get('strategy_metadata', {})
+                    if isinstance(metadata, dict):
+                        params.strategy_version = metadata.get('version', '1.0.0')
+                    else:
+                        params.strategy_version = '1.0.0'
             
             # Authenticate
             service = await self._authenticate(params)
@@ -134,10 +161,20 @@ class SyncToGoogleDriveV2Action(TypedStrategyAction[SyncToGoogleDriveV2Params, S
             )
             
         except Exception as e:
-            logger.error(f"Sync failed: {e}")
+            error_msg = str(e)
+            if "404" in error_msg and "notFound" in error_msg:
+                logger.error(f"Google Drive folder not accessible: {params.drive_folder_id}")
+                logger.error("Please ensure the service account has been granted access to this folder")
+                logger.error("Share the folder with the service account email from the credentials file")
+            elif "403" in error_msg and "storageQuotaExceeded" in error_msg:
+                logger.error("Service account cannot create files in its own storage")
+                logger.error("Please share a folder with the service account email")
+            else:
+                logger.error(f"Sync failed: {e}")
+            
             return SyncActionResult(
                 success=False,
-                error=str(e)
+                error=f"Google Drive sync failed: {error_msg[:200]}"
             )
     
     async def _create_organized_folders(
@@ -181,16 +218,25 @@ class SyncToGoogleDriveV2Action(TypedStrategyAction[SyncToGoogleDriveV2Params, S
     
     def _extract_strategy_base(self, strategy_name: str) -> str:
         """Extract base strategy name without version suffix."""
-        # Remove common version patterns: _v1_base, _v2_enhanced, etc.
+        # Remove common version patterns: _v1_base, _v2_enhanced, _v2.2_integrated, etc.
         import re
-        # Pattern matches _v{number}_{descriptor} at the end
-        pattern = r'_v\d+_\w+$'
-        base_name = re.sub(pattern, '', strategy_name)
         
-        # If no pattern matched, try simpler version pattern
-        if base_name == strategy_name:
-            pattern = r'_v\d+$'
-            base_name = re.sub(pattern, '', strategy_name)
+        # Pattern matches various version patterns at the end:
+        # _v{number}.{number}_{descriptor} (e.g., _v2.2_integrated)
+        # _v{number}_{descriptor} (e.g., _v1_base)
+        # _v{number} (e.g., _v2)
+        patterns = [
+            r'_v\d+\.\d+_\w+$',  # _v2.2_integrated
+            r'_v\d+_\w+$',       # _v1_base, _v2_enhanced
+            r'_v\d+$'            # _v2
+        ]
+        
+        base_name = strategy_name
+        for pattern in patterns:
+            new_name = re.sub(pattern, '', base_name)
+            if new_name != base_name:
+                base_name = new_name
+                break
         
         return base_name if base_name else strategy_name
     
@@ -277,14 +323,18 @@ class SyncToGoogleDriveV2Action(TypedStrategyAction[SyncToGoogleDriveV2Params, S
             from googleapiclient.discovery import build
             
             # Get credentials path
-            creds_path = params.credentials_path or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            if params.credentials_path:
+                creds_path = params.credentials_path
+            else:
+                creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            
             if not creds_path:
-                logger.error("No credentials path provided")
+                logger.error("No credentials path provided and GOOGLE_APPLICATION_CREDENTIALS not set")
                 return None
             
             credentials = service_account.Credentials.from_service_account_file(
                 creds_path,
-                scopes=["https://www.googleapis.com/auth/drive.file"]
+                scopes=["https://www.googleapis.com/auth/drive"]
             )
             
             return build("drive", "v3", credentials=credentials)
@@ -302,12 +352,25 @@ class SyncToGoogleDriveV2Action(TypedStrategyAction[SyncToGoogleDriveV2Params, S
         """Collect files to upload based on parameters."""
         files = []
         
+        # Wrap context for uniform access
+        ctx = UniversalContext.wrap(context)
+        
         # Collect from context outputs
         if params.sync_context_outputs:
-            output_files = context.get('output_files', {})
-            for key, path in output_files.items():
-                if path and os.path.exists(path):
-                    files.append(path)
+            output_files = ctx.get('output_files', {})
+            if isinstance(output_files, dict):
+                for key, path in output_files.items():
+                    if path and os.path.exists(path):
+                        files.append(path)
+        
+        # Collect from local directory if specified
+        if params.local_directory and os.path.exists(params.local_directory):
+            import glob
+            for pattern in params.include_patterns or ['*']:
+                pattern_path = os.path.join(params.local_directory, pattern)
+                for file_path in glob.glob(pattern_path, recursive=True):
+                    if os.path.isfile(file_path) and file_path not in files:
+                        files.append(file_path)
         
         # Apply filters
         if params.file_patterns or params.exclude_patterns:

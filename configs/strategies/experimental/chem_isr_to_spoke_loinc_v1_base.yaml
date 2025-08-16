@@ -7,8 +7,8 @@ metadata:
   created: '2025-08-07'
   author: biomapper-team
   entity_type: chemistry
-  source_dataset: israeli10k
-  target_dataset: spoke
+  source_key: israeli10k
+  target_key: spoke
   bridge_type:
   - loinc
   - fuzzy
@@ -147,12 +147,12 @@ steps:
   action:
     type: CALCULATE_SET_OVERLAP
     params:
-      dataset1_key: israeli10k_harmonized
+      input_key: israeli10k_harmonized
       dataset2_key: spoke_filtered
       output_key: overlap_statistics
 - name: export_mapping
   action:
     type: EXPORT_DATASET
     params:
-      dataset_key: fuzzy_matched
+      input_key: fuzzy_matched
       output_path: ${parameters.output_dir}/israeli10k_spoke_chemistry.tsv

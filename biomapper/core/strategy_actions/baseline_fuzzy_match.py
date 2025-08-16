@@ -29,7 +29,7 @@ class FuzzyAlgorithm(str, Enum):
 class BaselineFuzzyMatchParams(BaseModel):
     """Parameters for baseline fuzzy matching."""
 
-    source_dataset_key: str = Field(description="Key for source dataset")
+    input_key: str = Field(description="Key for source dataset")
     target_dataset_key: str = Field(description="Key for target dataset")
     source_column: str = Field(description="Column with source metabolite names")
     target_column: str = Field(description="Column with target metabolite names")

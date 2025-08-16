@@ -8,8 +8,8 @@ metadata:
   created: '2025-01-08'
   author: biomapper-team
   entity_type: metabolites
-  source_dataset: multi-source
-  target_dataset: semantically-enriched
+  source_key: multi-source
+  target_key: semantically-enriched
   bridge_type:
   - semantic
   - vector
@@ -246,7 +246,7 @@ steps:
   action:
     type: GENERATE_METABOLOMICS_REPORT
     params:
-      dataset_key: combined_matches
+      input_key: combined_matches
       include_statistics: true
       include_visualizations: true
       include_method_comparison: true
@@ -257,7 +257,7 @@ steps:
   action:
     type: EXPORT_DATASET
     params:
-      dataset_key: combined_matches
+      input_key: combined_matches
       output_path: ${parameters.output_dir}/semantically_enriched_metabolites.tsv
       include_confidence_scores: true
       include_method_provenance: true
@@ -266,7 +266,7 @@ steps:
   action:
     type: CALCULATE_SET_OVERLAP
     params:
-      dataset1_key: source_metabolites
+      input_key: source_metabolites
       dataset2_key: target_metabolites
       analysis_type: comprehensive
       include_method_metrics: true

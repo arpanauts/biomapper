@@ -1,0 +1,37 @@
+name: PROTEIN_HISTORICAL_RESOLUTION_DEMO
+description: Demonstrates the PROTEIN_HISTORICAL_RESOLUTION action for resolving deprecated
+  UniProt IDs
+parameters:
+  sample_proteins:
+  - id: protein_1
+    uniprot_id: P12345
+    gene_symbol: GENE1
+  - id: protein_2
+    uniprot_id: Q99999
+    gene_symbol: GENE2
+  - id: protein_3
+    uniprot_id: O00000
+    gene_symbol: GENE3
+steps:
+- name: load_sample_proteins
+  action:
+    type: CUSTOM_TRANSFORM
+    params:
+      input_expression: parameters.sample_proteins
+      output_key: deprecated_proteins
+- name: resolve_historical_uniprot_ids
+  action:
+    type: PROTEIN_HISTORICAL_RESOLUTION
+    params:
+      input_key: deprecated_proteins
+      output_key: resolved_proteins
+      uniprot_column: uniprot_id
+      min_confidence: 0.8
+      batch_size: 10
+- name: export_results
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: resolved_proteins
+      file_path: /tmp/historical_resolution_results.tsv
+      file_format: tsv

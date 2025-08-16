@@ -8,8 +8,8 @@ metadata:
   created: '2025-01-08'
   author: biomapper-team
   entity_type: metabolites
-  source_dataset: ukbb
-  target_dataset: spoke
+  source_key: ukbb
+  target_key: spoke
   bridge_type:
   - nightingale
   - hmdb
@@ -128,12 +128,12 @@ steps:
   action:
     type: CALCULATE_SET_OVERLAP
     params:
-      dataset1_key: ukbb_normalized
+      input_key: ukbb_normalized
       dataset2_key: spoke_metabolites
       output_key: overlap_statistics
 - name: export_mapping
   action:
     type: EXPORT_DATASET
     params:
-      dataset_key: semantic_matched
+      input_key: semantic_matched
       output_path: ${parameters.output_dir}/ukbb_nmr_spoke_enhanced.tsv

@@ -8,8 +8,8 @@ metadata:
   created: '2025-01-08'
   author: biomapper-team
   entity_type: metabolites
-  source_dataset: israeli10k
-  target_dataset: spoke
+  source_key: israeli10k
+  target_key: spoke
   bridge_type:
   - inchikey
   - cts
@@ -104,7 +104,7 @@ steps:
   action:
     type: CALCULATE_SET_OVERLAP
     params:
-      dataset1_key: israeli10k_lipids_normalized
+      input_key: israeli10k_lipids_normalized
       dataset2_key: spoke_metabolites
       overlap_method: inchikey
       output_key: overlap_statistics
@@ -112,5 +112,5 @@ steps:
   action:
     type: EXPORT_DATASET
     params:
-      dataset_key: cts_mapped
+      input_key: cts_mapped
       output_path: ${parameters.output_dir}/israeli10k_spoke_lipidomics.tsv

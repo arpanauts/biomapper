@@ -78,6 +78,24 @@ class ChemistryToPhenotypeBridgeAction(
 
             # Load known LOINC-to-phenotype associations
             loinc_hp_map = self._load_loinc_hp_associations()
+            
+            # PERFORMANCE OPTIMIZATION: Build phenotype lookup index for O(1) HP code matching
+            if not hasattr(self, '_phenotype_hp_index'):
+                self._phenotype_hp_index = {}
+                for idx, phenotype_row in target_df.iterrows():
+                    phenotype_id = str(phenotype_row.get(params.phenotype_id_column, ""))
+                    phenotype_xrefs = str(phenotype_row.get(params.phenotype_xrefs_column, ""))
+                    
+                    # Extract all HP codes from ID and xrefs
+                    all_text = phenotype_id + " " + phenotype_xrefs
+                    # Simple pattern matching for HP codes (HP:XXXXXXX)
+                    import re
+                    hp_codes = re.findall(r'HP:\d{7}', all_text)
+                    
+                    for hp_code in hp_codes:
+                        if hp_code not in self._phenotype_hp_index:
+                            self._phenotype_hp_index[hp_code] = []
+                        self._phenotype_hp_index[hp_code].append(phenotype_row.to_dict())
 
             # Process each chemistry test
             for idx, row in source_df.iterrows():
@@ -114,26 +132,20 @@ class ChemistryToPhenotypeBridgeAction(
                 associated_phenotypes = loinc_hp_map.get(loinc_code, [])
 
                 if associated_phenotypes:
-                    # Find matching phenotypes in target
+                    # PERFORMANCE OPTIMIZATION: Use O(1) index lookup instead of O(m) DataFrame filtering
                     for hp_code in associated_phenotypes:
-                        matched_phenotypes = target_df[
-                            target_df[params.phenotype_id_column].str.contains(
-                                hp_code, na=False
-                            )
-                            | target_df[params.phenotype_xrefs_column].str.contains(
-                                hp_code, na=False
-                            )
-                        ]
+                        # Get matching phenotypes using efficient index - O(1) lookup
+                        matched_phenotype_rows = self._phenotype_hp_index.get(hp_code, [])
 
-                        for _, phenotype_row in matched_phenotypes.iterrows():
+                        for phenotype_row in matched_phenotype_rows:
                             mappings.append(
                                 {
                                     "chemistry_id": chemistry_name,
                                     "chemistry_display": display_name,
                                     "loinc_code": loinc_code,
-                                    "phenotype_id": phenotype_row[
-                                        params.phenotype_id_column
-                                    ],
+                                    "phenotype_id": phenotype_row.get(
+                                        params.phenotype_id_column, ""
+                                    ),
                                     "phenotype_name": phenotype_row.get("name", ""),
                                     "match_type": "loinc_association",
                                     "confidence": 0.9,
@@ -235,23 +247,36 @@ class ChemistryToPhenotypeBridgeAction(
     def _semantic_match_to_phenotype(
         self, chemistry_name: str, display_name: str, target_df: pd.DataFrame
     ) -> Optional[Dict[str, Any]]:
-        """Attempt semantic matching between chemistry test and phenotypes."""
+        """Attempt semantic matching between chemistry test and phenotypes with O(m) complexity."""
         # Simple keyword-based matching for demonstration
         test_keywords = set(
             chemistry_name.lower().split() + display_name.lower().split()
         )
+        
+        # PERFORMANCE OPTIMIZATION: Build phenotype keyword index once and cache it
+        if not hasattr(self, '_phenotype_keyword_index'):
+            self._phenotype_keyword_index = {}
+            for idx, phenotype_row in target_df.iterrows():
+                phenotype_name = str(phenotype_row.get("name", "")).lower()
+                phenotype_desc = str(phenotype_row.get("description", "")).lower()
+                
+                # Create keyword set for this phenotype
+                phenotype_keywords = set(
+                    phenotype_name.split() + phenotype_desc.split()[:20]
+                )
+                
+                self._phenotype_keyword_index[idx] = {
+                    'keywords': phenotype_keywords,
+                    'id': phenotype_row.get("id"),
+                    'name': phenotype_row.get("name")
+                }
 
         best_match = None
         best_score = 0
 
-        for _, phenotype_row in target_df.iterrows():
-            phenotype_name = str(phenotype_row.get("name", "")).lower()
-            phenotype_desc = str(phenotype_row.get("description", "")).lower()
-
-            # Calculate similarity score
-            phenotype_keywords = set(
-                phenotype_name.split() + phenotype_desc.split()[:20]
-            )
+        # O(m) iteration through cached phenotype data instead of O(m) DataFrame iteration
+        for phenotype_data in self._phenotype_keyword_index.values():
+            phenotype_keywords = phenotype_data['keywords']
             common_keywords = test_keywords.intersection(phenotype_keywords)
 
             if len(common_keywords) > 0:
@@ -259,8 +284,8 @@ class ChemistryToPhenotypeBridgeAction(
                 if score > best_score and score > 0.3:
                     best_score = score
                     best_match = {
-                        "id": phenotype_row.get("id"),
-                        "name": phenotype_row.get("name"),
+                        "id": phenotype_data['id'],
+                        "name": phenotype_data['name'],
                         "confidence": score,
                     }
 

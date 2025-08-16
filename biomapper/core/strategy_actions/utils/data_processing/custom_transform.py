@@ -1,7 +1,8 @@
 """Custom data transformation action for flexible data processing operations."""
 
 from typing import Dict, Any, List, Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import Field
+from biomapper.core.standards import ActionParamsBase, FlexibleBaseModel
 import pandas as pd
 import numpy as np
 
@@ -14,7 +15,7 @@ from biomapper.core.exceptions import (
 )
 
 
-class ActionResult(BaseModel):
+class ActionResult(FlexibleBaseModel):
     """Simple action result for transformation operations."""
 
     success: bool
@@ -22,7 +23,7 @@ class ActionResult(BaseModel):
     data: Dict[str, Any] = Field(default_factory=dict)
 
 
-class TransformOperation(BaseModel):
+class TransformOperation(FlexibleBaseModel):
     """Single transformation operation specification."""
 
     type: Literal[
@@ -44,7 +45,7 @@ class TransformOperation(BaseModel):
     condition: Optional[str] = None  # Optional condition for conditional transforms
 
 
-class CustomTransformParams(BaseModel):
+class CustomTransformParams(ActionParamsBase):
     """Parameters for CUSTOM_TRANSFORM action."""
 
     input_key: str = Field(..., description="Key of input dataset to transform")

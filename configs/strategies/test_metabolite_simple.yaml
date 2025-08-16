@@ -11,30 +11,28 @@ parameters:
   output_dir: /tmp/biomapper/test_output
   cache_dir: /tmp/biomapper/cache
 steps:
-  - name: load_metabolites
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${parameters.source_file}"
-        identifier_column: metabolite_id
-        output_key: test_metabolites
-        additional_columns:
-          - name
-          - inchikey
-          - smiles
-        
-  - name: normalize_hmdb
-    action:
-      type: METABOLITE_NORMALIZE_HMDB
-      params:
-        input_key: test_metabolites
-        output_key: normalized_metabolites
-        id_column: metabolite_id
-        
-  - name: export_results
-    action:
-      type: EXPORT_DATASET
-      params:
-        input_key: normalized_metabolites
-        output_file: "${parameters.output_dir}/normalized_metabolites.tsv"
-        format: tsv
+- name: load_metabolites
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.source_file}
+      identifier_column: metabolite_id
+      output_key: test_metabolites
+      additional_columns:
+      - name
+      - inchikey
+      - smiles
+- name: normalize_hmdb
+  action:
+    type: METABOLITE_NORMALIZE_HMDB
+    params:
+      input_key: test_metabolites
+      output_key: normalized_metabolites
+      id_column: metabolite_id
+- name: export_results
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: normalized_metabolites
+      output_path: ${parameters.output_dir}/normalized_metabolites.tsv
+      format: tsv

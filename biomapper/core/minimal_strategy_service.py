@@ -5,12 +5,22 @@ from typing import Dict, Any, List, Optional, cast
 import yaml
 from pydantic import ValidationError
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not available, skip loading
+    pass
+
 from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
 from biomapper.core.models.execution_context import (
     StrategyExecutionContext,
     ProvenanceRecord,
 )
 from biomapper.core.infrastructure.parameter_resolver import ParameterResolver
+from biomapper.core.standards.debug_tracer import DebugTracer
+from biomapper.core.standards.known_issues import KnownIssuesRegistry
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -302,6 +312,13 @@ class MinimalStrategyService:
             "SemanticMetaboliteMatchAction",
             "CombineMetaboliteMatchesAction",
             "GenerateMetabolomicsReportAction",
+            "ParseCompositeIdentifiersAction",
+            "ProteinExtractUniProtFromXrefsAction",
+            "ProteinNormalizeAccessionsAction",
+            "ProteinHistoricalResolution",
+            "ProteinGeneSymbolBridge",
+            "ProteinEnsemblBridge",
+            "CustomTransformAction",
         }
 
         if action_name in pydantic_actions:
@@ -317,13 +334,43 @@ class MinimalStrategyService:
         target_endpoint_name: str = "",
         input_identifiers: List[str] = None,
         context: Optional[Dict[str, Any]] = None,
+        debug_config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Execute a named strategy with dual context support."""
+        """Execute a named strategy with dual context support and optional debugging.
+        
+        Args:
+            strategy_name: Name of the strategy to execute
+            source_endpoint_name: Source endpoint name
+            target_endpoint_name: Target endpoint name
+            input_identifiers: Initial identifiers to process
+            context: Optional execution context overrides
+            debug_config: Optional debug configuration with:
+                - trace_identifiers: List[str] - Identifiers to trace through pipeline
+                - save_trace: str - Path to save trace log
+                - check_known_issues: bool - Check for known issues
+        """
 
         if strategy_name not in self.strategies:
             raise ValueError(f"Strategy '{strategy_name}' not found")
 
         strategy = self.strategies[strategy_name]
+        
+        # Initialize debug tracer if configured
+        tracer = None
+        if debug_config:
+            trace_ids = debug_config.get('trace_identifiers', [])
+            if trace_ids:
+                tracer = DebugTracer(set(trace_ids))
+                logger.info(f"Debug tracing enabled for identifiers: {trace_ids}")
+            
+            # Check for known issues
+            if debug_config.get('check_known_issues', False):
+                for identifier in trace_ids:
+                    issue = KnownIssuesRegistry.check_identifier(identifier)
+                    if issue:
+                        logger.warning(f"⚠️ Known issue for {identifier}: {issue.description}")
+                        if issue.workaround:
+                            logger.info(f"💡 Workaround: {issue.workaround}")
 
         # Merge default parameters with context overrides
         parameters = strategy.get("parameters", {}).copy()
@@ -341,6 +388,7 @@ class MinimalStrategyService:
             "output_files": {},
             "custom_action_data": {},
             "provenance": [],
+            "debug_tracer": tracer,  # Add tracer to context
         }
 
         # Create dual contexts
@@ -376,6 +424,17 @@ class MinimalStrategyService:
             )
 
             logger.info(f"Executing step '{step_name}' with action '{action_type}'")
+            
+            # Debug trace step start
+            if tracer:
+                for identifier in dict_context.get("current_identifiers", []):
+                    if identifier in tracer.trace_identifiers:
+                        tracer.trace(
+                            identifier,
+                            action_type,
+                            "step_start",
+                            {"step_name": step_name, "params": action_params}
+                        )
 
             if action_type not in self.action_registry:
                 raise ValueError(f"Unknown action type: {action_type}")
@@ -506,13 +565,45 @@ class MinimalStrategyService:
                             dict_context[key] = value
 
                     logger.debug(f"Step '{step_name}' completed successfully")
+                    
+                    # Debug trace step completion
+                    if tracer:
+                        for identifier in dict_context.get("current_identifiers", []):
+                            if identifier in tracer.trace_identifiers:
+                                tracer.trace(
+                                    identifier,
+                                    action_type,
+                                    "step_complete",
+                                    {
+                                        "step_name": step_name,
+                                        "output_count": len(dict_context.get("current_identifiers", [])),
+                                        "datasets": list(dict_context.get("datasets", {}).keys())
+                                    }
+                                )
 
             except Exception as e:
                 logger.error(f"Action '{action_type}' failed: {str(e)}")
                 logger.error(f"Context preference was: {context_preference}")
+                
+                # Debug trace step failure
+                if tracer:
+                    for identifier in dict_context.get("current_identifiers", []):
+                        if identifier in tracer.trace_identifiers:
+                            tracer.trace(
+                                identifier,
+                                action_type,
+                                "step_failed",
+                                {"step_name": step_name, "error": str(e)}
+                            )
                 raise
 
         logger.info(f"Strategy '{strategy_name}' completed successfully")
+        
+        # Save debug trace if configured
+        if tracer and debug_config and debug_config.get('save_trace'):
+            trace_path = debug_config['save_trace']
+            tracer.save_trace(trace_path)
+            logger.info(f"Debug trace saved to: {trace_path}")
 
         # Return the dict context (backward compatibility)
         return {

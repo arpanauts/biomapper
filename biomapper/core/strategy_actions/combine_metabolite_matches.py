@@ -49,8 +49,8 @@ class MatchProvenance(BaseModel):
     """Provenance information for a single match."""
 
     match_id: str
-    source_dataset: str
-    target_dataset: str
+    source_key: str
+    target_key: str
     source_id: str
     target_id: str
     match_method: str

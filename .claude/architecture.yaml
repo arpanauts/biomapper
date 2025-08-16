@@ -1,0 +1,395 @@
+# Biomapper Restructure Architecture Configuration
+# Updated for zero-downtime migration with compatibility preservation
+
+# Files/patterns that should NEVER be deleted during restructure (CRITICAL)
+protected_patterns:
+  # Core infrastructure - NEVER TOUCH during migration
+  - "biomapper/core/strategy_actions/registry.py"
+  - "biomapper/core/minimal_strategy_service.py"
+  - "biomapper/core/strategy_actions/__init__.py"
+  - "biomapper/core/strategy_actions/typed_base.py"
+  
+  # High-usage actions (59+ YAML references) - Migrate with extreme care
+  - "biomapper/core/strategy_actions/load_dataset_identifiers.py"
+  - "biomapper/core/strategy_actions/export_dataset.py"
+  - "biomapper/core/strategy_actions/calculate_set_overlap.py"
+  - "biomapper/core/strategy_actions/filter_dataset.py"
+  - "biomapper/core/strategy_actions/merge_datasets.py"
+  
+  # API integration points - Service layer critical
+  - "biomapper-api/app/services/mapper_service.py"
+  - "biomapper-api/app/services/background_executor.py"
+  - "biomapper-api/app/main.py"
+  - "biomapper-api/app/routers/*"
+  
+  # Entry points and CLIs
+  - "*/__main__.py"
+  - "*/cli/*"
+  - "*/main.py"
+  - "biomapper_client/cli.py"
+  - "biomapper_client/client.py"
+  
+  # Configuration and setup
+  - "*/setup.py"
+  - "*/pyproject.toml"
+  - "*/poetry.lock"
+  - ".github/workflows/*"
+  
+  # Documentation (ReadTheDocs)
+  - "docs/source/conf.py"
+  - "docs/Makefile"
+  - "*/README.md"
+  - "CHANGELOG.md"
+
+# Target restructure destinations - NEW STRUCTURE BEING CREATED
+restructure_targets:
+  # New core structure
+  new_core_actions: "biomapper_core/actions/"
+  new_core_services: "biomapper_core/services/"
+  new_core_standards: "biomapper_core/standards/"
+  
+  # Action categorization for migration
+  action_categories:
+    base: "biomapper_core/actions/base/"
+    entities: "biomapper_core/actions/entities/"
+    io: "biomapper_core/actions/io/"
+    reports: "biomapper_core/actions/reports/"
+    utils: "biomapper_core/actions/utils/"
+  
+  # Package renames (with symlinks during transition)
+  package_renames:
+    - old: "biomapper-api"
+      new: "biomapper/api"
+      symlink_during_migration: true
+    - old: "biomapper_client"  
+      new: "biomapper/client"
+      symlink_during_migration: true
+
+# High-priority action migration order (by YAML usage frequency)
+action_migration_priority:
+  phase_1_critical:
+    - "load_dataset_identifiers.py"      # 59 YAML files
+    - "export_dataset.py"                # 48 YAML files  
+    - "calculate_set_overlap.py"         # 42 YAML files
+    - "filter_dataset.py"               # 31 YAML files
+    - "merge_datasets.py"               # 24 YAML files
+  
+  phase_2_high:
+    - "generate_visualizations_v2.py"    # Keep v2, archive v1
+    - "parse_composite_identifiers_v2.py" # Keep v2, archive v1
+    - "sync_to_google_drive_v2.py"      # Keep v2, archive v1
+  
+  phase_3_standard:
+    - "proteins/*"                       # Move to entities/proteins/
+    - "metabolites/*"                    # Move to entities/metabolites/
+    - "chemistry/*"                      # Move to entities/chemistry/
+
+# Duplicate elimination targets (130K+ lines of duplicates identified)
+duplicate_elimination:
+  visualization_consolidation:
+    keep: "generate_visualizations_v2.py"
+    archive: 
+      - "generate_visualizations.py"
+      - "generate_mapping_visualizations.py"
+    impact: "76K lines eliminated"
+  
+  parsing_unification:
+    keep: "parse_composite_identifiers_v2.py"
+    archive:
+      - "parse_composite_identifiers.py"
+      - "parse_composite_identifiers_v1.py"
+    impact: "25K lines eliminated"
+    
+  sync_standardization:
+    keep: "sync_to_google_drive_v2.py"
+    archive:
+      - "sync_to_google_drive.py"
+      - "sync_to_google_drive_v1.py"
+    impact: "31K lines eliminated"
+
+# Test consolidation strategy (20+ scattered tests identified)
+test_consolidation:
+  target_structure: "tests/"
+  subdirectories:
+    - "unit/"           # Fast tests (<1s)
+    - "integration/"    # Medium tests (<10s) 
+    - "performance/"    # Performance tests
+  
+  scattered_test_patterns:
+    - "test_*.py"       # Root level tests
+    - "*_test.py"       # Alternative naming
+    - "scripts/test_*"  # Script directory tests
+  
+  consolidation_rules:
+    - source: "Root level test_*.py files"
+      target: "tests/unit/"
+    - source: "scripts/test_*.py files"
+      target: "tests/integration/"
+    - source: "Complex performance tests"
+      target: "tests/performance/"
+
+# Configuration cleanup (74 YAML + 47 experimental strategies)
+config_consolidation:
+  strategy_organization:
+    production: "configs/strategies/production/"    # Stable, tested strategies
+    templates: "configs/strategies/templates/"      # Starting points
+    experimental: "configs/strategies/experimental/" # Max 10 active
+    archive: "configs/strategies/archive/"          # Old experiments
+  
+  cleanup_rules:
+    # Archive old experiments (>6 months)
+    archive_criteria: "mtime +180"
+    max_experimental: 10
+    
+    # Consolidate environment configs
+    environment_configs: "configs/environments/"
+
+# Compatibility preservation during migration
+compatibility_shims:
+  # Critical import paths that must continue working
+  preserved_imports:
+    - "from biomapper.core.strategy_actions.registry import ACTION_REGISTRY"
+    - "from biomapper.core.strategy_actions import register_action"
+    - "from biomapper.core.minimal_strategy_service import MinimalStrategyService"
+    - "from biomapper.core.strategy_actions.typed_base import TypedStrategyAction"
+  
+  # Shim file locations (temporary during migration)
+  shim_files:
+    - "biomapper/core/strategy_actions/__init__.py"
+    - "biomapper/core/__init__.py"
+    - "biomapper-api/__init__.py"
+    - "biomapper_client/__init__.py"
+
+# Migration validation checkpoints
+validation_checkpoints:
+  registry_integrity:
+    command: "python -c 'from biomapper.core.strategy_actions.registry import ACTION_REGISTRY; assert len(ACTION_REGISTRY) == 46'"
+    description: "Verify all 46 actions still registered"
+  
+  yaml_compatibility:
+    command: "poetry run biomapper validate --all-strategies"
+    description: "Verify all 91 YAML action types work"
+  
+  api_health:
+    command: "curl -s localhost:8000/api/health/status | grep healthy"
+    description: "API remains functional"
+  
+  test_suite:
+    command: "poetry run pytest tests/integration/ -x"
+    description: "Integration tests pass"
+
+# Rollback safety measures
+rollback_preparation:
+  git_tags:
+    - "pre-restructure-baseline"
+    - "pre-phase-1-cleanup"
+    - "pre-phase-2-deduplication"
+    - "pre-phase-3-restructure"
+  
+  backup_critical_files:
+    - "biomapper/core/strategy_actions/registry.py"
+    - "biomapper/core/minimal_strategy_service.py"
+    - "biomapper-api/app/services/mapper_service.py"
+    - "pyproject.toml"
+  
+  symlink_strategy:
+    # Keep symlinks during transition for safety
+    duration: "30 days minimum"
+    validation: "Ensure no external dependencies on old paths"
+
+# Success metrics tracking
+success_metrics:
+  quantitative_targets:
+    file_reduction: "586 → 200 files (66%)"
+    duplicate_elimination: "130K+ → <20K lines (85%)"
+    dependency_reduction: "283 → <50 deps (80%)"
+    test_consolidation: "20+ scattered → 0 (100%)"
+    
+  qualitative_indicators:
+    - "All 46 actions remain registered"
+    - "All 91 YAML strategies work unchanged"  
+    - "Zero API downtime during migration"
+    - "No breaking changes for external users"
+    - "Improved developer navigation experience"
+
+# Special handling during restructure
+migration_special_rules:
+  # Files requiring manual migration (not automated)
+  manual_migration_required:
+    - "biomapper/core/strategy_actions/registry.py"  # 71 dependencies
+    - "biomapper/core/minimal_strategy_service.py"   # 12 dependencies
+    - High-usage actions (59+ YAML references)
+  
+  # Actions that can be safely automated
+  automated_migration_safe:
+    - Low-usage actions (<10 YAML references)
+    - Utility functions
+    - Test files
+    - Documentation
+  
+  # Files to create compatibility shims for
+  requires_compatibility_shim:
+    - All registry imports
+    - Service layer interfaces  
+    - Public API endpoints
+    - Client library interfaces
+
+# Directories where action implementations are found
+action_sources:
+  - "biomapper/core/strategy_actions/"
+  - "custom_actions/"
+  - "scripts/actions/"
+
+# Directories containing YAML configuration files that reference actions
+config_locations:
+  - "configs/strategies/"
+  - "configs/"
+  - "biomapper-api/configs/"
+
+# Patterns that indicate HIGH confidence for deletion (85%+)
+high_confidence_patterns:
+  # Archive and deprecated
+  - "archive/*"
+  - "*/deprecated_*"
+  - "*/old_*"
+  - "*_deprecated*"
+  
+  # Build artifacts
+  - "*/__pycache__/*"
+  - "*.pyc"
+  - "*.pyo"
+  - "*.pyd"
+  - ".pytest_cache/*"
+  - ".mypy_cache/*"
+  - ".ruff_cache/*"
+  - "docs/build/*"          # ReadTheDocs build output
+  
+  # Mock and test utilities (not tests themselves)
+  - "*_mock/*"
+  - "*/mock_*"
+  - "*/mocks/*"
+  - "biomapper-api/biomapper_mock/*"
+  
+  # Templates and examples
+  - "*/templates/*"
+  - "*/examples/*"
+  - "*_template*"
+  - "*_example*"
+
+# Patterns that suggest MEDIUM confidence (60-84%)
+medium_confidence_patterns:
+  # Potentially unused utilities
+  - "*/utils/*"
+  - "*/helpers/*"
+  - "*_utils.py"
+  - "*_helper.py"
+  
+  # Investigative/research code
+  - "*/investigation/*"
+  - "*/research/*"
+  - "*/experiments/*"
+  - "*_investigation*"
+  - "*_research*"
+  
+  # Backup files
+  - "*.bak"
+  - "*_backup*"
+  - "*_old*"
+
+# Code patterns that indicate dynamic imports (reduces confidence)
+dynamic_import_indicators:
+  - "importlib"
+  - "__import__"
+  - "exec("
+  - "eval("
+  - "getattr("
+  - "globals()"
+  - "locals()"
+  - "vars()"
+
+# File patterns that should be moved rather than deleted
+consolidation_candidates:
+  test_patterns:
+    patterns:
+      - "test_*.py"
+      - "*_test.py"
+    target_directory: "tests/"
+  
+  doc_patterns:
+    patterns:
+      - "*.md"
+      - "*.rst"
+      - "*.txt"
+    target_directory: "docs/"
+    exclude_patterns:
+      - "README.md"
+      - "CHANGELOG.md"
+      - "LICENSE.txt"
+
+# Special handling rules
+special_rules:
+  # Don't delete if recently modified (days)
+  recent_modification_threshold: 30
+  
+  # Don't delete if file size is above threshold (indicates active development)
+  large_file_threshold_bytes: 50000  # 50KB
+  
+  # Minimum confidence to suggest for deletion
+  deletion_threshold: 60
+  
+  # Files that are safe to delete even if imported (test utilities, etc.)
+  safe_despite_imports:
+    - "*/test_utils.py"
+    - "*/testing_helpers.py"
+    - "*/mock_*.py"
+
+# Action-specific detection rules
+action_detection:
+  # Decorator patterns to look for
+  decorator_patterns:
+    - "@register_action\\([\"']([^\"']+)[\"']\\)"
+    - "@action\\([\"']([^\"']+)[\"']\\)"
+  
+  # YAML fields that contain action references
+  yaml_action_fields:
+    - "type"
+    - "action_type"
+    - "strategy_type"
+  
+  # Confidence adjustments for actions
+  action_confidence_rules:
+    # Action registered but not in YAML = likely unused
+    registered_not_in_yaml: 70
+    # Action in YAML but no registration = broken reference
+    in_yaml_not_registered: 85
+    # Action both registered and in YAML = definitely used
+    registered_and_in_yaml: -50  # Subtract from base confidence
+
+# Git integration settings
+git_analysis:
+  # Include git history in analysis
+  enabled: true
+  
+  # Consider files not committed to git as temporary
+  uncommitted_file_confidence_boost: 20
+  
+  # Files not modified in this many days get confidence boost
+  stale_file_days: 90
+  stale_file_confidence_boost: 15
+
+# Reporting preferences
+reporting:
+  # Show file sizes in report
+  show_file_sizes: true
+  
+  # Show last modified dates
+  show_last_modified: true
+  
+  # Group results by confidence level
+  group_by_confidence: true
+  
+  # Maximum number of files to show per category
+  max_files_per_category: 50
+  
+  # Show git commands in cleanup script
+  include_git_commands: true

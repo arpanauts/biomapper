@@ -1,0 +1,74 @@
+name: simple_production_with_gdrive_demo
+description: Simplified production pipeline with Google Drive sync - demonstrates
+  working end-to-end flow
+version: '1.0'
+parameters:
+  arivale_file: /procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv
+  kg2c_file: /procedure/data/local_data/MAPPING_ONTOLOGIES/kg2c_ontologies/kg2c_proteins.csv
+  arivale_id_column: uniprot
+  kg2c_id_column: id
+  kg2c_xref_column: equivalent_identifiers
+  output_dir: ${OUTPUT_DIR:-/tmp/biomapper_results}
+  timestamp: ${TIMESTAMP:-2024-12-14}
+steps:
+- name: load_arivale
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.arivale_file}
+      identifier_column: ${parameters.arivale_id_column}
+      output_key: arivale_proteins
+- name: load_kg2c
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.kg2c_file}
+      identifier_column: ${parameters.kg2c_id_column}
+      output_key: kg2c_entities
+- name: uniprot_resolution
+  action:
+    type: MERGE_WITH_UNIPROT_RESOLUTION
+    params:
+      input_key: arivale_proteins
+      target_dataset_key: kg2c_entities
+      source_id_column: ${parameters.arivale_id_column}
+      target_id_column: ${parameters.kg2c_id_column}
+      target_xref_column: ${parameters.kg2c_xref_column}
+      output_key: mapping_results
+- name: export_results
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: mapping_results
+      output_path: ${parameters.output_dir}/protein_mapping_results.csv
+      format: csv
+- name: calculate_overlap
+  action:
+    type: CALCULATE_SET_OVERLAP
+    params:
+      input_key: arivale_proteins
+      dataset2_key: kg2c_entities
+      id_column1: ${parameters.arivale_id_column}
+      id_column2: ${parameters.kg2c_id_column}
+      output_key: overlap_stats
+- name: export_overlap
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: overlap_stats
+      output_path: ${parameters.output_dir}/overlap_analysis.json
+      format: json
+- name: google_drive_sync
+  action:
+    type: SYNC_TO_GOOGLE_DRIVE_V2
+    params:
+      local_directory: ${parameters.output_dir}
+      strategy_name: simple_production_with_gdrive_demo
+      timestamp: ${parameters.timestamp}
+      include_patterns:
+      - '*.csv'
+      - '*.json'
+      - '*.html'
+      - '*.png'
+      auto_organize: true
+      create_summary: true

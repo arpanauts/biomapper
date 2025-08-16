@@ -9,6 +9,9 @@ from sqlalchemy.orm import declarative_base
 # Database URL from environment or default to SQLite
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./biomapper.db")
 
+# Debug print to track what's happening
+print(f"[DEBUG] Initial DATABASE_URL: {DATABASE_URL}")
+
 # Convert postgres:// to postgresql+asyncpg:// for async support
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)

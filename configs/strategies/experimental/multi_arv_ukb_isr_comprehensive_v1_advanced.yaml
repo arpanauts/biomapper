@@ -1,323 +1,315 @@
 name: multi_arv_ukb_isr_comprehensive_v1_advanced
 metadata:
-  id: "multi_arv_ukb_isr_comprehensive_v1_advanced"
-  name: "Comprehensive Multi-Omics Harmonization"
-  version: "1.0.0"
-  created: "2025-01-08"
-  author: "biomapper-team"
-  entity_type: ["proteins", "metabolites", "chemistry"]
-  source_dataset: ["arivale", "ukbb", "israeli10k"]
-  target_dataset: "unified"
-  bridge_type: ["uniprot", "hmdb", "loinc", "semantic"]
-  
-  quality_tier: "experimental"
-  validation_status: "pending"
-  expected_match_rate: 0.65  # Lower for multi-entity
-  
-  description: |
-    Complete harmonization of proteins, metabolites, and chemistry tests
-    across Arivale, UKBB, and Israeli10k datasets. This experimental strategy
-    integrates multiple entity types using advanced matching algorithms
-    including semantic similarity and cross-entity correlation analysis.
-  
-  source_files:
-    # Arivale
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/proteomics_metadata.tsv"
-      entity: "proteins"
-      description: "Arivale proteomics measurements"
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/metabolomics_metadata.tsv"
-      entity: "metabolites"
-      description: "Arivale metabolomics panel"
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/chemistries_metadata.tsv"
-      entity: "chemistry"
-      description: "Arivale clinical chemistry tests"
-    # UKBB
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
-      entity: "proteins"
-      description: "UKBB proteomics measurements"
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_NMR_Meta.tsv"
-      entity: "metabolites"
-      description: "UKBB NMR metabolomics"
-    # Israeli10k
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_metabolomics_metadata.csv"
-      entity: "metabolites"
-      description: "Israeli10k metabolomics measurements"
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_lipidomics_metadata.csv"
-      entity: "metabolites"
-      description: "Israeli10k lipidomics panel"
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_chemistries_metadata.csv"
-      entity: "chemistry"
-      description: "Israeli10k clinical chemistry"
+  id: multi_arv_ukb_isr_comprehensive_v1_advanced
+  name: Comprehensive Multi-Omics Harmonization
+  version: 1.0.0
+  created: '2025-01-08'
+  author: biomapper-team
+  entity_type:
+  - proteins
+  - metabolites
+  - chemistry
+  source_key:
+  - arivale
+  - ukbb
+  - israeli10k
+  target_key: unified
+  bridge_type:
+  - uniprot
+  - hmdb
+  - loinc
+  - semantic
+  quality_tier: experimental
+  validation_status: pending
+  expected_match_rate: 0.65
+  description: 'Complete harmonization of proteins, metabolites, and chemistry tests
 
+    across Arivale, UKBB, and Israeli10k datasets. This experimental strategy
+
+    integrates multiple entity types using advanced matching algorithms
+
+    including semantic similarity and cross-entity correlation analysis.
+
+    '
+  source_files:
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/proteomics_metadata.tsv
+    entity: proteins
+    description: Arivale proteomics measurements
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/metabolomics_metadata.tsv
+    entity: metabolites
+    description: Arivale metabolomics panel
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/chemistries_metadata.tsv
+    entity: chemistry
+    description: Arivale clinical chemistry tests
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv
+    entity: proteins
+    description: UKBB proteomics measurements
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_NMR_Meta.tsv
+    entity: metabolites
+    description: UKBB NMR metabolomics
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_metabolomics_metadata.csv
+    entity: metabolites
+    description: Israeli10k metabolomics measurements
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_lipidomics_metadata.csv
+    entity: metabolites
+    description: Israeli10k lipidomics panel
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/israeli10k/israeli10k_chemistries_metadata.csv
+    entity: chemistry
+    description: Israeli10k clinical chemistry
 parameters:
-  output_dir: "${OUTPUT_DIR:-/tmp/biomapper/outputs}"
+  output_dir: ${OUTPUT_DIR:-/tmp/biomapper/outputs}
   enable_semantic_matching: true
   cross_entity_analysis: true
   generate_report: true
   chunk_size: 10000
   min_confidence: 0.7
-
 steps:
-  # === PROTEIN PROCESSING ===
-  - name: load_arivale_proteins
-    description: "Load Arivale protein dataset"
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[0].path}"
-        identifier_column: "uniprot"
-        output_key: "arv_proteins_raw"
-  
-  - name: load_ukbb_proteins
-    description: "Load UKBB protein dataset"
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[3].path}"
-        identifier_column: "uniprot"
-        output_key: "ukb_proteins_raw"
-  
-  - name: extract_protein_uniprot_ids
-    description: "Extract and normalize UniProt IDs from all protein datasets"
-    action:
-      type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
-      params:
-        input_keys: ["arv_proteins_raw", "ukb_proteins_raw"]
-        xrefs_column: "uniprot"
-        remove_isoforms: true
-        output_key: "proteins_extracted"
-  
-  - name: normalize_all_proteins
-    description: "Normalize all protein accession formats"
-    action:
-      type: PROTEIN_NORMALIZE_ACCESSIONS
-      params:
-        input_key: "proteins_extracted"
-        target_format: "uniprot_standard"
-        validate_format: true
-        output_key: "proteins_normalized"
-  
-  # === METABOLITE PROCESSING ===
-  - name: load_arivale_metabolites
-    description: "Load Arivale metabolomics dataset"
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[1].path}"
-        identifier_column: "metabolite_id"
-        output_key: "arv_metabolites_raw"
-  
-  - name: load_ukbb_nmr
-    description: "Load UKBB NMR metabolomics dataset"
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[4].path}"
-        identifier_column: "biomarker"
-        output_key: "ukb_nmr_raw"
-  
-  - name: load_israeli10k_metabolites
-    description: "Load Israeli10k metabolomics dataset"
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[5].path}"
-        identifier_column: "hmdb_id"
-        output_key: "isr_metab_raw"
-  
-  - name: load_israeli10k_lipids
-    description: "Load Israeli10k lipidomics dataset"
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[6].path}"
-        identifier_column: "lipid_id"
-        output_key: "isr_lipid_raw"
-  
-  - name: extract_all_metabolite_ids
-    description: "Extract metabolite identifiers from all sources"
-    action:
-      type: METABOLITE_EXTRACT_IDENTIFIERS
-      params:
-        input_keys: ["arv_metabolites_raw", "ukb_nmr_raw", "isr_metab_raw", "isr_lipid_raw"]
-        extract_hmdb: true
-        extract_inchikey: true
-        extract_pubchem: true
-        output_key: "metabolites_extracted"
-  
-  - name: nightingale_process_ukbb
-    description: "Process UKBB NMR data using Nightingale reference"
-    action:
-      type: NIGHTINGALE_NMR_MATCH
-      params:
-        input_key: "ukb_nmr_raw"
-        biomarker_column: "biomarker"
-        match_threshold: 0.9
-        output_key: "ukb_nmr_matched"
-  
-  - name: normalize_all_metabolites
-    description: "Normalize metabolite identifiers to HMDB standard"
-    action:
-      type: METABOLITE_NORMALIZE_HMDB
-      params:
-        input_keys: ["metabolites_extracted", "ukb_nmr_matched"]
-        target_format: "hmdb_standard"
-        validate_format: true
-        output_key: "metabolites_normalized"
-  
-  # === CHEMISTRY PROCESSING ===
-  - name: load_arivale_chemistry
-    description: "Load Arivale clinical chemistry dataset"
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[2].path}"
-        identifier_column: "test_name"
-        output_key: "arv_chemistry_raw"
-  
-  - name: load_israeli10k_chemistry
-    description: "Load Israeli10k clinical chemistry dataset"
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[7].path}"
-        identifier_column: "test_id"
-        output_key: "isr_chemistry_raw"
-  
-  - name: extract_all_loinc
-    description: "Extract LOINC codes from clinical chemistry tests"
-    action:
-      type: CHEMISTRY_EXTRACT_LOINC
-      params:
-        input_keys: ["arv_chemistry_raw", "isr_chemistry_raw"]
-        test_name_column: "test_name"
-        extract_from_description: true
-        output_key: "chemistry_loinc"
-  
-  - name: harmonize_chemistry_vendors
-    description: "Harmonize chemistry tests across different vendors"
-    action:
-      type: CHEMISTRY_VENDOR_HARMONIZATION
-      params:
-        input_key: "chemistry_loinc"
-        vendors: ["arivale", "israeli10k"]
-        harmonization_method: "loinc_based"
-        fuzzy_threshold: 0.8
-        output_key: "chemistry_harmonized"
-  
-  # === CROSS-ENTITY INTEGRATION ===
-  - name: merge_all_entities
-    description: "Merge all normalized entity datasets"
-    action:
-      type: MERGE_DATASETS
-      params:
-        dataset_keys:
-          - "proteins_normalized"
-          - "metabolites_normalized"  
-          - "chemistry_harmonized"
-        merge_strategy: "entity_aware"
-        maintain_entity_types: true
-        deduplicate: true
-        output_key: "multi_omics_merged"
-  
-  - name: calculate_entity_overlaps
-    description: "Calculate overlaps between different entity types"
-    action:
-      type: CALCULATE_THREE_WAY_OVERLAP
-      params:
-        dataset1_key: "proteins_normalized"
-        dataset2_key: "metabolites_normalized"
-        dataset3_key: "chemistry_harmonized"
-        overlap_method: "identifier_based"
-        include_statistics: true
-        output_key: "entity_overlap_stats"
-  
-  - name: semantic_cross_entity_matching
-    description: "Perform semantic matching across entity types"
-    action:
-      type: SEMANTIC_METABOLITE_MATCH
-      params:
-        source_key: "multi_omics_merged"
-        enable_cross_entity: true
-        model: "biobert"
-        context: "multi_omics"
-        similarity_threshold: "${parameters.min_confidence}"
-        output_key: "semantic_enhanced"
-  
-  # === ADVANCED ANALYSIS ===
-  - name: protein_metabolite_bridge
-    description: "Create protein-metabolite associations"
-    action:
-      type: PROTEIN_MULTI_BRIDGE
-      params:
-        protein_key: "proteins_normalized"
-        metabolite_key: "metabolites_normalized"
-        bridge_databases: ["string_db", "reactome", "kegg"]
-        confidence_threshold: 0.7
-        output_key: "protein_metabolite_associations"
-  
-  - name: chemistry_metabolite_bridge
-    description: "Bridge clinical chemistry with metabolomics"
-    action:
-      type: METABOLITE_CTS_BRIDGE
-      params:
-        chemistry_key: "chemistry_harmonized"
-        metabolite_key: "metabolites_normalized"
-        bridge_method: "clinical_correlation"
-        correlation_threshold: 0.6
-        output_key: "chemistry_metabolite_bridge"
-  
-  # === REPORTING AND EXPORT ===
-  - name: generate_comprehensive_report
-    description: "Generate comprehensive multi-omics analysis report"
-    action:
-      type: GENERATE_METABOLOMICS_REPORT
-      params:
-        dataset_key: "semantic_enhanced"
-        report_type: "multi_omics"
-        include_statistics: true
-        include_visualizations: true
-        include_entity_breakdown: true
-        include_overlap_analysis: true
-        overlap_stats_key: "entity_overlap_stats"
-        associations_key: "protein_metabolite_associations"
-        output_path: "${parameters.output_dir}/multi_omics_comprehensive_report.html"
-  
-  - name: export_unified_dataset
-    description: "Export unified multi-omics dataset"
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "semantic_enhanced"
-        output_path: "${parameters.output_dir}/unified_multi_omics.tsv"
-        format: "tsv"
-        include_metadata: true
-        partition_by_entity: true
-        
-  - name: export_entity_statistics
-    description: "Export detailed statistics for each entity type"
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "entity_overlap_stats"
-        output_path: "${parameters.output_dir}/entity_overlap_statistics.json"
-        format: "json"
-        include_metadata: true
-
+- name: load_arivale_proteins
+  description: Load Arivale protein dataset
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[0].path}
+      identifier_column: uniprot
+      output_key: arv_proteins_raw
+- name: load_ukbb_proteins
+  description: Load UKBB protein dataset
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[3].path}
+      identifier_column: uniprot
+      output_key: ukb_proteins_raw
+- name: extract_protein_uniprot_ids
+  description: Extract and normalize UniProt IDs from all protein datasets
+  action:
+    type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
+    params:
+      input_keys:
+      - arv_proteins_raw
+      - ukb_proteins_raw
+      xrefs_column: uniprot
+      remove_isoforms: true
+      output_key: proteins_extracted
+- name: normalize_all_proteins
+  description: Normalize all protein accession formats
+  action:
+    type: PROTEIN_NORMALIZE_ACCESSIONS
+    params:
+      input_key: proteins_extracted
+      target_format: uniprot_standard
+      validate_format: true
+      output_key: proteins_normalized
+- name: load_arivale_metabolites
+  description: Load Arivale metabolomics dataset
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[1].path}
+      identifier_column: metabolite_id
+      output_key: arv_metabolites_raw
+- name: load_ukbb_nmr
+  description: Load UKBB NMR metabolomics dataset
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[4].path}
+      identifier_column: biomarker
+      output_key: ukb_nmr_raw
+- name: load_israeli10k_metabolites
+  description: Load Israeli10k metabolomics dataset
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[5].path}
+      identifier_column: hmdb_id
+      output_key: isr_metab_raw
+- name: load_israeli10k_lipids
+  description: Load Israeli10k lipidomics dataset
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[6].path}
+      identifier_column: lipid_id
+      output_key: isr_lipid_raw
+- name: extract_all_metabolite_ids
+  description: Extract metabolite identifiers from all sources
+  action:
+    type: METABOLITE_EXTRACT_IDENTIFIERS
+    params:
+      input_keys:
+      - arv_metabolites_raw
+      - ukb_nmr_raw
+      - isr_metab_raw
+      - isr_lipid_raw
+      extract_hmdb: true
+      extract_inchikey: true
+      extract_pubchem: true
+      output_key: metabolites_extracted
+- name: nightingale_process_ukbb
+  description: Process UKBB NMR data using Nightingale reference
+  action:
+    type: NIGHTINGALE_NMR_MATCH
+    params:
+      input_key: ukb_nmr_raw
+      biomarker_column: biomarker
+      match_threshold: 0.9
+      output_key: ukb_nmr_matched
+- name: normalize_all_metabolites
+  description: Normalize metabolite identifiers to HMDB standard
+  action:
+    type: METABOLITE_NORMALIZE_HMDB
+    params:
+      input_keys:
+      - metabolites_extracted
+      - ukb_nmr_matched
+      target_format: hmdb_standard
+      validate_format: true
+      output_key: metabolites_normalized
+- name: load_arivale_chemistry
+  description: Load Arivale clinical chemistry dataset
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[2].path}
+      identifier_column: test_name
+      output_key: arv_chemistry_raw
+- name: load_israeli10k_chemistry
+  description: Load Israeli10k clinical chemistry dataset
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[7].path}
+      identifier_column: test_id
+      output_key: isr_chemistry_raw
+- name: extract_all_loinc
+  description: Extract LOINC codes from clinical chemistry tests
+  action:
+    type: CHEMISTRY_EXTRACT_LOINC
+    params:
+      input_keys:
+      - arv_chemistry_raw
+      - isr_chemistry_raw
+      test_name_column: test_name
+      extract_from_description: true
+      output_key: chemistry_loinc
+- name: harmonize_chemistry_vendors
+  description: Harmonize chemistry tests across different vendors
+  action:
+    type: CHEMISTRY_VENDOR_HARMONIZATION
+    params:
+      input_key: chemistry_loinc
+      vendors:
+      - arivale
+      - israeli10k
+      harmonization_method: loinc_based
+      fuzzy_threshold: 0.8
+      output_key: chemistry_harmonized
+- name: merge_all_entities
+  description: Merge all normalized entity datasets
+  action:
+    type: MERGE_DATASETS
+    params:
+      dataset_keys:
+      - proteins_normalized
+      - metabolites_normalized
+      - chemistry_harmonized
+      merge_strategy: entity_aware
+      maintain_entity_types: true
+      deduplicate: true
+      output_key: multi_omics_merged
+- name: calculate_entity_overlaps
+  description: Calculate overlaps between different entity types
+  action:
+    type: CALCULATE_THREE_WAY_OVERLAP
+    params:
+      input_key: proteins_normalized
+      dataset2_key: metabolites_normalized
+      dataset3_key: chemistry_harmonized
+      overlap_method: identifier_based
+      include_statistics: true
+      output_key: entity_overlap_stats
+- name: semantic_cross_entity_matching
+  description: Perform semantic matching across entity types
+  action:
+    type: SEMANTIC_METABOLITE_MATCH
+    params:
+      source_key: multi_omics_merged
+      enable_cross_entity: true
+      model: biobert
+      context: multi_omics
+      similarity_threshold: ${parameters.min_confidence}
+      output_key: semantic_enhanced
+- name: protein_metabolite_bridge
+  description: Create protein-metabolite associations
+  action:
+    type: PROTEIN_MULTI_BRIDGE
+    params:
+      protein_key: proteins_normalized
+      metabolite_key: metabolites_normalized
+      bridge_databases:
+      - string_db
+      - reactome
+      - kegg
+      confidence_threshold: 0.7
+      output_key: protein_metabolite_associations
+- name: chemistry_metabolite_bridge
+  description: Bridge clinical chemistry with metabolomics
+  action:
+    type: METABOLITE_CTS_BRIDGE
+    params:
+      chemistry_key: chemistry_harmonized
+      metabolite_key: metabolites_normalized
+      bridge_method: clinical_correlation
+      correlation_threshold: 0.6
+      output_key: chemistry_metabolite_bridge
+- name: generate_comprehensive_report
+  description: Generate comprehensive multi-omics analysis report
+  action:
+    type: GENERATE_METABOLOMICS_REPORT
+    params:
+      input_key: semantic_enhanced
+      report_type: multi_omics
+      include_statistics: true
+      include_visualizations: true
+      include_entity_breakdown: true
+      include_overlap_analysis: true
+      overlap_stats_key: entity_overlap_stats
+      associations_key: protein_metabolite_associations
+      output_path: ${parameters.output_dir}/multi_omics_comprehensive_report.html
+- name: export_unified_dataset
+  description: Export unified multi-omics dataset
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: semantic_enhanced
+      output_path: ${parameters.output_dir}/unified_multi_omics.tsv
+      format: tsv
+      include_metadata: true
+      partition_by_entity: true
+- name: export_entity_statistics
+  description: Export detailed statistics for each entity type
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: entity_overlap_stats
+      output_path: ${parameters.output_dir}/entity_overlap_statistics.json
+      format: json
+      include_metadata: true
 expected_outputs:
   primary:
-    - path: "${parameters.output_dir}/unified_multi_omics.tsv"
-      description: "Unified dataset with all harmonized entities"
-      entity_types: ["proteins", "metabolites", "chemistry"]
-  
+  - path: ${parameters.output_dir}/unified_multi_omics.tsv
+    description: Unified dataset with all harmonized entities
+    entity_types:
+    - proteins
+    - metabolites
+    - chemistry
   reports:
-    - path: "${parameters.output_dir}/multi_omics_comprehensive_report.html"
-      description: "Comprehensive analysis report with visualizations"
-      
+  - path: ${parameters.output_dir}/multi_omics_comprehensive_report.html
+    description: Comprehensive analysis report with visualizations
   statistics:
-    - path: "${parameters.output_dir}/entity_overlap_statistics.json"
-      description: "Detailed overlap statistics between entity types"
-
+  - path: ${parameters.output_dir}/entity_overlap_statistics.json
+    description: Detailed overlap statistics between entity types
 validation:
   min_entities_per_type: 100
   max_execution_time_minutes: 30

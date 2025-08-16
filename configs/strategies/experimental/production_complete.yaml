@@ -1,0 +1,101 @@
+name: production_complete
+description: Complete production pipeline with working exports and Google Drive sync
+version: '1.0'
+parameters:
+  arivale_file: /procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv
+  kg2c_file: /procedure/data/local_data/MAPPING_ONTOLOGIES/kg2.10.2c_ontologies/kg2c_proteins.csv
+  arivale_id_column: uniprot
+  kg2c_id_column: id
+  output_dir: /tmp/biomapper_results
+  timestamp: '2024-12-14'
+  drive_folder_id: 1lqOX1pWP_CbZn-mU5InVt6lG7-uaj8Hn
+steps:
+- name: load_arivale
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.arivale_file}
+      identifier_column: ${parameters.arivale_id_column}
+      output_key: arivale_proteins
+- name: load_kg2c
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.kg2c_file}
+      identifier_column: ${parameters.kg2c_id_column}
+      output_key: kg2c_entities
+- name: uniprot_resolution
+  action:
+    type: MERGE_WITH_UNIPROT_RESOLUTION
+    params:
+      input_key: arivale_proteins
+      target_dataset_key: kg2c_entities
+      source_id_column: ${parameters.arivale_id_column}
+      target_id_column: ${parameters.kg2c_id_column}
+      target_xref_column: xrefs
+      composite_separator: _
+      use_api: true
+      api_batch_size: 100
+      output_key: mapping_results
+- name: export_results
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: mapping_results
+      output_path: ${parameters.output_dir}/protein_mapping_results.csv
+      format: csv
+- name: export_arivale
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: arivale_proteins
+      output_path: ${parameters.output_dir}/arivale_proteins.csv
+      format: csv
+- name: sample_kg2c
+  action:
+    type: CUSTOM_TRANSFORM
+    params:
+      input_key: kg2c_entities
+      output_key: kg2c_sample
+      transformations:
+      - type: head
+        n: 1000
+- name: export_kg2c_sample
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: kg2c_sample
+      output_path: ${parameters.output_dir}/kg2c_sample.csv
+      format: csv
+- name: create_summary
+  action:
+    type: CUSTOM_TRANSFORM
+    params:
+      input_key: mapping_results
+      output_key: summary_stats
+      transformations:
+      - type: expression
+        expression: "{\n  'total_arivale': len(context.get('datasets', {}).get('arivale_proteins',\
+          \ [])),\n  'total_kg2c': len(context.get('datasets', {}).get('kg2c_entities',\
+          \ [])),\n  'total_mappings': len(df),\n  'timestamp': '${parameters.timestamp}',\n\
+          \  'strategy': 'production_complete'\n}\n"
+- name: export_summary
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: summary_stats
+      output_path: ${parameters.output_dir}/summary.json
+      format: json
+- name: google_drive_sync
+  action:
+    type: SYNC_TO_GOOGLE_DRIVE_V2
+    params:
+      local_directory: ${parameters.output_dir}
+      drive_folder_id: ${parameters.drive_folder_id}
+      strategy_name: production_complete
+      timestamp: ${parameters.timestamp}
+      include_patterns:
+      - '*.csv'
+      - '*.json'
+      auto_organize: true
+      create_summary: true

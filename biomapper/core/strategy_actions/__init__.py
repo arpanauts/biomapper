@@ -31,8 +31,17 @@ from . import workflows
 from . import io
 from . import reports
 
+# Explicit imports to ensure registration
+from .entities.proteins.annotation.extract_uniprot_from_xrefs import ProteinExtractUniProtFromXrefsAction
+from .entities.proteins.annotation.normalize_accessions import ProteinNormalizeAccessionsAction
+from .utils.data_processing.parse_composite_identifiers import ParseCompositeIdentifiersAction
+from .io.sync_to_google_drive_v2 import SyncToGoogleDriveV2Action
+
 # Import chemistry_to_phenotype_bridge action
 from .chemistry_to_phenotype_bridge import ChemistryToPhenotypeBridgeAction
+
+# Import missing actions
+from .export_dataset import ExportDatasetAction
 
 # Import existing actions for backward compatibility
 # (These will be migrated to appropriate entity directories)

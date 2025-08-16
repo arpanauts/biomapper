@@ -26,6 +26,8 @@ Usage:
 """
 
 # Import all protein action categories to trigger registration
+from . import annotation
+from . import matching
 # from . import structure  # Future expansion
 
-__all__ = []  # Actions register themselves
+__all__ = ["annotation", "matching"]  # Actions register themselves

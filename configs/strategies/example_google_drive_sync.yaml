@@ -34,7 +34,7 @@ steps:
     type: EXPORT_DATASET
     params:
       input_key: matched_metabolites
-      output_file: ${parameters.output_dir}/metabolite_matches.csv
+      output_path: ${parameters.output_dir}/metabolite_matches.csv
       format: csv
 - name: sync_to_google_drive
   action:

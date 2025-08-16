@@ -28,7 +28,14 @@ try:
         extract_uniprot_from_xrefs,
         normalize_accessions,
     )
-    from biomapper.core.strategy_actions.entities.proteins.matching import multi_bridge
+    from biomapper.core.strategy_actions.entities.proteins.matching import multi_bridge, historical_resolution
+    
+    # Data processing actions - import the class to trigger registration
+    from biomapper.core.strategy_actions.utils.data_processing.parse_composite_identifiers import ParseCompositeIdentifiersAction
+    
+    # Report actions - import the classes to trigger registration
+    from biomapper.core.strategy_actions.reports.generate_html_report import GenerateHtmlReportAction
+    from biomapper.core.strategy_actions.reports.generate_visualizations import GenerateMappingVisualizationsAction
     
     # IO actions
     from biomapper.core.strategy_actions.io import sync_to_google_drive_v2

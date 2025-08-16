@@ -1,142 +1,127 @@
-# Metabolite Mapping Strategy Template
-# Instructions: Copy this template and fill in the specific values for your mapping
-
 metadata:
-  # Identity (all required - update these)
-  id: "met_SOURCE_to_TARGET_BRIDGE_v1_base"  # Follow naming convention
-  name: "SOURCE Metabolites to TARGET via BRIDGE"
-  version: "1.0.0"
-  created: "YYYY-MM-DD"
-  author: "your-name"
-  entity_type: "metabolites"
-  source_dataset: "SOURCE_CODE"  # arv|ukb|isr|fnh|osp
-  target_dataset: "TARGET_CODE"  # kg2c|spoke|unified
-  bridge_type: ["BRIDGE_TYPE"]   # inchikey|pubchem|hmdb|kegg|semantic|multi
-  
-  # Quality tracking (required)
-  quality_tier: "experimental"
-  validation_status: "pending"
-  expected_match_rate: 0.70     # Metabolites typically 60-80%
+  id: met_SOURCE_to_TARGET_BRIDGE_v1_base
+  name: SOURCE Metabolites to TARGET via BRIDGE
+  version: 1.0.0
+  created: YYYY-MM-DD
+  author: your-name
+  entity_type: metabolites
+  source_key: SOURCE_CODE
+  target_key: TARGET_CODE
+  bridge_type:
+  - BRIDGE_TYPE
+  quality_tier: experimental
+  validation_status: pending
+  expected_match_rate: 0.7
   actual_match_rate: null
-  
-  # Data tracking (required - update paths)
   source_files:
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/SOURCE/FILE.tsv"
-      last_updated: "YYYY-MM-DD"
-      row_count: null
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/SOURCE/FILE.tsv
+    last_updated: YYYY-MM-DD
+    row_count: null
   target_files:
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/TARGET/FILE.csv"
-      last_updated: "YYYY-MM-DD"
-      row_count: null
-  
-  # Optional but recommended
-  description: "Maps SOURCE metabolite data to TARGET ontology using BRIDGE identifiers"
-  tags: ["metabolites", "BRIDGE", "SOURCE", "TARGET"]
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/TARGET/FILE.csv
+    last_updated: YYYY-MM-DD
+    row_count: null
+  description: Maps SOURCE metabolite data to TARGET ontology using BRIDGE identifiers
+  tags:
+  - metabolites
+  - BRIDGE
+  - SOURCE
+  - TARGET
   dependencies: []
   supersedes: null
   citation: null
-
-# Runtime parameters
 parameters:
-  output_dir: "${OUTPUT_DIR:-/tmp/biomapper/outputs}"
+  output_dir: ${OUTPUT_DIR:-/tmp/biomapper/outputs}
   min_confidence: 0.7
-  enable_fuzzy_matching: true  # Often needed for metabolites
+  enable_fuzzy_matching: true
   enable_semantic_matching: false
-  cts_timeout: 30  # Chemical Translation Service timeout
+  cts_timeout: 30
   max_retries: 3
-
-# Strategy implementation
 steps:
-  # Step 1: Load source metabolites
-  - name: load_source_metabolites
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.source_files[0].path}"
-        identifier_column: "COLUMN_NAME"  # Update with actual column
-        output_key: "source_metabolites"
-        drop_empty: true
-        normalize_names: true  # Important for metabolites
-        statistics_key: "source_stats"
-
-  # Step 2: Load target metabolites
-  - name: load_target_metabolites
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${metadata.target_files[0].path}"
-        identifier_column: "COLUMN_NAME"
-        output_key: "target_metabolites"
-        parse_xrefs: true
-        statistics_key: "target_stats"
-
-  # Step 3: Primary matching (exact identifiers)
-  - name: exact_match
-    action:
-      type: METABOLITE_API_ENRICHMENT  # Or CTS_ENRICHED_MATCH
-      params:
-        source_key: "source_metabolites"
-        target_key: "target_metabolites"
-        match_type: "exact"
-        identifier_types: ["inchikey", "pubchem", "hmdb"]
-        output_key: "exact_matched"
-        unmatched_key: "unmatched_after_exact"
-        statistics_key: "exact_match_stats"
-
-  # Step 4: Secondary matching (fuzzy/semantic)
-  - name: fuzzy_match
-    action:
-      type: SEMANTIC_METABOLITE_MATCH
-      params:
-        source_key: "unmatched_after_exact"
-        target_key: "target_metabolites"
-        similarity_threshold: 0.8
-        output_key: "fuzzy_matched"
-        unmatched_key: "final_unmatched"
-        statistics_key: "fuzzy_match_stats"
-
-  # Step 5: Combine matches
-  - name: combine_matches
-    action:
-      type: COMBINE_METABOLITE_MATCHES
-      params:
-        match_keys: ["exact_matched", "fuzzy_matched"]
-        output_key: "all_matched"
-        statistics_key: "combined_stats"
-
-  # Step 6: Calculate metrics
-  - name: calculate_overlap
-    action:
-      type: CALCULATE_SET_OVERLAP
-      params:
-        dataset1_key: "source_metabolites"
-        dataset2_key: "all_matched"
-        identifier_column: "id"
-        output_key: "overlap_metrics"
-
-  # Step 7: Export results
-  - name: export_matched
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "all_matched"
-        output_format: "tsv"
-        output_path: "${parameters.output_dir}/${metadata.id}_matched.tsv"
-        include_metadata: true
-
-  - name: export_unmatched
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "final_unmatched"
-        output_format: "tsv"
-        output_path: "${parameters.output_dir}/${metadata.id}_unmatched.tsv"
-
-  - name: generate_report
-    action:
-      type: GENERATE_METABOLOMICS_REPORT
-      params:
-        statistics_keys: ["source_stats", "exact_match_stats", "fuzzy_match_stats", "combined_stats"]
-        output_format: "html"
-        output_path: "${parameters.output_dir}/${metadata.id}_report.html"
-        include_visualizations: true
+- name: load_source_metabolites
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.source_files[0].path}
+      identifier_column: COLUMN_NAME
+      output_key: source_metabolites
+      drop_empty: true
+      normalize_names: true
+      statistics_key: source_stats
+- name: load_target_metabolites
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${metadata.target_files[0].path}
+      identifier_column: COLUMN_NAME
+      output_key: target_metabolites
+      parse_xrefs: true
+      statistics_key: target_stats
+- name: exact_match
+  action:
+    type: METABOLITE_API_ENRICHMENT
+    params:
+      source_key: source_metabolites
+      target_key: target_metabolites
+      match_type: exact
+      identifier_types:
+      - inchikey
+      - pubchem
+      - hmdb
+      output_key: exact_matched
+      unmatched_key: unmatched_after_exact
+      statistics_key: exact_match_stats
+- name: fuzzy_match
+  action:
+    type: SEMANTIC_METABOLITE_MATCH
+    params:
+      source_key: unmatched_after_exact
+      target_key: target_metabolites
+      similarity_threshold: 0.8
+      output_key: fuzzy_matched
+      unmatched_key: final_unmatched
+      statistics_key: fuzzy_match_stats
+- name: combine_matches
+  action:
+    type: COMBINE_METABOLITE_MATCHES
+    params:
+      match_keys:
+      - exact_matched
+      - fuzzy_matched
+      output_key: all_matched
+      statistics_key: combined_stats
+- name: calculate_overlap
+  action:
+    type: CALCULATE_SET_OVERLAP
+    params:
+      input_key: source_metabolites
+      dataset2_key: all_matched
+      identifier_column: id
+      output_key: overlap_metrics
+- name: export_matched
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: all_matched
+      output_format: tsv
+      output_path: ${parameters.output_dir}/${metadata.id}_matched.tsv
+      include_metadata: true
+- name: export_unmatched
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: final_unmatched
+      output_format: tsv
+      output_path: ${parameters.output_dir}/${metadata.id}_unmatched.tsv
+- name: generate_report
+  action:
+    type: GENERATE_METABOLOMICS_REPORT
+    params:
+      statistics_keys:
+      - source_stats
+      - exact_match_stats
+      - fuzzy_match_stats
+      - combined_stats
+      output_format: html
+      output_path: ${parameters.output_dir}/${metadata.id}_report.html
+      include_visualizations: true

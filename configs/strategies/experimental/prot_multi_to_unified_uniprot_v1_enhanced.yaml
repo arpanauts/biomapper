@@ -1,231 +1,204 @@
-name: "Multi-Source Protein Harmonization"
-description: "Harmonize proteins from multiple sources (Arivale, UKBB, KG2c, SPOKE) into unified dataset"
-
+name: Multi-Source Protein Harmonization
+description: Harmonize proteins from multiple sources (Arivale, UKBB, KG2c, SPOKE)
+  into unified dataset
 metadata:
-  # Required fields
-  id: "prot_multi_to_unified_uniprot_v1_enhanced"
-  name: "Multi-Source Protein Harmonization"
-  version: "1.0.0"
-  created: "2025-01-08"
-  author: "biomapper-team"
-  entity_type: "proteins"
-  source_dataset: "multi"
-  target_dataset: "unified"
-  bridge_type: ["uniprot"]
-  
-  # Quality tracking
-  quality_tier: "experimental"
-  validation_status: "pending"
-  expected_match_rate: 0.90
+  id: prot_multi_to_unified_uniprot_v1_enhanced
+  name: Multi-Source Protein Harmonization
+  version: 1.0.0
+  created: '2025-01-08'
+  author: biomapper-team
+  entity_type: proteins
+  source_key: multi
+  target_key: unified
+  bridge_type:
+  - uniprot
+  quality_tier: experimental
+  validation_status: pending
+  expected_match_rate: 0.9
   actual_match_rate: null
-  
-  # Data tracking
   source_files:
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/proteomics_metadata.tsv"
-      last_updated: "2024-06-01"
-      row_count: 1197
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
-      last_updated: "2024-10-01"
-      row_count: 2500
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/kg2.10.2c_ontologies/kg2c_proteins.csv"
-      last_updated: "2024-10-01"
-      row_count: 45000
-    - path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/spoke_ontologies/spoke_proteins.csv"
-      last_updated: "2024-10-01"
-      row_count: 20000
-  
-  # Optional fields
-  description: "Comprehensive protein harmonization across Arivale, UKBB, KG2c, and SPOKE datasets with multi-way overlap analysis"
-  tags: ["proteomics", "uniprot", "harmonization", "arivale", "ukbb", "kg2c", "spoke", "multi-source"]
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/proteomics_metadata.tsv
+    last_updated: '2024-06-01'
+    row_count: 1197
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv
+    last_updated: '2024-10-01'
+    row_count: 2500
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/kg2.10.2c_ontologies/kg2c_proteins.csv
+    last_updated: '2024-10-01'
+    row_count: 45000
+  - path: /procedure/data/local_data/MAPPING_ONTOLOGIES/spoke_ontologies/spoke_proteins.csv
+    last_updated: '2024-10-01'
+    row_count: 20000
+  description: Comprehensive protein harmonization across Arivale, UKBB, KG2c, and
+    SPOKE datasets with multi-way overlap analysis
+  tags:
+  - proteomics
+  - uniprot
+  - harmonization
+  - arivale
+  - ukbb
+  - kg2c
+  - spoke
+  - multi-source
   dependencies: []
   supersedes: null
   citation: null
-
 parameters:
-  output_dir: "/tmp/biomapper_results/prot_multi_harmonization"
-
+  output_dir: /tmp/biomapper_results/prot_multi_harmonization
 steps:
-  # Load all source datasets
-  - name: load_arivale
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/proteomics_metadata.tsv"
-        identifier_column: "uniprot"
-        output_key: "arivale_proteins"
-  
-  - name: load_ukbb
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv"
-        identifier_column: "uniprot"
-        output_key: "ukbb_proteins"
-  
-  - name: load_kg2c
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/kg2.10.2c_ontologies/kg2c_proteins.csv"
-        identifier_column: "xrefs"
-        output_key: "kg2c_proteins_raw"
-  
-  - name: load_spoke
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "/procedure/data/local_data/MAPPING_ONTOLOGIES/spoke_ontologies/spoke_proteins.csv"
-        identifier_column: "xrefs"
-        output_key: "spoke_proteins_raw"
-  
-  # Extract UniProt from xrefs for ontology datasets
-  - name: extract_kg2c_uniprot
-    action:
-      type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
-      params:
-        input_key: "kg2c_proteins_raw"
-        xrefs_column: "xrefs"
-        remove_isoforms: true
-        output_key: "kg2c_proteins"
-  
-  - name: extract_spoke_uniprot
-    action:
-      type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
-      params:
-        input_key: "spoke_proteins_raw"
-        xrefs_column: "xrefs"
-        remove_isoforms: true
-        output_key: "spoke_proteins"
-  
-  # Normalize all datasets
-  - name: normalize_arivale
-    action:
-      type: PROTEIN_NORMALIZE_ACCESSIONS
-      params:
-        input_key: "arivale_proteins"
-        output_key: "arivale_normalized"
-  
-  - name: normalize_ukbb
-    action:
-      type: PROTEIN_NORMALIZE_ACCESSIONS
-      params:
-        input_key: "ukbb_proteins"
-        output_key: "ukbb_normalized"
-  
-  - name: normalize_kg2c
-    action:
-      type: PROTEIN_NORMALIZE_ACCESSIONS
-      params:
-        input_key: "kg2c_proteins"
-        output_key: "kg2c_normalized"
-  
-  - name: normalize_spoke
-    action:
-      type: PROTEIN_NORMALIZE_ACCESSIONS
-      params:
-        input_key: "spoke_proteins"
-        output_key: "spoke_normalized"
-  
-  # Filter ontology datasets for quality
-  - name: filter_kg2c
-    action:
-      type: FILTER_DATASET
-      params:
-        input_key: "kg2c_normalized"
-        filter_criteria:
-          has_uniprot: true
-        output_key: "kg2c_filtered"
-  
-  - name: filter_spoke
-    action:
-      type: FILTER_DATASET
-      params:
-        input_key: "spoke_normalized"
-        filter_criteria:
-          has_uniprot: true
-        output_key: "spoke_filtered"
-  
-  # Merge all datasets into unified set
-  - name: merge_datasets
-    action:
-      type: MERGE_DATASETS
-      params:
-        dataset_keys: 
-          - "arivale_normalized"
-          - "ukbb_normalized"
-          - "kg2c_filtered"
-          - "spoke_filtered"
-        merge_strategy: "union"
-        deduplicate: true
-        output_key: "unified_proteins"
-  
-  # Calculate comprehensive overlap statistics
-  - name: calculate_arivale_ukbb_overlap
-    action:
-      type: CALCULATE_SET_OVERLAP
-      params:
-        dataset1_key: "arivale_normalized"
-        dataset2_key: "ukbb_normalized"
-        output_key: "arivale_ukbb_overlap"
-  
-  - name: calculate_three_way_experimental
-    action:
-      type: CALCULATE_THREE_WAY_OVERLAP
-      params:
-        dataset1_key: "arivale_normalized"
-        dataset2_key: "ukbb_normalized"
-        dataset3_key: "kg2c_filtered"
-        output_key: "three_way_experimental_stats"
-  
-  - name: calculate_three_way_ontology
-    action:
-      type: CALCULATE_THREE_WAY_OVERLAP
-      params:
-        dataset1_key: "arivale_normalized"
-        dataset2_key: "kg2c_filtered"
-        dataset3_key: "spoke_filtered"
-        output_key: "three_way_ontology_stats"
-  
-  - name: calculate_kg2c_spoke_overlap
-    action:
-      type: CALCULATE_SET_OVERLAP
-      params:
-        dataset1_key: "kg2c_filtered"
-        dataset2_key: "spoke_filtered"
-        output_key: "kg2c_spoke_overlap"
-  
-  # Export all results
-  - name: export_unified_proteins
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "unified_proteins"
-        output_path: "${parameters.output_dir}/unified_proteins.tsv"
-  
-  - name: export_arivale_subset
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "arivale_normalized"
-        output_path: "${parameters.output_dir}/arivale_proteins_normalized.tsv"
-  
-  - name: export_ukbb_subset
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "ukbb_normalized"
-        output_path: "${parameters.output_dir}/ukbb_proteins_normalized.tsv"
-  
-  - name: export_kg2c_subset
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "kg2c_filtered"
-        output_path: "${parameters.output_dir}/kg2c_proteins_filtered.tsv"
-  
-  - name: export_spoke_subset
-    action:
-      type: EXPORT_DATASET
-      params:
-        dataset_key: "spoke_filtered"
-        output_path: "${parameters.output_dir}/spoke_proteins_filtered.tsv"
+- name: load_arivale
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: /procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/proteomics_metadata.tsv
+      identifier_column: uniprot
+      output_key: arivale_proteins
+- name: load_ukbb
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: /procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_Protein_Meta.tsv
+      identifier_column: uniprot
+      output_key: ukbb_proteins
+- name: load_kg2c
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: /procedure/data/local_data/MAPPING_ONTOLOGIES/kg2.10.2c_ontologies/kg2c_proteins.csv
+      identifier_column: xrefs
+      output_key: kg2c_proteins_raw
+- name: load_spoke
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: /procedure/data/local_data/MAPPING_ONTOLOGIES/spoke_ontologies/spoke_proteins.csv
+      identifier_column: xrefs
+      output_key: spoke_proteins_raw
+- name: extract_kg2c_uniprot
+  action:
+    type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
+    params:
+      input_key: kg2c_proteins_raw
+      xrefs_column: xrefs
+      remove_isoforms: true
+      output_key: kg2c_proteins
+- name: extract_spoke_uniprot
+  action:
+    type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
+    params:
+      input_key: spoke_proteins_raw
+      xrefs_column: xrefs
+      remove_isoforms: true
+      output_key: spoke_proteins
+- name: normalize_arivale
+  action:
+    type: PROTEIN_NORMALIZE_ACCESSIONS
+    params:
+      input_key: arivale_proteins
+      output_key: arivale_normalized
+- name: normalize_ukbb
+  action:
+    type: PROTEIN_NORMALIZE_ACCESSIONS
+    params:
+      input_key: ukbb_proteins
+      output_key: ukbb_normalized
+- name: normalize_kg2c
+  action:
+    type: PROTEIN_NORMALIZE_ACCESSIONS
+    params:
+      input_key: kg2c_proteins
+      output_key: kg2c_normalized
+- name: normalize_spoke
+  action:
+    type: PROTEIN_NORMALIZE_ACCESSIONS
+    params:
+      input_key: spoke_proteins
+      output_key: spoke_normalized
+- name: filter_kg2c
+  action:
+    type: FILTER_DATASET
+    params:
+      input_key: kg2c_normalized
+      filter_criteria:
+        has_uniprot: true
+      output_key: kg2c_filtered
+- name: filter_spoke
+  action:
+    type: FILTER_DATASET
+    params:
+      input_key: spoke_normalized
+      filter_criteria:
+        has_uniprot: true
+      output_key: spoke_filtered
+- name: merge_datasets
+  action:
+    type: MERGE_DATASETS
+    params:
+      dataset_keys:
+      - arivale_normalized
+      - ukbb_normalized
+      - kg2c_filtered
+      - spoke_filtered
+      merge_strategy: union
+      deduplicate: true
+      output_key: unified_proteins
+- name: calculate_arivale_ukbb_overlap
+  action:
+    type: CALCULATE_SET_OVERLAP
+    params:
+      input_key: arivale_normalized
+      dataset2_key: ukbb_normalized
+      output_key: arivale_ukbb_overlap
+- name: calculate_three_way_experimental
+  action:
+    type: CALCULATE_THREE_WAY_OVERLAP
+    params:
+      input_key: arivale_normalized
+      dataset2_key: ukbb_normalized
+      dataset3_key: kg2c_filtered
+      output_key: three_way_experimental_stats
+- name: calculate_three_way_ontology
+  action:
+    type: CALCULATE_THREE_WAY_OVERLAP
+    params:
+      input_key: arivale_normalized
+      dataset2_key: kg2c_filtered
+      dataset3_key: spoke_filtered
+      output_key: three_way_ontology_stats
+- name: calculate_kg2c_spoke_overlap
+  action:
+    type: CALCULATE_SET_OVERLAP
+    params:
+      input_key: kg2c_filtered
+      dataset2_key: spoke_filtered
+      output_key: kg2c_spoke_overlap
+- name: export_unified_proteins
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: unified_proteins
+      output_path: ${parameters.output_dir}/unified_proteins.tsv
+- name: export_arivale_subset
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: arivale_normalized
+      output_path: ${parameters.output_dir}/arivale_proteins_normalized.tsv
+- name: export_ukbb_subset
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: ukbb_normalized
+      output_path: ${parameters.output_dir}/ukbb_proteins_normalized.tsv
+- name: export_kg2c_subset
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: kg2c_filtered
+      output_path: ${parameters.output_dir}/kg2c_proteins_filtered.tsv
+- name: export_spoke_subset
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: spoke_filtered
+      output_path: ${parameters.output_dir}/spoke_proteins_filtered.tsv

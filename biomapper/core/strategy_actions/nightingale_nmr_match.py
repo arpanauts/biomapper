@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 class NightingaleNmrMatchParams(BaseModel):
     """Parameters for Nightingale NMR matching."""
 
-    source_dataset_key: str = Field(description="Key for source dataset in context")
+    input_key: str = Field(description="Key for source dataset in context")
     target_dataset_key: str = Field(description="Key for target dataset in context")
     source_nightingale_column: str = Field(
         description="Column with Nightingale names in source"

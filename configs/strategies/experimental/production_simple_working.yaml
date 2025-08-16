@@ -1,0 +1,87 @@
+name: production_simple_working
+description: Simplified production pipeline that works end-to-end with Google Drive
+  sync
+version: '1.0'
+parameters:
+  arivale_file: /procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv
+  kg2c_file: /procedure/data/local_data/MAPPING_ONTOLOGIES/kg2.10.2c_ontologies/kg2c_proteins.csv
+  arivale_id_column: uniprot
+  kg2c_id_column: id
+  output_dir: /tmp/biomapper_results
+  timestamp: '2024-12-14'
+  drive_folder_id: 1oQ7CczccH2a6oYYFMo_sf8fXtxF8au_D
+steps:
+- name: load_arivale
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.arivale_file}
+      identifier_column: ${parameters.arivale_id_column}
+      output_key: arivale_proteins
+- name: load_kg2c
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.kg2c_file}
+      identifier_column: ${parameters.kg2c_id_column}
+      output_key: kg2c_entities
+- name: uniprot_resolution
+  action:
+    type: MERGE_WITH_UNIPROT_RESOLUTION
+    params:
+      input_key: arivale_proteins
+      target_dataset_key: kg2c_entities
+      source_id_column: ${parameters.arivale_id_column}
+      target_id_column: ${parameters.kg2c_id_column}
+      target_xref_column: xrefs
+      composite_separator: _
+      use_api: true
+      api_batch_size: 100
+      output_key: mapping_results
+- name: export_results
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: mapping_results
+      output_path: ${parameters.output_dir}/protein_mapping_results.tsv
+      format: tsv
+- name: export_arivale
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: arivale_proteins
+      output_path: ${parameters.output_dir}/arivale_proteins.tsv
+      format: tsv
+- name: generate_summary
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: mapping_results
+      output_path: ${parameters.output_dir}/mapping_summary.json
+      format: json
+- name: generate_report
+  action:
+    type: GENERATE_HTML_REPORT
+    params:
+      template: protein_mapping
+      output_path: ${parameters.output_dir}/protein_mapping_report.html
+      title: Protein Mapping Results - Arivale to KG2c
+      include_visualizations: true
+      include_statistics: true
+- name: google_drive_sync
+  action:
+    type: SYNC_TO_GOOGLE_DRIVE_V2
+    params:
+      local_directory: ${parameters.output_dir}
+      drive_folder_id: ${parameters.drive_folder_id}
+      strategy_name: production_simple_working
+      timestamp: ${parameters.timestamp}
+      include_patterns:
+      - '*.tsv'
+      - '*.json'
+      - '*.html'
+      - '*.png'
+      - '*.pdf'
+      - '*.log'
+      auto_organize: true
+      create_summary: true

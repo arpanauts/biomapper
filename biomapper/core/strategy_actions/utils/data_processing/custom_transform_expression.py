@@ -14,6 +14,7 @@ import logging
 
 from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
 from biomapper.core.strategy_actions.registry import register_action
+from biomapper.core.standards.context_handler import UniversalContext
 
 logger = logging.getLogger(__name__)
 
@@ -96,12 +97,21 @@ class CustomTransformExpressionAction(
         return ActionResult
 
     async def execute_typed(  # type: ignore[override]
-        self, params: CustomTransformExpressionParams, context: Dict[str, Any]
+        self,
+        current_identifiers: List[str],
+        current_ontology_type: str,
+        params: CustomTransformExpressionParams,
+        source_endpoint: Any,
+        target_endpoint: Any,
+        context: Dict[str, Any]
     ) -> ActionResult:
         """Execute custom transformations on dataset using Python expressions."""
         try:
+            # Wrap context for uniform access
+            ctx = UniversalContext.wrap(context)
+            
             # Get input dataset from context
-            datasets = context.get("datasets", {})
+            datasets = ctx.get_datasets()
             if params.input_key not in datasets:
                 available_keys = list(datasets.keys())
                 error_msg = f"Input key '{params.input_key}' not found in context. Available keys: {available_keys}"
@@ -161,16 +171,20 @@ class CustomTransformExpressionAction(
                         # Continue with other transformations
 
             # Store result in context
-            context.setdefault("datasets", {})[params.output_key] = df
+            datasets = ctx.get_datasets()
+            datasets[params.output_key] = df
+            ctx.set("datasets", datasets)
 
             # Update statistics in context
-            context.setdefault("statistics", {}).update(
+            statistics = ctx.get_statistics()
+            statistics.update(
                 {
                     f"{params.output_key}_rows": len(df),
                     f"{params.output_key}_columns": len(df.columns),
                     f"{params.output_key}_transformations": transformations_applied,
                 }
             )
+            ctx.set("statistics", statistics)
 
             return ActionResult(
                 success=True,
@@ -194,12 +208,20 @@ class CustomTransformExpressionAction(
     ) -> pd.DataFrame:
         """Apply a single transformation to a DataFrame column using Python expression."""
 
-        # Check if column exists
+        # Check if column exists - if not, create it for new columns
         if transform.column not in df.columns:
-            logger.warning(
-                f"Column '{transform.column}' not found in DataFrame. Skipping transformation."
-            )
-            return df
+            # If we have an expression, this is likely creating a new column
+            if transform.expression:
+                logger.info(
+                    f"Creating new column '{transform.column}' via transformation."
+                )
+                # Initialize column with None so we can apply the expression
+                df[transform.column] = None
+            else:
+                logger.warning(
+                    f"Column '{transform.column}' not found and no expression provided. Skipping transformation."
+                )
+                return df
 
         # Determine target column name
         target_column = transform.new_column or transform.column

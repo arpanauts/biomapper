@@ -1,0 +1,286 @@
+name: prot_arv_to_kg2c_uniprot_v2.3_with_gdrive
+description: v2.3 - Complete protein mapping pipeline with Google Drive sync
+metadata:
+  id: prot_arv_to_kg2c_uniprot_v2.3_with_gdrive
+  name: Arivale to KG2C Protein Mapping with Google Drive Integration
+  version: 2.3-gdrive
+  created: '2025-01-15'
+  author: biomapper-team
+parameters:
+  arivale_file: /procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/proteomics_metadata.tsv
+  kg2c_file: /procedure/data/local_data/MAPPING_ONTOLOGIES/kg2.10.2c_ontologies/kg2c_proteins.csv
+  output_dir: /tmp/biomapper/proteins/arivale_kg2c_v2_3_gdrive
+  high_confidence_threshold: 0.8
+  medium_confidence_threshold: 0.6
+  drive_folder_id: ${GOOGLE_DRIVE_FOLDER_ID:-1oQ7CczccH2a6oYYFMo_sf8fXtxF8au_D}
+steps:
+- name: load_arivale
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.arivale_file}
+      identifier_column: uniprot
+      output_key: arivale_raw
+- name: load_kg2c
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.kg2c_file}
+      identifier_column: id
+      output_key: kg2c_raw
+- name: parse_arivale_composites
+  action:
+    type: PARSE_COMPOSITE_IDENTIFIERS
+    params:
+      input_key: arivale_raw
+      id_field: uniprot
+      separators:
+      - ','
+      - ;
+      - '|'
+      output_key: arivale_parsed
+      track_expansion: true
+      skip_empty: false
+      trim_whitespace: true
+      preserve_order: true
+- name: extract_kg2c_uniprot
+  action:
+    type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
+    params:
+      input_key: kg2c_raw
+      xrefs_column: xrefs
+      output_column: extracted_uniprot
+      output_key: kg2c_with_uniprot
+      handle_multiple: expand_rows
+      keep_isoforms: false
+      drop_na: true
+- name: normalize_arivale
+  action:
+    type: PROTEIN_NORMALIZE_ACCESSIONS
+    params:
+      input_key: arivale_parsed
+      id_columns:
+      - uniprot
+      strip_isoforms: true
+      strip_versions: true
+      validate_format: true
+      output_key: arivale_normalized
+      add_normalization_log: true
+- name: normalize_kg2c
+  action:
+    type: PROTEIN_NORMALIZE_ACCESSIONS
+    params:
+      input_key: kg2c_with_uniprot
+      id_columns:
+      - extracted_uniprot
+      strip_isoforms: true
+      strip_versions: true
+      validate_format: true
+      output_key: kg2c_normalized
+      add_normalization_log: true
+- name: merge_direct
+  action:
+    type: MERGE_DATASETS
+    params:
+      input_key: arivale_normalized
+      dataset2_key: kg2c_normalized
+      join_columns:
+      - source: uniprot
+        target: extracted_uniprot
+      output_key: direct_matches
+      join_type: inner
+- name: find_unmatched_arivale
+  action:
+    type: MERGE_DATASETS
+    params:
+      input_key: arivale_normalized
+      dataset2_key: direct_matches
+      join_columns:
+      - source: uniprot
+        target: uniprot
+      output_key: arivale_unmatched
+      join_type: left_anti
+- name: calculate_overlap
+  action:
+    type: CALCULATE_SET_OVERLAP
+    params:
+      dataset1_name: arivale_proteins
+      dataset1_identifiers: arivale_normalized
+      dataset1_id_column: uniprot
+      dataset2_name: kg2c_proteins
+      dataset2_identifiers: kg2c_normalized
+      dataset2_id_column: extracted_uniprot
+      output_key: overlap_statistics
+- name: calculate_mapping_stats
+  action:
+    type: CUSTOM_TRANSFORM
+    params:
+      input_key: direct_matches
+      output_key: mapping_statistics
+      expression: "import pandas as pd\n\n# Get basic counts\ntotal_arivale = len(context['datasets']['arivale_normalized'])\n\
+        total_kg2c = len(context['datasets']['kg2c_normalized'])\ntotal_matches =\
+        \ len(df)\n\n# Calculate mapping rate\narivale_mapped = df['uniprot'].nunique()\n\
+        kg2c_mapped = df['extracted_uniprot'].nunique()\n\nmapping_rate = arivale_mapped\
+        \ / total_arivale if total_arivale > 0 else 0\n\n# Get composite expansion\
+        \ stats\nexpansion_stats = context.get('statistics', {}).get('composite_expansion',\
+        \ {})\n\nstats = [{\n    'total_arivale_proteins': total_arivale,\n    'total_kg2c_proteins':\
+        \ total_kg2c,\n    'direct_matches': total_matches,\n    'unique_arivale_mapped':\
+        \ arivale_mapped,\n    'unique_kg2c_mapped': kg2c_mapped,\n    'arivale_mapping_rate':\
+        \ mapping_rate,\n    'composite_original_count': expansion_stats.get('original_count',\
+        \ 0),\n    'composite_expanded_count': expansion_stats.get('expanded_count',\
+        \ 0),\n    'composite_expansion_rate': expansion_stats.get('expansion_rate',\
+        \ 0)\n}]\n\nstats\n"
+- name: generate_comprehensive_report
+  action:
+    type: GENERATE_HTML_REPORT
+    params:
+      title: Arivale to KG2C Protein Mapping Report
+      subtitle: Comprehensive Analysis with Google Drive Integration
+      sections:
+      - type: metadata
+        title: Analysis Information
+        data:
+          Strategy: prot_arv_to_kg2c_uniprot_v2.3_with_gdrive
+          Version: 2.3-gdrive
+          Generated: '2025-01-15'
+          Purpose: Production protein mapping with comprehensive reporting
+      - type: summary
+        title: Mapping Summary
+        data_key: datasets.mapping_statistics
+      - type: summary
+        title: Composite Identifier Expansion
+        data_key: statistics.composite_expansion
+      - type: table
+        title: Direct Matches (Top 100)
+        data_key: datasets.direct_matches
+        max_rows: 100
+        sort_by: uniprot
+        columns:
+        - uniprot
+        - extracted_uniprot
+        - protein_name
+        - description
+      - type: table
+        title: Unmatched Arivale Proteins (Top 50)
+        data_key: datasets.arivale_unmatched
+        max_rows: 50
+        sort_by: uniprot
+      - type: table
+        title: Overlap Statistics
+        data_key: datasets.overlap_statistics
+      output_path: ${parameters.output_dir}/comprehensive_protein_mapping_report.html
+      style_theme: professional
+      include_toc: true
+      include_footer: true
+- name: generate_mapping_visualizations
+  action:
+    type: GENERATE_MAPPING_VISUALIZATIONS
+    params:
+      charts:
+      - type: summary_cards
+        title: Key Mapping Metrics
+        data_key: datasets.mapping_statistics
+        file_path: mapping_metrics.html
+      - type: bar
+        title: Dataset Sizes Comparison
+        data_key: datasets.mapping_statistics
+        x_field: dataset
+        y_field: count
+        file_path: dataset_comparison.html
+        custom_data:
+        - dataset: Arivale Proteins
+          count: total_arivale_proteins
+        - dataset: KG2C Proteins
+          count: total_kg2c_proteins
+        - dataset: Direct Matches
+          count: direct_matches
+      - type: pie
+        title: Mapping Success Rate
+        data_key: datasets.mapping_statistics
+        file_path: mapping_success_pie.html
+        custom_data:
+        - category: Mapped
+          value: unique_arivale_mapped
+        - category: Unmapped
+          value: arivale_unmapped
+      - type: bar
+        title: Composite Identifier Expansion
+        data_key: statistics.composite_expansion
+        x_field: expansion_type
+        y_field: count
+        file_path: composite_expansion.html
+      output_directory: ${parameters.output_dir}/visualizations
+      format: plotly
+      create_dashboard: true
+      dashboard_title: Protein Mapping Dashboard
+      include_statistics: true
+      responsive: true
+- name: export_direct_matches
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: direct_matches
+      output_path: ${parameters.output_dir}/direct_matches.tsv
+      format: tsv
+- name: export_unmatched
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: arivale_unmatched
+      output_path: ${parameters.output_dir}/arivale_unmatched.tsv
+      format: tsv
+- name: export_overlap_statistics
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: overlap_statistics
+      output_path: ${parameters.output_dir}/overlap_statistics.json
+      format: json
+- name: export_mapping_statistics
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: mapping_statistics
+      output_path: ${parameters.output_dir}/mapping_statistics.json
+      format: json
+- name: generate_expansion_report
+  action:
+    type: CUSTOM_TRANSFORM
+    params:
+      input_key: arivale_parsed
+      output_key: expansion_report
+      expression: "# Calculate detailed expansion statistics\noriginal_count = context['statistics']['composite_expansion']['original_count']\n\
+        expanded_count = len(df)\n\nexpansion_details = {\n    'original_rows': original_count,\n\
+        \    'expanded_rows': expanded_count,\n    'expansion_factor': expanded_count\
+        \ / original_count if original_count > 0 else 0,\n    'total_composite_identifiers':\
+        \ context['statistics']['composite_expansion']['composite_count'],\n    'average_ids_per_composite':\
+        \ context['statistics']['composite_expansion']['avg_ids_per_composite']\n\
+        }\n\n[expansion_details]\n"
+- name: export_expansion_report
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: expansion_report
+      output_path: ${parameters.output_dir}/composite_expansion_report.json
+      format: json
+- name: sync_to_google_drive
+  action:
+    type: SYNC_TO_GOOGLE_DRIVE_V2
+    params:
+      drive_folder_id: ${parameters.drive_folder_id}
+      credentials_path: ${GOOGLE_APPLICATION_CREDENTIALS}
+      auto_organize: true
+      strategy_name: prot_arv_to_kg2c_uniprot_v2.3_with_gdrive
+      strategy_version: 2.3-gdrive
+      create_subfolder: true
+      subfolder_name: production_run_${TIMESTAMP:-$(date +%Y%m%d_%H%M%S)}
+      sync_context_outputs: true
+      description: Production protein mapping results with comprehensive analysis
+      file_patterns:
+      - '*.html'
+      - '*.tsv'
+      - '*.json'
+      - '*.csv'
+      exclude_patterns:
+      - '*.tmp'
+      - '*.log'

@@ -1,0 +1,96 @@
+# UniProt API Client Configuration
+name: UNIPROT_API_CONFIG
+description: "Configuration for UniProt REST API client with historical resolution support"
+
+# API settings
+base_url: "https://rest.uniprot.org"
+api_endpoints:
+  search: "/uniprotkb/search"
+  accession: "/uniprotkb/{accession}"
+  stream: "/uniprotkb/stream"
+  idmapping: "/idmapping"
+  
+# Request settings
+timeout_seconds: 30
+max_concurrent_requests: 5
+batch_size: 100
+max_results_per_query: 500
+
+# Rate limiting (UniProt guidelines)
+rate_limit:
+  requests_per_second: 10
+  burst_size: 20
+  wait_on_limit: true
+  respect_retry_after: true
+
+# Caching configuration
+cache:
+  enabled: true
+  ttl_minutes: 1440  # 24 hours for UniProt data
+  max_size: 50000
+  cache_dir: "/tmp/biomapper/cache/uniprot"
+  cache_historical_forever: true  # Historical resolutions don't change
+
+# Historical resolution settings
+historical_resolution:
+  enabled: true
+  check_secondary_accessions: true
+  check_obsolete_entries: true
+  check_demerged_entries: true
+  include_confidence_scores: true
+  
+# ID mapping configuration
+id_mapping:
+  supported_from:
+    - UniProtKB_AC-ID  # UniProt accession/ID
+    - RefSeq
+    - GeneID
+    - Ensembl
+    - Ensembl_Protein
+    - Gene_Name
+    - KEGG
+    - HMDB
+  supported_to:
+    - UniProtKB
+    - UniProtKB-Swiss-Prot
+    - Gene_Name
+    - RefSeq
+    - Ensembl
+    - KEGG
+
+# Query optimization
+query_optimization:
+  use_compressed_response: true
+  fields_to_retrieve:
+    - accession
+    - id
+    - gene_names
+    - organism_name
+    - protein_name
+    - xref
+    - sequence
+    - cc_function
+  exclude_large_fields: true  # Exclude sequences for faster responses unless needed
+
+# Error handling
+error_handling:
+  log_errors: true
+  retry_on_500: true
+  retry_on_timeout: true
+  max_retries: 3
+  exponential_backoff: true
+  backoff_factor: 2.0
+  
+# Logging
+logging:
+  level: INFO
+  log_api_calls: true
+  log_cache_hits: true
+  log_resolution_details: true
+  
+# Performance tracking
+performance:
+  track_api_calls: true
+  track_cache_performance: true
+  track_resolution_stats: true
+  report_interval_minutes: 60

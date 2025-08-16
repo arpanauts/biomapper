@@ -1,0 +1,39 @@
+name: prot_arv_to_kg2c_simple
+description: Simple protein mapping strategy for testing
+parameters:
+  source_file: /procedure/data/local_data/ARIVALE_SNAPSHOTS/proteomics_metadata.tsv
+  target_file: /procedure/data/local_data/MAPPING_ONTOLOGIES/kg2c_ontologies/kg2c_proteins.csv
+  output_dir: /tmp/biomapper/protein_mapping_simple
+steps:
+- name: load_arivale
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.source_file}
+      identifier_column: uniprot
+      output_key: arivale
+      comment_prefix: '#'
+- name: load_kg2c
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.target_file}
+      identifier_column: id
+      output_key: kg2c
+      delimiter: ','
+- name: calculate_overlap
+  action:
+    type: CALCULATE_SET_OVERLAP
+    params:
+      input_key: arivale
+      dataset2_key: kg2c
+      id_column1: uniprot
+      id_column2: id
+      output_key: overlap
+- name: export_overlap
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: overlap
+      output_path: ${parameters.output_dir}/overlap_results.json
+      format: json

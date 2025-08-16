@@ -33,7 +33,7 @@ class BuildNightingaleReferenceParams(BaseModel):
     )
     output_key: str = Field(description="Key to store reference mapping")
     export_csv: bool = Field(default=True, description="Export reference to CSV file")
-    csv_path: Optional[str] = Field(
+    file_path: Optional[str] = Field(
         default=None, description="Path for CSV export (auto-generated if not provided)"
     )
     include_metadata: bool = Field(

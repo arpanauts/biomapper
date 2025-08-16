@@ -2,15 +2,17 @@
 from typing import Any
 from pathlib import Path
 import pandas as pd
-from pydantic import BaseModel, Field
+from pydantic import Field
+from biomapper.core.standards import ActionParamsBase, FlexibleBaseModel
 
 from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
 from biomapper.core.strategy_actions.registry import register_action
+from biomapper.core.standards.context_handler import UniversalContext
 # Don't use the complex ActionResult from models
 # from biomapper.core.models.action_results import ActionResult
 
 
-class ExportDatasetParams(BaseModel):
+class ExportDatasetParams(ActionParamsBase):
     """Parameters for EXPORT_DATASET action."""
 
     input_key: str = Field(..., description="Key in context containing data to export")
@@ -23,7 +25,7 @@ class ExportDatasetParams(BaseModel):
     )
 
 
-class ActionResult(BaseModel):
+class ActionResult(FlexibleBaseModel):
     """Simple action result for export operations."""
     
     success: bool = Field(..., description="Whether the action succeeded")
@@ -47,25 +49,18 @@ class ExportDatasetAction(TypedStrategyAction[ExportDatasetParams, ActionResult]
     ) -> ActionResult:
         """Export dataset from context to file."""
         try:
-            # Work directly with context - support dict, MockContext, and StrategyExecutionContext
-            if isinstance(context, dict):
-                ctx = context
-            elif hasattr(context, '_dict'):
-                # MockContext - use the underlying dict
-                ctx = context._dict
-            else:
-                # For StrategyExecutionContext, adapt it
-                from biomapper.core.context_adapter import adapt_context
-                ctx = adapt_context(context)
+            # Wrap context for uniform access
+            ctx = UniversalContext.wrap(context)
             
             # Get data from context
-            if params.input_key not in ctx.get("datasets", {}):
+            datasets = ctx.get_datasets()
+            if params.input_key not in datasets:
                 return ActionResult(
                     success=False,
                     error=f"Dataset '{params.input_key}' not found in context",
                 )
 
-            data = ctx["datasets"][params.input_key]
+            data = datasets[params.input_key]
 
             # Convert to DataFrame if needed
             if isinstance(data, pd.DataFrame):

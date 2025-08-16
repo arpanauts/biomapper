@@ -8,8 +8,8 @@ metadata:
   created: '2025-08-07'
   author: biomapper-team
   entity_type: chemistry
-  source_dataset: multi_vendor
-  target_dataset: unified_chemistry
+  source_key: multi_vendor
+  target_key: unified_chemistry
   bridge_type:
   - loinc
   - fuzzy
@@ -265,7 +265,7 @@ steps:
   action:
     type: CALCULATE_THREE_WAY_OVERLAP
     params:
-      dataset1_key: arivale_harmonized
+      input_key: arivale_harmonized
       dataset2_key: ukbb_harmonized
       dataset3_key: israeli10k_harmonized
       overlap_metric: loinc_code
@@ -274,7 +274,7 @@ steps:
   action:
     type: EXPORT_DATASET
     params:
-      dataset_key: unified_chemistry
+      input_key: unified_chemistry
       output_path: ${parameters.output_dir}/unified_chemistry_tests.tsv
       include_source_mapping: true
       include_harmonization_info: true
@@ -282,13 +282,13 @@ steps:
   action:
     type: EXPORT_DATASET
     params:
-      dataset_key: cross_matched
+      input_key: cross_matched
       output_path: ${parameters.output_dir}/chemistry_cross_reference_table.tsv
       format: cross_reference_table
 - name: export_statistics
   action:
     type: EXPORT_DATASET
     params:
-      dataset_key: multi_vendor_statistics
+      input_key: multi_vendor_statistics
       output_path: ${parameters.output_dir}/multi_vendor_chemistry_statistics.json
       format: json

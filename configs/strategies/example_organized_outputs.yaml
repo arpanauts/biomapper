@@ -6,109 +6,65 @@ metadata:
   version: 2.0.0
   entity_type: metabolites
   quality_tier: example
-  
 parameters:
-  # Input data
   source_file: /home/ubuntu/biomapper/data/test_data/test_metabolites.tsv
-  
-  # Google Drive settings (folder ID for "Data Harmonization" folder)
   gdrive_folder_id: 1oQ7CczccH2a6oYYFMo_sf8fXtxF8au_D
-  
-  # Optional: Override local base directory (defaults to results/Data_Harmonization)
-  # local_base_dir: /custom/path/to/results
-  
 steps:
-  # Step 1: Load test data
-  - name: load_metabolites
-    action:
-      type: LOAD_DATASET_IDENTIFIERS
-      params:
-        file_path: "${parameters.source_file}"
-        identifier_column: metabolite_id
-        output_key: metabolites
-        additional_columns:
-          - name
-          - inchikey
-          - chebi_id
-          - kegg_id
-  
-  # Step 2: Export with organized local structure
-  # This will create: results/Data_Harmonization/example_organized_outputs/v2_0_0/run_[timestamp]/
-  - name: export_local_organized
-    action:
-      type: EXPORT_DATASET_V2
-      params:
-        input_key: metabolites
-        output_filename: metabolites_harmonized.tsv
-        use_organized_structure: true  # Uses strategy name/version/run structure
-        format: tsv
-        include_metadata: true
-        create_summary: true
-  
-  # Step 3: Export additional format (JSON) to same organized location
-  - name: export_json_organized
-    action:
-      type: EXPORT_DATASET_V2
-      params:
-        input_key: metabolites
-        output_filename: metabolites_harmonized.json
-        use_organized_structure: true  # Will use same run folder as above
-        format: json
-        create_summary: false  # No need for duplicate summary
-  
-  # Step 4: Sync to Google Drive with matching structure
-  # This will create: Drive/example_organized_outputs/v2_0_0/run_[timestamp]/
-  - name: sync_to_gdrive_organized
-    action:
-      type: SYNC_TO_GOOGLE_DRIVE_V2
-      params:
-        drive_folder_id: "${parameters.gdrive_folder_id}"
-        credentials_path: "${GOOGLE_APPLICATION_CREDENTIALS}"
-        auto_organize: true  # Uses same strategy/version structure
-        sync_context_outputs: true  # Syncs all files from context
-        create_subfolder: true  # Adds run_[timestamp] folder
-        description: "Organized metabolite harmonization results"
-        
-  # Alternative: Use classic (non-organized) export for comparison
-  - name: export_classic
-    action:
-      type: EXPORT_DATASET
-      params:
-        input_key: metabolites
-        output_path: /tmp/biomapper/classic_output/metabolites_classic.tsv
-        format: tsv
-        
-  # Alternative: Sync specific files without organization
-  - name: sync_classic
-    action:
-      type: SYNC_TO_GOOGLE_DRIVE
-      params:
-        drive_folder_id: "${parameters.gdrive_folder_id}"
-        credentials_path: "${GOOGLE_APPLICATION_CREDENTIALS}"
-        input_files:
-          - /tmp/biomapper/classic_output/metabolites_classic.tsv
-        create_subfolder: true
-        subfolder_name: "classic_export_${timestamp}"
-        
-# Notes on organized structure:
-# 
-# LOCAL STRUCTURE (automatic with EXPORT_DATASET_V2):
-# /home/ubuntu/biomapper/results/Data_Harmonization/
-# └── example_organized_outputs/           # Strategy base name (version suffix removed)
-#     └── v2_0_0/                          # Version folder
-#         └── run_20250812_123456/         # Timestamped run folder
-#             ├── metabolites_harmonized.tsv
-#             ├── metabolites_harmonized_summary.txt
-#             └── metabolites_harmonized.json
-#
-# GOOGLE DRIVE STRUCTURE (automatic with SYNC_TO_GOOGLE_DRIVE_V2):
-# BioMapper Results (Shared Drive)/
-# └── Data Harmonization/                  # Folder specified by gdrive_folder_id
-#     └── example_organized_outputs/       # Strategy base name
-#         └── v2_0_0/                      # Version folder
-#             └── run_20250812_123456/     # Same timestamp as local
-#                 ├── metabolites_harmonized.tsv
-#                 ├── metabolites_harmonized_summary.txt
-#                 └── metabolites_harmonized.json
-#
-# This ensures perfect mirroring between local and cloud storage!
+- name: load_metabolites
+  action:
+    type: LOAD_DATASET_IDENTIFIERS
+    params:
+      file_path: ${parameters.source_file}
+      identifier_column: metabolite_id
+      output_key: metabolites
+      additional_columns:
+      - name
+      - inchikey
+      - chebi_id
+      - kegg_id
+- name: export_local_organized
+  action:
+    type: EXPORT_DATASET_V2
+    params:
+      input_key: metabolites
+      output_path: metabolites_harmonized.tsv
+      use_organized_structure: true
+      format: tsv
+      include_metadata: true
+      create_summary: true
+- name: export_json_organized
+  action:
+    type: EXPORT_DATASET_V2
+    params:
+      input_key: metabolites
+      output_path: metabolites_harmonized.json
+      use_organized_structure: true
+      format: json
+      create_summary: false
+- name: sync_to_gdrive_organized
+  action:
+    type: SYNC_TO_GOOGLE_DRIVE_V2
+    params:
+      drive_folder_id: ${parameters.gdrive_folder_id}
+      credentials_path: ${GOOGLE_APPLICATION_CREDENTIALS}
+      auto_organize: true
+      sync_context_outputs: true
+      create_subfolder: true
+      description: Organized metabolite harmonization results
+- name: export_classic
+  action:
+    type: EXPORT_DATASET
+    params:
+      input_key: metabolites
+      output_path: /tmp/biomapper/classic_output/metabolites_classic.tsv
+      format: tsv
+- name: sync_classic
+  action:
+    type: SYNC_TO_GOOGLE_DRIVE
+    params:
+      drive_folder_id: ${parameters.gdrive_folder_id}
+      credentials_path: ${GOOGLE_APPLICATION_CREDENTIALS}
+      input_files:
+      - /tmp/biomapper/classic_output/metabolites_classic.tsv
+      create_subfolder: true
+      subfolder_name: classic_export_${timestamp}

@@ -7,8 +7,8 @@ metadata:
   created: '2025-08-07'
   author: biomapper-team
   entity_type: chemistry
-  source_dataset: ukbb_nmr
-  target_dataset: spoke
+  source_key: ukbb_nmr
+  target_key: spoke
   bridge_type:
   - nightingale
   - loinc
@@ -154,13 +154,13 @@ steps:
   action:
     type: CALCULATE_SET_OVERLAP
     params:
-      dataset1_key: clinical_biomarkers
+      input_key: clinical_biomarkers
       dataset2_key: spoke_labs
       output_key: overlap_statistics
 - name: export_mapping
   action:
     type: EXPORT_DATASET
     params:
-      dataset_key: matched_labs
+      input_key: matched_labs
       output_path: ${parameters.output_dir}/ukbb_nmr_spoke_chemistry.tsv
       include_nightingale_mapping: true

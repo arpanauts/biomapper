@@ -25,7 +25,7 @@ class ExportDatasetV2Params(BaseModel):
     input_key: str = Field(..., description="Key in context containing data to export")
     
     # Output configuration
-    output_filename: str = Field(
+    output_path: str = Field(
         ..., 
         description="Output filename (path will be auto-organized)"
     )

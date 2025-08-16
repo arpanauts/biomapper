@@ -1,0 +1,604 @@
+#!/usr/bin/env python3
+"""
+Biomapper Dead Code Detection and Cleanup Command
+Custom Claude Code slash command for detecting unused/bloated code in biomapper project.
+
+Usage: /biomapper-cleanup [options]
+"""
+
+import ast
+import os
+import re
+import json
+import yaml
+import subprocess
+from pathlib import Path
+from typing import Dict, List, Set, Tuple, Optional, NamedTuple
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+import importlib.util
+
+
+@dataclass
+class DeadCodeCandidate:
+    """Represents a potential dead code file with confidence metrics."""
+    path: Path
+    confidence: int  # 0-100
+    reasons: List[str]
+    category: str  # 'safe', 'medium', 'low', 'protected'
+    last_modified: Optional[datetime] = None
+    size_bytes: int = 0
+
+
+class BiomapperArchitectureConfig:
+    """Configuration for biomapper project architecture patterns."""
+    
+    def __init__(self, config_path: Optional[Path] = None):
+        self.config_path = config_path or Path(".claude/architecture.yaml")
+        self.config = self._load_config()
+    
+    def _load_config(self) -> Dict:
+        """Load architecture configuration or use defaults."""
+        default_config = {
+            "protected_patterns": [
+                "*/strategy_actions/registry.py",
+                "*/minimal_strategy_service.py",
+                "*/core/services/*",
+                "*/__main__.py",
+                "*/cli/*",
+                "*/main.py",
+                "*/app/main.py"
+            ],
+            "action_sources": [
+                "biomapper/core/strategy_actions/",
+                "custom_actions/"
+            ],
+            "config_locations": [
+                "configs/strategies/",
+                "configs/"
+            ],
+            "high_confidence_patterns": [
+                "archive/*",
+                "*/__pycache__/*",
+                "*.pyc",
+                "*_mock/*",
+                "*/deprecated_*",
+                "*/old_*"
+            ],
+            "dynamic_import_indicators": [
+                "importlib",
+                "__import__",
+                "exec(",
+                "eval(",
+                "getattr("
+            ]
+        }
+        
+        if self.config_path.exists():
+            try:
+                with open(self.config_path) as f:
+                    user_config = yaml.safe_load(f) or {}
+                # Merge with defaults
+                for key, value in default_config.items():
+                    if key not in user_config:
+                        user_config[key] = value
+                return user_config
+            except Exception as e:
+                print(f"Warning: Could not load {self.config_path}: {e}")
+                return default_config
+        
+        return default_config
+    
+    def is_protected(self, file_path: Path) -> bool:
+        """Check if file matches protected patterns."""
+        path_str = str(file_path)
+        return any(
+            self._match_pattern(pattern, path_str)
+            for pattern in self.config["protected_patterns"]
+        )
+    
+    def _match_pattern(self, pattern: str, path: str) -> bool:
+        """Match glob-style patterns."""
+        import fnmatch
+        return fnmatch.fnmatch(path, pattern)
+
+
+class YAMLActionParser:
+    """Parser for YAML configuration files to find action references."""
+    
+    def __init__(self, config_locations: List[str]):
+        self.config_locations = config_locations
+        self.action_references: Set[str] = set()
+    
+    def parse_all_configs(self, project_root: Path) -> Set[str]:
+        """Parse all YAML files to extract action type references."""
+        self.action_references = set()
+        
+        for location in self.config_locations:
+            config_dir = project_root / location
+            if config_dir.exists():
+                self._parse_directory(config_dir)
+        
+        return self.action_references
+    
+    def _parse_directory(self, directory: Path) -> None:
+        """Recursively parse YAML files in directory."""
+        for yaml_file in directory.rglob("*.yaml"):
+            self._parse_yaml_file(yaml_file)
+        for yml_file in directory.rglob("*.yml"):
+            self._parse_yaml_file(yml_file)
+    
+    def _parse_yaml_file(self, yaml_file: Path) -> None:
+        """Parse individual YAML file for action references."""
+        try:
+            with open(yaml_file, 'r') as f:
+                content = yaml.safe_load(f)
+                self._extract_action_refs(content)
+        except Exception as e:
+            print(f"Warning: Could not parse {yaml_file}: {e}")
+    
+    def _extract_action_refs(self, obj) -> None:
+        """Recursively extract 'type' fields that reference actions."""
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if key == 'type' and isinstance(value, str):
+                    self.action_references.add(value)
+                else:
+                    self._extract_action_refs(value)
+        elif isinstance(obj, list):
+            for item in obj:
+                self._extract_action_refs(item)
+
+
+class ImportAnalyzer:
+    """Analyzes Python files for import dependencies."""
+    
+    def __init__(self, project_root: Path):
+        self.project_root = project_root
+        self.import_graph: Dict[str, Set[str]] = {}
+        self.reverse_imports: Dict[str, Set[str]] = {}
+        self.action_decorators: Dict[str, str] = {}  # file -> action_name
+        self.dynamic_imports: Set[str] = set()
+    
+    def analyze_project(self, scope_dir: Optional[Path] = None) -> None:
+        """Analyze all Python files for imports and decorators."""
+        search_dir = scope_dir or self.project_root
+        
+        for py_file in search_dir.rglob("*.py"):
+            if self._should_analyze_file(py_file):
+                self._analyze_file(py_file)
+        
+        self._build_reverse_import_graph()
+    
+    def _should_analyze_file(self, file_path: Path) -> bool:
+        """Filter files that should be analyzed."""
+        path_str = str(file_path)
+        skip_patterns = ['__pycache__', '.pyc', 'venv/', '.venv/', 'site-packages/']
+        return not any(pattern in path_str for pattern in skip_patterns)
+    
+    def _analyze_file(self, file_path: Path) -> None:
+        """Analyze single Python file for imports and decorators."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Check for dynamic imports
+            if any(indicator in content for indicator in 
+                   ["importlib", "__import__", "exec(", "eval(", "getattr("]):
+                self.dynamic_imports.add(str(file_path.relative_to(self.project_root)))
+            
+            # Parse AST
+            try:
+                tree = ast.parse(content)
+                self._extract_imports(tree, file_path)
+                self._extract_decorators(tree, file_path, content)
+            except SyntaxError:
+                print(f"Warning: Syntax error in {file_path}")
+                
+        except Exception as e:
+            print(f"Warning: Could not analyze {file_path}: {e}")
+    
+    def _extract_imports(self, tree: ast.AST, file_path: Path) -> None:
+        """Extract import statements from AST."""
+        file_key = str(file_path.relative_to(self.project_root))
+        imports = set()
+        
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imports.add(alias.name)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    imports.add(node.module)
+                    for alias in node.names:
+                        imports.add(f"{node.module}.{alias.name}")
+        
+        self.import_graph[file_key] = imports
+    
+    def _extract_decorators(self, tree: ast.AST, file_path: Path, content: str) -> None:
+        """Extract @register_action decorators."""
+        file_key = str(file_path.relative_to(self.project_root))
+        
+        # Look for @register_action("ACTION_NAME") pattern
+        register_pattern = r'@register_action\(["\']([^"\']+)["\']\)'
+        matches = re.findall(register_pattern, content)
+        
+        if matches:
+            # Store the first action name found (usually only one per file)
+            self.action_decorators[file_key] = matches[0]
+    
+    def _build_reverse_import_graph(self) -> None:
+        """Build reverse import graph (who imports what)."""
+        for file_path, imports in self.import_graph.items():
+            for imported in imports:
+                if imported not in self.reverse_imports:
+                    self.reverse_imports[imported] = set()
+                self.reverse_imports[imported].add(file_path)
+    
+    def is_imported(self, file_path: Path) -> bool:
+        """Check if a file is imported by others."""
+        relative_path = str(file_path.relative_to(self.project_root))
+        
+        # Check direct imports
+        module_name = relative_path.replace('/', '.').replace('.py', '')
+        if module_name in self.reverse_imports:
+            return True
+        
+        # Check package imports
+        if relative_path.endswith('__init__.py'):
+            package_name = str(file_path.parent.relative_to(self.project_root)).replace('/', '.')
+            if package_name in self.reverse_imports:
+                return True
+        
+        return False
+
+
+class DeadCodeDetector:
+    """Main class for detecting dead code in biomapper project."""
+    
+    def __init__(self, project_root: Optional[Path] = None):
+        self.project_root = project_root or Path.cwd()
+        self.config = BiomapperArchitectureConfig()
+        self.yaml_parser = YAMLActionParser(self.config.config["config_locations"])
+        self.import_analyzer = ImportAnalyzer(self.project_root)
+        
+    def detect_dead_code(self, 
+                        scope_dir: Optional[Path] = None,
+                        min_confidence: int = 0,
+                        include_tests: bool = False) -> List[DeadCodeCandidate]:
+        """Main detection method."""
+        print("🔍 Analyzing biomapper project for dead code...")
+        
+        # Step 1: Parse YAML configs for action references
+        print("📋 Parsing YAML configurations...")
+        yaml_actions = self.yaml_parser.parse_all_configs(self.project_root)
+        print(f"   Found {len(yaml_actions)} action references in YAML")
+        
+        # Step 2: Analyze imports and decorators
+        print("📦 Analyzing imports and decorators...")
+        self.import_analyzer.analyze_project(scope_dir)
+        print(f"   Analyzed {len(self.import_analyzer.import_graph)} Python files")
+        print(f"   Found {len(self.import_analyzer.action_decorators)} action decorators")
+        
+        # Step 3: Detect candidates
+        print("🎯 Detecting dead code candidates...")
+        candidates = []
+        search_dir = scope_dir or self.project_root
+        
+        for py_file in search_dir.rglob("*.py"):
+            if not include_tests and 'test' in str(py_file).lower():
+                continue
+                
+            candidate = self._evaluate_file(py_file, yaml_actions)
+            if candidate and candidate.confidence >= min_confidence:
+                candidates.append(candidate)
+        
+        # Sort by confidence (highest first)
+        candidates.sort(key=lambda x: x.confidence, reverse=True)
+        
+        print(f"✅ Analysis complete. Found {len(candidates)} candidates.")
+        return candidates
+    
+    def _evaluate_file(self, file_path: Path, yaml_actions: Set[str]) -> Optional[DeadCodeCandidate]:
+        """Evaluate a single file for dead code likelihood."""
+        if not file_path.exists():
+            return None
+        
+        relative_path = file_path.relative_to(self.project_root)
+        reasons = []
+        confidence = 0
+        
+        # Protected files get negative confidence
+        if self.config.is_protected(relative_path):
+            return DeadCodeCandidate(
+                path=relative_path,
+                confidence=0,
+                reasons=["Protected by architecture config"],
+                category="protected"
+            )
+        
+        # High confidence patterns (archive, __pycache__, etc.)
+        path_str = str(relative_path)
+        for pattern in self.config.config["high_confidence_patterns"]:
+            if self.config._match_pattern(pattern, path_str):
+                confidence = 95
+                reasons.append(f"Matches high-confidence pattern: {pattern}")
+                break
+        
+        # Empty files
+        if file_path.stat().st_size == 0:
+            confidence = max(confidence, 90)
+            reasons.append("Empty file")
+        
+        # Check if file is imported
+        if not self.import_analyzer.is_imported(file_path):
+            confidence = max(confidence, 60)
+            reasons.append("No direct imports found")
+        
+        # Check action registration
+        file_key = str(relative_path)
+        if file_key in self.import_analyzer.action_decorators:
+            action_name = self.import_analyzer.action_decorators[file_key]
+            if action_name not in yaml_actions:
+                confidence = max(confidence, 70)
+                reasons.append(f"Action '{action_name}' not referenced in YAML configs")
+            else:
+                # Action is used, reduce confidence
+                confidence = max(0, confidence - 30)
+                reasons.append(f"Action '{action_name}' IS referenced in YAML configs")
+        
+        # Dynamic import risk
+        if file_key in self.import_analyzer.dynamic_imports:
+            confidence = max(0, confidence - 20)
+            reasons.append("Contains dynamic imports - may load other modules")
+        
+        # Recent modification (last 30 days)
+        try:
+            last_modified = datetime.fromtimestamp(file_path.stat().st_mtime)
+            if last_modified > datetime.now() - timedelta(days=30):
+                confidence = max(0, confidence - 25)
+                reasons.append("Recently modified (last 30 days)")
+        except:
+            last_modified = None
+        
+        # Categorize by confidence
+        if confidence >= 85:
+            category = "safe"
+        elif confidence >= 60:
+            category = "medium"
+        else:
+            category = "low"
+        
+        # Only return candidates with some confidence
+        if confidence > 0 or reasons:
+            return DeadCodeCandidate(
+                path=relative_path,
+                confidence=confidence,
+                reasons=reasons,
+                category=category,
+                last_modified=last_modified,
+                size_bytes=file_path.stat().st_size
+            )
+        
+        return None
+
+
+def generate_cleanup_script(candidates: List[DeadCodeCandidate], 
+                          safe_only: bool = True) -> str:
+    """Generate a bash script for cleaning up detected files."""
+    script_lines = [
+        "#!/bin/bash",
+        "# Generated biomapper cleanup script",
+        "# Review carefully before executing!",
+        "",
+        "set -e  # Exit on error",
+        "",
+        "echo '🧹 Biomapper Cleanup Script'",
+        "echo '=========================='",
+        ""
+    ]
+    
+    safe_candidates = [c for c in candidates if c.category == "safe"]
+    
+    if safe_only:
+        target_candidates = safe_candidates
+        script_lines.append("echo 'Removing HIGH CONFIDENCE files only...'")
+    else:
+        target_candidates = candidates
+        script_lines.append("echo 'Removing ALL detected files...'")
+    
+    script_lines.append("")
+    
+    # Group by category
+    for category in ["safe", "medium", "low"]:
+        category_candidates = [c for c in target_candidates if c.category == category]
+        if not category_candidates:
+            continue
+            
+        script_lines.extend([
+            f"echo 'Removing {category.upper()} confidence files...'",
+            ""
+        ])
+        
+        for candidate in category_candidates:
+            script_lines.append(f"rm -f '{candidate.path}'")
+        
+        script_lines.append("")
+    
+    script_lines.extend([
+        "echo 'Cleaning __pycache__ directories...'",
+        "find . -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true",
+        "",
+        "echo '✅ Cleanup complete!'",
+        ""
+    ])
+    
+    return "\n".join(script_lines)
+
+
+def format_report(candidates: List[DeadCodeCandidate], 
+                 output_format: str = "report") -> str:
+    """Format detection results as report or JSON."""
+    
+    if output_format == "json":
+        # JSON output for programmatic use
+        data = []
+        for candidate in candidates:
+            data.append({
+                "path": str(candidate.path),
+                "confidence": candidate.confidence,
+                "reasons": candidate.reasons,
+                "category": candidate.category,
+                "last_modified": candidate.last_modified.isoformat() if candidate.last_modified else None,
+                "size_bytes": candidate.size_bytes
+            })
+        return json.dumps(data, indent=2)
+    
+    # Human-readable report
+    lines = [
+        "🔍 Biomapper Dead Code Detection Report",
+        "=" * 50,
+        ""
+    ]
+    
+    # Summary
+    total_candidates = len(candidates)
+    safe_count = len([c for c in candidates if c.category == "safe"])
+    medium_count = len([c for c in candidates if c.category == "medium"])
+    low_count = len([c for c in candidates if c.category == "low"])
+    total_size = sum(c.size_bytes for c in candidates)
+    
+    lines.extend([
+        f"📊 Summary:",
+        f"   Total candidates: {total_candidates}",
+        f"   Safe to delete: {safe_count}",
+        f"   Needs review: {medium_count}",
+        f"   Low confidence: {low_count}",
+        f"   Total size: {total_size:,} bytes ({total_size/1024/1024:.1f} MB)",
+        ""
+    ])
+    
+    # High confidence (safe) deletions
+    safe_candidates = [c for c in candidates if c.category == "safe"]
+    if safe_candidates:
+        lines.extend([
+            "🟢 HIGH CONFIDENCE - Safe to delete:",
+            "-" * 40
+        ])
+        for candidate in safe_candidates:
+            lines.append(f"   {candidate.path} [{candidate.confidence}%]")
+            for reason in candidate.reasons:
+                lines.append(f"      • {reason}")
+            lines.append("")
+    
+    # Medium confidence
+    medium_candidates = [c for c in candidates if c.category == "medium"]
+    if medium_candidates:
+        lines.extend([
+            "🟡 MEDIUM CONFIDENCE - Review recommended:",
+            "-" * 45
+        ])
+        for candidate in medium_candidates:
+            lines.append(f"   {candidate.path} [{candidate.confidence}%]")
+            for reason in candidate.reasons:
+                lines.append(f"      • {reason}")
+            lines.append("")
+    
+    # Low confidence
+    low_candidates = [c for c in candidates if c.category == "low"]
+    if low_candidates:
+        lines.extend([
+            "🔴 LOW CONFIDENCE - Manual review required:",
+            "-" * 45
+        ])
+        for candidate in low_candidates:
+            lines.append(f"   {candidate.path} [{candidate.confidence}%]")
+            for reason in candidate.reasons:
+                lines.append(f"      • {reason}")
+            lines.append("")
+    
+    # Next steps
+    lines.extend([
+        "📋 Recommended Next Steps:",
+        "1. Review the HIGH CONFIDENCE files above",
+        "2. Run with --dry-run=false --confidence=85 to generate cleanup script",
+        "3. Manually review MEDIUM CONFIDENCE files", 
+        "4. Investigate LOW CONFIDENCE files for dynamic usage patterns",
+        ""
+    ])
+    
+    return "\n".join(lines)
+
+
+def main():
+    """Main entry point for Claude Code slash command."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description="Detect dead code in biomapper project",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--scope", 
+        choices=["current", "global"], 
+        default="current",
+        help="Analyze current directory only or entire project"
+    )
+    parser.add_argument(
+        "--confidence", 
+        type=int, 
+        default=50,
+        help="Minimum confidence threshold (0-100)"
+    )
+    parser.add_argument(
+        "--dry-run", 
+        type=bool, 
+        default=True,
+        help="Generate report only, don't create cleanup script"
+    )
+    parser.add_argument(
+        "--include-tests", 
+        action="store_true",
+        help="Include test files in analysis"
+    )
+    parser.add_argument(
+        "--output", 
+        choices=["report", "json"], 
+        default="report",
+        help="Output format"
+    )
+    parser.add_argument(
+        "--generate-script", 
+        action="store_true",
+        help="Generate cleanup script for safe deletions"
+    )
+    
+    args = parser.parse_args()
+    
+    # Determine scope directory
+    scope_dir = None if args.scope == "global" else Path.cwd()
+    
+    # Initialize detector and run analysis
+    detector = DeadCodeDetector()
+    candidates = detector.detect_dead_code(
+        scope_dir=scope_dir,
+        min_confidence=args.confidence,
+        include_tests=args.include_tests
+    )
+    
+    # Output results
+    report = format_report(candidates, args.output)
+    print(report)
+    
+    # Generate cleanup script if requested
+    if args.generate_script:
+        script = generate_cleanup_script(candidates, safe_only=True)
+        script_path = Path("biomapper_cleanup.sh")
+        with open(script_path, 'w') as f:
+            f.write(script)
+        print(f"\n📝 Cleanup script generated: {script_path}")
+        print("   Review the script before running: chmod +x biomapper_cleanup.sh && ./biomapper_cleanup.sh")
+
+
+if __name__ == "__main__":
+    main()

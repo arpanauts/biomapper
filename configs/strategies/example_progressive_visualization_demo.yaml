@@ -1,0 +1,178 @@
+name: PROGRESSIVE_VISUALIZATION_DEMO
+description: Demonstration strategy showcasing progressive visualization capabilities with comprehensive mapping stages and advanced chart generation
+
+parameters:
+  # Input data configuration
+  data_file: "${BIOMAPPER_DATA_DIR:-/tmp}/protein_dataset.tsv"
+  output_dir: "${BIOMAPPER_OUTPUT_DIR:-/tmp/results}"
+  visualization_dir: "${BIOMAPPER_OUTPUT_DIR:-/tmp/results}/visualizations"
+  
+  # Progressive mapping configuration
+  enable_progressive_tracking: true
+  enable_comprehensive_visualization: true
+  
+steps:
+  # Stage 1: Load initial dataset
+  - name: load_protein_dataset
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.data_file}"
+        identifier_column: "protein_id"
+        output_key: "original_proteins"
+        description: "Load original protein dataset for progressive mapping"
+
+  # Stage 2: Direct UniProt matching (first stage)
+  - name: direct_uniprot_matching
+    action:
+      type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
+      params:
+        input_key: "original_proteins"
+        output_key: "direct_matched_proteins"
+        xrefs_column: "protein_id"
+        remove_isoforms: true
+        stage_name: "Direct UniProt Match"
+        method_name: "Direct UniProt"
+        track_progressive_stats: true
+
+  # Stage 3: Composite identifier parsing (second stage)
+  - name: composite_parsing
+    action:
+      type: PARSE_COMPOSITE_IDENTIFIERS_V2
+      params:
+        input_key: "direct_matched_proteins"
+        output_key: "composite_parsed_proteins"
+        identifier_column: "protein_id"
+        delimiter_patterns: ["|", ";", ",", " "]
+        stage_name: "Composite Parsing"
+        method_name: "Composite parsing"
+        track_progressive_stats: true
+
+  # Stage 4: Multi-bridge resolution (third stage)
+  - name: multi_bridge_resolution
+    action:
+      type: PROTEIN_MULTI_BRIDGE
+      params:
+        input_key: "composite_parsed_proteins"
+        output_key: "bridge_resolved_proteins"
+        include_uniprot_bridge: true
+        include_ensembl_bridge: true
+        include_gene_symbol_bridge: true
+        stage_name: "Multi-Bridge Resolution"
+        method_name: "Multi-bridge"
+        track_progressive_stats: true
+
+  # Stage 5: Historical resolution (fourth stage)
+  - name: historical_resolution
+    action:
+      type: PROTEIN_HISTORICAL_RESOLUTION
+      params:
+        input_key: "bridge_resolved_proteins"
+        output_key: "historically_resolved_proteins"
+        use_uniprot_api: true
+        use_ensembl_api: true
+        batch_size: 100
+        stage_name: "Historical Resolution"
+        method_name: "Historical API"
+        track_progressive_stats: true
+
+  # Stage 6: Generate comprehensive progressive visualizations
+  - name: generate_progressive_visualizations
+    action:
+      type: GENERATE_MAPPING_VISUALIZATIONS_V2
+      params:
+        # Traditional chart configurations
+        charts:
+          - type: bar
+            title: "Final Mapping Results Summary"
+            data_key: "statistics.mapping_summary"
+            file_path: "mapping_summary.html"
+            x_field: "category"
+            y_field: "count"
+          
+          - type: pie
+            title: "Mapping Success Distribution"
+            data_key: "statistics.success_distribution"
+            file_path: "success_distribution.html"
+            x_field: "status"
+            y_field: "percentage"
+
+        # Output configuration
+        output_directory: "${parameters.visualization_dir}"
+        format: "plotly"
+        theme: "plotly_white"
+        export_static: true
+        static_formats: ["png", "svg"]
+        export_json: true
+        create_dashboard: true
+        dashboard_title: "Progressive Protein Mapping Analysis Dashboard"
+        include_statistics: true
+
+        # Progressive visualization configuration
+        progressive_params:
+          progressive_mode: true
+          export_statistics_tsv: true
+          waterfall_chart: true
+          stage_comparison: true
+          confidence_distribution: true
+          method_breakdown: true
+          stage_prefix: "Stage"
+          show_percentages: true
+          show_improvements: true
+
+  # Stage 7: Export final results with comprehensive statistics
+  - name: export_comprehensive_results
+    action:
+      type: EXPORT_DATASET_V2
+      params:
+        input_key: "historically_resolved_proteins"
+        output_path: "${parameters.output_dir}/final_progressive_mapping_results.tsv"
+        format: "tsv"
+        include_metadata: true
+        include_statistics: true
+
+  # Stage 8: Generate detailed HTML report
+  - name: generate_html_report
+    action:
+      type: GENERATE_HTML_REPORT
+      params:
+        input_key: "historically_resolved_proteins"
+        output_path: "${parameters.output_dir}/progressive_mapping_report.html"
+        title: "Progressive Protein Mapping Analysis Report"
+        include_visualizations: true
+        visualization_directory: "${parameters.visualization_dir}"
+        include_progressive_analysis: true
+        include_performance_metrics: true
+
+  # Stage 9: Sync results to Google Drive (optional)
+  - name: sync_to_google_drive
+    action:
+      type: SYNC_TO_GOOGLE_DRIVE_V2
+      params:
+        input_directory: "${parameters.output_dir}"
+        folder_name: "Progressive_Mapping_Demo_Results"
+        include_subdirectories: true
+        file_patterns: ["*.tsv", "*.html", "*.png", "*.svg", "*.json"]
+        create_timestamp_folder: true
+        enable_chunked_upload: true
+        chunk_size_mb: 10
+
+# Expected progressive visualization outputs:
+# 1. progressive_waterfall.html/png/svg - Waterfall chart showing cumulative improvement
+# 2. stage_comparison.html/png/svg - Bar chart comparing each stage's contribution  
+# 3. confidence_distribution.html/png/svg - Line chart showing confidence across stages
+# 4. method_breakdown.html/png/svg - Pie chart showing method distribution
+# 5. progressive_statistics.tsv - Detailed TSV with stage-by-stage metrics
+# 6. progressive_summary.json - Machine-readable summary with key metrics
+# 7. dashboard.html - Combined dashboard with all charts and statistics
+
+# Sample expected results structure:
+# progressive_stats: {
+#   "total_processed": 10000,
+#   "stages": {
+#     1: {"name": "Direct UniProt Match", "method": "Direct UniProt", "new_matches": 6500, "confidence_avg": 1.00},
+#     2: {"name": "Composite Parsing", "method": "Composite parsing", "new_matches": 0, "confidence_avg": 0.95},  
+#     3: {"name": "Multi-Bridge Resolution", "method": "Multi-bridge", "new_matches": 1500, "confidence_avg": 0.90},
+#     4: {"name": "Historical Resolution", "method": "Historical API", "new_matches": 400, "confidence_avg": 0.85}
+#   }
+# }
