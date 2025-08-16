@@ -59,7 +59,7 @@ class TestChemistryStrategies:
     @pytest.fixture
     def client(self):
         """Mock BiomapperClient for testing."""
-        return Mock(spec=BiomapperClient)
+        return Mock()
 
     @pytest.fixture
     def sample_execution_result(self):
@@ -339,7 +339,7 @@ class TestChemistryStrategyEdgeCases:
 
     @pytest.fixture
     def client(self):
-        return Mock(spec=BiomapperClient)
+        return Mock()
 
     def test_missing_loinc_codes_handling(self, client):
         """Test handling of datasets with missing LOINC codes."""

@@ -9,7 +9,7 @@ from biomapper_client.models import StrategyResult
 @pytest.fixture
 def client():
     """Mock BiomapperClient for testing."""
-    return Mock(spec=BiomapperClient)
+    return Mock()
 
 
 @pytest.fixture

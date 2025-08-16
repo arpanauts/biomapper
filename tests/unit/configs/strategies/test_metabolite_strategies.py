@@ -17,7 +17,7 @@ class TestMetaboliteStrategies:
     @pytest.fixture
     def client(self):
         """Mock BiomapperClient for testing."""
-        return Mock(spec=BiomapperClient)
+        return Mock()
 
     @pytest.fixture
     def strategy_files(self):
