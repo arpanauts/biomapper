@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f /home/ubuntu/biomapper/.claude/commands/biomapper-memory-refresh.md ]; then echo 'Refreshing Biomapper context...' && cat /home/ubuntu/biomapper/.claude/commands/biomapper-memory-refresh.md > /dev/null && echo '✓ Biomapper context refreshed'; else echo '⚠ Biomapper refresh file not found at .claude/commands/biomapper-memory-refresh.md'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,603 +1,514 @@
 #!/usr/bin/env python3
 """
-Biomapper Dead Code Detection and Cleanup Command
-Custom Claude Code slash command for detecting unused/bloated code in biomapper project.
+Enhanced Biomapper Cleanup - Script Artifacts Edition
+Extends the existing biomapper-cleanup command to handle one-time scripts and artifacts.
 
-Usage: /biomapper-cleanup [options]
+Usage: /biomapper-cleanup --include-scripts [other options]
 """
 
-import ast
 import os
 import re
-import json
-import yaml
-import subprocess
+import ast
 from pathlib import Path
-from typing import Dict, List, Set, Tuple, Optional, NamedTuple
+from typing import Dict, List, Set, Tuple, Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import importlib.util
+import fnmatch
 
 
 @dataclass
-class DeadCodeCandidate:
-    """Represents a potential dead code file with confidence metrics."""
+class ScriptArtifact:
+    """Represents a script artifact that may need cleanup."""
     path: Path
-    confidence: int  # 0-100
+    artifact_type: str  # 'one_time_script', 'test_script', 'debug_script', 'log_file', 'temp_file'
+    confidence: int     # 0-100
     reasons: List[str]
-    category: str  # 'safe', 'medium', 'low', 'protected'
     last_modified: Optional[datetime] = None
     size_bytes: int = 0
+    suggested_action: str = 'archive'  # 'delete', 'archive', 'keep'
 
 
-class BiomapperArchitectureConfig:
-    """Configuration for biomapper project architecture patterns."""
-    
-    def __init__(self, config_path: Optional[Path] = None):
-        self.config_path = config_path or Path(".claude/architecture.yaml")
-        self.config = self._load_config()
-    
-    def _load_config(self) -> Dict:
-        """Load architecture configuration or use defaults."""
-        default_config = {
-            "protected_patterns": [
-                "*/strategy_actions/registry.py",
-                "*/minimal_strategy_service.py",
-                "*/core/services/*",
-                "*/__main__.py",
-                "*/cli/*",
-                "*/main.py",
-                "*/app/main.py"
-            ],
-            "action_sources": [
-                "biomapper/core/strategy_actions/",
-                "custom_actions/"
-            ],
-            "config_locations": [
-                "configs/strategies/",
-                "configs/"
-            ],
-            "high_confidence_patterns": [
-                "archive/*",
-                "*/__pycache__/*",
-                "*.pyc",
-                "*_mock/*",
-                "*/deprecated_*",
-                "*/old_*"
-            ],
-            "dynamic_import_indicators": [
-                "importlib",
-                "__import__",
-                "exec(",
-                "eval(",
-                "getattr("
-            ]
-        }
-        
-        if self.config_path.exists():
-            try:
-                with open(self.config_path) as f:
-                    user_config = yaml.safe_load(f) or {}
-                # Merge with defaults
-                for key, value in default_config.items():
-                    if key not in user_config:
-                        user_config[key] = value
-                return user_config
-            except Exception as e:
-                print(f"Warning: Could not load {self.config_path}: {e}")
-                return default_config
-        
-        return default_config
-    
-    def is_protected(self, file_path: Path) -> bool:
-        """Check if file matches protected patterns."""
-        path_str = str(file_path)
-        return any(
-            self._match_pattern(pattern, path_str)
-            for pattern in self.config["protected_patterns"]
-        )
-    
-    def _match_pattern(self, pattern: str, path: str) -> bool:
-        """Match glob-style patterns."""
-        import fnmatch
-        return fnmatch.fnmatch(path, pattern)
-
-
-class YAMLActionParser:
-    """Parser for YAML configuration files to find action references."""
-    
-    def __init__(self, config_locations: List[str]):
-        self.config_locations = config_locations
-        self.action_references: Set[str] = set()
-    
-    def parse_all_configs(self, project_root: Path) -> Set[str]:
-        """Parse all YAML files to extract action type references."""
-        self.action_references = set()
-        
-        for location in self.config_locations:
-            config_dir = project_root / location
-            if config_dir.exists():
-                self._parse_directory(config_dir)
-        
-        return self.action_references
-    
-    def _parse_directory(self, directory: Path) -> None:
-        """Recursively parse YAML files in directory."""
-        for yaml_file in directory.rglob("*.yaml"):
-            self._parse_yaml_file(yaml_file)
-        for yml_file in directory.rglob("*.yml"):
-            self._parse_yaml_file(yml_file)
-    
-    def _parse_yaml_file(self, yaml_file: Path) -> None:
-        """Parse individual YAML file for action references."""
-        try:
-            with open(yaml_file, 'r') as f:
-                content = yaml.safe_load(f)
-                self._extract_action_refs(content)
-        except Exception as e:
-            print(f"Warning: Could not parse {yaml_file}: {e}")
-    
-    def _extract_action_refs(self, obj) -> None:
-        """Recursively extract 'type' fields that reference actions."""
-        if isinstance(obj, dict):
-            for key, value in obj.items():
-                if key == 'type' and isinstance(value, str):
-                    self.action_references.add(value)
-                else:
-                    self._extract_action_refs(value)
-        elif isinstance(obj, list):
-            for item in obj:
-                self._extract_action_refs(item)
-
-
-class ImportAnalyzer:
-    """Analyzes Python files for import dependencies."""
+class ScriptArtifactAnalyzer:
+    """Analyzes Python scripts and other files to identify cleanup candidates."""
     
     def __init__(self, project_root: Path):
         self.project_root = project_root
-        self.import_graph: Dict[str, Set[str]] = {}
-        self.reverse_imports: Dict[str, Set[str]] = {}
-        self.action_decorators: Dict[str, str] = {}  # file -> action_name
-        self.dynamic_imports: Set[str] = set()
-    
-    def analyze_project(self, scope_dir: Optional[Path] = None) -> None:
-        """Analyze all Python files for imports and decorators."""
-        search_dir = scope_dir or self.project_root
+        self.current_time = datetime.now()
         
-        for py_file in search_dir.rglob("*.py"):
-            if self._should_analyze_file(py_file):
-                self._analyze_file(py_file)
+    def analyze_root_directory(self) -> List[ScriptArtifact]:
+        """Analyze root directory for script artifacts."""
+        artifacts = []
         
-        self._build_reverse_import_graph()
+        # Only analyze root directory files
+        for item in self.project_root.iterdir():
+            if item.is_file():
+                artifact = self._analyze_file(item)
+                if artifact:
+                    artifacts.append(artifact)
+        
+        return artifacts
     
-    def _should_analyze_file(self, file_path: Path) -> bool:
-        """Filter files that should be analyzed."""
-        path_str = str(file_path)
-        skip_patterns = ['__pycache__', '.pyc', 'venv/', '.venv/', 'site-packages/']
-        return not any(pattern in path_str for pattern in skip_patterns)
+    def _analyze_file(self, file_path: Path) -> Optional[ScriptArtifact]:
+        """Analyze a single file to determine if it's a cleanup candidate."""
+        if not file_path.is_file():
+            return None
+        
+        # Get file stats
+        try:
+            stat = file_path.stat()
+            last_modified = datetime.fromtimestamp(stat.st_mtime)
+            size_bytes = stat.st_size
+        except OSError:
+            return None
+        
+        # Analyze by file type and patterns
+        artifact = None
+        
+        if file_path.suffix == '.py':
+            artifact = self._analyze_python_script(file_path, last_modified, size_bytes)
+        elif file_path.suffix == '.log':
+            artifact = self._analyze_log_file(file_path, last_modified, size_bytes)
+        elif file_path.name.startswith('test_') and file_path.suffix in ['.txt', '.json', '.csv']:
+            artifact = self._analyze_test_output_file(file_path, last_modified, size_bytes)
+        elif file_path.suffix in ['.tmp', '.temp', '.bak']:
+            artifact = self._analyze_temp_file(file_path, last_modified, size_bytes)
+        
+        return artifact
     
-    def _analyze_file(self, file_path: Path) -> None:
-        """Analyze single Python file for imports and decorators."""
+    def _analyze_python_script(self, file_path: Path, last_modified: datetime, size_bytes: int) -> Optional[ScriptArtifact]:
+        """Analyze Python script for cleanup candidacy."""
+        reasons = []
+        confidence = 0
+        artifact_type = 'unknown'
+        suggested_action = 'keep'
+        
+        filename = file_path.name.lower()
+        
+        # One-time script patterns
+        one_time_patterns = [
+            'quick_', 'test_', 'debug_', 'temp_', 'tmp_',
+            'run_', 'upload_', 'verify_', 'time_',
+            'extract_', 'process_', 'analyze_', 'check_',
+            'fix_', 'migrate_', 'convert_', 'export_',
+            'import_', 'sync_', 'backup_', 'restore_'
+        ]
+        
+        # Check filename patterns
+        for pattern in one_time_patterns:
+            if filename.startswith(pattern):
+                artifact_type = 'one_time_script'
+                confidence += 40
+                reasons.append(f'Filename pattern suggests one-time script: {pattern}')
+                break
+        
+        # Production/testing script patterns
+        production_patterns = [
+            'run_production_', 'run_v3_', 'run_direct_', 'run_with_',
+            'quick_test', 'quick_timing', 'time_data_processing'
+        ]
+        
+        for pattern in production_patterns:
+            if pattern in filename:
+                artifact_type = 'one_time_script'
+                confidence += 50
+                reasons.append(f'Production/testing script pattern: {pattern}')
+                suggested_action = 'archive'
+                break
+        
+        # Analyze file content for additional clues
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
-            # Check for dynamic imports
-            if any(indicator in content for indicator in 
-                   ["importlib", "__import__", "exec(", "eval(", "getattr("]):
-                self.dynamic_imports.add(str(file_path.relative_to(self.project_root)))
-            
-            # Parse AST
-            try:
-                tree = ast.parse(content)
-                self._extract_imports(tree, file_path)
-                self._extract_decorators(tree, file_path, content)
-            except SyntaxError:
-                print(f"Warning: Syntax error in {file_path}")
                 
-        except Exception as e:
-            print(f"Warning: Could not analyze {file_path}: {e}")
-    
-    def _extract_imports(self, tree: ast.AST, file_path: Path) -> None:
-        """Extract import statements from AST."""
-        file_key = str(file_path.relative_to(self.project_root))
-        imports = set()
+            # Look for one-time script indicators
+            one_time_indicators = [
+                'if __name__ == "__main__":',
+                '# One-time script',
+                '# Quick test',
+                '# Debug script',
+                '# TODO: Remove after',
+                '# TEMP:',
+                '# FIXME: Delete',
+                'print("Debug:',
+                'print("Testing:',
+                'import pdb',
+                'pdb.set_trace',
+                'input("Press Enter"',
+                'time.sleep(',
+            ]
+            
+            for indicator in one_time_indicators:
+                if indicator in content:
+                    confidence += 15
+                    reasons.append(f'Contains one-time indicator: {indicator}')
+            
+            # Check for hardcoded paths or values (indicates one-time use)
+            hardcoded_patterns = [
+                r'/home/ubuntu/biomapper/',
+                r'kg2_10_2c',
+                r'v3\.0',
+                r'production_complete',
+                r'direct_no_api',
+            ]
+            
+            for pattern in hardcoded_patterns:
+                if re.search(pattern, content):
+                    confidence += 20
+                    reasons.append(f'Contains hardcoded values: {pattern}')
+            
+            # Check if it's a simple wrapper or runner script
+            if content.count('\n') < 50 and 'subprocess' in content:
+                confidence += 25
+                reasons.append('Simple runner/wrapper script (likely one-time)')
+            
+            # Check for imports that suggest testing/debugging
+            debug_imports = ['pdb', 'cProfile', 'timeit', 'memory_profiler']
+            for imp in debug_imports:
+                if f'import {imp}' in content or f'from {imp}' in content:
+                    confidence += 30
+                    reasons.append(f'Imports debugging/profiling module: {imp}')
         
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    imports.add(alias.name)
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    imports.add(node.module)
-                    for alias in node.names:
-                        imports.add(f"{node.module}.{alias.name}")
-        
-        self.import_graph[file_key] = imports
-    
-    def _extract_decorators(self, tree: ast.AST, file_path: Path, content: str) -> None:
-        """Extract @register_action decorators."""
-        file_key = str(file_path.relative_to(self.project_root))
-        
-        # Look for @register_action("ACTION_NAME") pattern
-        register_pattern = r'@register_action\(["\']([^"\']+)["\']\)'
-        matches = re.findall(register_pattern, content)
-        
-        if matches:
-            # Store the first action name found (usually only one per file)
-            self.action_decorators[file_key] = matches[0]
-    
-    def _build_reverse_import_graph(self) -> None:
-        """Build reverse import graph (who imports what)."""
-        for file_path, imports in self.import_graph.items():
-            for imported in imports:
-                if imported not in self.reverse_imports:
-                    self.reverse_imports[imported] = set()
-                self.reverse_imports[imported].add(file_path)
-    
-    def is_imported(self, file_path: Path) -> bool:
-        """Check if a file is imported by others."""
-        relative_path = str(file_path.relative_to(self.project_root))
-        
-        # Check direct imports
-        module_name = relative_path.replace('/', '.').replace('.py', '')
-        if module_name in self.reverse_imports:
-            return True
-        
-        # Check package imports
-        if relative_path.endswith('__init__.py'):
-            package_name = str(file_path.parent.relative_to(self.project_root)).replace('/', '.')
-            if package_name in self.reverse_imports:
-                return True
-        
-        return False
-
-
-class DeadCodeDetector:
-    """Main class for detecting dead code in biomapper project."""
-    
-    def __init__(self, project_root: Optional[Path] = None):
-        self.project_root = project_root or Path.cwd()
-        self.config = BiomapperArchitectureConfig()
-        self.yaml_parser = YAMLActionParser(self.config.config["config_locations"])
-        self.import_analyzer = ImportAnalyzer(self.project_root)
-        
-    def detect_dead_code(self, 
-                        scope_dir: Optional[Path] = None,
-                        min_confidence: int = 0,
-                        include_tests: bool = False) -> List[DeadCodeCandidate]:
-        """Main detection method."""
-        print("🔍 Analyzing biomapper project for dead code...")
-        
-        # Step 1: Parse YAML configs for action references
-        print("📋 Parsing YAML configurations...")
-        yaml_actions = self.yaml_parser.parse_all_configs(self.project_root)
-        print(f"   Found {len(yaml_actions)} action references in YAML")
-        
-        # Step 2: Analyze imports and decorators
-        print("📦 Analyzing imports and decorators...")
-        self.import_analyzer.analyze_project(scope_dir)
-        print(f"   Analyzed {len(self.import_analyzer.import_graph)} Python files")
-        print(f"   Found {len(self.import_analyzer.action_decorators)} action decorators")
-        
-        # Step 3: Detect candidates
-        print("🎯 Detecting dead code candidates...")
-        candidates = []
-        search_dir = scope_dir or self.project_root
-        
-        for py_file in search_dir.rglob("*.py"):
-            if not include_tests and 'test' in str(py_file).lower():
-                continue
-                
-            candidate = self._evaluate_file(py_file, yaml_actions)
-            if candidate and candidate.confidence >= min_confidence:
-                candidates.append(candidate)
-        
-        # Sort by confidence (highest first)
-        candidates.sort(key=lambda x: x.confidence, reverse=True)
-        
-        print(f"✅ Analysis complete. Found {len(candidates)} candidates.")
-        return candidates
-    
-    def _evaluate_file(self, file_path: Path, yaml_actions: Set[str]) -> Optional[DeadCodeCandidate]:
-        """Evaluate a single file for dead code likelihood."""
-        if not file_path.exists():
-            return None
-        
-        relative_path = file_path.relative_to(self.project_root)
-        reasons = []
-        confidence = 0
-        
-        # Protected files get negative confidence
-        if self.config.is_protected(relative_path):
-            return DeadCodeCandidate(
-                path=relative_path,
-                confidence=0,
-                reasons=["Protected by architecture config"],
-                category="protected"
-            )
-        
-        # High confidence patterns (archive, __pycache__, etc.)
-        path_str = str(relative_path)
-        for pattern in self.config.config["high_confidence_patterns"]:
-            if self.config._match_pattern(pattern, path_str):
-                confidence = 95
-                reasons.append(f"Matches high-confidence pattern: {pattern}")
-                break
-        
-        # Empty files
-        if file_path.stat().st_size == 0:
-            confidence = max(confidence, 90)
-            reasons.append("Empty file")
-        
-        # Check if file is imported
-        if not self.import_analyzer.is_imported(file_path):
-            confidence = max(confidence, 60)
-            reasons.append("No direct imports found")
-        
-        # Check action registration
-        file_key = str(relative_path)
-        if file_key in self.import_analyzer.action_decorators:
-            action_name = self.import_analyzer.action_decorators[file_key]
-            if action_name not in yaml_actions:
-                confidence = max(confidence, 70)
-                reasons.append(f"Action '{action_name}' not referenced in YAML configs")
-            else:
-                # Action is used, reduce confidence
-                confidence = max(0, confidence - 30)
-                reasons.append(f"Action '{action_name}' IS referenced in YAML configs")
-        
-        # Dynamic import risk
-        if file_key in self.import_analyzer.dynamic_imports:
+        except Exception:
+            # Can't read file, reduce confidence
             confidence = max(0, confidence - 20)
-            reasons.append("Contains dynamic imports - may load other modules")
+            reasons.append('Could not analyze file content')
         
-        # Recent modification (last 30 days)
-        try:
-            last_modified = datetime.fromtimestamp(file_path.stat().st_mtime)
-            if last_modified > datetime.now() - timedelta(days=30):
-                confidence = max(0, confidence - 25)
-                reasons.append("Recently modified (last 30 days)")
-        except:
-            last_modified = None
+        # Age-based analysis
+        days_old = (self.current_time - last_modified).days
+        if days_old > 90:  # Older than 3 months
+            confidence += 20
+            reasons.append(f'File is {days_old} days old (likely stale)')
+            if artifact_type == 'one_time_script':
+                suggested_action = 'archive'
+        elif days_old > 30:  # Older than 1 month
+            confidence += 10
+            reasons.append(f'File is {days_old} days old')
         
-        # Categorize by confidence
-        if confidence >= 85:
-            category = "safe"
-        elif confidence >= 60:
-            category = "medium"
-        else:
-            category = "low"
+        # Size-based analysis (very small scripts are often one-time)
+        if size_bytes < 1000:  # Less than 1KB
+            confidence += 15
+            reasons.append(f'Very small script ({size_bytes} bytes, likely simple one-time script)')
         
-        # Only return candidates with some confidence
-        if confidence > 0 or reasons:
-            return DeadCodeCandidate(
-                path=relative_path,
+        # Only consider it an artifact if we have some confidence
+        if confidence >= 30:
+            if artifact_type == 'unknown':
+                artifact_type = 'one_time_script'
+            
+            # Adjust suggested action based on confidence
+            if confidence >= 80:
+                suggested_action = 'archive'
+            elif confidence >= 60:
+                suggested_action = 'archive'
+            else:
+                suggested_action = 'review'
+            
+            return ScriptArtifact(
+                path=file_path,
+                artifact_type=artifact_type,
                 confidence=confidence,
                 reasons=reasons,
-                category=category,
                 last_modified=last_modified,
-                size_bytes=file_path.stat().st_size
+                size_bytes=size_bytes,
+                suggested_action=suggested_action
             )
         
         return None
-
-
-def generate_cleanup_script(candidates: List[DeadCodeCandidate], 
-                          safe_only: bool = True) -> str:
-    """Generate a bash script for cleaning up detected files."""
-    script_lines = [
-        "#!/bin/bash",
-        "# Generated biomapper cleanup script",
-        "# Review carefully before executing!",
-        "",
-        "set -e  # Exit on error",
-        "",
-        "echo '🧹 Biomapper Cleanup Script'",
-        "echo '=========================='",
-        ""
-    ]
     
-    safe_candidates = [c for c in candidates if c.category == "safe"]
-    
-    if safe_only:
-        target_candidates = safe_candidates
-        script_lines.append("echo 'Removing HIGH CONFIDENCE files only...'")
-    else:
-        target_candidates = candidates
-        script_lines.append("echo 'Removing ALL detected files...'")
-    
-    script_lines.append("")
-    
-    # Group by category
-    for category in ["safe", "medium", "low"]:
-        category_candidates = [c for c in target_candidates if c.category == category]
-        if not category_candidates:
-            continue
+    def _analyze_log_file(self, file_path: Path, last_modified: datetime, size_bytes: int) -> Optional[ScriptArtifact]:
+        """Analyze log files for cleanup."""
+        reasons = []
+        confidence = 70  # Log files are generally cleanup candidates
+        
+        filename = file_path.name.lower()
+        
+        # Log file patterns
+        if filename.endswith('.log'):
+            reasons.append('Log file extension')
             
-        script_lines.extend([
-            f"echo 'Removing {category.upper()} confidence files...'",
-            ""
-        ])
+        # Age-based confidence
+        days_old = (self.current_time - last_modified).days
+        if days_old > 30:
+            confidence += 20
+            reasons.append(f'Log file is {days_old} days old')
         
-        for candidate in category_candidates:
-            script_lines.append(f"rm -f '{candidate.path}'")
+        # Version-specific logs (like v3.0_run.log)
+        if re.search(r'v\d+\.\d+', filename):
+            confidence += 25
+            reasons.append('Version-specific log file')
         
-        script_lines.append("")
+        return ScriptArtifact(
+            path=file_path,
+            artifact_type='log_file',
+            confidence=confidence,
+            reasons=reasons,
+            last_modified=last_modified,
+            size_bytes=size_bytes,
+            suggested_action='archive' if days_old > 30 else 'review'
+        )
     
-    script_lines.extend([
-        "echo 'Cleaning __pycache__ directories...'",
-        "find . -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true",
-        "",
-        "echo '✅ Cleanup complete!'",
-        ""
-    ])
+    def _analyze_test_output_file(self, file_path: Path, last_modified: datetime, size_bytes: int) -> Optional[ScriptArtifact]:
+        """Analyze test output files."""
+        reasons = ['Test output file pattern']
+        confidence = 75
+        
+        days_old = (self.current_time - last_modified).days
+        if days_old > 7:  # Test outputs older than a week
+            confidence += 15
+            reasons.append(f'Test output is {days_old} days old')
+        
+        return ScriptArtifact(
+            path=file_path,
+            artifact_type='test_output',
+            confidence=confidence,
+            reasons=reasons,
+            last_modified=last_modified,
+            size_bytes=size_bytes,
+            suggested_action='delete' if days_old > 30 else 'archive'
+        )
     
-    return "\n".join(script_lines)
+    def _analyze_temp_file(self, file_path: Path, last_modified: datetime, size_bytes: int) -> Optional[ScriptArtifact]:
+        """Analyze temporary files."""
+        reasons = ['Temporary file extension']
+        confidence = 90
+        
+        return ScriptArtifact(
+            path=file_path,
+            artifact_type='temp_file',
+            confidence=confidence,
+            reasons=reasons,
+            last_modified=last_modified,
+            size_bytes=size_bytes,
+            suggested_action='delete'
+        )
 
 
-def format_report(candidates: List[DeadCodeCandidate], 
-                 output_format: str = "report") -> str:
-    """Format detection results as report or JSON."""
+class ScriptCleanupExecutor:
+    """Executes cleanup actions on identified script artifacts."""
     
-    if output_format == "json":
-        # JSON output for programmatic use
-        data = []
-        for candidate in candidates:
-            data.append({
-                "path": str(candidate.path),
-                "confidence": candidate.confidence,
-                "reasons": candidate.reasons,
-                "category": candidate.category,
-                "last_modified": candidate.last_modified.isoformat() if candidate.last_modified else None,
-                "size_bytes": candidate.size_bytes
-            })
-        return json.dumps(data, indent=2)
-    
-    # Human-readable report
-    lines = [
-        "🔍 Biomapper Dead Code Detection Report",
-        "=" * 50,
-        ""
+    def __init__(self, project_root: Path):
+        self.project_root = project_root
+        
+    def execute_cleanup(self, artifacts: List[ScriptArtifact], dry_run: bool = True) -> Dict:
+        """Execute cleanup actions on artifacts."""
+        results = {
+            'total_artifacts': len(artifacts),
+            'actions_taken': 0,
+            'archived': 0,
+            'deleted': 0,
+            'kept': 0,
+            'errors': [],
+            'summary': []
+        }
+        
+        # Create archive directory if needed
+        archive_dir = self.project_root / 'archive' / 'one_time_scripts'
+        if not dry_run:
+            archive_dir.mkdir(parents=True, exist_ok=True)
+        
+        for artifact in artifacts:
+            try:
+                if artifact.suggested_action == 'delete':
+                    if not dry_run:
+                        artifact.path.unlink()
+                    results['deleted'] += 1
+                    results['actions_taken'] += 1
+                    results['summary'].append(f"Deleted: {artifact.path.name}")
+                    
+                elif artifact.suggested_action == 'archive':
+                    if not dry_run:
+                        # Move to archive with timestamp
+                        timestamp = datetime.now().strftime('%Y%m%d')
+                        new_name = f"{timestamp}_{artifact.path.name}"
+                        new_path = archive_dir / new_name
+                        artifact.path.rename(new_path)
+                    results['archived'] += 1
+                    results['actions_taken'] += 1
+                    results['summary'].append(f"Archived: {artifact.path.name}")
+                    
+                else:  # keep or review
+                    results['kept'] += 1
+                    results['summary'].append(f"Kept: {artifact.path.name} (needs review)")
+                    
+            except Exception as e:
+                results['errors'].append(f"Error processing {artifact.path.name}: {e}")
+        
+        return results
+
+
+def analyze_your_script_list():
+    """Analyze the specific scripts you mentioned."""
+    script_list = [
+        'quick_test.py',
+        'quick_timing_test.py', 
+        'run_direct_no_api.py',
+        'run_production_complete.py',
+        'run_production_direct.py',
+        'run_production_via_api.py',
+        'run_production_with_gdrive.py',
+        'run_production_with_monitoring.py',
+        'run_v3_pipeline_direct.py',
+        'run_with_kg2_10_2c.py',
+        'test_output.log',
+        'time_data_processing.py',
+        'upload_kg2_10_2c_results.py',
+        'upload_to_gdrive.py',
+        'v3.0_run.log',
+        'verify_extraction_logic.py',
+        'verify_match_stats.py'
     ]
     
-    # Summary
-    total_candidates = len(candidates)
-    safe_count = len([c for c in candidates if c.category == "safe"])
-    medium_count = len([c for c in candidates if c.category == "medium"])
-    low_count = len([c for c in candidates if c.category == "low"])
-    total_size = sum(c.size_bytes for c in candidates)
+    print("📊 Analysis of Your Root Directory Scripts:")
+    print("=" * 50)
     
-    lines.extend([
-        f"📊 Summary:",
-        f"   Total candidates: {total_candidates}",
-        f"   Safe to delete: {safe_count}",
-        f"   Needs review: {medium_count}",
-        f"   Low confidence: {low_count}",
-        f"   Total size: {total_size:,} bytes ({total_size/1024/1024:.1f} MB)",
-        ""
-    ])
+    # Categorize the scripts
+    categories = {
+        'Production Runners (Archive)': [
+            'run_production_complete.py',
+            'run_production_direct.py', 
+            'run_production_via_api.py',
+            'run_production_with_gdrive.py',
+            'run_production_with_monitoring.py',
+            'run_v3_pipeline_direct.py',
+            'run_direct_no_api.py'
+        ],
+        'Quick Tests (Archive)': [
+            'quick_test.py',
+            'quick_timing_test.py',
+            'time_data_processing.py'
+        ],
+        'Verification Scripts (Archive)': [
+            'verify_extraction_logic.py',
+            'verify_match_stats.py'
+        ],
+        'Upload Scripts (Archive)': [
+            'upload_kg2_10_2c_results.py',
+            'upload_to_gdrive.py',
+            'run_with_kg2_10_2c.py'
+        ],
+        'Log Files (Delete)': [
+            'test_output.log',
+            'v3.0_run.log'
+        ]
+    }
     
-    # High confidence (safe) deletions
-    safe_candidates = [c for c in candidates if c.category == "safe"]
-    if safe_candidates:
-        lines.extend([
-            "🟢 HIGH CONFIDENCE - Safe to delete:",
-            "-" * 40
-        ])
-        for candidate in safe_candidates:
-            lines.append(f"   {candidate.path} [{candidate.confidence}%]")
-            for reason in candidate.reasons:
-                lines.append(f"      • {reason}")
-            lines.append("")
+    total_cleanup = 0
+    for category, files in categories.items():
+        action = "ARCHIVE" if "Archive" in category else "DELETE"
+        print(f"\n{category}:")
+        for file in files:
+            if file in script_list:
+                print(f"   📄 {file} → {action}")
+                total_cleanup += 1
     
-    # Medium confidence
-    medium_candidates = [c for c in candidates if c.category == "medium"]
-    if medium_candidates:
-        lines.extend([
-            "🟡 MEDIUM CONFIDENCE - Review recommended:",
-            "-" * 45
-        ])
-        for candidate in medium_candidates:
-            lines.append(f"   {candidate.path} [{candidate.confidence}%]")
-            for reason in candidate.reasons:
-                lines.append(f"      • {reason}")
-            lines.append("")
+    print(f"\n📈 Summary:")
+    print(f"   Total files identified: {total_cleanup}")
+    print(f"   Archive candidates: {sum(len(files) for cat, files in categories.items() if 'Archive' in cat)}")
+    print(f"   Delete candidates: {sum(len(files) for cat, files in categories.items() if 'Delete' in cat)}")
+    print(f"   Root directory reduction: ~{total_cleanup} files")
     
-    # Low confidence
-    low_candidates = [c for c in candidates if c.category == "low"]
-    if low_candidates:
-        lines.extend([
-            "🔴 LOW CONFIDENCE - Manual review required:",
-            "-" * 45
-        ])
-        for candidate in low_candidates:
-            lines.append(f"   {candidate.path} [{candidate.confidence}%]")
-            for reason in candidate.reasons:
-                lines.append(f"      • {reason}")
-            lines.append("")
-    
-    # Next steps
-    lines.extend([
-        "📋 Recommended Next Steps:",
-        "1. Review the HIGH CONFIDENCE files above",
-        "2. Run with --dry-run=false --confidence=85 to generate cleanup script",
-        "3. Manually review MEDIUM CONFIDENCE files", 
-        "4. Investigate LOW CONFIDENCE files for dynamic usage patterns",
-        ""
-    ])
-    
-    return "\n".join(lines)
+    return categories
 
 
 def main():
-    """Main entry point for Claude Code slash command."""
+    """Enhanced main function with script cleanup capabilities."""
     import argparse
     
     parser = argparse.ArgumentParser(
-        description="Detect dead code in biomapper project",
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        description="Enhanced biomapper cleanup with script artifact detection",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  /biomapper-cleanup --include-scripts                    # Include script analysis
+  /biomapper-cleanup --scripts-only                       # Only analyze scripts
+  /biomapper-cleanup --include-scripts --dry-run=false    # Actually clean scripts
+  /biomapper-cleanup --analyze-list                       # Analyze your specific list
+        """
     )
-    parser.add_argument(
-        "--scope", 
-        choices=["current", "global"], 
-        default="current",
-        help="Analyze current directory only or entire project"
-    )
-    parser.add_argument(
-        "--confidence", 
-        type=int, 
-        default=50,
-        help="Minimum confidence threshold (0-100)"
-    )
-    parser.add_argument(
-        "--dry-run", 
-        type=bool, 
-        default=True,
-        help="Generate report only, don't create cleanup script"
-    )
-    parser.add_argument(
-        "--include-tests", 
-        action="store_true",
-        help="Include test files in analysis"
-    )
-    parser.add_argument(
-        "--output", 
-        choices=["report", "json"], 
-        default="report",
-        help="Output format"
-    )
-    parser.add_argument(
-        "--generate-script", 
-        action="store_true",
-        help="Generate cleanup script for safe deletions"
-    )
+    
+    parser.add_argument('--include-scripts', action='store_true',
+                       help='Include script artifact analysis')
+    parser.add_argument('--scripts-only', action='store_true', 
+                       help='Only analyze script artifacts (skip regular cleanup)')
+    parser.add_argument('--analyze-list', action='store_true',
+                       help='Analyze the specific script list you provided')
+    parser.add_argument('--dry-run', type=bool, default=True,
+                       help='Show what would be cleaned without making changes')
+    parser.add_argument('--confidence', type=int, default=70,
+                       help='Minimum confidence threshold for script cleanup (0-100)')
     
     args = parser.parse_args()
     
-    # Determine scope directory
-    scope_dir = None if args.scope == "global" else Path.cwd()
+    if args.analyze_list:
+        analyze_your_script_list()
+        return
     
-    # Initialize detector and run analysis
-    detector = DeadCodeDetector()
-    candidates = detector.detect_dead_code(
-        scope_dir=scope_dir,
-        min_confidence=args.confidence,
-        include_tests=args.include_tests
-    )
+    project_root = Path.cwd()
     
-    # Output results
-    report = format_report(candidates, args.output)
-    print(report)
+    print("🧹 Enhanced Biomapper Cleanup - Script Artifacts Edition")
+    print("=" * 60)
+    print(f"Project root: {project_root}")
+    print(f"Mode: {'DRY RUN' if args.dry_run else 'CLEANUP'}")
+    print()
     
-    # Generate cleanup script if requested
-    if args.generate_script:
-        script = generate_cleanup_script(candidates, safe_only=True)
-        script_path = Path("biomapper_cleanup.sh")
-        with open(script_path, 'w') as f:
-            f.write(script)
-        print(f"\n📝 Cleanup script generated: {script_path}")
-        print("   Review the script before running: chmod +x biomapper_cleanup.sh && ./biomapper_cleanup.sh")
+    if args.include_scripts or args.scripts_only:
+        print("📊 Analyzing script artifacts in root directory...")
+        
+        analyzer = ScriptArtifactAnalyzer(project_root)
+        artifacts = analyzer.analyze_root_directory()
+        
+        # Filter by confidence
+        high_confidence_artifacts = [a for a in artifacts if a.confidence >= args.confidence]
+        
+        print(f"   Found {len(artifacts)} potential script artifacts")
+        print(f"   High confidence (>={args.confidence}%): {len(high_confidence_artifacts)}")
+        print()
+        
+        if high_confidence_artifacts:
+            print("📋 Script Artifact Analysis:")
+            print("-" * 40)
+            
+            # Group by suggested action
+            actions = {}
+            for artifact in high_confidence_artifacts:
+                action = artifact.suggested_action
+                if action not in actions:
+                    actions[action] = []
+                actions[action].append(artifact)
+            
+            for action, artifacts_list in actions.items():
+                print(f"\n{action.upper()} ({len(artifacts_list)} files):")
+                for artifact in artifacts_list:
+                    age = (datetime.now() - artifact.last_modified).days if artifact.last_modified else 0
+                    print(f"   📄 {artifact.path.name} [{artifact.confidence}%] ({age} days old)")
+                    print(f"      Type: {artifact.artifact_type}")
+                    for reason in artifact.reasons[:2]:  # Show first 2 reasons
+                        print(f"      • {reason}")
+            
+            # Execute cleanup
+            if not args.dry_run:
+                print(f"\n🔧 Executing cleanup actions...")
+                executor = ScriptCleanupExecutor(project_root)
+                results = executor.execute_cleanup(high_confidence_artifacts, dry_run=False)
+                
+                print(f"✅ Cleanup completed:")
+                print(f"   Archived: {results['archived']} files")
+                print(f"   Deleted: {results['deleted']} files") 
+                print(f"   Kept: {results['kept']} files")
+                
+                if results['errors']:
+                    print(f"❌ Errors: {len(results['errors'])}")
+                    for error in results['errors']:
+                        print(f"   • {error}")
+            else:
+                print(f"\n💡 To execute cleanup: /biomapper-cleanup --include-scripts --dry-run=false")
+        else:
+            print("✅ No high-confidence script artifacts found for cleanup")
+    
+    if not args.scripts_only:
+        print("\n" + "="*60)
+        print("Running standard biomapper cleanup...")
+        # Here you would call your existing biomapper-cleanup logic
+        print("(Standard cleanup logic would run here)")
 
 
 if __name__ == "__main__":

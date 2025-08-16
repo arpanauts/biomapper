@@ -1,0 +1,967 @@
+#!/usr/bin/env python3
+"""
+Biomapper Markdown Cleanup Command
+Custom Claude Code slash command for cleaning up outdated/misaligned markdown files.
+
+Usage: /markdown-cleanup [options]
+"""
+
+import os
+import re
+import ast
+import yaml
+import json
+from pathlib import Path
+from typing import Dict, List, Set, Tuple, Optional
+from dataclasses import dataclass
+from datetime import datetime
+import fnmatch
+import hashlib
+
+
+@dataclass
+class MarkdownIssue:
+    """Represents an issue found in markdown documentation."""
+    file_path: Path
+    issue_type: str
+    severity: str  # 'critical', 'high', 'medium', 'low'
+    description: str
+    line_number: Optional[int] = None
+    suggested_fix: Optional[str] = None
+    confidence: int = 0  # 0-100
+
+
+class BiomapperArchitectureAnalyzer:
+    """Analyzes current biomapper architecture to identify outdated references."""
+    
+    def __init__(self, project_root: Path):
+        self.project_root = project_root
+        self.current_structure = self._analyze_current_structure()
+        self.deprecated_paths = self._identify_deprecated_paths()
+        self.valid_actions = self._get_valid_actions()
+        self.config_files = self._find_config_files()
+        
+    def _analyze_current_structure(self) -> Dict[str, List[str]]:
+        """Analyze current project structure."""
+        structure = {
+            'core_packages': [],
+            'api_endpoints': [],
+            'cli_commands': [],
+            'action_files': [],
+            'test_files': [],
+            'config_files': []
+        }
+        
+        # Find core packages
+        for item in ['biomapper', 'biomapper_core', 'biomapper-api', 'biomapper_client']:
+            if (self.project_root / item).exists():
+                structure['core_packages'].append(item)
+        
+        # Find action files
+        action_dirs = [
+            self.project_root / 'biomapper' / 'core' / 'strategy_actions',
+            self.project_root / 'biomapper_core' / 'actions'
+        ]
+        
+        for action_dir in action_dirs:
+            if action_dir.exists():
+                for py_file in action_dir.rglob('*.py'):
+                    if py_file.name != '__init__.py':
+                        structure['action_files'].append(str(py_file.relative_to(self.project_root)))
+        
+        # Find test files
+        test_dirs = [self.project_root / 'tests']
+        for test_dir in test_dirs:
+            if test_dir.exists():
+                for test_file in test_dir.rglob('test_*.py'):
+                    structure['test_files'].append(str(test_file.relative_to(self.project_root)))
+        
+        return structure
+    
+    def _identify_deprecated_paths(self) -> Set[str]:
+        """Identify paths that are deprecated after restructure."""
+        deprecated = set()
+        
+        # Known deprecated patterns from restructure
+        deprecated_patterns = [
+            'biomapper/core/strategy_actions/deprecated_*',
+            'archive/*',
+            'scripts/debug_*',
+            'scripts/investigation_*',
+            'biomapper/mvp0_pipeline/*',
+            'biomapper/embedder/*',  # If unused
+            'biomapper-api/biomapper_mock/*'
+        ]
+        
+        for pattern in deprecated_patterns:
+            for path in self.project_root.rglob(pattern):
+                if path.is_file():
+                    deprecated.add(str(path.relative_to(self.project_root)))
+        
+        return deprecated
+    
+    def _get_valid_actions(self) -> Set[str]:
+        """Get list of valid action types from registry."""
+        valid_actions = set()
+        
+        try:
+            # Try to import and get current actions
+            import sys
+            sys.path.insert(0, str(self.project_root))
+            
+            try:
+                from biomapper.core.strategy_actions.registry import ACTION_REGISTRY
+                valid_actions.update(ACTION_REGISTRY.keys())
+            except ImportError:
+                pass
+            
+            try:
+                from biomapper_core.actions.registry import ACTION_REGISTRY
+                valid_actions.update(ACTION_REGISTRY.keys())
+            except ImportError:
+                pass
+                
+        except Exception:
+            # Fallback: scan for @register_action decorators
+            for py_file in self.project_root.rglob('*.py'):
+                try:
+                    with open(py_file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    matches = re.findall(r'@register_action\(["\']([^"\']+)["\']\)', content)
+                    valid_actions.update(matches)
+                except Exception:
+                    continue
+        
+        return valid_actions
+    
+    def _find_config_files(self) -> List[Path]:
+        """Find configuration files for cross-reference."""
+        config_files = []
+        
+        config_patterns = [
+            'pyproject.toml',
+            'setup.py',
+            'configs/**/*.yaml',
+            'configs/**/*.yml',
+            '.claude/architecture.yaml'
+        ]
+        
+        for pattern in config_patterns:
+            for config_file in self.project_root.rglob(pattern):
+                if config_file.is_file():
+                    config_files.append(config_file)
+        
+        return config_files
+
+
+class MarkdownAnalyzer:
+    """Analyzes markdown files for issues and outdated content."""
+    
+    def __init__(self, architecture_analyzer: BiomapperArchitectureAnalyzer):
+        self.arch = architecture_analyzer
+        self.issues: List[MarkdownIssue] = []
+        
+    def analyze_markdown_file(self, md_file: Path) -> List[MarkdownIssue]:
+        """Analyze a single markdown file for issues."""
+        issues = []
+        
+        try:
+            with open(md_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                lines = content.splitlines()
+            
+            # Check for various issue types
+            issues.extend(self._check_deprecated_paths(md_file, content, lines))
+            issues.extend(self._check_invalid_action_references(md_file, content, lines))
+            issues.extend(self._check_outdated_code_blocks(md_file, content, lines))
+            issues.extend(self._check_broken_links(md_file, content, lines))
+            issues.extend(self._check_debugging_content(md_file, content, lines))
+            issues.extend(self._check_outdated_installation_instructions(md_file, content, lines))
+            issues.extend(self._check_inconsistent_terminology(md_file, content, lines))
+            
+        except Exception as e:
+            issues.append(MarkdownIssue(
+                file_path=md_file,
+                issue_type='read_error',
+                severity='high',
+                description=f'Could not read file: {e}',
+                confidence=100
+            ))
+        
+        return issues
+    
+    def _check_deprecated_paths(self, md_file: Path, content: str, lines: List[str]) -> List[MarkdownIssue]:
+        """Check for references to deprecated file paths."""
+        issues = []
+        
+        deprecated_path_patterns = [
+            # Old structure paths
+            r'biomapper/core/strategy_actions/(?!registry\.py|typed_base\.py)',
+            r'biomapper-api/biomapper_mock',
+            r'biomapper/mvp0_pipeline',
+            r'biomapper/embedder',
+            r'archive/',
+            r'scripts/debug_',
+            r'scripts/investigation_',
+            
+            # Specific deprecated files
+            r'generate_visualizations\.py(?!_v2)',  # Old version
+            r'parse_composite_identifiers\.py(?!_v2)',  # Old version
+            r'sync_to_google_drive\.py(?!_v2)',  # Old version
+        ]
+        
+        for i, line in enumerate(lines):
+            for pattern in deprecated_path_patterns:
+                if re.search(pattern, line):
+                    # Check if this is actually a deprecated path
+                    potential_path = self._extract_path_from_line(line)
+                    if potential_path and any(dep in potential_path for dep in self.arch.deprecated_paths):
+                        issues.append(MarkdownIssue(
+                            file_path=md_file,
+                            issue_type='deprecated_path',
+                            severity='high',
+                            description=f'References deprecated path: {potential_path}',
+                            line_number=i + 1,
+                            suggested_fix=self._suggest_path_replacement(potential_path),
+                            confidence=85
+                        ))
+        
+        return issues
+    
+    def _check_invalid_action_references(self, md_file: Path, content: str, lines: List[str]) -> List[MarkdownIssue]:
+        """Check for references to invalid or non-existent actions."""
+        issues = []
+        
+        # Pattern to find action type references
+        action_patterns = [
+            r'type:\s*["\']([^"\']+)["\']',  # YAML style
+            r'action_type:\s*["\']([^"\']+)["\']',  # Alternative YAML
+            r'ACTION_REGISTRY\[["\']([^"\']+)["\']\]',  # Registry access
+            r'@register_action\(["\']([^"\']+)["\']\)',  # Registration
+        ]
+        
+        for i, line in enumerate(lines):
+            for pattern in action_patterns:
+                matches = re.finditer(pattern, line)
+                for match in matches:
+                    action_name = match.group(1)
+                    if action_name not in self.arch.valid_actions:
+                        issues.append(MarkdownIssue(
+                            file_path=md_file,
+                            issue_type='invalid_action',
+                            severity='medium',
+                            description=f'References unknown action: {action_name}',
+                            line_number=i + 1,
+                            suggested_fix=self._suggest_similar_action(action_name),
+                            confidence=70
+                        ))
+        
+        return issues
+    
+    def _check_outdated_code_blocks(self, md_file: Path, content: str, lines: List[str]) -> List[MarkdownIssue]:
+        """Check for outdated code examples in markdown."""
+        issues = []
+        
+        # Find code blocks
+        code_blocks = self._extract_code_blocks(content)
+        
+        for block in code_blocks:
+            start_line = block['start_line']
+            code = block['code']
+            language = block.get('language', '')
+            
+            if language.lower() in ['python', 'py']:
+                # Check Python code blocks
+                issues.extend(self._analyze_python_code_block(md_file, code, start_line))
+            elif language.lower() in ['yaml', 'yml']:
+                # Check YAML code blocks
+                issues.extend(self._analyze_yaml_code_block(md_file, code, start_line))
+            elif language.lower() in ['bash', 'sh', 'shell']:
+                # Check shell code blocks
+                issues.extend(self._analyze_shell_code_block(md_file, code, start_line))
+        
+        return issues
+    
+    def _check_debugging_content(self, md_file: Path, content: str, lines: List[str]) -> List[MarkdownIssue]:
+        """Check for debugging or temporary content that should be removed."""
+        issues = []
+        
+        debugging_indicators = [
+            r'# DEBUG:',
+            r'# TODO: REMOVE',
+            r'# FIXME: TEMPORARY',
+            r'print\s*\(\s*["\']debug',
+            r'console\.log\s*\(',
+            r'import pdb',
+            r'pdb\.set_trace\(\)',
+            r'debugger;',
+            r'# HACK:',
+            r'# XXX:',
+            r'# TEMP:',
+        ]
+        
+        for i, line in enumerate(lines):
+            for pattern in debugging_indicators:
+                if re.search(pattern, line, re.IGNORECASE):
+                    issues.append(MarkdownIssue(
+                        file_path=md_file,
+                        issue_type='debugging_content',
+                        severity='medium',
+                        description='Contains debugging or temporary content',
+                        line_number=i + 1,
+                        suggested_fix='Remove debugging content',
+                        confidence=80
+                    ))
+        
+        return issues
+    
+    def _check_broken_links(self, md_file: Path, content: str, lines: List[str]) -> List[MarkdownIssue]:
+        """Check for broken internal links."""
+        issues = []
+        
+        # Find markdown links
+        link_pattern = r'\[([^\]]+)\]\(([^)]+)\)'
+        
+        for i, line in enumerate(lines):
+            matches = re.finditer(link_pattern, line)
+            for match in matches:
+                link_text = match.group(1)
+                link_url = match.group(2)
+                
+                # Check internal file links
+                if not link_url.startswith(('http://', 'https://', 'mailto:')):
+                    # Resolve relative path
+                    if link_url.startswith('/'):
+                        target_path = self.arch.project_root / link_url[1:]
+                    else:
+                        target_path = md_file.parent / link_url
+                    
+                    # Remove fragment identifier
+                    if '#' in link_url:
+                        target_path = Path(str(target_path).split('#')[0])
+                    
+                    if not target_path.exists():
+                        issues.append(MarkdownIssue(
+                            file_path=md_file,
+                            issue_type='broken_link',
+                            severity='medium',
+                            description=f'Broken link to: {link_url}',
+                            line_number=i + 1,
+                            suggested_fix=f'Fix or remove link to {link_url}',
+                            confidence=90
+                        ))
+        
+        return issues
+    
+    def _check_outdated_installation_instructions(self, md_file: Path, content: str, lines: List[str]) -> List[MarkdownIssue]:
+        """Check for outdated installation or setup instructions."""
+        issues = []
+        
+        # Patterns that might be outdated after restructure
+        outdated_patterns = [
+            r'pip install biomapper-api',  # Old package name
+            r'pip install biomapper_client',  # Old package name  
+            r'from biomapper\.core\.strategy_actions import \*',  # Broad import
+            r'cd biomapper-api',  # Old directory
+            r'poetry install.*biomapper-api',  # Old package reference
+        ]
+        
+        for i, line in enumerate(lines):
+            for pattern in outdated_patterns:
+                if re.search(pattern, line):
+                    issues.append(MarkdownIssue(
+                        file_path=md_file,
+                        issue_type='outdated_installation',
+                        severity='high',
+                        description='Contains outdated installation instructions',
+                        line_number=i + 1,
+                        suggested_fix=self._suggest_updated_installation(line),
+                        confidence=75
+                    ))
+        
+        return issues
+    
+    def _check_inconsistent_terminology(self, md_file: Path, content: str, lines: List[str]) -> List[MarkdownIssue]:
+        """Check for inconsistent terminology after restructure."""
+        issues = []
+        
+        # Terminology mappings (old -> new)
+        terminology_updates = {
+            'strategy_actions': 'actions (in biomapper_core)',
+            'MinimalStrategyService': 'EnhancedStrategyService (recommended)',
+            'biomapper-api': 'biomapper/api',
+            'biomapper_client': 'biomapper/client',
+        }
+        
+        for i, line in enumerate(lines):
+            for old_term, new_term in terminology_updates.items():
+                if old_term in line and 'deprecated' not in line.lower():
+                    issues.append(MarkdownIssue(
+                        file_path=md_file,
+                        issue_type='inconsistent_terminology',
+                        severity='low',
+                        description=f'Uses old terminology: {old_term}',
+                        line_number=i + 1,
+                        suggested_fix=f'Consider updating to: {new_term}',
+                        confidence=60
+                    ))
+        
+        return issues
+    
+    def _extract_code_blocks(self, content: str) -> List[Dict]:
+        """Extract code blocks from markdown content."""
+        code_blocks = []
+        lines = content.splitlines()
+        in_code_block = False
+        current_block = None
+        
+        for i, line in enumerate(lines):
+            if line.strip().startswith('```'):
+                if not in_code_block:
+                    # Start of code block
+                    language = line.strip()[3:].strip()
+                    current_block = {
+                        'start_line': i + 1,
+                        'language': language,
+                        'code': []
+                    }
+                    in_code_block = True
+                else:
+                    # End of code block
+                    if current_block:
+                        current_block['code'] = '\n'.join(current_block['code'])
+                        code_blocks.append(current_block)
+                    in_code_block = False
+                    current_block = None
+            elif in_code_block and current_block:
+                current_block['code'].append(line)
+        
+        return code_blocks
+    
+    def _analyze_python_code_block(self, md_file: Path, code: str, start_line: int) -> List[MarkdownIssue]:
+        """Analyze Python code blocks for issues."""
+        issues = []
+        
+        # Check for deprecated imports
+        deprecated_imports = [
+            'from biomapper.core.strategy_actions import',
+            'import biomapper.core.strategy_actions',
+            'from biomapper_client import',
+        ]
+        
+        for pattern in deprecated_imports:
+            if pattern in code:
+                issues.append(MarkdownIssue(
+                    file_path=md_file,
+                    issue_type='outdated_code',
+                    severity='medium',
+                    description=f'Python code uses deprecated import: {pattern}',
+                    line_number=start_line,
+                    suggested_fix='Update to use new import paths',
+                    confidence=85
+                ))
+        
+        # Try to parse for syntax errors
+        try:
+            ast.parse(code)
+        except SyntaxError as e:
+            issues.append(MarkdownIssue(
+                file_path=md_file,
+                issue_type='syntax_error',
+                severity='high',
+                description=f'Python code has syntax error: {e}',
+                line_number=start_line + (e.lineno or 1) - 1,
+                suggested_fix='Fix Python syntax',
+                confidence=100
+            ))
+        
+        return issues
+    
+    def _analyze_yaml_code_block(self, md_file: Path, code: str, start_line: int) -> List[MarkdownIssue]:
+        """Analyze YAML code blocks for issues."""
+        issues = []
+        
+        try:
+            yaml_data = yaml.safe_load(code)
+            # Check for invalid action types in YAML
+            self._check_yaml_action_types(yaml_data, md_file, start_line, issues)
+        except yaml.YAMLError as e:
+            issues.append(MarkdownIssue(
+                file_path=md_file,
+                issue_type='yaml_syntax_error',
+                severity='high',
+                description=f'YAML syntax error: {e}',
+                line_number=start_line,
+                suggested_fix='Fix YAML syntax',
+                confidence=100
+            ))
+        
+        return issues
+    
+    def _analyze_shell_code_block(self, md_file: Path, code: str, start_line: int) -> List[MarkdownIssue]:
+        """Analyze shell code blocks for issues."""
+        issues = []
+        
+        # Check for references to old directory structure
+        old_commands = [
+            'cd biomapper-api',
+            'cd biomapper_client',
+            'python scripts/debug_',
+            'python scripts/investigation_',
+        ]
+        
+        for cmd in old_commands:
+            if cmd in code:
+                issues.append(MarkdownIssue(
+                    file_path=md_file,
+                    issue_type='outdated_shell_command',
+                    severity='medium',
+                    description=f'Shell code references old structure: {cmd}',
+                    line_number=start_line,
+                    suggested_fix='Update to use new directory structure',
+                    confidence=80
+                ))
+        
+        return issues
+    
+    def _extract_path_from_line(self, line: str) -> Optional[str]:
+        """Extract file path from a line of text."""
+        # Common patterns for paths in markdown
+        path_patterns = [
+            r'`([^`]+\.(py|yaml|yml|json|toml))`',
+            r'"([^"]+\.(py|yaml|yml|json|toml))"',
+            r"'([^']+\.(py|yaml|yml|json|toml))'",
+            r'([a-zA-Z_][a-zA-Z0-9_./]*\.(py|yaml|yml|json|toml))',
+        ]
+        
+        for pattern in path_patterns:
+            match = re.search(pattern, line)
+            if match:
+                return match.group(1)
+        
+        return None
+    
+    def _suggest_path_replacement(self, deprecated_path: str) -> str:
+        """Suggest replacement for deprecated path."""
+        replacements = {
+            'biomapper-api': 'biomapper/api',
+            'biomapper_client': 'biomapper/client',
+            'strategy_actions': 'biomapper_core/actions',
+            'generate_visualizations.py': 'generate_visualizations_v2.py',
+            'parse_composite_identifiers.py': 'parse_composite_identifiers_v2.py',
+            'sync_to_google_drive.py': 'sync_to_google_drive_v2.py',
+        }
+        
+        for old, new in replacements.items():
+            if old in deprecated_path:
+                return deprecated_path.replace(old, new)
+        
+        return f'Update path: {deprecated_path}'
+    
+    def _suggest_similar_action(self, invalid_action: str) -> str:
+        """Suggest similar valid action for invalid action reference."""
+        # Simple similarity matching
+        valid_actions = list(self.arch.valid_actions)
+        
+        # Look for exact substring matches
+        candidates = [action for action in valid_actions if invalid_action.upper() in action]
+        
+        if candidates:
+            return f'Did you mean: {candidates[0]}?'
+        
+        # Look for similar patterns
+        candidates = [action for action in valid_actions if 
+                     any(word in action for word in invalid_action.split('_'))]
+        
+        if candidates:
+            return f'Similar action available: {candidates[0]}'
+        
+        return 'Check ACTION_REGISTRY for available actions'
+    
+    def _suggest_updated_installation(self, line: str) -> str:
+        """Suggest updated installation instruction."""
+        if 'pip install biomapper-api' in line:
+            return line.replace('pip install biomapper-api', 'pip install biomapper[api]')
+        elif 'pip install biomapper_client' in line:
+            return line.replace('pip install biomapper_client', 'pip install biomapper[client]')
+        elif 'from biomapper.core.strategy_actions import *' in line:
+            return 'from biomapper_core.actions import ACTION_REGISTRY'
+        
+        return 'Update installation instructions for new structure'
+    
+    def _check_yaml_action_types(self, yaml_data: any, md_file: Path, start_line: int, issues: List[MarkdownIssue]):
+        """Recursively check YAML data for action type references."""
+        if isinstance(yaml_data, dict):
+            for key, value in yaml_data.items():
+                if key == 'type' and isinstance(value, str):
+                    if value not in self.arch.valid_actions:
+                        issues.append(MarkdownIssue(
+                            file_path=md_file,
+                            issue_type='invalid_yaml_action',
+                            severity='medium',
+                            description=f'YAML references unknown action: {value}',
+                            line_number=start_line,
+                            suggested_fix=self._suggest_similar_action(value),
+                            confidence=75
+                        ))
+                else:
+                    self._check_yaml_action_types(value, md_file, start_line, issues)
+        elif isinstance(yaml_data, list):
+            for item in yaml_data:
+                self._check_yaml_action_types(item, md_file, start_line, issues)
+
+
+class MarkdownCleaner:
+    """Cleans up markdown files based on identified issues."""
+    
+    def __init__(self, architecture_analyzer: BiomapperArchitectureAnalyzer):
+        self.arch = architecture_analyzer
+        
+    def clean_markdown_file(self, md_file: Path, issues: List[MarkdownIssue], 
+                          dry_run: bool = True) -> Dict[str, any]:
+        """Clean a markdown file based on identified issues."""
+        result = {
+            'file': str(md_file),
+            'issues_found': len(issues),
+            'issues_fixed': 0,
+            'high_confidence_fixes': 0,
+            'manual_review_needed': 0,
+            'changes_made': []
+        }
+        
+        if not issues:
+            return result
+        
+        try:
+            with open(md_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                lines = content.splitlines()
+            
+            # Sort issues by line number (descending) to avoid line number shifts
+            issues.sort(key=lambda x: x.line_number or 0, reverse=True)
+            
+            for issue in issues:
+                if issue.confidence >= 80 and issue.suggested_fix:
+                    # High confidence fixes
+                    if not dry_run:
+                        lines = self._apply_fix(lines, issue)
+                    result['issues_fixed'] += 1
+                    result['high_confidence_fixes'] += 1
+                    result['changes_made'].append(f"Fixed {issue.issue_type}: {issue.description}")
+                elif issue.confidence >= 60:
+                    # Medium confidence - flag for manual review
+                    result['manual_review_needed'] += 1
+                    result['changes_made'].append(f"Manual review: {issue.issue_type}: {issue.description}")
+            
+            # Write back the file if not dry run and changes made
+            if not dry_run and result['issues_fixed'] > 0:
+                new_content = '\n'.join(lines)
+                
+                # Add cleanup metadata
+                cleanup_metadata = self._generate_cleanup_metadata(md_file, result)
+                if cleanup_metadata:
+                    new_content += '\n\n' + cleanup_metadata
+                
+                with open(md_file, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+                    
+        except Exception as e:
+            result['error'] = str(e)
+        
+        return result
+    
+    def _apply_fix(self, lines: List[str], issue: MarkdownIssue) -> List[str]:
+        """Apply a specific fix to the content lines."""
+        if issue.line_number is None:
+            return lines
+        
+        line_idx = issue.line_number - 1
+        if 0 <= line_idx < len(lines):
+            old_line = lines[line_idx]
+            
+            if issue.issue_type == 'deprecated_path':
+                # Apply path replacement
+                if issue.suggested_fix and 'Update path:' not in issue.suggested_fix:
+                    lines[line_idx] = issue.suggested_fix
+                else:
+                    # More sophisticated path replacement logic
+                    lines[line_idx] = self._replace_deprecated_paths(old_line)
+            
+            elif issue.issue_type == 'debugging_content':
+                # Remove or comment out debugging lines
+                if any(keyword in old_line.lower() for keyword in ['debug:', 'todo: remove', 'fixme: temporary']):
+                    lines[line_idx] = f'<!-- REMOVED: {old_line.strip()} -->'
+            
+            elif issue.issue_type == 'outdated_installation':
+                # Apply installation update
+                if issue.suggested_fix:
+                    lines[line_idx] = issue.suggested_fix
+        
+        return lines
+    
+    def _replace_deprecated_paths(self, line: str) -> str:
+        """Replace deprecated paths in a line."""
+        replacements = {
+            'biomapper-api': 'biomapper/api',
+            'biomapper_client': 'biomapper/client',
+            'biomapper/core/strategy_actions': 'biomapper_core/actions',
+            'generate_visualizations.py': 'generate_visualizations_v2.py',
+            'parse_composite_identifiers.py': 'parse_composite_identifiers_v2.py',
+            'sync_to_google_drive.py': 'sync_to_google_drive_v2.py',
+        }
+        
+        updated_line = line
+        for old, new in replacements.items():
+            updated_line = updated_line.replace(old, new)
+        
+        return updated_line
+    
+    def _generate_cleanup_metadata(self, md_file: Path, result: Dict) -> str:
+        """Generate cleanup metadata to append to cleaned files."""
+        if result['issues_fixed'] == 0:
+            return ""
+        
+        timestamp = datetime.now().strftime('%Y-%m-%d')
+        
+        metadata = f"""---
+## Markdown Cleanup
+
+*Cleaned on: {timestamp}*
+
+This document was automatically cleaned by the biomapper markdown-cleanup tool:
+
+- **Issues found**: {result['issues_found']}
+- **Issues fixed**: {result['issues_fixed']} (high confidence)
+- **Manual review needed**: {result['manual_review_needed']}
+
+### Changes Made:
+"""
+        
+        for change in result['changes_made'][:10]:  # Limit to first 10
+            metadata += f"- {change}\n"
+        
+        if len(result['changes_made']) > 10:
+            metadata += f"- ... and {len(result['changes_made']) - 10} more changes\n"
+        
+        metadata += "\n*Generated by /markdown-cleanup command*"
+        
+        return metadata
+
+
+def main():
+    """Main entry point for the markdown cleanup command."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description="Clean up outdated and misaligned markdown files in biomapper project",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  /markdown-cleanup                    # Scan current directory
+  /markdown-cleanup --scope global    # Scan entire project  
+  /markdown-cleanup --dry-run=false   # Actually clean files
+  /markdown-cleanup --confidence=90   # Only high confidence fixes
+        """
+    )
+    
+    parser.add_argument(
+        '--scope',
+        choices=['current', 'global'],
+        default='current',
+        help='Scope of markdown cleanup (current dir or entire project)'
+    )
+    
+    parser.add_argument(
+        '--dry-run',
+        type=bool,
+        default=True,
+        help='Show what would be cleaned without making changes'
+    )
+    
+    parser.add_argument(
+        '--confidence',
+        type=int,
+        default=80,
+        help='Minimum confidence threshold for automatic fixes (0-100)'
+    )
+    
+    parser.add_argument(
+        '--include-low-severity',
+        action='store_true',
+        help='Include low severity issues in report'
+    )
+    
+    parser.add_argument(
+        '--output',
+        choices=['report', 'json', 'summary'],
+        default='report',
+        help='Output format'
+    )
+    
+    args = parser.parse_args()
+    
+    # Determine project root and scan directory
+    current_dir = Path.cwd()
+    
+    # Find project root (look for key indicators)
+    project_root = current_dir
+    for parent in [current_dir] + list(current_dir.parents):
+        if any((parent / indicator).exists() for indicator in 
+               ['pyproject.toml', 'biomapper', 'biomapper_core', '.git']):
+            project_root = parent
+            break
+    
+    scan_dir = current_dir if args.scope == 'current' else project_root
+    
+    print(f"🔍 Biomapper Markdown Cleanup")
+    print(f"   Project root: {project_root}")
+    print(f"   Scan directory: {scan_dir}")
+    print(f"   Mode: {'DRY RUN' if args.dry_run else 'CLEANUP'}")
+    print()
+    
+    # Initialize analyzers
+    print("📊 Analyzing current biomapper architecture...")
+    arch_analyzer = BiomapperArchitectureAnalyzer(project_root)
+    
+    print(f"   Core packages: {arch_analyzer.current_structure['core_packages']}")
+    print(f"   Valid actions: {len(arch_analyzer.valid_actions)}")
+    print(f"   Deprecated paths: {len(arch_analyzer.deprecated_paths)}")
+    print()
+    
+    markdown_analyzer = MarkdownAnalyzer(arch_analyzer)
+    markdown_cleaner = MarkdownCleaner(arch_analyzer)
+    
+    # Find all markdown files
+    print("📝 Finding markdown files...")
+    md_files = []
+    patterns = ['*.md', '*.rst', '*.txt']
+    
+    for pattern in patterns:
+        md_files.extend(scan_dir.rglob(pattern))
+    
+    # Filter out certain directories
+    exclude_patterns = ['.git/', 'venv/', '.venv/', 'node_modules/', '__pycache__/']
+    md_files = [f for f in md_files if not any(ex in str(f) for ex in exclude_patterns)]
+    
+    print(f"   Found {len(md_files)} markdown files")
+    print()
+    
+    # Analyze files
+    all_results = []
+    total_issues = 0
+    total_fixed = 0
+    
+    for md_file in md_files:
+        print(f"Analyzing: {md_file.relative_to(project_root)}")
+        
+        # Analyze issues
+        issues = markdown_analyzer.analyze_markdown_file(md_file)
+        
+        # Filter by severity
+        if not args.include_low_severity:
+            issues = [i for i in issues if i.severity != 'low']
+        
+        # Clean the file
+        result = markdown_cleaner.clean_markdown_file(
+            md_file, 
+            issues, 
+            dry_run=args.dry_run
+        )
+        
+        result['issues_detail'] = issues
+        all_results.append(result)
+        
+        total_issues += len(issues)
+        total_fixed += result['issues_fixed']
+        
+        if issues:
+            print(f"   Issues found: {len(issues)}")
+            if not args.dry_run and result['issues_fixed'] > 0:
+                print(f"   Issues fixed: {result['issues_fixed']}")
+    
+    print()
+    print("📊 Cleanup Summary:")
+    print(f"   Files analyzed: {len(md_files)}")
+    print(f"   Total issues: {total_issues}")
+    print(f"   Issues fixed: {total_fixed}")
+    print(f"   Files with issues: {len([r for r in all_results if r['issues_found'] > 0])}")
+    
+    # Generate detailed report
+    if args.output == 'report':
+        print("\n" + "="*60)
+        print("📋 DETAILED ISSUE REPORT")
+        print("="*60)
+        
+        for result in all_results:
+            if result['issues_found'] > 0:
+                print(f"\n📄 {result['file']}")
+                print(f"   Issues: {result['issues_found']}, Fixed: {result['issues_fixed']}")
+                
+                # Group issues by type
+                issues_by_type = {}
+                for issue in result['issues_detail']:
+                    if issue.issue_type not in issues_by_type:
+                        issues_by_type[issue.issue_type] = []
+                    issues_by_type[issue.issue_type].append(issue)
+                
+                for issue_type, issues in issues_by_type.items():
+                    print(f"   {issue_type.upper()}: {len(issues)} issues")
+                    for issue in issues[:3]:  # Show first 3
+                        severity_icon = {'critical': '🚨', 'high': '⚠️', 'medium': '🔸', 'low': '💡'}.get(issue.severity, '•')
+                        print(f"     {severity_icon} Line {issue.line_number or '?'}: {issue.description}")
+                    if len(issues) > 3:
+                        print(f"     ... and {len(issues) - 3} more")
+    
+    elif args.output == 'json':
+        # JSON output for programmatic use
+        import json
+        output_data = {
+            'summary': {
+                'files_analyzed': len(md_files),
+                'total_issues': total_issues,
+                'issues_fixed': total_fixed,
+                'dry_run': args.dry_run
+            },
+            'results': []
+        }
+        
+        for result in all_results:
+            file_result = {
+                'file': result['file'],
+                'issues_found': result['issues_found'],
+                'issues_fixed': result['issues_fixed'],
+                'issues': []
+            }
+            
+            for issue in result['issues_detail']:
+                file_result['issues'].append({
+                    'type': issue.issue_type,
+                    'severity': issue.severity,
+                    'description': issue.description,
+                    'line': issue.line_number,
+                    'confidence': issue.confidence,
+                    'suggested_fix': issue.suggested_fix
+                })
+            
+            output_data['results'].append(file_result)
+        
+        print(json.dumps(output_data, indent=2))
+    
+    # Final recommendations
+    if args.dry_run and total_issues > 0:
+        print(f"\n💡 To actually clean files, run: /markdown-cleanup --dry-run=false")
+    
+    if total_issues > 0:
+        high_confidence_issues = sum(len([i for i in r['issues_detail'] if i.confidence >= 80]) 
+                                   for r in all_results)
+        if high_confidence_issues > 0:
+            print(f"📌 {high_confidence_issues} issues can be automatically fixed with high confidence")
+        
+        manual_review_issues = sum(len([i for i in r['issues_detail'] if 60 <= i.confidence < 80]) 
+                                 for r in all_results)
+        if manual_review_issues > 0:
+            print(f"👀 {manual_review_issues} issues need manual review")
+
+
+if __name__ == "__main__":
+    main()
