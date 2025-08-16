@@ -10,6 +10,9 @@ import pytest
 import asyncio
 from unittest.mock import Mock, AsyncMock, patch
 
+# Mark entire module as requiring external services (Qdrant, PubChem RAG)
+pytestmark = pytest.mark.requires_external_services
+
 from biomapper.mvp0_pipeline.pipeline_orchestrator import (
     PipelineOrchestrator,
     create_orchestrator,

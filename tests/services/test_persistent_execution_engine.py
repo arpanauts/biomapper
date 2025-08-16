@@ -12,6 +12,9 @@ import uuid
 from unittest.mock import AsyncMock, patch
 from typing import Any, Dict
 
+# Mark entire module as requiring external services (async SQLAlchemy)
+pytestmark = pytest.mark.requires_external_services
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.database import Base

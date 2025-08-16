@@ -7,6 +7,9 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
+# Mark entire module as requiring external services
+pytestmark = pytest.mark.requires_external_services
+
 # Mock the config loading before importing
 with patch("os.makedirs"):
     from biomapper.embedder.storage.vector_store import FAISSVectorStore

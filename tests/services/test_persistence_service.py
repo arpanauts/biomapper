@@ -11,6 +11,9 @@ import pytest
 import uuid
 from datetime import datetime, timedelta
 
+# Mark entire module as requiring external services (async SQLAlchemy)
+pytestmark = pytest.mark.requires_external_services
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.database import Base

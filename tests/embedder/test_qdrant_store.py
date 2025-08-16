@@ -5,6 +5,9 @@ import numpy as np
 from unittest.mock import Mock, patch
 from typing import List, Dict, Any, Optional
 
+# Mark entire module as requiring Qdrant
+pytestmark = pytest.mark.requires_qdrant
+
 # Mock the config loading before importing
 with patch("os.makedirs"):
     from biomapper.embedder.storage.qdrant_store import QdrantVectorStore

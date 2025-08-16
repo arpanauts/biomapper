@@ -5,6 +5,9 @@ Unit tests for the Qdrant search component in the MVP0 pipeline.
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 
+# Mark entire module as requiring external services (Qdrant)
+pytestmark = pytest.mark.requires_external_services
+
 from biomapper.mvp0_pipeline.qdrant_search import search_qdrant_for_biochemical_name
 from biomapper.schemas.rag_schema import MappingOutput, MappingResultItem
 

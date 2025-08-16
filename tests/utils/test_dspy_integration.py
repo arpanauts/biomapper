@@ -6,6 +6,9 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+# Mark entire module as requiring external services (DSPy/RAG)
+pytestmark = pytest.mark.requires_external_services
+
 from biomapper.mapping.rag import RAGCompoundMapper
 from biomapper.schemas.store_schema import VectorStoreConfig
 from biomapper.schemas.rag_schema import LLMMapperResult, CompoundDocument
