@@ -1,3 +1,7 @@
+# ============================================
+# Python Standard Ignores
+# ============================================
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -27,66 +31,7 @@ share/python-wheels/
 MANIFEST
 .python-version
 
-# Raw data & outputs
-*.csv
-*.tsv
-*.xlsx
-*.xls
-*.json
-!configs/schemas/*.json
-#*.yaml
-*.yml
-*.jsonl
-*.parquet
-*.png
-*_report.txt
-*.sdf
-*.sqlite3
-*.xml
-*.bin
-vector_store/
-hmdb_metabolites.xml
-mapping_cache.db
-mapping_cache.db-*
-metamapper.db-*
-*.prof
-pytest_output.txt
-!mappings_list.csv
-
-# IDE specific files
-.idea/
-.vscode/
-*.swp
-*.swo
-gwr.sh
-agent.sh
-
-# Development and temporary files
-*_test.py
-*.py.new
-*_implementation.py
-#*_metadata.py
-*_metadata_readme.md
-biomapper/settings.py  # Using biomapper/config.py instead per MEMORY[7741c86c]
-biomapper-ui/roadmap/  # Development UI files
-dashboard/  # Development dashboard
-docs/prompts/  # Development prompt templates
-
-# Keep specific txt files
-!hmdb_metabolites_sample.txt
-!tests_protein_set.py.txt
-!docs/requirements.txt
-#!data/output/*.txt
-#!data/output/*.tsv
-
-# Ignore docs/build/ directory entirely
-docs/build/
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
+# Testing & Coverage
 htmlcov/
 .tox/
 .nox/
@@ -101,83 +46,15 @@ coverage.xml
 .pytest_cache/
 cover/
 
-# Translations
-*.mo
-*.pot
-
-# Ruff
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
 .ruff_cache/
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-notebooks/3_development/
-notebooks/2_use_cases/function_health_to_arivale.ipynb
-
-# IPython
-profile_default/
-ipython_config.py
-#*.ipynb
-
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
-
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
-.pdm.toml
-.pdm-python
-.pdm-build/
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
+# Virtual Environments
 .env
 .venv
 env/
@@ -185,99 +62,216 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+__pypackages__/
 
-# Spyder project settings
+# ============================================
+# IDE & Editor Files
+# ============================================
+
+# IDEs
+.idea/
+.vscode/
 .spyderproject
 .spyproject
-
-# Rope project settings
 .ropeproject
 
-# mkdocs documentation
+# Editor backups
+*.swp
+*.swo
+*~
+*.bak
+*.backup
+*.tmp
+
+# ============================================
+# Data Files (Project Specific)
+# ============================================
+
+# Raw data files (we don't want to commit large data)
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.parquet
+*.sdf
+*.xml
+*.bin
+
+# BUT keep specific important files
+!mappings_list.csv
+!hmdb_metabolites_sample.txt
+!tests_protein_set.py.txt
+!docs/requirements.txt
+
+# ============================================
+# JSON Files
+# ============================================
+
+# Ignore most JSON files (data/results)
+*.json
+
+# BUT keep config schemas
+!configs/schemas/*.json
+
+# BUT keep .claude settings (project config)
+!.claude/settings.json
+# Note: settings.local.json should be ignored
+.claude/settings.local.json
+
+# ============================================
+# YAML Files
+# ============================================
+
+# We now WANT to track YAML files (strategies, configs)
+# So we're NOT ignoring them
+# *.yaml  # REMOVED - we want to track these
+# *.yml   # REMOVED - we want to track these
+
+# ============================================
+# Sensitive & Security Files
+# ============================================
+
+# Credentials and secrets
+google-credentials.json
+*-credentials.json
+*.pem
+*.key
+*.cert
+.env
+.env.*
+
+# ============================================
+# Database Files
+# ============================================
+
+# SQLite databases
+*.sqlite3
+*.db
+*.db-*
+
+# Specific database files
+mapping_cache.db*
+metamapper.db*
+biomapper.db*
+
+# ============================================
+# Logs & Reports
+# ============================================
+
+# Log files
+*.log
+*_log.txt
+debug_output.txt
+validation_logs.txt
+pytest_output.txt
+
+# Reports (usually generated)
+*_report.txt
+*.prof
+
+# ============================================
+# Project-Specific Ignores
+# ============================================
+
+# Vector storage (large binary data)
+vector_store/
+qdrant_storage/
+docker/qdrant/qdrant_storage/
+data/qdrant_storage/
+*.qdrant.tar.gz
+*_snapshot.tar
+
+# Large data directories
+data/output/
+data/test_data/
+data/filtered_embeddings/
+arivale_ukbb_comparison/
+
+# Generated documentation
+docs/build/
+docs/_build/
+docs/generated/
 /site
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+# Jupyter notebooks
+.ipynb_checkpoints
+notebooks/3_development/
 
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# Project specific
-arivale_ukbb_comparison/
+# Development files
+scripts/dev_experiments/
+temp_sample_data/
 tests_*.py*
 tutorial_*.py*
-vector_store/
+*_test.py
+*_implementation.py
 
-# SQLite database files
-#data/metamapper.db
-data/metamapper.db-*
+# UI/Dashboard development
+biomapper-ui/roadmap/
+dashboard/
 
-# Biomapper specific ignores added by Cascade
-# Backup files for mapping_executor
+# Temporary scripts
+temp_*.sh
+temp_*.py
+
+# Archive/backup files
+*.tar.gz
+*.zip
+*.pkl
+
+# ============================================
+# Files to Track (Exceptions)
+# ============================================
+
+# Important configuration
+!pyproject.toml
+!poetry.lock
+!Makefile
+!.github/
+
+# Documentation
+!README.md
+!CLAUDE.md
+!*.md
+
+# Configuration
+!configs/**/*.yaml
+!configs/**/*.yml
+
+# ============================================
+# OS-Specific
+# ============================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+.directory
+.Trash-*
+
+# ============================================
+# Git
+# ============================================
+
+# Git worktrees
+.worktrees/
+
+# ============================================
+# Legacy/Deprecated (can be removed later)
+# ============================================
+
+# Old backup files for mapping_executor
 biomapper/core/mapping_executor.py.backup
 biomapper/core/mapping_executor.py.bak
 biomapper/core/mapping_executor_bak.py
 biomapper/core/mapping_executor_fix.py
 
-# Local data and output files (excluding metamapper.db)
-data/output/
-data/test_data/
-data/direct_mapping_summary.txt
-data/verified_mapping_summary.txt
-*.pkl
-*.zip
-*.tar.gz
-*.tsv.gz
-*.csv.gz
-*.sdf.gz
-*.sdf
-
-# Log files
-debug_output.txt
-validation_logs.txt
-
-# Generated documentation
-docs/generated/
-
-# Development experiments and temporary sample data
-scripts/dev_experiments/
-temp_sample_data/
-**/.claude/settings.local.json
-
-# Qdrant vector database storage (large binary data)
-docker/qdrant/qdrant_storage/
-data/qdrant_storage/
-
-# Qdrant backups and snapshots
-*.qdrant.tar.gz
-*_snapshot.tar
-qdrant_storage_backup.tar.gz
-
-# Large data files for PubChem embeddings
-data/filtered_embeddings/
-data/bio_relevant_cids*.txt
-data/filtering_log.txt
-data/qdrant_indexing_log.txt
-metamapper.db*
-
-# Log files
-*_log.txt
-qdrant_indexing_log.txt
-
-# Ignore Git worktree directories
-.worktrees/
-
-# Ignore temporary scripts
-temp_merge_script.sh
-
-# Google Credentials
-google-credentials.json
-
+# Old scripts
+gwr.sh
+agent.sh
