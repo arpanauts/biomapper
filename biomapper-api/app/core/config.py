@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     MAX_INLINE_STORAGE_SIZE: int = 100 * 1024  # 100KB
 
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", case_sensitive=False
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="allow"
     )
 
     def __init__(self, **data):
