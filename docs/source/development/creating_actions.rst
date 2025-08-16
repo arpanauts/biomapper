@@ -152,7 +152,7 @@ Step 3: Implement the Action
            params: MyActionParams,
            source_endpoint: Any,
            target_endpoint: Any,
-           context: Dict[str, Any]
+           context: Any
        ) -> StandardActionResult:
            """Execute the filtering action."""
            try:

@@ -167,9 +167,9 @@ Verification Sources
 
 This documentation was verified against the following project resources:
 
-- ``/biomapper/biomapper/core/services/strategy_service_v2_minimal.py`` (MinimalStrategyService with direct YAML loading)
-- ``/biomapper/configs/strategies/`` (Production strategy examples organized by tier)
-- ``/biomapper/biomapper-api/app/api/strategies.py`` (FastAPI strategy endpoints)
-- ``/biomapper/biomapper_client/client_v2.py`` (BiomapperClient synchronous wrapper)
-- ``/biomapper/README.md`` (Strategy execution examples)
-- ``/biomapper/CLAUDE.md`` (Variable substitution patterns and strategy organization)
+- ``biomapper/core/minimal_strategy_service.py`` (MinimalStrategyService with direct YAML loading)
+- ``configs/strategies/`` (Production strategy examples organized by tier)
+- ``biomapper-api/app/api/strategies.py`` (FastAPI strategy endpoints)
+- ``biomapper_client/biomapper_client/client_v2.py`` (BiomapperClient synchronous wrapper)
+- ``README.md`` (Strategy execution examples)
+- ``CLAUDE.md`` (Variable substitution patterns and strategy organization)

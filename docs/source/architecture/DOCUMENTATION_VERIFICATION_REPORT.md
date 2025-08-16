@@ -1,6 +1,8 @@
+:orphan:
+
 # Documentation Verification Report
 
-**Date**: 2025-08-13  
+**Date**: 2025-08-16  
 **Location**: `/home/ubuntu/biomapper/docs/source/architecture/`  
 **Verified By**: Automated Documentation Auditor
 
@@ -183,11 +185,33 @@ All documentation files in the architecture directory have been verified, update
 ✅ Variable substitution patterns are accurate  
 ✅ Component descriptions match implementation  
 
+## Issues Corrected (2025-08-16 Update)
+
+### Path and Import Corrections
+1. **Fixed service file paths**:
+   - Changed `biomapper/core/services/strategy_service_v2_minimal.py` → `biomapper/core/minimal_strategy_service.py`
+   - Changed `biomapper-api/app/core/mapper_service.py` → `biomapper-api/app/services/mapper_service.py`
+   - Changed `biomapper_client/client_v2.py` → `biomapper_client/biomapper_client/client_v2.py`
+
+2. **Fixed import statements**:
+   - Removed incorrect import `from biomapper.core.strategy_actions.models import ActionResult`
+   - Updated to show `ActionResult` is defined inline within each action module
+   - Added proper type imports (`Dict`, `Any`) where missing
+
+3. **Verified all paths**:
+   - All referenced files now exist and are accessible
+   - Import statements have been tested and work correctly
+   - Documentation examples are now executable
+
 ## Summary
 
-The architecture documentation has been successfully verified and updated to reflect the current state of the BioMapper codebase. All major discrepancies have been corrected, examples have been modernized, and verification sources have been added to each document for future reference.
+The architecture documentation has been successfully verified and updated to reflect the current state of the BioMapper codebase. All path discrepancies and import errors have been corrected, examples have been fixed to be executable, and verification sources have been updated to match the actual file structure.
 
-The documentation now provides an accurate, comprehensive guide to BioMapper's architecture, suitable for both new developers and experienced contributors. The self-registering action system, type-safe patterns, and YAML strategy system are all properly documented with working examples.
+The documentation now provides an accurate, comprehensive guide to BioMapper's architecture with:
+- Correct file paths that match the actual codebase structure
+- Working code examples with proper imports
+- Accurate component descriptions and locations
+- Verified references to source files
 
 ---
 

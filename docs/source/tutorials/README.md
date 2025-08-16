@@ -1,3 +1,5 @@
+:orphan:
+
 # Biomapper Tutorials
 
 The main Biomapper tutorials can be found in the following sections:

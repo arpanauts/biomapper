@@ -307,7 +307,7 @@ Get Resource Status
 
 .. code-block:: http
 
-   GET /api/resources/status
+   GET /api/status
    
    Response:
    {
@@ -436,7 +436,7 @@ See :doc:`client_reference` for detailed client documentation.
 
 Verification Sources
 ~~~~~~~~~~~~~~~~~~~~
-*Last verified: 2025-08-14*
+*Last verified: 2025-08-16*
 
 This documentation was verified against the following project resources:
 

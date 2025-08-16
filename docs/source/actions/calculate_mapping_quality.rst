@@ -1,5 +1,5 @@
 calculate_mapping_quality
-========================
+==========================
 
 The ``CALCULATE_MAPPING_QUALITY`` action provides comprehensive quality assessment for biological identifier mappings with detailed metrics and recommendations.
 
@@ -225,28 +225,30 @@ id_format_consistency    | 0.989      | mapping_quality
 ```
 
 **Summary Statistics**:
-```python
-{
-    "total_source_identifiers": 1000,
-    "total_mapped_identifiers": 923,
-    "successful_mappings": 847,
-    "failed_mappings": 76,
-    "overall_quality_score": 0.834,
-    "high_confidence_mappings": 723,
-    "low_confidence_mappings": 124,
-    "ambiguous_mappings": 12
-}
-```
+
+.. code-block:: python
+
+    {
+        "total_source_identifiers": 1000,
+        "total_mapped_identifiers": 923,
+        "successful_mappings": 847,
+        "failed_mappings": 76,
+        "overall_quality_score": 0.834,
+        "high_confidence_mappings": 723,
+        "low_confidence_mappings": 124,
+        "ambiguous_mappings": 12
+    }
 
 **Quality Distribution**:
-```python
-{
-    "high_quality": 723,    # Above confidence threshold
-    "medium_quality": 124,  # Below threshold but mapped
-    "low_quality": 0,       # Very low confidence
-    "failed": 76           # No mapping found
-}
-```
+
+.. code-block:: python
+
+    {
+        "high_quality": 723,    # Above confidence threshold
+        "medium_quality": 124,  # Below threshold but mapped
+        "low_quality": 0,       # Very low confidence
+        "failed": 76           # No mapping found
+    }
 
 Detailed Reporting
 ------------------
@@ -272,7 +274,7 @@ When `include_detailed_report=True`, the action provides:
 - Trend detection
 
 Recommendations Engine
----------------------
+----------------------
 
 The action generates actionable recommendations based on quality metrics:
 
@@ -306,17 +308,18 @@ Quality Score Calculation
 
 The overall quality score is a weighted combination of metrics:
 
-```python
-weights = {
-    "match_rate": 0.3,           # Primary importance
-    "coverage": 0.2,             # Secondary importance  
-    "precision": 0.2,            # Accuracy measure
-    "avg_confidence": 0.15,      # Confidence in results
-    "id_format_consistency": 0.1, # Data quality
-    "f1_score": 0.05            # Balanced accuracy
-}
+.. code-block:: python
 
-overall_score = sum(metric_value * weight for metric, weight in weights.items())
+    weights = {
+        "match_rate": 0.3,           # Primary importance
+        "coverage": 0.2,             # Secondary importance  
+        "precision": 0.2,            # Accuracy measure
+        "avg_confidence": 0.15,      # Confidence in results
+        "id_format_consistency": 0.1, # Data quality
+        "f1_score": 0.05            # Balanced accuracy
+    }
+    
+    overall_score = sum(metric_value * weight for metric, weight in weights.items())
 ```
 
 Integration Examples
