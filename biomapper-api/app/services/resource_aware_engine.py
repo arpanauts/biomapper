@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .execution_engine import EnhancedExecutionEngine
 from .resource_manager import ResourceManager, ResourceStatus, ResourceUnavailableError
-from ..models.job import Job
+from ..models.persistence import Job
 from ..models.strategy_execution import JobStatus
 from biomapper.core.models import StrategyExecutionContext
 from biomapper.core.strategy_actions.base import BaseStrategyAction
