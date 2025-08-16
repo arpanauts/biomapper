@@ -12,9 +12,9 @@ from typing import Dict, Any
 
 # These imports will fail initially - that's expected in TDD!
 # We're defining the contract before implementation
-from biomapper.core.strategy_actions.io.sync_to_google_drive import (
-    SyncToGoogleDriveAction,
-    SyncToGoogleDriveParams,
+from biomapper.core.strategy_actions.io.sync_to_google_drive_v2 import (
+    SyncToGoogleDriveV2Action as SyncToGoogleDriveAction,
+    SyncToGoogleDriveV2Params as SyncToGoogleDriveParams,
     SyncActionResult
 )
 

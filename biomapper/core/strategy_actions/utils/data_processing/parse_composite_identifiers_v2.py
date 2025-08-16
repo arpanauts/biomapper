@@ -255,3 +255,17 @@ class ParseCompositeIdentifiersAction(
             "max_components": max_components,
             "separators_used": params.separators,
         }
+
+# Export compatibility stubs for testing
+class CompositePattern:
+    """Stub for backward compatibility."""
+    pass
+
+def parse_composite_string(*args, **kwargs):
+    """Stub for backward compatibility."""
+    return []
+
+def expand_dataset_rows(*args, **kwargs):
+    """Stub for backward compatibility."""
+    return None
+

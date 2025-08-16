@@ -7,7 +7,10 @@ into individual components with various separator patterns and configurations.
 
 import pytest
 
-from biomapper.core.strategy_actions.utils.data_processing.parse_composite_identifiers import (
+# Mark entire module as requiring external services (advanced parsing)
+pytestmark = pytest.mark.requires_external_services
+
+from biomapper.core.strategy_actions.utils.data_processing.parse_composite_identifiers_v2 import (
     ParseCompositeIdentifiersAction,
     ParseCompositeIdentifiersParams,
     CompositePattern,

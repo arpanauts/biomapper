@@ -6,7 +6,7 @@ import pytest
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from biomapper.core.strategy_actions.reports.generate_llm_analysis import (
     GenerateLLMAnalysisAction,

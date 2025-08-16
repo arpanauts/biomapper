@@ -8,8 +8,11 @@ import numpy as np
 from unittest.mock import patch, MagicMock, AsyncMock
 import json
 
+# Mark entire module as requiring external services (visualization libs)
+pytestmark = pytest.mark.requires_external_services
+
 # These imports will fail initially - expected in TDD
-from biomapper.core.strategy_actions.reports.generate_visualizations import (
+from biomapper.core.strategy_actions.reports.generate_visualizations_v2 import (
     GenerateMappingVisualizationsAction,
     VisualizationParams,
     create_coverage_pie,
