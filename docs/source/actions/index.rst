@@ -38,6 +38,8 @@ BioMapper provides 30+ self-registering actions for biological data processing.
    :caption: Chemistry Actions
    
    chemistry_extract_loinc
+   chemistry_fuzzy_test_match
+   chemistry_vendor_harmonization
 
 .. toctree::
    :maxdepth: 1
@@ -122,6 +124,10 @@ Chemistry Actions
      - Description
    * - ``CHEMISTRY_EXTRACT_LOINC``
      - Extract and validate LOINC codes from clinical chemistry data
+   * - ``CHEMISTRY_FUZZY_TEST_MATCH``
+     - Match clinical test names using fuzzy string matching
+   * - ``CHEMISTRY_VENDOR_HARMONIZATION``
+     - Harmonize vendor-specific test names to standard nomenclature
 
 Analysis Actions
 ~~~~~~~~~~~~~~~~

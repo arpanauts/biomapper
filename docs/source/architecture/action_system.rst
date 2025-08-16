@@ -77,8 +77,13 @@ Follow Test-Driven Development (TDD) when creating new actions:
     from pydantic import BaseModel, Field
     from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
     from biomapper.core.strategy_actions.registry import register_action
-    from biomapper.core.strategy_actions.models import ActionResult
     from typing import Dict, Any
+    
+    # ActionResult is typically defined within each action module
+    class ActionResult(BaseModel):
+        success: bool
+        message: str = ""
+        data: Dict[str, Any] = Field(default_factory=dict)
     
     class MyActionParams(BaseModel):
         input_key: str = Field(..., description="Input dataset key")
@@ -171,11 +176,10 @@ Verification Sources
 
 This documentation was verified against the following project resources:
 
-- ``/biomapper/biomapper/core/strategy_actions/registry.py`` (Global ACTION_REGISTRY and register_action decorator)
-- ``/biomapper/biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction generic base class)
-- ``/biomapper/biomapper/core/strategy_actions/models.py`` (ActionResult model definition)
-- ``/biomapper/biomapper/core/strategy_actions/entities/`` (37 self-registering entity-specific actions)
-- ``/biomapper/biomapper/core/strategy_actions/io/load_dataset_identifiers.py`` (Generic CSV/TSV data loader)
-- ``/biomapper/biomapper/core/strategy_actions/data_operations/`` (Core data operations like merge and filter)
-- ``/biomapper/README.md`` (Complete list of available actions)
-- ``/biomapper/CLAUDE.md`` (Action development patterns and TDD approach)
+- ``biomapper/core/strategy_actions/registry.py`` (Global ACTION_REGISTRY and register_action decorator)
+- ``biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction generic base class)
+- ``biomapper/core/strategy_actions/entities/`` (Entity-specific actions with inline ActionResult definitions)
+- ``biomapper/core/strategy_actions/io/load_dataset_identifiers.py`` (Generic CSV/TSV data loader)
+- ``biomapper/core/strategy_actions/data_operations/`` (Core data operations like merge and filter)
+- ``README.md`` (Complete list of available actions)
+- ``CLAUDE.md`` (Action development patterns and TDD approach)

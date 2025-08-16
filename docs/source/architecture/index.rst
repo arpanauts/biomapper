@@ -47,16 +47,16 @@ Quick Architecture Overview
 Component Responsibilities
 --------------------------
 
-**BiomapperClient** (``biomapper_client/client_v2.py``)
+**BiomapperClient** (``biomapper_client/biomapper_client/client_v2.py``)
   Python client library providing synchronous wrapper and async interfaces. Primary entry point for programmatic access.
 
 **FastAPI Server** (``biomapper-api/app/main.py``)
   REST API handling HTTP requests, validation, response formatting, and Server-Sent Events (SSE) for progress tracking.
 
-**MapperService** (``biomapper-api/app/core/mapper_service.py``)
+**MapperService** (``biomapper-api/app/services/mapper_service.py``)
   Orchestrates job execution, manages background tasks, handles SQLite persistence, and checkpoint recovery.
 
-**MinimalStrategyService** (``biomapper/core/services/strategy_service_v2_minimal.py``)
+**MinimalStrategyService** (``biomapper/core/minimal_strategy_service.py``)
   Core execution engine that loads YAML strategies from ``configs/strategies/`` and executes actions sequentially.
 
 **ACTION_REGISTRY** (``biomapper/core/strategy_actions/registry.py``)
@@ -87,21 +87,29 @@ Example action implementation:
     from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
     from biomapper.core.strategy_actions.registry import register_action
     from pydantic import BaseModel, Field
+    from typing import Dict, Any
     
     class MyActionParams(BaseModel):
         input_key: str = Field(..., description="Input dataset key")
         threshold: float = Field(0.8, ge=0.0, le=1.0)
         output_key: str = Field(..., description="Output dataset key")
     
+    # ActionResult is typically defined within each action module
+    class ActionResult(BaseModel):
+        success: bool
+        message: str = ""
+        data: Dict[str, Any] = Field(default_factory=dict)
+    
     @register_action("MY_ACTION")
     class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
         def get_params_model(self) -> type[MyActionParams]:
             return MyActionParams
         
-        async def execute_typed(self, params: MyActionParams, context: Dict) -> ActionResult:
+        async def execute_typed(self, params: MyActionParams, context: Dict[str, Any]) -> ActionResult:
             # Access input data
             input_data = context["datasets"].get(params.input_key)
             # Process and store results
+            processed_data = input_data  # Processing logic here
             context["datasets"][params.output_key] = processed_data
             return ActionResult(success=True, message="Processed successfully")
 
@@ -199,9 +207,10 @@ This documentation was verified against the following project resources:
 
 * ``biomapper/core/strategy_actions/registry.py`` (Action registry implementation)
 * ``biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction base class)
-* ``biomapper/core/services/strategy_service_v2_minimal.py`` (Strategy execution engine)
+* ``biomapper/core/minimal_strategy_service.py`` (Strategy execution engine)
 * ``biomapper-api/app/main.py`` (FastAPI server implementation)
-* ``biomapper_client/client_v2.py`` (Client library implementation)
+* ``biomapper-api/app/services/mapper_service.py`` (Job orchestration service)
+* ``biomapper_client/biomapper_client/client_v2.py`` (Client library implementation)
 * ``README.md`` (Project overview and installation)
 * ``CLAUDE.md`` (Developer guidelines and patterns)
 * ``pyproject.toml`` (Dependencies and configuration)

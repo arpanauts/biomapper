@@ -154,6 +154,7 @@ Required Input Data Structure
 -----------------------------
 
 **Combined Matches Data (context['datasets'][input_key])**
+
 .. code-block:: python
 
     {
@@ -314,7 +315,7 @@ Statistical Metrics Explained
 -----------------------------
 
 **Jaccard Index**
-  Measures similarity between datasets: |A ∩ B| / |A ∪ B|
+  Measures similarity between datasets: ``|A ∩ B| / |A ∪ B|``
   
   * 1.0 = Perfect overlap
   * 0.0 = No overlap

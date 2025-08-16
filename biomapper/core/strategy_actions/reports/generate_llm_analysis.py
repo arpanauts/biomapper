@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from biomapper.core.standards.base_models import ActionParamsBase
 from biomapper.core.standards.context_handler import UniversalContext
 from biomapper.core.strategy_actions.registry import register_action
-from biomapper.core.strategy_actions.typed_base import TypedStrategyAction, StandardActionResult
+from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
 from biomapper.core.strategy_actions.utils.llm_providers import (
     LLMProviderFactory, 
     LLMProviderManager, 
@@ -48,13 +48,16 @@ class LLMAnalysisParams(ActionParamsBase):
     strategy_name: str = Field("", description="Name of the strategy being analyzed")
 
 
-class LLMAnalysisResult(StandardActionResult):
+class LLMAnalysisResult(BaseModel):
     """Result of LLM analysis generation."""
     
+    success: bool = Field(True, description="Whether the action succeeded")
+    message: str = Field("", description="Success or error message")
     generated_files: List[str] = Field([], description="List of generated file paths")
     analysis_metadata: Dict[str, Any] = Field({}, description="LLM usage and analysis metadata")
     summary_content: Optional[str] = Field(None, description="Generated summary content")
     flowchart_content: Optional[str] = Field(None, description="Generated mermaid flowchart")
+    data: Dict[str, Any] = Field({}, description="Additional data")
 
 
 @register_action("GENERATE_LLM_ANALYSIS")

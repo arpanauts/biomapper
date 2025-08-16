@@ -1,3 +1,5 @@
+:orphan:
+
 # Documentation Completion Report
 
 ## Summary

@@ -68,27 +68,28 @@ Optional Parameters
     Enable detailed performance metrics tracking
 
 Vector Database Setup
---------------------
+---------------------
 
 Before using this action, you need a populated Qdrant collection:
 
 **HMDB Collection Structure**:
-```json
-{
-  "vectors": {
-    "size": 384,  // BGE-small embedding dimension
-    "distance": "Cosine"
-  },
-  "payload": {
-    "hmdb_id": "HMDB0000122",
-    "name": "Glucose", 
-    "synonyms": ["D-Glucose", "Dextrose", "Blood sugar"],
-    "inchikey": "WQZGKKKJIJFFOK-GASJEMHNSA-N",
-    "molecular_formula": "C6H12O6",
-    "pathways": ["Glycolysis", "Gluconeogenesis"]
-  }
-}
-```
+
+.. code-block:: json
+
+    {
+      "vectors": {
+        "size": 384,
+        "distance": "Cosine"
+      },
+      "payload": {
+        "hmdb_id": "HMDB0000122",
+        "name": "Glucose", 
+        "synonyms": ["D-Glucose", "Dextrose", "Blood sugar"],
+        "inchikey": "WQZGKKKJIJFFOK-GASJEMHNSA-N",
+        "molecular_formula": "C6H12O6",
+        "pathways": ["Glycolysis", "Gluconeogenesis"]
+      }
+    }
 
 Multi-Text Search Strategy
 --------------------------
@@ -125,7 +126,7 @@ Basic Vector Matching
            output_key: "vector_matches"
 
 High-Throughput Processing
-~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: yaml
 
@@ -175,7 +176,7 @@ Multi-Stage Matching Pipeline
            unmatched_key: "final_unmatched"
 
 FastEmbed Models
----------------
+----------------
 
 Supported embedding models with different trade-offs:
 
@@ -236,7 +237,7 @@ Comprehensive performance tracking:
    }
 
 Optimization Features
---------------------
+---------------------
 
 **Embedding Optimization**
 - Local model loading for no API dependency

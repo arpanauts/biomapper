@@ -34,7 +34,7 @@ from . import reports
 # Explicit imports to ensure registration
 from .entities.proteins.annotation.extract_uniprot_from_xrefs import ProteinExtractUniProtFromXrefsAction
 from .entities.proteins.annotation.normalize_accessions import ProteinNormalizeAccessionsAction
-from .utils.data_processing.parse_composite_identifiers import ParseCompositeIdentifiersAction
+from .utils.data_processing.parse_composite_identifiers_v2 import ParseCompositeIdentifiersAction
 from .io.sync_to_google_drive_v2 import SyncToGoogleDriveV2Action
 
 # Import chemistry_to_phenotype_bridge action
@@ -124,3 +124,8 @@ logger.info("Created metabolomics action aliases:")
 logger.info("  METABOLITE_NAME_MATCH -> BASELINE_FUZZY_MATCH")
 logger.info("  ENRICHED_METABOLITE_MATCH -> VECTOR_ENHANCED_MATCH")
 logger.info("  METABOLITE_API_ENRICHMENT -> CTS_ENRICHED_MATCH (extended version)")
+
+# Export registry components for backward compatibility
+from .registry import ACTION_REGISTRY, register_action
+
+__all__ = ['ACTION_REGISTRY', 'register_action']

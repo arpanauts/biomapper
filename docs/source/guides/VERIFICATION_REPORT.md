@@ -1,3 +1,5 @@
+:orphan:
+
 # Documentation Verification Report - Guides Directory
 
 **Date**: 2025-08-13  

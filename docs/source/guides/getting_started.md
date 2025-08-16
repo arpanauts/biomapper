@@ -1,3 +1,5 @@
+:orphan:
+
 # Getting Started with Biomapper
 
 ## Installation
