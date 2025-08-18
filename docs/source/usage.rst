@@ -357,13 +357,10 @@ Next Steps
 
 Verification Sources
 --------------------
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-17*
 
 This documentation was verified against the following project resources:
 
-- ``biomapper_client/biomapper_client/client_v2.py`` (Client implementation)
-- ``biomapper-api/app/main.py`` (API server configuration)
-- ``biomapper/core/strategy_actions/registry.py`` (Available actions)
-- ``configs/strategies/templates/*.yaml`` (Strategy templates)
-- ``CLAUDE.md`` (CLI commands and best practices)
-- ``README.md`` (Installation and quick start)
+- ``/biomapper/CLAUDE.md`` (CLI commands and best practices)
+- ``/biomapper/README.md`` (Installation and quick start)
+- ``/biomapper/pyproject.toml`` (Project configuration)

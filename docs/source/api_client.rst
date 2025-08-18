@@ -1,7 +1,7 @@
 Python Client Reference
 =======================
 
-The ``biomapper_client`` package provides a convenient Python interface to the BioMapper REST API.
+The ``client`` module provides a convenient Python interface to the BioMapper REST API.
 
 Installation
 ------------
@@ -10,19 +10,16 @@ The client can be installed as a standalone package or with the main BioMapper i
 
 .. code-block:: bash
 
-    # Standalone client installation
-    cd biomapper_client
-    poetry install
-    
-    # Or as part of main BioMapper with API
-    poetry install --with api,dev
+    # Install as part of main BioMapper package
+    poetry install --with dev,docs,api
+    poetry shell
 
 Basic Usage
 -----------
 
 .. code-block:: python
 
-    from biomapper_client import BiomapperClient
+    from client.client_v2 import BiomapperClient
     
     # Simple synchronous usage (recommended)
     client = BiomapperClient("http://localhost:8000")
@@ -30,21 +27,18 @@ Basic Usage
         "input_file": "/data/proteins.csv",
         "output_dir": "/results"
     })
-    print(f"Status: {result['status']}")
+    print(f"Success: {result.success}")  # StrategyResult object
     
     # Async usage for advanced scenarios
     import asyncio
     
     async def main():
         async with BiomapperClient() as client:
-            context = {
-                "current_identifiers": [],
-                "datasets": {},
-                "statistics": {},
-                "output_files": []
-            }
-            result = await client.execute_strategy_async("protein_mapping_template", context)
-            print(result)
+            result = await client.execute_strategy(
+                "protein_mapping_template", 
+                parameters={"input_file": "/data/proteins.csv"}
+            )
+            print(f"Success: {result.success}")
     
     asyncio.run(main())
 
@@ -82,7 +76,7 @@ run(strategy, parameters=None, context=None, wait=True, watch=False)
 * ``watch`` (bool): If True, print progress to stdout
 
 **Returns:**
-* ``dict``: Strategy execution results
+* ``StrategyResult``: Strategy execution results object with success, data, error attributes
 
 .. code-block:: python
 
@@ -101,29 +95,28 @@ run(strategy, parameters=None, context=None, wait=True, watch=False)
     # With progress display
     result = client.run("chemistry_mapping_template", watch=True)
 
-execute_strategy_async(strategy, context=None, parameters=None)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+execute_strategy(strategy, parameters=None, context=None, options=None)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Asynchronous method** for advanced users who need full control or concurrent execution.
 
 **Parameters:**
-* ``strategy_name`` (str): Name of the strategy to execute
-* ``context`` (dict): Execution context with datasets, identifiers, etc.
+* ``strategy`` (str|Path|dict): Strategy name, path to YAML file, or dict configuration
+* ``parameters`` (dict): Optional parameter overrides
+* ``context`` (dict): Optional execution context
+* ``options`` (ExecutionOptions): Optional execution options
 
 **Returns:**
-* ``dict``: Strategy execution results
+* ``Job``: Job object for tracking execution
 
 .. code-block:: python
 
     async with BiomapperClient() as client:
-        context = {
-            "current_identifiers": [],
-            "datasets": {"input_data": [...]},
-            "statistics": {},
-            "output_files": [],
-            "metadata": {"source": "experiment_001"}
-        }
-        result = await client.execute_strategy("protein_harmonization", context)
+        job = await client.execute_strategy(
+            "protein_harmonization",
+            parameters={"input_file": "/data/proteins.csv"}
+        )
+        result = await client.wait_for_job(job.id)
 
 Error Handling
 --------------
@@ -132,8 +125,8 @@ The client provides custom exceptions for different error scenarios:
 
 .. code-block:: python
 
-    from biomapper_client import BiomapperClient
-    from biomapper_client.exceptions import ApiError, NetworkError, ValidationError
+    from client.client_v2 import BiomapperClient
+    from client.exceptions import ApiError, NetworkError, ValidationError
     
     # Synchronous error handling
     try:
@@ -148,7 +141,8 @@ The client provides custom exceptions for different error scenarios:
         try:
             async with BiomapperClient() as client:
                 context = {"datasets": {}, "statistics": {}, "output_files": []}
-                result = await client.execute_strategy_async("protein_mapping_template", context)
+                job = await client.execute_strategy("protein_mapping_template")
+                result = await client.wait_for_job(job.id)
                 return result
         except ApiError as e:
             if e.status_code == 404:
@@ -181,12 +175,12 @@ Running Multiple Strategies
     for strategy_name in strategies:
         print(f"Running {strategy_name}...")
         results[strategy_name] = client.run(strategy_name)
-        print(f"Completed with status: {results[strategy_name]['status']}")
+        print(f"Completed with success: {results[strategy_name].success}")
     
     # Process results
     for name, result in results.items():
-        if result['status'] == 'success':
-            print(f"{name}: Processed {len(result['results']['datasets'])} datasets")
+        if result.success:
+            print(f"{name}: Strategy executed successfully")
 
 Using with Jupyter Notebooks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -194,59 +188,45 @@ Using with Jupyter Notebooks
 .. code-block:: python
 
     # In Jupyter notebooks, use the synchronous interface
-    from biomapper_client import BiomapperClient
+    from client.client_v2 import BiomapperClient
     
     client = BiomapperClient()
     
     # Run with progress display (great for notebooks)
-    result = client.run("metabolite_mapping_template", 
-                       parameters={"threshold": 0.95},
-                       watch=True)
+    result = client.run_with_progress("metabolite_mapping_template", 
+                                     parameters={"threshold": 0.95})
     
     # Access results
-    if result['status'] == 'success':
-        datasets = result['results']['datasets']
-        stats = result['results'].get('statistics', {})
-        print(f"Processed {stats.get('total_records', 0)} records")
+    if result.success:
+        print(f"Strategy completed successfully in {result.execution_time_seconds:.1f}s")
+        print(f"Job ID: {result.job_id}")
+    else:
+        print(f"Strategy failed: {result.error}")
 
 Response Format
 ---------------
 
-The ``run()`` method returns a dictionary with execution results:
+The ``run()`` method returns a ``StrategyResult`` object with the following structure:
 
 .. code-block:: python
 
-    {
-        "status": "success",           # "success" or "error"
-        "results": {                   # Strategy execution results
-            "datasets": {              # Named datasets from the workflow
-                "proteins": [...],
-                "normalized": [...],
-                "harmonized": [...] 
-            },
-            "statistics": {            # Accumulated statistics
-                "total_records": 1000,
-                "processing_time": 45.2,
-                "success_rate": 0.98
-            },
-            "output_files": [          # Generated files
-                "/results/harmonized.csv",
-                "/results/report.html"
-            ]
-        },
-        "execution_time": 45.2         # Total execution time in seconds
-    }
+    # Successful execution
+    result = client.run("strategy_name")
+    print(result.success)                    # True/False
+    print(result.job_id)                     # Job tracking ID
+    print(result.execution_time_seconds)     # Execution time
+    print(result.result_data)                # Dictionary with execution results
+    print(result.error)                      # None for successful runs
 
-For error responses:
+For failed executions:
 
 .. code-block:: python
 
-    {
-        "status": "error",
-        "detail": "Strategy 'unknown_strategy' not found",
-        "error_type": "StrategyNotFoundError",
-        "traceback": "..."            # Stack trace for debugging
-    }
+    # Failed execution
+    result = client.run("invalid_strategy")
+    print(result.success)                    # False
+    print(result.error)                      # Error message
+    print(result.job_id)                     # Job ID (if created)
 
 Best Practices
 --------------
@@ -273,11 +253,11 @@ Best Practices
    .. code-block:: python
    
        result = client.run("protein_mapping_template")
-       if result["status"] == "success":
-           datasets = result["results"]["datasets"]
-           # Process datasets
+       if result.success:
+           data = result.result_data
+           # Process results data
        else:
-           print(f"Strategy failed: {result.get('detail')}")
+           print(f"Strategy failed: {result.error}")
 
 4. **Use parameters to override strategy defaults**:
    
@@ -309,11 +289,11 @@ Troubleshooting
       client = BiomapperClient(timeout=3600)  # 1 hour timeout
 
 **Strategy not found**
-  Check that the strategy exists in ``configs/strategies/`` or its subdirectories:
+  Check that the strategy exists in ``src/configs/strategies/`` or its subdirectories:
   
   .. code-block:: bash
   
-      find configs/strategies -name "*.yaml" -type f
+      find src/configs/strategies -name "*.yaml" -type f
 
 **API errors (400/422)**
   These indicate validation errors. Check the error detail for specific parameter issues:
@@ -332,14 +312,12 @@ Troubleshooting
 
 Verification Sources
 --------------------
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-18*
 
 This documentation was verified against the following project resources:
 
-- ``biomapper_client/biomapper_client/client_v2.py`` (BiomapperClient implementation)
-- ``biomapper_client/biomapper_client/exceptions.py`` (Exception definitions)
-- ``biomapper_client/biomapper_client/models.py`` (Data models)
-- ``biomapper-api/app/main.py`` (API server endpoints)
-- ``configs/strategies/templates/*.yaml`` (Strategy templates)
-- ``README.md`` (Installation instructions)
-- ``pyproject.toml`` (Package dependencies)
+- ``/biomapper/src/client/client_v2.py`` (BiomapperClient implementation with run() and execute_strategy() methods)
+- ``/biomapper/src/client/models.py`` (StrategyResult, Job, and other client data models)
+- ``/biomapper/src/client/exceptions.py`` (Custom exception classes for error handling)
+- ``/biomapper/pyproject.toml`` (Package dependencies and CLI script configuration)
+- ``/biomapper/CLAUDE.md`` (Installation commands and usage patterns)

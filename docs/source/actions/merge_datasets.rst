@@ -21,7 +21,7 @@ Required Parameters
 ~~~~~~~~~~~~~~~~~~~
 
 **dataset_keys** (list of strings)
-  List of dataset keys to merge from the execution context.
+  List of dataset keys to merge from the execution context. For backward compatibility, also supports `input_key` and `dataset2_key` for two-dataset merges.
 
 **output_key** (string)
   Key name to store the merged dataset in the execution context.
@@ -42,12 +42,33 @@ Optional Parameters
   Default: 'concat'
 
 **join_on** (string)
-  Column name to join on when using 'join' strategy. Required for join operations.
+  Column name to join on when using 'join' strategy with uniform columns. Alternative to `join_columns`.
+  Default: None
+
+**join_columns** (dict)
+  Map of dataset_key to column name for joins when datasets have different column names.
+  Example: {"dataset1": "id", "dataset2": "identifier"}
   Default: None
 
 **join_how** (string)
   Type of join to perform: 'inner', 'outer', 'left', 'right'.
   Default: 'outer'
+
+**handle_one_to_many** (string)
+  How to handle one-to-many relationships: 'keep_all', 'first', 'aggregate'.
+  Default: 'keep_all'
+
+**aggregate_func** (string)
+  Aggregation function when handle_one_to_many='aggregate' (e.g., 'mean', 'sum', 'first').
+  Default: None
+
+**add_provenance** (boolean)
+  Whether to add a provenance column tracking the source dataset for each row.
+  Default: false
+
+**provenance_value** (string)
+  Custom value for the provenance column when add_provenance=true.
+  Default: None (uses dataset key as value)
 
 Example Usage
 -------------
@@ -63,8 +84,10 @@ Basic Dataset Concatenation
         params:
           dataset_keys: ["ukbb_proteins", "arv_proteins", "kg2c_proteins"]
           output_key: "all_proteins"
+          merge_strategy: "concat"
           deduplication_column: "uniprot_id"
           keep: "first"
+          add_provenance: true
 
 Join-Based Merging
 ~~~~~~~~~~~~~~~~~~
@@ -78,7 +101,10 @@ Join-Based Merging
           dataset_keys: ["protein_data", "protein_annotations"]
           output_key: "annotated_proteins"
           merge_strategy: "join"
-          join_on: "uniprot_id"
+          join_columns: {
+            "protein_data": "uniprot_id",
+            "protein_annotations": "protein_id"
+          }
           join_how: "left"
 
 Advanced Deduplication
@@ -125,10 +151,10 @@ Merge Strategies
 ----------------
 
 **Concatenation (concat)**
-  Stacks datasets vertically, preserving all columns from all datasets. Missing columns are filled with NaN.
+  Stacks datasets vertically, preserving all columns from all datasets. Missing columns are filled with NaN. Supports provenance tracking to identify source dataset for each row.
 
 **Join (join)**
-  Merges datasets horizontally based on a common column. Column conflicts are resolved with suffixes.
+  Merges datasets horizontally based on common columns. Supports different column names per dataset via `join_columns`. Column conflicts are resolved with suffixes (_x, _y).
 
 Deduplication Options
 ---------------------
@@ -141,6 +167,18 @@ Deduplication Options
 
 **keep='all'**
   Keeps all rows (no deduplication performed).
+
+One-to-Many Handling
+--------------------
+
+**handle_one_to_many='keep_all'**
+  Preserves all matching rows in one-to-many relationships.
+
+**handle_one_to_many='first'**
+  Keeps only the first match in one-to-many relationships.
+
+**handle_one_to_many='aggregate'**
+  Aggregates multiple matches using specified aggregation function.
 
 Error Handling
 --------------
@@ -155,9 +193,9 @@ Error Handling
 **Join column missing**
   .. code-block::
   
-      Error: join_on parameter required for join strategy
+      Error: join_columns or join_on required when merge_strategy='join'
       
-  Solution: Specify the column name to join on when using join strategy.
+  Solution: Specify either `join_on` for uniform columns or `join_columns` for different column names per dataset.
 
 **Empty datasets**
   .. code-block::
@@ -181,7 +219,8 @@ Performance Notes
 * Large datasets (>100K rows) are processed efficiently using pandas
 * Memory usage scales with combined dataset size
 * Join operations may be slower than concatenation for large datasets
-* Consider processing in chunks for extremely large datasets (>1M rows)
+* Uses UniversalContext for robust context handling across different execution environments
+* Supports both legacy parameter formats and new standardized formats for backward compatibility
 
 Common Use Cases
 ----------------
@@ -238,5 +277,54 @@ This action typically follows data loading actions and precedes analysis:
         action:
           type: CALCULATE_SET_OVERLAP
           params:
-            dataset_key: "combined_proteins"
-            identifier_column: "UniProt"
+            input_key: "combined_proteins"
+            source_name: "UKBB"
+            target_name: "ARV"
+            mapping_combo_id: "UKBB_ARV"
+            output_key: "overlap_stats"
+
+Backward Compatibility
+----------------------
+
+The action supports legacy parameter formats for seamless migration:
+
+**Legacy Two-Dataset Format**
+  .. code-block:: yaml
+  
+      params:
+        input_key: "dataset1"         # Mapped to dataset_keys[0]
+        dataset2_key: "dataset2"      # Mapped to dataset_keys[1]
+        join_column1: "id"            # Mapped to join_columns
+        join_column2: "identifier"
+        join_type: "outer"            # Mapped to join_how
+        
+      # Alternative legacy format:
+      params:
+        dataset1_key: "dataset1"      # Alias for input_key
+        dataset2_key: "dataset2"
+
+**Modern Multi-Dataset Format**
+  .. code-block:: yaml
+  
+      params:
+        dataset_keys: ["dataset1", "dataset2", "dataset3"]
+        join_columns: {
+          "dataset1": "id",
+          "dataset2": "identifier",
+          "dataset3": "uid"
+        }
+        join_how: "outer"
+
+---
+
+## Verification Sources
+*Last verified: 2025-08-17*
+
+This documentation was verified against the following project resources:
+
+- `/biomapper/src/actions/merge_datasets.py` (implementation with backward compatibility and parameter validation)
+- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class and StandardActionResult)
+- `/biomapper/src/actions/registry.py` (action registration via decorator)
+- `/biomapper/src/core/standards/context_handler.py` (UniversalContext for robust context handling)
+- `/biomapper/tests/unit/core/strategy_actions/test_merge_datasets_fix.py` (test coverage and validation)
+- `/biomapper/CLAUDE.md` (standardized parameter naming and context handling patterns)

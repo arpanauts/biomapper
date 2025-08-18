@@ -18,31 +18,23 @@ ENV PATH="/root/.local/bin:${PATH}"
 # Set working directory
 WORKDIR /app
 
-# Copy project files
+# Copy project files (src-layout structure)
 COPY pyproject.toml poetry.lock ./
-COPY README.md ./
-COPY biomapper ./biomapper
-COPY biomapper-api ./biomapper-api
-COPY biomapper_client ./biomapper_client
+COPY README.md CLAUDE.md ./
+COPY src ./src
 COPY tests ./tests
-COPY configs ./configs
-COPY conftest.py ./
-COPY CLAUDE.md ./
+COPY conftest.py pytest.ini pytest-ci.ini ./
+COPY dev ./dev
+COPY scripts ./scripts
 
-# Install dependencies for main project
+# Install dependencies
 RUN poetry config virtualenvs.create false && \
-    poetry install --no-interaction --no-root
-
-# Install dependencies for biomapper-api
-WORKDIR /app/biomapper-api
-RUN poetry install --no-interaction --no-root
-
-# Back to main directory
-WORKDIR /app
+    poetry install --with dev,docs,api --no-interaction
 
 # Set environment variables to match CI
 ENV LANGFUSE_ENABLED=false
-ENV PYTHONPATH=/app:/app/biomapper-api:$PYTHONPATH
+ENV DATABASE_URL="sqlite+aiosqlite:///./test.db"
+ENV PYTHONPATH=/app/src:$PYTHONPATH
 
-# Default command - run tests
-CMD ["poetry", "run", "pytest", "-v"]
+# Default command - run tests with CI configuration
+CMD ["poetry", "run", "pytest", "-c", "pytest-ci.ini", "--cov=src", "--cov-report=term-missing"]

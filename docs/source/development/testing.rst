@@ -10,13 +10,15 @@ Test Organization
 
    tests/
    ├── unit/                    # Unit tests (fast, isolated)
-   │   ├── core/
-   │   │   └── strategy_actions/  # Action tests
-   │   └── api/                   # API unit tests
+   │   ├── actions/             # Action tests
+   │   ├── core/                # Core library tests
+   │   └── api/                 # API unit tests
    ├── integration/             # Integration tests (slower)
-   │   ├── strategies/          # Strategy execution tests
-   │   └── api/                 # API integration tests
-   └── fixtures/                # Test data and fixtures
+   │   └── strategies/          # Strategy execution tests
+   ├── performance/             # Performance benchmarks
+   ├── fixtures/                # Test data and fixtures
+   ├── mocks/                   # Mock objects and utilities
+   └── conftest.py              # Shared pytest fixtures
 
 Running Tests
 -------------
@@ -33,7 +35,7 @@ Basic Commands
    poetry run pytest --cov=biomapper --cov-report=html
    
    # Run specific test file
-   poetry run pytest tests/unit/core/strategy_actions/test_my_action.py
+   poetry run pytest tests/unit/actions/test_my_action.py
    
    # Run tests matching pattern
    poetry run pytest -k "test_protein"
@@ -62,7 +64,7 @@ Test Categories
    poetry run pytest tests/api/
    
    # Specific action tests
-   poetry run pytest tests/unit/core/strategy_actions/entities/proteins/
+   poetry run pytest tests/unit/actions/entities/proteins/
 
 Writing Unit Tests
 ------------------
@@ -73,7 +75,7 @@ Basic Test Structure
 .. code-block:: python
 
    import pytest
-   from biomapper.core.strategy_actions.my_action import MyAction, MyActionParams
+   from biomapper.actions.my_action import MyAction, MyActionParams
    
    class TestMyAction:
        """Test suite for MyAction."""
@@ -196,14 +198,14 @@ Strategy Execution Test
 
    # tests/integration/strategies/test_protein_workflow.py
    import pytest
-   from biomapper.core.services import MinimalStrategyService
+   from biomapper.api.services.strategy_execution_service import StrategyExecutionService
    
    @pytest.mark.integration
    @pytest.mark.asyncio
    async def test_protein_harmonization_workflow():
        """Test complete protein harmonization workflow."""
        # Load test strategy
-       service = MinimalStrategyService()
+       service = StrategyExecutionService()
        strategy = {
            "name": "test_protein_workflow",
            "steps": [
@@ -505,12 +507,13 @@ Best Practices
 Verification Sources
 --------------------
 
-*Last verified: 2025-08-14*
+*Last verified: 2025-08-17*
 
 This documentation was verified against the following project resources:
 
-- ``/biomapper/tests/unit/core/strategy_actions/test_load_dataset_identifiers.py`` (actual test implementation patterns)
+- ``/biomapper/tests/`` (current test directory structure with unit, integration, performance subdirectories)
+- ``/biomapper/tests/conftest.py`` (shared pytest fixtures)
 - ``/biomapper/pyproject.toml`` (pytest and coverage dependencies)
 - ``/biomapper/CLAUDE.md`` (TDD approach and test commands)
-- ``/biomapper/Makefile`` (make test command with coverage reporting)
-- ``/biomapper/biomapper/core/strategy_actions/typed_base.py`` (execute_typed method signature)
+- ``/biomapper/src/actions/typed_base.py`` (execute_typed method signature with StrategyExecutionContext)
+- ``/biomapper/src/api/services/`` (strategy execution service for integration tests)

@@ -63,8 +63,8 @@ FastAPI service with:
 - Simple interface: `client.run("strategy_name")`
 
 ### Core Execution Engine
-`MinimalStrategyService` in `biomapper/core/services/strategy_service_v2_minimal.py`:
-- Direct YAML loading from `configs/strategies/`
+`MinimalStrategyService` in `biomapper/core/minimal_strategy_service.py`:
+- Direct YAML loading from `src/biomapper/configs/strategies/`
 - Sequential action execution with error handling
 - Variable substitution (`${parameters.key}`, `${env.VAR}`)
 - Shared execution context management
@@ -74,37 +74,44 @@ FastAPI service with:
 
 ```
 biomapper/
-├── biomapper/                     # Core library
-│   └── core/
-│       ├── strategy_actions/      # Self-registering actions
-│       │   ├── entities/          # Entity-specific actions
-│       │   │   ├── proteins/      # UniProt, Ensembl actions
-│       │   │   ├── metabolites/   # HMDB, CHEBI, KEGG actions
-│       │   │   └── chemistry/     # LOINC, clinical test actions
-│       │   ├── algorithms/        # Analysis algorithms
-│       │   ├── io/               # Import/export actions
-│       │   ├── utils/            # Utility actions
-│       │   ├── typed_base.py     # TypedStrategyAction base
-│       │   ├── registry.py       # Global ACTION_REGISTRY
-│       │   └── models.py         # ActionResult models
-│       └── services/
-│           └── strategy_service_v2_minimal.py  # Execution engine
-├── biomapper-api/                # FastAPI service
-│   └── app/
-│       ├── main.py              # Server configuration
-│       ├── api/                 # REST endpoints
-│       └── core/
-│           └── mapper_service.py # Job orchestration
-├── biomapper_client/            # Python client
-│   └── client_v2.py            # BiomapperClient
-├── configs/
-│   └── strategies/             # YAML strategies
-│       ├── experimental/       # Development strategies
-│       ├── production/         # Validated strategies
-│       └── templates/          # Reusable templates
+├── src/                            # Main source directory
+│   ├── actions/                    # Self-registering actions
+│   │   ├── entities/               # Entity-specific actions
+│   │   │   ├── proteins/           # UniProt, Ensembl actions
+│   │   │   ├── metabolites/        # HMDB, CHEBI, KEGG actions
+│   │   │   └── chemistry/          # LOINC, clinical test actions
+│   │   ├── algorithms/             # Analysis algorithms  
+│   │   ├── io/                     # Import/export actions
+│   │   ├── utils/                  # Utility actions
+│   │   ├── workflows/              # High-level workflows
+│   │   ├── typed_base.py           # TypedStrategyAction base
+│   │   ├── registry.py             # Global ACTION_REGISTRY
+│   │   └── base.py                 # BaseStrategyAction
+│   ├── api/                        # FastAPI service
+│   │   ├── main.py                 # Server configuration
+│   │   ├── routes/                 # REST endpoints
+│   │   └── services/
+│   │       └── mapper_service.py   # Job orchestration
+│   ├── client/                     # Python client
+│   │   └── client_v2.py            # BiomapperClient
+│   ├── core/                       # Core library
+│   │   ├── minimal_strategy_service.py  # Execution engine
+│   │   ├── models/                 # Data models
+│   │   ├── standards/              # 2025 standardizations
+│   │   └── algorithms/             # Core algorithms
+│   └── configs/
+│       └── strategies/             # YAML strategies
+│           ├── experimental/       # Development strategies
+│           ├── metabolite/         # Metabolite-specific
+│           └── protein/            # Protein-specific
 ├── tests/
-│   └── unit/core/strategy_actions/ # Unit tests for actions
-└── docs/                        # Documentation
+│   └── unit/                       # Unit tests
+│       ├── core/
+│       │   └── strategy_actions/   # Action tests
+│       └── strategy_actions/       # Legacy test location
+└── docs/                           # Documentation
+    └── source/
+        └── architecture/           # Architecture docs
 ```
 
 ## System Architecture
@@ -177,10 +184,11 @@ biomapper/
 ## Creating New Actions
 
 ```python
-from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
-from biomapper.core.strategy_actions.registry import register_action
-from biomapper.core.strategy_actions.models import ActionResult
+from actions.typed_base import TypedStrategyAction, StandardActionResult
+from actions.registry import register_action
 from pydantic import BaseModel, Field
+from typing import Dict, Any
+import pandas as pd
 
 class MyActionParams(BaseModel):
     input_key: str = Field(..., description="Input dataset key")
@@ -188,24 +196,30 @@ class MyActionParams(BaseModel):
     output_key: str = Field(..., description="Output dataset key")
 
 @register_action("MY_ACTION")
-class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
+class MyAction(TypedStrategyAction[MyActionParams, StandardActionResult]):
     def get_params_model(self) -> type[MyActionParams]:
         return MyActionParams
     
-    async def execute_typed(self, params: MyActionParams, context: Dict) -> ActionResult:
+    async def execute_typed(self, params: MyActionParams, context: Dict[str, Any]) -> StandardActionResult:
         # Access input data
-        input_data = context["datasets"].get(params.input_key, [])
+        datasets = context.get("datasets", {})
+        input_data = datasets.get(params.input_key, pd.DataFrame())
         
-        # Process data
-        processed = [item for item in input_data 
-                    if item.get("score", 0) >= params.threshold]
+        # Process data using pandas
+        if not input_data.empty:
+            processed = input_data[input_data["score"] >= params.threshold]
+        else:
+            processed = pd.DataFrame()
         
         # Store output
+        if "datasets" not in context:
+            context["datasets"] = {}
         context["datasets"][params.output_key] = processed
         
-        return ActionResult(
+        return StandardActionResult(
             success=True,
-            message=f"Processed {len(processed)} items"
+            message=f"Processed {len(processed)} items",
+            data={"input_count": len(input_data), "output_count": len(processed)}
         )
 ```
 
@@ -282,14 +296,15 @@ The system runs as a containerized FastAPI service with:
 ---
 
 ## Verification Sources
-*Last verified: 2025-08-14*
+*Last verified: 2025-01-17*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/biomapper/core/strategy_actions/` (37 self-registering actions organized by entity)
-- `/biomapper/biomapper/core/services/strategy_service_v2_minimal.py` (MinimalStrategyService implementation)
-- `/biomapper/biomapper-api/app/` (FastAPI service with job persistence)
-- `/biomapper/biomapper_client/client_v2.py` (BiomapperClient synchronous wrapper)
-- `/biomapper/configs/strategies/` (Production YAML strategy examples)
-- `/biomapper/CLAUDE.md` (Architecture patterns and guidelines)
-- `/biomapper/README.md` (High-level overview and action list)
+- `/biomapper/src/actions/` (Self-registering actions organized by entity type with registry.py)
+- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class with StandardActionResult)
+- `/biomapper/src/core/minimal_strategy_service.py` (MinimalStrategyService execution engine)
+- `/biomapper/src/api/main.py` (FastAPI server configuration with uvicorn)
+- `/biomapper/src/api/services/mapper_service.py` (MapperService job orchestration)
+- `/biomapper/src/client/client_v2.py` (BiomapperClient synchronous wrapper)
+- `/biomapper/src/configs/strategies/` (YAML strategy templates and examples)
+- `/biomapper/CLAUDE.md` (2025 standardizations and TDD development patterns)

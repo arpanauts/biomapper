@@ -113,18 +113,17 @@ Step 3: Implement the Action
 
 .. code-block:: python
 
-   from biomapper.core.strategy_actions.typed_base import (
-       TypedStrategyAction,
-       StandardActionResult
-   )
-   from biomapper.core.strategy_actions.registry import register_action
-   from typing import Dict, Any, List
+   from biomapper.actions.typed_base import TypedStrategyAction
+   from biomapper.actions.registry import register_action
+   from biomapper.core.models.action_results import ActionResult
+   from biomapper.core.models.execution_context import StrategyExecutionContext
+   from typing import Dict, Any, List, Type
    import logging
    
    logger = logging.getLogger(__name__)
    
    @register_action("MY_ACTION")
-   class MyAction(TypedStrategyAction[MyActionParams, StandardActionResult]):
+   class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
        """
        Filter biological data based on score threshold.
        
@@ -137,13 +136,13 @@ Step 3: Implement the Action
            Output: [{"id": "A", "score": 0.9}]
        """
        
-       def get_params_model(self) -> type[MyActionParams]:
+       def get_params_model(self) -> Type[MyActionParams]:
            """Return the parameters model class."""
            return MyActionParams
        
-       def get_result_model(self) -> type[StandardActionResult]:
+       def get_result_model(self) -> Type[ActionResult]:
            """Return the result model class."""
-           return StandardActionResult
+           return ActionResult
        
        async def execute_typed(
            self, 
@@ -152,13 +151,13 @@ Step 3: Implement the Action
            params: MyActionParams,
            source_endpoint: Any,
            target_endpoint: Any,
-           context: Any
-       ) -> StandardActionResult:
+           context: StrategyExecutionContext
+       ) -> ActionResult:
            """Execute the filtering action."""
            try:
                # Get input data
                if params.input_key not in context.get("datasets", {}):
-                   return StandardActionResult(
+                   return ActionResult(
                        success=False,
                        message=f"Input key '{params.input_key}' not found"
                    )
@@ -196,7 +195,7 @@ Step 3: Implement the Action
                
                logger.info(f"Filtered {len(input_data)} to {len(filtered)} items")
                
-               return StandardActionResult(
+               return ActionResult(
                    success=True,
                    message=f"Filtered {len(filtered)} items with threshold {params.threshold}",
                    data={
@@ -208,7 +207,7 @@ Step 3: Implement the Action
                
            except Exception as e:
                logger.error(f"Error in MyAction: {str(e)}")
-               return StandardActionResult(
+               return ActionResult(
                    success=False,
                    message=f"Action failed: {str(e)}"
                )
@@ -220,7 +219,7 @@ Place your action in the appropriate directory:
 
 .. code-block:: text
 
-   strategy_actions/
+   actions/
    ├── entities/           # Entity-specific actions
    │   ├── proteins/      # Protein processing
    │   ├── metabolites/   # Metabolite processing
@@ -378,14 +377,14 @@ Debugging Tips
 
    .. code-block:: python
    
-      from biomapper.core.strategy_actions.registry import ACTION_REGISTRY
+      from biomapper.actions.registry import ACTION_REGISTRY
       print(ACTION_REGISTRY.keys())
 
 Need Help?
 ----------
 
-* Check existing actions in ``biomapper/core/strategy_actions/``
-* Review tests in ``tests/unit/core/strategy_actions/``
+* Check existing actions in ``biomapper/actions/``
+* Review tests in ``tests/unit/actions/``
 * See ``CLAUDE.md`` for AI assistance with development
 
 ---
@@ -393,12 +392,14 @@ Need Help?
 Verification Sources
 --------------------
 
-*Last verified: 2025-08-14*
+*Last verified: 2025-08-17*
 
 This documentation was verified against the following project resources:
 
-- ``/biomapper/biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction base class with execute_typed signature)
-- ``/biomapper/biomapper/core/strategy_actions/registry.py`` (self-registering action system with @register_action decorator)
-- ``/biomapper/biomapper/core/strategy_actions/load_dataset_identifiers.py`` (real action implementation showing correct patterns)
+- ``/biomapper/src/actions/typed_base.py`` (TypedStrategyAction base class with execute_typed signature requiring StrategyExecutionContext)
+- ``/biomapper/src/actions/registry.py`` (self-registering action system with @register_action decorator)
+- ``/biomapper/src/core/models/action_results.py`` (ActionResult model for return values)
+- ``/biomapper/src/core/models/execution_context.py`` (StrategyExecutionContext for typed context)
+- ``/biomapper/src/actions/`` (current action directory structure under src/)
 - ``/biomapper/CLAUDE.md`` (action organization and development patterns)
-- ``/biomapper/configs/strategies/`` (YAML strategy examples and usage)
+- ``/biomapper/src/configs/strategies/`` (YAML strategy examples and usage)

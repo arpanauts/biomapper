@@ -9,19 +9,19 @@ Core Data Operations
 Fundamental actions for data loading and analysis:
 
 **LOAD_DATASET_IDENTIFIERS**
-  Generic data loader supporting CSV/TSV files with flexible column mapping and automatic format detection.
+  Generic data loader supporting CSV/TSV files with intelligent identifier handling, automatic format detection, prefix stripping, and regex-based filtering.
 
 **MERGE_DATASETS**
-  Combine multiple datasets with intelligent deduplication and conflict resolution.
+  Combine multiple datasets with intelligent deduplication and conflict resolution strategies.
 
 **FILTER_DATASET**
-  Apply complex filtering criteria using Python expressions.
+  Apply complex filtering criteria using Python expressions for data subsetting.
 
-**EXPORT_DATASET_V2**
-  Export results to CSV, TSV, or JSON formats with metadata preservation.
+**EXPORT_DATASET**
+  Export results to CSV, TSV, or JSON formats with comprehensive metadata preservation.
 
 **CUSTOM_TRANSFORM_EXPRESSION**
-  Apply Python expressions to transform data columns dynamically.
+  Apply Python expressions to transform data columns dynamically without code changes.
 
 Action Registry System
 ----------------------
@@ -30,9 +30,8 @@ Actions self-register at import time using the ``@register_action`` decorator:
 
 .. code-block:: python
 
-    from biomapper.core.strategy_actions.registry import register_action
-    from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
-    from biomapper.core.strategy_actions.models import ActionResult
+    from actions.registry import register_action
+    from actions.typed_base import TypedStrategyAction
     
     @register_action("ACTION_NAME")
     class MyAction(TypedStrategyAction[ParamsModel, ActionResult]):
@@ -75,23 +74,18 @@ Follow Test-Driven Development (TDD) when creating new actions:
 .. code-block:: python
 
     from pydantic import BaseModel, Field
-    from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
-    from biomapper.core.strategy_actions.registry import register_action
-    from typing import Dict, Any
-    
-    # ActionResult is typically defined within each action module
-    class ActionResult(BaseModel):
-        success: bool
-        message: str = ""
-        data: Dict[str, Any] = Field(default_factory=dict)
+    from actions.typed_base import TypedStrategyAction, StandardActionResult
+    from actions.registry import register_action
+    from typing import Dict, Any, List
     
     class MyActionParams(BaseModel):
+        """Parameters for custom action with validation."""
         input_key: str = Field(..., description="Input dataset key")
         threshold: float = Field(0.8, ge=0.0, le=1.0, description="Processing threshold")
         output_key: str = Field(..., description="Output dataset key")
     
     @register_action("MY_ACTION")  
-    class MyAction(TypedStrategyAction[MyActionParams, ActionResult]):
+    class MyAction(TypedStrategyAction[MyActionParams, StandardActionResult]):
         """Process biological data with threshold filtering."""
         
         def get_params_model(self) -> type[MyActionParams]:
@@ -101,20 +95,24 @@ Follow Test-Driven Development (TDD) when creating new actions:
             self, 
             params: MyActionParams, 
             context: Dict[str, Any]
-        ) -> ActionResult:
-            # Access input data
-            input_data = context["datasets"].get(params.input_key, [])
+        ) -> StandardActionResult:
+            # Access input data from context datasets
+            input_data = context.get("datasets", {}).get(params.input_key, pd.DataFrame())
             
-            # Process data  
-            processed = [item for item in input_data 
-                        if item.get("score", 0) >= params.threshold]
+            # Process data using pandas operations
+            if not input_data.empty:
+                processed = input_data[input_data["score"] >= params.threshold]
+            else:
+                processed = pd.DataFrame()
             
-            # Store results
+            # Store results in context
+            if "datasets" not in context:
+                context["datasets"] = {}
             context["datasets"][params.output_key] = processed
             
-            return ActionResult(
+            return StandardActionResult(
                 success=True,
-                message=f"Processed {len(processed)} items",
+                message=f"Processed {len(processed)} items from {len(input_data)} total",
                 data={"filtered_count": len(input_data) - len(processed)}
             )
 
@@ -170,16 +168,15 @@ Benefits
 
 ---
 
-Verification Sources
---------------------
-*Last verified: 2025-08-14*
+## Verification Sources
+*Last verified: 2025-01-17*
 
 This documentation was verified against the following project resources:
 
-- ``biomapper/core/strategy_actions/registry.py`` (Global ACTION_REGISTRY and register_action decorator)
-- ``biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction generic base class)
-- ``biomapper/core/strategy_actions/entities/`` (Entity-specific actions with inline ActionResult definitions)
-- ``biomapper/core/strategy_actions/io/load_dataset_identifiers.py`` (Generic CSV/TSV data loader)
-- ``biomapper/core/strategy_actions/data_operations/`` (Core data operations like merge and filter)
-- ``README.md`` (Complete list of available actions)
-- ``CLAUDE.md`` (Action development patterns and TDD approach)
+- `/biomapper/src/actions/registry.py` (Global ACTION_REGISTRY dictionary with @register_action decorator)
+- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class with StandardActionResult)
+- `/biomapper/src/actions/load_dataset_identifiers.py` (LoadDatasetIdentifiersParams with file_path, identifier_column, output_key)
+- `/biomapper/src/actions/merge_datasets.py` (Dataset combination with deduplication logic)
+- `/biomapper/src/actions/semantic_metabolite_match.py` (AI-powered metabolite matching implementation)
+- `/biomapper/src/actions/calculate_set_overlap.py` (Jaccard similarity calculation with Venn diagrams)
+- `/biomapper/CLAUDE.md` (2025 standardizations and TDD development patterns)

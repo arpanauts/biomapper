@@ -9,35 +9,29 @@ The BioMapper test suite follows Test-Driven Development (TDD) principles with c
 ```
 tests/
 ├── unit/                           # Unit tests
-│   └── core/
-│       ├── models/                 # Pydantic model tests
-│       │   ├── test_action_models.py
-│       │   ├── test_action_results.py
-│       │   └── test_execution_context.py
-│       └── strategy_actions/       # Action tests (37+ files)
-│           ├── entities/           # Entity-specific tests
-│           │   ├── proteins/       # Protein action tests
-│           │   │   ├── test_protein_normalize_accessions.py
-│           │   │   └── test_protein_multi_bridge.py
-│           │   ├── metabolites/    # Metabolite action tests
-│           │   │   ├── test_nightingale_nmr_match.py
-│           │   │   └── test_semantic_metabolite_match.py
-│           │   └── chemistry/      # Chemistry action tests
-│           │       └── test_chemistry_extract_loinc.py
-│           ├── io/                 # IO action tests
-│           │   ├── test_load_dataset_identifiers.py
-│           │   └── test_export_dataset_v2.py
-│           ├── algorithms/         # Algorithm tests
-│           │   ├── test_calculate_set_overlap.py
-│           │   └── test_calculate_three_way_overlap.py
-│           └── test_registry.py    # Registry tests
-├── integration/                    # Integration tests
-│   ├── test_strategy_execution.py # End-to-end strategy tests
-│   ├── test_api_endpoints.py      # API endpoint tests
-│   └── test_client_integration.py # BiomapperClient tests
-├── api/                           # API-specific tests
-│   └── test_mapper_service.py    # Job orchestration tests
-└── conftest.py                   # Test configuration and fixtures
+│   ├── core/
+│   │   ├── standards/              # Standards tests
+│   │   │   ├── test_file_loader.py
+│   │   │   └── test_file_validator.py
+│   │   ├── strategy_actions/       # Core action tests
+│   │   │   ├── test_load_dataset_identifiers.py
+│   │   │   ├── test_calculate_set_overlap.py
+│   │   │   ├── test_merge_with_uniprot_resolution.py
+│   │   │   └── utils/              # Utility tests
+│   │   │       ├── test_progressive_wrapper.py
+│   │   │       └── data_processing/
+│   │   │           └── test_calculate_mapping_quality.py
+│   │   └── test_control_flow.py   # Control flow tests
+│   └── strategy_actions/          # Direct action tests
+│       ├── test_build_nightingale_reference.py
+│       ├── test_semantic_metabolite_match.py
+│       ├── test_merge_datasets.py
+│       └── test_action_aliases.py
+├── scripts/                        # Script tests
+│   ├── test_refactored_scripts.py
+│   └── test_metabolomics_wrapper.py
+├── test_identifier_normalization.py # Identifier tests
+└── conftest.py                    # Test configuration and fixtures
 ```
 
 ## Test Categories
@@ -242,8 +236,24 @@ The `pytest.ini` file includes:
 ```ini
 [pytest]
 asyncio_mode = auto
+asyncio_default_fixture_loop_scope = function
+
+# Test markers
 markers =
     requires_api: marks tests that require the API server to be running
+    integration: marks tests that require real services (Qdrant, etc.)
+    performance: marks performance benchmark tests
+    memory: marks memory efficiency and optimization tests
+    requires_qdrant: marks tests that require Qdrant vector database
+    requires_external_services: marks tests that require external APIs or services
+    requires_network: marks tests that require network access
+    slow: marks tests that take more than 30 seconds to run
+
+# Test isolation and resource limits
+addopts = --strict-markers -p no:cacheprovider
+
+# Plugin path
+pythonpath = . dev
 ```
 
 ## Coverage Requirements
@@ -355,13 +365,14 @@ biomapper/core/strategy_actions/entities/proteins/
 ---
 
 ## Verification Sources
-*Last verified: 2025-08-14*
+*Last verified: 2025-01-17*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/tests/unit/core/strategy_actions/` (37+ action test files organized by entity)
-- `/biomapper/tests/integration/` (End-to-end strategy execution tests)
-- `/biomapper/tests/conftest.py` (Global test fixtures and configuration)
-- `/biomapper/.github/workflows/test.yml` (CI/CD test configuration with coverage requirements)
-- `/biomapper/pyproject.toml` (pytest and coverage configuration)
-- `/biomapper/CLAUDE.md` (TDD approach and testing requirements)
+- `/biomapper/tests/unit/core/strategy_actions/` (Core action tests including test_load_dataset_identifiers.py)
+- `/biomapper/tests/unit/strategy_actions/` (Direct action tests: test_semantic_metabolite_match.py, test_merge_datasets.py)
+- `/biomapper/tests/unit/core/standards/` (Standards tests: test_file_loader.py, test_file_validator.py)
+- `/biomapper/tests/scripts/` (Script tests: test_refactored_scripts.py, test_metabolomics_wrapper.py)
+- `/biomapper/pytest.ini` (Test markers, asyncio configuration, and addopts settings)
+- `/biomapper/pyproject.toml` (pytest-asyncio and coverage dependencies)
+- `/biomapper/CLAUDE.md` (TDD approach and testing commands)

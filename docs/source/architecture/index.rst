@@ -57,9 +57,9 @@ Component Responsibilities
   Orchestrates job execution, manages background tasks, handles SQLite persistence, and checkpoint recovery.
 
 **MinimalStrategyService** (``biomapper/core/minimal_strategy_service.py``)
-  Core execution engine that loads YAML strategies from ``configs/strategies/`` and executes actions sequentially.
+  Core execution engine that loads YAML strategies from ``src/biomapper/configs/strategies/`` and executes actions sequentially.
 
-**ACTION_REGISTRY** (``biomapper/core/strategy_actions/registry.py``)
+**ACTION_REGISTRY** (``biomapper/actions/registry.py``)
   Global dictionary where actions self-register at import time using the ``@register_action`` decorator.
 
 **Execution Context**
@@ -84,8 +84,8 @@ Example action implementation:
 
 .. code-block:: python
 
-    from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
-    from biomapper.core.strategy_actions.registry import register_action
+    from biomapper.actions.typed_base import TypedStrategyAction
+    from biomapper.actions.registry import register_action
     from pydantic import BaseModel, Field
     from typing import Dict, Any
     
@@ -199,18 +199,18 @@ Future Architecture Goals
 
 ---
 
-Verification Sources
---------------------
-*Last verified: 2025-08-13*
+---
+
+## Verification Sources
+*Last verified: 2025-08-17*
 
 This documentation was verified against the following project resources:
 
-* ``biomapper/core/strategy_actions/registry.py`` (Action registry implementation)
-* ``biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction base class)
-* ``biomapper/core/minimal_strategy_service.py`` (Strategy execution engine)
-* ``biomapper-api/app/main.py`` (FastAPI server implementation)
-* ``biomapper-api/app/services/mapper_service.py`` (Job orchestration service)
-* ``biomapper_client/biomapper_client/client_v2.py`` (Client library implementation)
-* ``README.md`` (Project overview and installation)
-* ``CLAUDE.md`` (Developer guidelines and patterns)
-* ``pyproject.toml`` (Dependencies and configuration)
+- `/biomapper/src/biomapper/actions/registry.py` (Action registry implementation with global ACTION_REGISTRY)
+- `/biomapper/src/biomapper/actions/typed_base.py` (TypedStrategyAction base class with execute() wrapper)
+- `/biomapper/src/biomapper/core/minimal_strategy_service.py` (Strategy execution engine with dual context support)
+- `/biomapper/src/biomapper/api/main.py` (FastAPI server with background job management)
+- `/biomapper/src/biomapper/client/client_v2.py` (BiomapperClient synchronous wrapper)
+- `/biomapper/README.md` (Project overview and 37+ available actions)
+- `/biomapper/CLAUDE.md` (TDD development guidelines and 2025 standardizations)
+- `/biomapper/pyproject.toml` (Poetry dependencies and test configuration)

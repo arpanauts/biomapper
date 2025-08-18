@@ -28,42 +28,50 @@ Biomapper uses YAML-based strategies executed through a REST API. Here's the bas
 ### 1. Start the API Server
 
 ```bash
-cd biomapper-api
-poetry run uvicorn app.main:app --reload --port 8000
+# Start directly from project root (no separate directory needed)
+poetry run uvicorn api.main:app --reload --port 8000
 ```
 
-The API will be available at http://localhost:8000
+The API will be available at:
+- Interactive docs: http://localhost:8000/api/docs  
+- API health: http://localhost:8000/api/health
 
 ### 2. Create a Strategy
 
-Create a YAML file `my_strategy.yaml`:
+Create a YAML file in `src/configs/strategies/` or locally:
 
 ```yaml
-name: "PROTEIN_ANALYSIS"
-description: "Load and analyze protein data"
+name: "protein_harmonization"
+description: "Load and harmonize protein identifiers"
+
+parameters:
+  input_file: "/path/to/proteins.csv"
+  output_dir: "/results"
 
 steps:
   - name: load_data
     action:
       type: LOAD_DATASET_IDENTIFIERS
       params:
-        file_path: "/path/to/proteins.csv"
-        identifier_column: "uniprot"
+        file_path: "${parameters.input_file}"
+        identifier_column: "uniprot_id"
         output_key: "proteins"
-        dataset_name: "My Proteins"
 ```
 
 ### 3. Execute the Strategy
 
-Using the Python client:
+Using the Python client (located in `src/client/`):
 
 ```python
-from biomapper_client import BiomapperClient
+from client.client_v2 import BiomapperClient
 
 # Simple synchronous execution (recommended)
 client = BiomapperClient(base_url="http://localhost:8000")
-result = client.run("my_strategy.yaml")
-print(f"Status: {result['status']}")
+result = client.run("protein_harmonization", parameters={
+    "input_file": "/path/to/your/data.csv",
+    "output_dir": "/path/to/output"
+})
+print(f"Success: {result.get('success', False)}")
 print(f"Job ID: {result.get('job_id')}")
 
 # Or async with progress tracking
@@ -71,8 +79,8 @@ import asyncio
 
 async def main():
     async with BiomapperClient() as client:
-        result = await client.execute_strategy("my_strategy.yaml")
-        print(f"Status: {result['status']}")
+        result = await client.execute_strategy("protein_harmonization")
+        print(f"Success: {result.get('success', False)}")
 
 asyncio.run(main())
 ```
@@ -80,15 +88,21 @@ asyncio.run(main())
 Or use the CLI:
 
 ```bash
-# Using the biomapper CLI
-poetry run biomapper run my_strategy.yaml --watch
+# Check available commands
+poetry run biomapper --help
+
+# Basic health check
+poetry run biomapper health
+
+# List available strategies
+poetry run biomapper strategies
 ```
 
 ## Core Concepts
 
 ### Actions
 
-Biomapper ships with 38 self-registering actions organized by domain:
+Biomapper ships with 30+ self-registering actions organized by entity type in `src/actions/`:
 
 **Core Data Operations:**
 - **LOAD_DATASET_IDENTIFIERS**: Load biological identifiers from CSV/TSV files
@@ -97,23 +111,29 @@ Biomapper ships with 38 self-registering actions organized by domain:
 - **EXPORT_DATASET_V2**: Export results to TSV/CSV/JSON formats
 - **CUSTOM_TRANSFORM_EXPRESSION**: Apply Python expressions to transform data
 
-**Protein Mapping:**
+**Protein Mapping** (`entities/proteins/`):
 - **PROTEIN_EXTRACT_UNIPROT_FROM_XREFS**: Extract UniProt IDs from compound reference fields
 - **PROTEIN_NORMALIZE_ACCESSIONS**: Standardize protein accession formats
+- **PROTEIN_MULTI_BRIDGE**: Multi-source protein identifier resolution
 - **MERGE_WITH_UNIPROT_RESOLUTION**: Map identifiers to UniProt accessions
 
-**Metabolite Mapping:**
+**Metabolite Mapping** (`entities/metabolites/`):
 - **METABOLITE_CTS_BRIDGE**: Chemical Translation Service API integration
 - **NIGHTINGALE_NMR_MATCH**: Nightingale NMR platform matching
 - **SEMANTIC_METABOLITE_MATCH**: AI-powered semantic matching
 - **VECTOR_ENHANCED_MATCH**: Vector embedding similarity matching
+- **METABOLITE_EXTRACT_IDENTIFIERS**: Extract metabolite IDs from text fields
 
-**Analysis:**
+**Chemistry Operations** (`entities/chemistry/`):
+- **CHEMISTRY_EXTRACT_LOINC**: Extract LOINC codes from clinical data
+- **CHEMISTRY_FUZZY_TEST_MATCH**: Fuzzy matching for clinical test names
+
+**Analysis & Reporting:**
 - **CALCULATE_SET_OVERLAP**: Calculate Jaccard similarity between datasets
 - **CALCULATE_THREE_WAY_OVERLAP**: Three-way dataset comparison
-- **GENERATE_METABOLOMICS_REPORT**: Comprehensive metabolomics reports
+- **CALCULATE_MAPPING_QUALITY**: Assess mapping quality metrics
 
-The self-registering action system allows easy development of new actions.
+The self-registering action system using `@register_action("ACTION_NAME")` decorators allows easy development of new actions.
 
 ### YAML Strategies
 
@@ -231,16 +251,22 @@ steps:
 Verify your installation works:
 
 ```bash
-# Check API health
-curl http://localhost:8000/health
+# Check CLI installation
+poetry run biomapper health
+
+# Test core imports
+poetry run biomapper test-import
+
+# Check API health (if API server is running)
+curl http://localhost:8000/api/health
 
 # View API documentation
-open http://localhost:8000/docs
+open http://localhost:8000/api/docs
 
 # Run tests with coverage
 poetry run pytest --cov=biomapper
 
-# Run quick unit tests
+# Run quick unit tests only
 poetry run pytest tests/unit/
 ```
 
@@ -253,13 +279,14 @@ poetry run pytest tests/unit/
 
 ---
 ## Verification Sources
-*Last verified: 2025-08-14*
+*Last verified: 2025-01-17*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/biomapper-api/app/main.py` (FastAPI server and endpoint definitions)
-- `/biomapper/biomapper/core/strategy_actions/registry.py` (38 self-registering actions via @register_action)
-- `/biomapper/biomapper_client/biomapper_client/client_v2.py` (BiomapperClient with run() and execute_strategy() methods)
-- `/biomapper/biomapper_client/biomapper_client/cli_v2.py` (CLI run command implementation)
-- `/biomapper/pyproject.toml` (Python 3.11+ requirement, repository URL)
+- `/biomapper/src/api/main.py` (FastAPI server configuration with /api/docs endpoint)
+- `/biomapper/src/actions/registry.py` (ACTION_REGISTRY and @register_action decorator)
+- `/biomapper/src/client/client_v2.py` (BiomapperClient with run() and execute_strategy() methods)
+- `/biomapper/src/cli/minimal.py` (biomapper CLI commands: health, test-import, strategies)
+- `/biomapper/src/configs/strategies/` (strategy YAML files location)
+- `/biomapper/pyproject.toml` (Python 3.11+ requirement, repository URL, CLI script definition)
 - `/biomapper/CLAUDE.md` (essential commands and project conventions)

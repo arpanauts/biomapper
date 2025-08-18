@@ -48,7 +48,7 @@ BioMapper follows a modern microservices architecture with three layers:
 
 1. **Client Layer** - Python client library (``biomapper_client``) for programmatic access
 2. **API Layer** - FastAPI service with SQLite job persistence and SSE progress tracking
-3. **Core Layer** - 30+ self-registering actions with strategy execution engine
+3. **Core Layer** - 13 self-registering actions with strategy execution engine
 
 The system uses a **registry pattern** where actions self-register via ``@register_action`` decorators, a **strategy pattern** for YAML-based workflow configuration, and a **pipeline pattern** for data flow through shared execution context. Actions are organized by biological entity (proteins, metabolites, chemistry) and automatically discovered at runtime.
 
@@ -58,7 +58,6 @@ The system uses a **registry pattern** where actions self-register via ``@regist
    
    guides/quickstart
    guides/installation
-   guides/first_mapping
 
 .. toctree::
    :maxdepth: 2
@@ -87,13 +86,13 @@ The system uses a **registry pattern** where actions self-register via ``@regist
 📚 **Available Actions**
 ------------------------
 
-BioMapper includes 30+ actions across categories:
+BioMapper includes 13 actions across categories:
 
 * **Data Operations**: Load, merge, filter, export, transform
-* **Protein Mapping**: UniProt resolution, accession normalization, multi-bridge
-* **Metabolite Matching**: CTS, semantic, vector, NMR matching
-* **Chemistry**: LOINC extraction, fuzzy matching, vendor harmonization
-* **Analysis**: Set overlap, quality metrics, comprehensive reports
+* **Protein Actions**: UniProt extraction, accession normalization
+* **Metabolite Actions**: Nightingale NMR matching, semantic matching
+* **Chemistry Actions**: Fuzzy test matching
+* **Integration Actions**: Google Drive sync with chunked transfer
 
 Indices and tables
 ==================
@@ -106,13 +105,11 @@ Indices and tables
 
 Verification Sources
 --------------------
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-18*
 
 This documentation was verified against the following project resources:
 
-- ``biomapper/core/strategy_actions/registry.py`` (Action registry)
-- ``biomapper_client/biomapper_client/client_v2.py`` (Client implementation)
-- ``biomapper-api/app/main.py`` (API server)
-- ``configs/strategies/test_metabolite_simple.yaml`` (Example strategy)
-- ``README.md`` (Project overview)
-- ``CLAUDE.md`` (Commands and patterns)
+- ``/biomapper/README.md`` (Project overview)
+- ``/biomapper/CLAUDE.md`` (Commands and patterns)
+- ``/biomapper/src/actions/registry.py`` (Verified 13 actual registered actions)
+- ``/biomapper/pyproject.toml`` (Project configuration and dependencies)

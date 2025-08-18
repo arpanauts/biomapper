@@ -36,9 +36,8 @@ Here's how to create a typed action following the established patterns:
 ```python
 from typing import Type, Dict, Any, List
 from pydantic import BaseModel, Field, field_validator
-from biomapper.core.strategy_actions.typed_base import TypedStrategyAction
-from biomapper.core.strategy_actions.models import ActionResult
-from biomapper.core.strategy_actions.registry import register_action
+from biomapper.actions.typed_base import TypedStrategyAction
+from biomapper.actions.registry import register_action
 
 class ProteinNormalizeParams(BaseModel):
     """Parameters for protein normalization action."""
@@ -329,15 +328,17 @@ The self-registering action pattern combined with Pydantic validation creates a 
 
 ---
 
+---
+
 ## Verification Sources
-*Last verified: 2025-08-14*
+*Last verified: 2025-08-17*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/biomapper/core/strategy_actions/typed_base.py` (TypedStrategyAction generic implementation with execute() wrapper)
-- `/biomapper/biomapper/core/strategy_actions/registry.py` (Global ACTION_REGISTRY and @register_action decorator)
-- `/biomapper/biomapper/core/strategy_actions/models.py` (ActionResult and StandardActionResult models)
-- `/biomapper/biomapper/core/strategy_actions/entities/proteins/` (Example typed protein actions)
-- `/biomapper/tests/unit/core/strategy_actions/` (Unit tests demonstrating both interfaces)
-- `/biomapper/CLAUDE.md` (Type safety migration approach and backward compatibility)
-- `/biomapper/README.md` (Current migration status: ~35 of 37 actions completed)
+- `/biomapper/src/biomapper/actions/typed_base.py` (TypedStrategyAction with dual context support and execute() compatibility wrapper)
+- `/biomapper/src/biomapper/actions/registry.py` (Global ACTION_REGISTRY with @register_action decorator)
+- `/biomapper/src/biomapper/actions/base.py` (BaseStrategyAction abstract base class)
+- `/biomapper/src/biomapper/actions/entities/proteins/` (Typed protein actions with Pydantic parameter models)
+- `/biomapper/tests/unit/core/strategy_actions/` (TDD unit tests with both typed and legacy interfaces)
+- `/biomapper/CLAUDE.md` (Type safety migration status: ~35 of 37 actions completed)
+- `/biomapper/README.md` (TypedStrategyAction adoption and backward compatibility guarantees)

@@ -26,10 +26,17 @@ Start the API
 
 .. code-block:: bash
 
-   cd biomapper-api
-   poetry run uvicorn app.main:app --reload --port 8000
+   # Start from project root (recommended)
+   cd biomapper && poetry run uvicorn api.main:app --reload --port 8000
+   
+   # Alternative: Use CLI command
+   poetry run biomapper api --host localhost --port 8000
 
-API will be available at http://localhost:8000/docs
+API will be available at:
+
+- Interactive docs: http://localhost:8000/api/docs
+- Health endpoint: http://localhost:8000/api/health
+- Root endpoint: http://localhost:8000/
 
 Your First Strategy
 -------------------
@@ -56,7 +63,7 @@ Your First Strategy
      
      - name: export_results
        action:
-         type: EXPORT_DATASET_V2
+         type: EXPORT_DATASET
          params:
            input_key: "proteins"
            output_file: "${parameters.output_dir}/harmonized.csv"
@@ -66,7 +73,7 @@ Your First Strategy
 
 .. code-block:: python
 
-   from biomapper_client import BiomapperClient
+   from client.client_v2 import BiomapperClient
    
    # Simple synchronous execution
    client = BiomapperClient(base_url="http://localhost:8000")
@@ -74,60 +81,75 @@ Your First Strategy
        "input_file": "/path/to/your/data.csv",
        "output_dir": "/path/to/output"
    })
-   print(f"Success: {result['success']}")
+   print(f"Success: {result.success}")  # StrategyResult object
 
 3. **Or use the CLI**:
 
 .. code-block:: bash
 
-   # Using the biomapper CLI
-   poetry run biomapper run test_strategy.yaml \
-     --parameters '{"input_file": "/data/proteins.csv", "output_dir": "/results"}' \
-     --watch
+   # Check available CLI commands
+   poetry run biomapper --help
+   
+   # List available strategies
+   poetry run biomapper strategies
+   
+   # Verify CLI installation
+   poetry run biomapper health
 
 Verify Installation
 -------------------
 
 .. code-block:: bash
 
+   # Test CLI installation
+   poetry run biomapper health
+   poetry run biomapper test-import
+   
    # Run tests with coverage
    poetry run pytest --cov=biomapper
    
    # Quick unit tests only
    poetry run pytest tests/unit/
    
-   # Check API health
-   curl http://localhost:8000/health
+   # Check API health (if API server is running)
+   curl http://localhost:8000/api/health
    
    # View interactive API docs
-   open http://localhost:8000/docs
+   open http://localhost:8000/api/docs
 
 Common Actions
 --------------
 
-* **LOAD_DATASET_IDENTIFIERS** - Load biological identifiers
-* **PROTEIN_EXTRACT_UNIPROT_FROM_XREFS** - Extract UniProt IDs
-* **METABOLITE_CTS_BRIDGE** - Chemical Translation Service
-* **CALCULATE_SET_OVERLAP** - Dataset comparison
-* **EXPORT_DATASET_V2** - Export results
+* **LOAD_DATASET_IDENTIFIERS** - Load biological identifiers from CSV/TSV
+* **PROTEIN_EXTRACT_UNIPROT_FROM_XREFS** - Extract UniProt IDs from reference fields
+* **PROTEIN_NORMALIZE_ACCESSIONS** - Standardize protein accession formats  
+* **MERGE_DATASETS** - Combine multiple datasets with deduplication
+* **FILTER_DATASET** - Apply filtering criteria to datasets
+* **CUSTOM_TRANSFORM_EXPRESSION** - Apply Python expressions to data
+* **EXPORT_DATASET** - Export results to various formats
+* **SYNC_TO_GOOGLE_DRIVE_V2** - Upload results to Google Drive
+* **SEMANTIC_METABOLITE_MATCH** - AI-powered metabolite matching
+* **NIGHTINGALE_NMR_MATCH** - Nightingale NMR platform matching
+* **CHEMISTRY_FUZZY_TEST_MATCH** - Fuzzy matching for clinical tests
 
 Next Steps
 ----------
 
 * :doc:`installation` - Detailed setup instructions
-* :doc:`first_mapping` - Complete mapping example
 * :doc:`../usage` - Advanced usage patterns
 * :doc:`../configuration` - Strategy configuration
 * :doc:`../actions/index` - Complete action reference
 
 ---
-## Verification Sources
-*Last verified: 2025-08-14*
 
-This documentation was verified against the following project resources:
+.. note::
+   **Verification Sources** (*Last verified: 2025-08-18*)
 
-- `/biomapper/biomapper-api/app/main.py` (uvicorn server startup command)
-- `/biomapper/biomapper_client/biomapper_client/client_v2.py` (BiomapperClient.run() method)
-- `/biomapper/biomapper_client/biomapper_client/cli_v2.py` (biomapper run CLI command)
-- `/biomapper/biomapper/core/strategy_actions/registry.py` (action registration)
-- `/biomapper/pyproject.toml` (Python 3.11+ requirement, repository URL)
+   This documentation was verified against the following project resources:
+
+   - ``/biomapper/pyproject.toml`` (Python 3.11+ requirement, repository URL, CLI script definition)
+   - ``/biomapper/CLAUDE.md`` (Essential commands and environment setup)
+   - ``/biomapper/src/api/main.py`` (FastAPI server startup and endpoints)
+   - ``/biomapper/src/client/client_v2.py`` (BiomapperClient class with run() method and StrategyResult)
+   - ``/biomapper/src/cli/minimal.py`` (CLI commands: health, test-import, strategies, api)
+   - ``/biomapper/src/actions/registry.py`` (Action registry with 13 registered actions verified)

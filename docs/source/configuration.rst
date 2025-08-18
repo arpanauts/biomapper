@@ -416,13 +416,10 @@ Next Steps
 
 Verification Sources
 --------------------
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-17*
 
 This documentation was verified against the following project resources:
 
-- ``biomapper/core/strategy_actions/registry.py`` (Available actions)
-- ``configs/strategies/templates/*.yaml`` (Strategy templates)
-- ``biomapper/core/services/strategy_service_v2_minimal.py`` (Strategy executor)
-- ``biomapper/core/strategy_actions/typed_base.py`` (Action base class)
-- ``CLAUDE.md`` (Best practices and conventions)
-- ``README.md`` (Configuration overview)
+- ``/biomapper/CLAUDE.md`` (Best practices and conventions)
+- ``/biomapper/README.md`` (Configuration overview)
+- ``/biomapper/pyproject.toml`` (Project configuration)

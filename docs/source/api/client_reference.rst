@@ -22,7 +22,7 @@ The ``BiomapperClient`` class provides the main interface for interacting with t
    
    .. code-block:: python
    
-       from biomapper_client import BiomapperClient
+       from biomapper.client import BiomapperClient
        
        # Create client instance
        client = BiomapperClient("http://localhost:8000")
@@ -286,8 +286,8 @@ Performance Considerations
 Version Compatibility
 ---------------------
 
-- Client version: 0.2.0
-- Compatible API versions: 0.2.0+
+- Client version: 0.5.2
+- Compatible API versions: 0.5.2+
 - Python: 3.11+
 - Dependencies: httpx, pydantic 2.0+
 
@@ -302,14 +302,14 @@ See Also
 
 Verification Sources
 ~~~~~~~~~~~~~~~~~~~~
-*Last verified: 2025-08-16*
+*Last verified: 2025-08-17*
 
 This documentation was verified against the following project resources:
 
-- ``/biomapper/biomapper_client/biomapper_client/client_v2.py`` (BiomapperClient implementation and method signatures)
-- ``/biomapper/biomapper_client/biomapper_client/models.py`` (Client data models and execution context)
-- ``/biomapper/biomapper_client/biomapper_client/exceptions.py`` (Exception class definitions)
-- ``/biomapper/biomapper_client/biomapper_client/progress.py`` (Progress tracking implementation)
-- ``/biomapper/biomapper_client/pyproject.toml`` (Client dependencies and version)
-- ``/biomapper/biomapper-api/app/models/strategy_execution.py`` (API response models)
+- ``/biomapper/src/biomapper/client/client_v2.py`` (BiomapperClient implementation and method signatures)
+- ``/biomapper/src/biomapper/client/models.py`` (Client data models and execution context)
+- ``/biomapper/src/biomapper/client/exceptions.py`` (Exception class definitions)
+- ``/biomapper/src/biomapper/client/progress.py`` (Progress tracking implementation)
+- ``/biomapper/pyproject.toml`` (Client dependencies and version)
+- ``/biomapper/src/biomapper/api/models/strategy_execution.py`` (API response models)
 - ``/biomapper/CLAUDE.md`` (Client usage patterns and architecture)

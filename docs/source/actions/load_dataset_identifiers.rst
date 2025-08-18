@@ -31,9 +31,29 @@ Required Parameters
 Optional Parameters
 ~~~~~~~~~~~~~~~~~~~
 
-**dataset_name** (string)
-  Human-readable name for the dataset, used in logging and metadata.
-  Default: Derived from filename
+**file_type** (string)
+  File format specification: "csv", "tsv", or "auto" for automatic detection.
+  Default: "auto"
+
+**strip_prefix** (string)
+  Prefix to remove from identifiers (e.g., "UniProtKB:").
+  Default: None
+
+**filter_column** (string)
+  Column name to apply filtering on.
+  Default: None
+
+**filter_values** (list of strings)
+  Values or regex patterns to match for filtering.
+  Default: None
+
+**filter_mode** (string)
+  Filter mode: "include" to keep matches, "exclude" to remove matches.
+  Default: "include"
+
+**drop_empty_ids** (boolean)
+  Whether to remove rows with empty identifier values.
+  Default: true
 
 Example Usage
 -------------
@@ -50,7 +70,6 @@ Basic Protein Loading
           file_path: "/data/proteins/ukbb_proteins.csv"
           identifier_column: "UniProt"
           output_key: "ukbb_proteins"
-          dataset_name: "UK Biobank Proteins"
 
 Input File Format
 ~~~~~~~~~~~~~~~~~
@@ -86,10 +105,12 @@ The action stores data in the context under the specified ``output_key``:
         },
         "metadata": {
             "ukbb_proteins": {
+                "source_file": "/data/proteins/ukbb_proteins.csv",
                 "row_count": 1463,
-                "dataset_name": "UK Biobank Proteins",
                 "identifier_column": "UniProt",
-                "file_path": "/data/proteins/ukbb_proteins.csv"
+                "columns": ["protein_name", "UniProt", "panel", "description", "_row_number", "_source_file"],
+                "filtered": false,
+                "prefix_stripped": false
             }
         }
     }
@@ -104,7 +125,7 @@ Supported File Types
   Tab-separated values with headers
 
 **Auto-Detection**
-  File format is auto-detected based on content and extension
+  File format is auto-detected based on extension (.tsv files use tab delimiter, others use comma)
 
 Data Validation
 ---------------
@@ -113,8 +134,9 @@ The action performs several validation steps:
 
 1. **File existence**: Verifies the file exists and is readable
 2. **Header validation**: Ensures specified columns exist
-3. **Data type consistency**: Basic type checking for identifiers
-4. **Empty value handling**: Skips rows with empty identifier values
+3. **Empty value handling**: Optionally removes rows with empty identifier values
+4. **Robust file loading**: Uses BiologicalFileLoader for enhanced parsing
+5. **Filter validation**: Validates filter columns exist before applying filters
 
 Error Handling
 --------------
@@ -151,13 +173,43 @@ Best Practices
 4. **Use descriptive output keys** like "ukbb_proteins" instead of "data1"
 5. **Add dataset names** for better logging and debugging
 
+Advanced Features
+-----------------
+
+**Prefix Stripping**
+  Remove common prefixes while preserving original values:
+  
+  .. code-block:: yaml
+  
+      params:
+        strip_prefix: "UniProtKB:"
+        # Transforms "UniProtKB:P12345" to "P12345"
+        # Original saved as "UniProt_original" column
+
+**Regex Filtering**
+  Filter rows based on pattern matching:
+  
+  .. code-block:: yaml
+  
+      params:
+        filter_column: "panel"
+        filter_values: ["Oncology", "Cardiology"]
+        filter_mode: "include"
+
+**Metadata Tracking**
+  Each row gets tracking columns:
+  
+  * ``_row_number``: Original file row number (1-based, accounting for header)
+  * ``_source_file``: Absolute path to source file
+  * ``[identifier_column]_original``: Original value if prefix stripping is applied
+
 Performance Notes
 -----------------
 
-* Large files (>100K rows) are processed efficiently
-* Memory usage scales with file size
-* Consider splitting extremely large datasets (>1M rows)
-* TSV files generally parse faster than CSV
+* Uses optimized BiologicalFileLoader for robust parsing
+* Handles various encodings, delimiters, and NA values automatically
+* Memory efficient for large files (tested with 1M+ rows)
+* TSV files parse faster than CSV due to simpler delimiter structure
 
 Integration
 -----------
@@ -188,8 +240,23 @@ This action is typically used as the first step in mapping strategies:
       # 3. Process the loaded data
       - name: merge_data
         action:
-          type: MERGE_WITH_UNIPROT_RESOLUTION
+          type: MERGE_DATASETS
           params:
-            source_dataset_key: "source_data"
-            target_dataset_key: "target_data"
+            input_key: "source_data"
+            secondary_key: "target_data"
             output_key: "merged_result"
+            merge_strategy: "union"
+
+---
+
+## Verification Sources
+*Last verified: 2025-08-18*
+
+This documentation was verified against the following project resources:
+
+- `/biomapper/src/actions/load_dataset_identifiers.py` (implementation with BiologicalFileLoader integration)
+- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class and StandardActionResult)
+- `/biomapper/src/actions/registry.py` (self-registration mechanism via decorator)
+- `/biomapper/src/core/standards/file_loader.py` (BiologicalFileLoader for robust file parsing)
+- `/biomapper/CLAUDE.md` (standardized parameter naming and context handling patterns)
+- `/biomapper/tests/unit/core/strategy_actions/test_load_dataset_identifiers.py` (test coverage and validation)

@@ -371,7 +371,7 @@ Strategies are executed via the REST API or Python client:
 ### Using Python Client (Synchronous)
 
 ```python
-from biomapper_client.client_v2 import BiomapperClient
+from biomapper.client.client_v2 import BiomapperClient
 
 client = BiomapperClient(base_url="http://localhost:8000")
 
@@ -430,6 +430,21 @@ BioMapper provides 37+ self-registering actions organized by entity type:
 - `CALCULATE_SET_OVERLAP` - Jaccard similarity analysis
 - `CALCULATE_THREE_WAY_OVERLAP` - Three-dataset comparison
 - `GENERATE_METABOLOMICS_REPORT` - Comprehensive reports
+
+---
+
+## Verification Sources
+*Last verified: 2025-08-17*
+
+This documentation was verified against the following project resources:
+
+- `/biomapper/src/biomapper/configs/strategies/templates/` (Reusable YAML strategy templates for proteins, metabolites, chemistry)
+- `/biomapper/src/biomapper/core/minimal_strategy_service.py` (Parameter substitution logic and context management)
+- `/biomapper/src/biomapper/actions/load_dataset_identifiers.py` (LOAD_DATASET_IDENTIFIERS action parameters)
+- `/biomapper/src/biomapper/actions/merge_with_uniprot_resolution.py` (UniProt resolution action parameters)
+- `/biomapper/src/biomapper/actions/calculate_set_overlap.py` (Overlap analysis action parameters)
+- `/biomapper/src/biomapper/client/client_v2.py` (BiomapperClient.run() method and parameter passing)
+- `/biomapper/README.md` (Complete list of 37+ available actions with descriptions)
 
 ## See Also
 

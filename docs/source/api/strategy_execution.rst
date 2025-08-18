@@ -13,7 +13,7 @@ Strategy Definition
 
 Strategies can be executed in two ways:
 
-1. **Pre-defined Strategies**: YAML files stored in ``configs/strategies/``
+1. **Pre-defined Strategies**: YAML files stored in ``src/biomapper/configs/strategies/``
 2. **Inline Strategies**: YAML content submitted directly in the API request
 
 Strategy Structure
@@ -82,7 +82,7 @@ Execution Workflow
 
 3. **Strategy Loading**
    
-   - YAML file loaded from ``configs/strategies/`` directory and subdirectories
+   - YAML file loaded from ``src/biomapper/configs/strategies/`` directory and subdirectories
    - Parameters substituted using ParameterResolver (``${parameters.key}``)
    - Environment variables resolved (``${env.VAR}`` or ``${VAR}``)
    - Default values supported (``${parameters.key:-default}``)
@@ -391,7 +391,7 @@ Example: Complete Workflow
 
 .. code-block:: python
 
-   from biomapper_client import BiomapperClient
+   from biomapper.client import BiomapperClient
    import asyncio
    
    async def run_workflow():
@@ -431,15 +431,15 @@ Example: Complete Workflow
 
 Verification Sources
 ~~~~~~~~~~~~~~~~~~~~
-*Last verified: 2025-08-16*
+*Last verified: 2025-08-17*
 
 This documentation was verified against the following project resources:
 
-- ``/biomapper/biomapper-api/app/api/routes/strategies_v2_simple.py`` (V2 strategy execution endpoints and job handling)
-- ``/biomapper/biomapper-api/app/api/routes/jobs.py`` (Job management with persistence and checkpointing)
-- ``/biomapper/biomapper-api/app/services/persistent_execution_engine.py`` (Execution engine with checkpoint support)
-- ``/biomapper/biomapper/core/minimal_strategy_service.py`` (MinimalStrategyService implementation and YAML loading)
-- ``/biomapper/biomapper/core/strategy_actions/registry.py`` (Self-registering action system)
-- ``/biomapper/biomapper/core/infrastructure/parameter_resolver.py`` (Parameter substitution logic)
-- ``/biomapper/biomapper_client/biomapper_client/client_v2.py`` (Client-side progress tracking and SSE)
+- ``/biomapper/src/biomapper/api/api/routes/strategies_v2_simple.py`` (V2 strategy execution endpoints and job handling)
+- ``/biomapper/src/biomapper/api/api/routes/jobs.py`` (Job management with persistence and checkpointing)
+- ``/biomapper/src/biomapper/api/services/persistent_execution_engine.py`` (Execution engine with checkpoint support)
+- ``/biomapper/src/biomapper/core/minimal_strategy_service.py`` (MinimalStrategyService implementation and YAML loading)
+- ``/biomapper/src/biomapper/actions/registry.py`` (Self-registering action system)
+- ``/biomapper/src/biomapper/core/standards/parameter_validator.py`` (Parameter validation and standardization)
+- ``/biomapper/src/biomapper/client/client_v2.py`` (Client-side progress tracking and SSE)
 - ``/biomapper/CLAUDE.md`` (Strategy execution patterns and architecture)

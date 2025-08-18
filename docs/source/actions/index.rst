@@ -1,7 +1,7 @@
 Actions Reference
 =================
 
-BioMapper provides 30+ self-registering actions for biological data processing.
+BioMapper provides 13 self-registering actions for biological data processing. All actions follow the 2025 standardizations for parameter naming, context handling, and type safety.
 
 .. toctree::
    :maxdepth: 1
@@ -19,36 +19,19 @@ BioMapper provides 30+ self-registering actions for biological data processing.
    
    protein_extract_uniprot
    protein_normalize_accessions
-   protein_multi_bridge
-   merge_with_uniprot_resolution
 
 .. toctree::
    :maxdepth: 1
    :caption: Metabolite Actions
    
-   metabolite_cts_bridge
-   metabolite_extract_identifiers
-   metabolite_normalize_hmdb
    nightingale_nmr_match
    semantic_metabolite_match
-   vector_enhanced_match
 
 .. toctree::
    :maxdepth: 1
    :caption: Chemistry Actions
    
-   chemistry_extract_loinc
    chemistry_fuzzy_test_match
-   chemistry_vendor_harmonization
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Analysis Actions
-   
-   calculate_set_overlap
-   calculate_three_way_overlap
-   calculate_mapping_quality
-   generate_metabolomics_report
 
 Quick Reference
 ---------------
@@ -68,10 +51,14 @@ Data Operations
      - Combine multiple datasets with deduplication
    * - ``FILTER_DATASET``
      - Apply filtering criteria to datasets
-   * - ``EXPORT_DATASET_V2``
-     - Export results to various formats
+   * - ``EXPORT_DATASET``
+     - Export results to various formats including CSV, JSON, and Excel
+   * - ``CUSTOM_TRANSFORM``
+     - Apply Python expressions to transform data columns
    * - ``CUSTOM_TRANSFORM_EXPRESSION``
-     - Apply Python expressions to transform data
+     - Enhanced expression-based data transformation
+   * - ``PARSE_COMPOSITE_IDENTIFIERS``
+     - Parse and extract identifiers from composite fields
 
 Protein Actions
 ~~~~~~~~~~~~~~~
@@ -86,10 +73,6 @@ Protein Actions
      - Extract UniProt IDs from compound reference fields
    * - ``PROTEIN_NORMALIZE_ACCESSIONS``
      - Standardize protein accession formats
-   * - ``PROTEIN_MULTI_BRIDGE``
-     - Multi-source protein identifier resolution
-   * - ``MERGE_WITH_UNIPROT_RESOLUTION``
-     - Map identifiers to UniProt accessions
 
 Metabolite Actions
 ~~~~~~~~~~~~~~~~~~
@@ -100,18 +83,10 @@ Metabolite Actions
 
    * - Action
      - Description
-   * - ``METABOLITE_CTS_BRIDGE``
-     - Chemical Translation Service API integration
-   * - ``METABOLITE_EXTRACT_IDENTIFIERS``
-     - Extract metabolite IDs from text fields
-   * - ``METABOLITE_NORMALIZE_HMDB``
-     - Standardize HMDB identifier formats
    * - ``NIGHTINGALE_NMR_MATCH``
      - Nightingale NMR platform matching
    * - ``SEMANTIC_METABOLITE_MATCH``
      - AI-powered semantic matching
-   * - ``VECTOR_ENHANCED_MATCH``
-     - Vector embedding similarity matching
 
 Chemistry Actions
 ~~~~~~~~~~~~~~~~~
@@ -122,15 +97,11 @@ Chemistry Actions
 
    * - Action
      - Description
-   * - ``CHEMISTRY_EXTRACT_LOINC``
-     - Extract and validate LOINC codes from clinical chemistry data
    * - ``CHEMISTRY_FUZZY_TEST_MATCH``
      - Match clinical test names using fuzzy string matching
-   * - ``CHEMISTRY_VENDOR_HARMONIZATION``
-     - Harmonize vendor-specific test names to standard nomenclature
 
-Analysis Actions
-~~~~~~~~~~~~~~~~
+Integration Actions
+~~~~~~~~~~~~~~~~~~~
 
 .. list-table::
    :header-rows: 1
@@ -138,42 +109,102 @@ Analysis Actions
 
    * - Action
      - Description
-   * - ``CALCULATE_SET_OVERLAP``
-     - Calculate Jaccard similarity and set overlaps
-   * - ``CALCULATE_THREE_WAY_OVERLAP``
-     - Three-way dataset intersection analysis
-   * - ``CALCULATE_MAPPING_QUALITY``
-     - Comprehensive quality assessment for identifier mappings
-   * - ``GENERATE_METABOLOMICS_REPORT``
-     - Generate detailed metabolomics analysis reports
+   * - ``SYNC_TO_GOOGLE_DRIVE_V2``
+     - Upload and sync results to Google Drive with chunked transfer
 
 Usage Example
 -------------
 
 .. code-block:: yaml
 
-   name: example_workflow
-   description: Example multi-action workflow
+   name: protein_processing_workflow
+   description: Complete protein data processing and export
    
    steps:
-     - name: load_data
+     - name: load_source
        action:
          type: LOAD_DATASET_IDENTIFIERS
          params:
-           file_path: "/data/proteins.csv"
+           file_path: "/data/ukbb_proteins.csv"
            identifier_column: "uniprot"
-           output_key: "proteins"
+           output_key: "source_data"
      
-     - name: normalize
+     - name: extract_uniprot_ids
+       action:
+         type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
+         params:
+           input_key: "source_data"
+           xref_column: "protein_refs"
+           output_key: "extracted_data"
+     
+     - name: normalize_accessions
        action:
          type: PROTEIN_NORMALIZE_ACCESSIONS
          params:
-           input_key: "proteins"
-           output_key: "normalized"
+           input_key: "extracted_data"
+           accession_column: "uniprot_id"
+           output_key: "normalized_data"
      
-     - name: export
+     - name: filter_results
        action:
-         type: EXPORT_DATASET_V2
+         type: FILTER_DATASET
          params:
-           input_key: "normalized"
-           output_file: "/results/output.csv"
+           input_key: "normalized_data"
+           conditions:
+             - "confidence > 0.8"
+           output_key: "filtered_data"
+     
+     - name: export_results
+       action:
+         type: EXPORT_DATASET
+         params:
+           input_key: "filtered_data"
+           file_path: "/results/processed_proteins.csv"
+
+2025 Standardizations
+---------------------
+
+**Parameter Naming**
+  All actions use standardized parameter names:
+  
+  - ``input_key`` (not ``dataset_key``, ``data_key``)
+  - ``output_key`` (not ``result_key``, ``target_key``)
+  - ``file_path`` (not ``filepath``, ``input_file``)
+
+**Context Handling**
+  Actions use UniversalContext wrapper for robust context handling across different execution environments.
+
+**Type Safety**
+  Actions inherit from TypedStrategyAction with Pydantic parameter validation and structured results.
+
+**Performance**
+  All actions are audited for algorithmic complexity to prevent O(n²)+ performance issues.
+
+**File Loading**
+  Uses BiologicalFileLoader for robust parsing with automatic encoding detection and biological data optimization.
+
+Strategy File Locations
+-----------------------
+
+Strategy YAML files are located in ``src/biomapper/configs/strategies/`` and organized by:
+
+- **Entity Type**: ``prot_*``, ``met_*``, ``chem_*``, ``multi_*``
+- **Source-Target**: ``ukb_to_hpa``, ``arv_to_kg2c``
+- **Approach**: ``uniprot_v1_base``, ``semantic_v1_enhanced``
+
+Example: ``prot_ukb_to_hpa_uniprot_v1_base.yaml``
+
+---
+
+## Verification Sources
+*Last verified: 2025-08-18*
+
+This documentation was verified against the following project resources:
+
+- `/biomapper/src/actions/` (action implementations and self-registration - verified 13 actual actions)
+- `/biomapper/src/actions/registry.py` (global ACTION_REGISTRY and @register_action decorator)
+- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class)
+- `/biomapper/CLAUDE.md` (2025 standardization requirements and patterns)
+- `/biomapper/src/configs/strategies/` (strategy YAML file organization)
+- `/biomapper/src/core/standards/` (standardized utilities and validators)
+- `/biomapper/pyproject.toml` (project dependencies and structure)

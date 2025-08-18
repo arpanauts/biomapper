@@ -102,13 +102,13 @@ Strategy Loading and Discovery
 
 The ``MinimalStrategyService`` loads strategies from multiple sources:
 
-1. **Config Directory** (``configs/strategies/``)
-   Automatically discovered at startup, organized by quality tier:
+1. **Config Directory** (``src/biomapper/configs/strategies/``)
+   Automatically discovered at startup, organized by entity and tier:
    
-   * ``experimental/`` - Active development and testing strategies
-   * ``production/`` - Validated production workflows
+   * ``experimental/`` - Active development and testing strategies  
+   * ``metabolite/`` - Metabolite-specific strategies
+   * ``protein/`` - Protein-specific strategies
    * ``templates/`` - Reusable strategy templates
-   * ``test/`` - Simple test strategies for validation
 
 2. **Direct File Paths**
    Absolute paths specified in API calls or client requests
@@ -132,7 +132,7 @@ Integration Points
 **Python Client Library**
   .. code-block:: python
   
-      from biomapper_client.client_v2 import BiomapperClient
+      from biomapper.client.client_v2 import BiomapperClient
       
       client = BiomapperClient(base_url="http://localhost:8000")
       result = client.run("strategy_name", parameters={
@@ -161,15 +161,16 @@ Benefits
 
 ---
 
-Verification Sources
---------------------
-*Last verified: 2025-08-14*
+---
+
+## Verification Sources
+*Last verified: 2025-08-17*
 
 This documentation was verified against the following project resources:
 
-- ``biomapper/core/minimal_strategy_service.py`` (MinimalStrategyService with direct YAML loading)
-- ``configs/strategies/`` (Production strategy examples organized by tier)
-- ``biomapper-api/app/api/strategies.py`` (FastAPI strategy endpoints)
-- ``biomapper_client/biomapper_client/client_v2.py`` (BiomapperClient synchronous wrapper)
-- ``README.md`` (Strategy execution examples)
-- ``CLAUDE.md`` (Variable substitution patterns and strategy organization)
+- `/biomapper/src/biomapper/core/minimal_strategy_service.py` (MinimalStrategyService with parameter resolver and dual context)
+- `/biomapper/src/biomapper/configs/strategies/` (YAML strategies organized by entity type with templates)
+- `/biomapper/src/biomapper/api/routes/strategies_v2_simple.py` (FastAPI strategy execution endpoints)
+- `/biomapper/src/biomapper/client/client_v2.py` (BiomapperClient with synchronous run() wrapper)
+- `/biomapper/README.md` (Strategy execution examples and Python client usage)
+- `/biomapper/CLAUDE.md` (Variable substitution patterns: ${parameters.key}, ${env.VAR}, ${VAR:-default})

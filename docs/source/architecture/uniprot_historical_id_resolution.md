@@ -164,7 +164,7 @@ steps:
 Execute the strategy using BiomapperClient:
 
 ```python
-from biomapper_client.client_v2 import BiomapperClient
+from biomapper.client.client_v2 import BiomapperClient
 
 client = BiomapperClient(base_url="http://localhost:8000")
 
@@ -256,13 +256,16 @@ The MERGE_WITH_UNIPROT_RESOLUTION action automatically batches API requests:
 
 ---
 
+---
+
 ## Verification Sources
-*Last verified: 2025-08-14*
+*Last verified: 2025-08-17*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/biomapper/core/strategy_actions/entities/proteins/merge_with_uniprot_resolution.py` (Main resolution action implementation)
-- `/biomapper/biomapper/core/strategy_actions/entities/proteins/annotation/protein_normalize_accessions.py` (Normalization action)
-- `/biomapper/tests/unit/core/strategy_actions/test_merge_with_uniprot_resolution.py` (Unit tests with test cases)
-- `/biomapper/configs/strategies/experimental/` (Example strategies using UniProt resolution)
-- `/biomapper/CLAUDE.md` (Protein action documentation)
+- `/biomapper/src/biomapper/actions/merge_with_uniprot_resolution.py` (Main resolution action with API integration)
+- `/biomapper/src/biomapper/actions/entities/proteins/annotation/` (Protein normalization actions)
+- `/biomapper/tests/unit/core/strategy_actions/test_merge_with_uniprot_resolution.py` (Unit tests with secondary ID scenarios)
+- `/biomapper/src/biomapper/configs/strategies/templates/protein_mapping_template.yaml` (Template with UniProt resolution)
+- `/biomapper/src/biomapper/client/client_v2.py` (BiomapperClient with strategy execution)
+- `/biomapper/CLAUDE.md` (Protein action documentation and historical ID handling patterns)

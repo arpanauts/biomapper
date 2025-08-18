@@ -29,7 +29,6 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-.python-version
 
 # Testing & Coverage
 htmlcov/
@@ -175,9 +174,6 @@ pytest_output.txt
 
 # Vector storage (large binary data)
 vector_store/
-qdrant_storage/
-docker/qdrant/qdrant_storage/
-data/qdrant_storage/
 *.qdrant.tar.gz
 *_snapshot.tar
 

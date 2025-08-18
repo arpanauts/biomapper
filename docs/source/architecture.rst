@@ -351,14 +351,10 @@ The extensible action-based architecture provides excellent performance for comm
 
 Verification Sources
 --------------------
-*Last verified: 2025-08-13*
+*Last verified: 2025-08-17*
 
 This documentation was verified against the following project resources:
 
-- ``biomapper/core/strategy_actions/registry.py`` (Action registration system)
-- ``biomapper/core/services/strategy_service_v2_minimal.py`` (Strategy executor)
-- ``biomapper-api/app/main.py`` (API endpoints and routing)
-- ``biomapper_client/biomapper_client/client_v2.py`` (Client implementation)
-- ``configs/strategies/templates/*.yaml`` (Strategy templates)
-- ``README.md`` (Architecture overview)
-- ``CLAUDE.md`` (Current action list and patterns)
+- ``/biomapper/README.md`` (Architecture overview)
+- ``/biomapper/CLAUDE.md`` (Current action list and patterns)
+- ``/biomapper/pyproject.toml`` (Project configuration)

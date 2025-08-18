@@ -75,8 +75,8 @@ Development Workflow
    # Fix linting issues
    poetry run ruff check . --fix
    
-   # Type checking (all packages)
-   poetry run mypy biomapper biomapper-api biomapper_client
+   # Type checking
+   poetry run mypy biomapper
    
    # Run tests
    poetry run pytest
@@ -311,22 +311,29 @@ Understanding the Layout
 .. code-block:: text
 
    biomapper/
-   ├── biomapper/           # Core library
-   │   └── core/
-   │       └── strategy_actions/  # Actions
-   ├── biomapper-api/       # REST API
-   ├── biomapper_client/    # Python client
-   ├── tests/              # Test suite
-   ├── docs/               # Documentation
-   └── configs/            # YAML strategies
+   ├── src/                     # Source code root
+   │   ├── actions/             # Strategy actions  
+   │   ├── api/                 # FastAPI components
+   │   ├── cli/                 # CLI interface
+   │   ├── client/              # Python client
+   │   ├── configs/             # YAML strategies
+   │   ├── core/                # Core library
+   │   └── integrations/        # External integrations
+   ├── tests/                   # Test suite
+   │   ├── unit/                # Unit tests
+   │   ├── integration/         # Integration tests
+   │   └── performance/         # Performance tests
+   ├── docs/                    # Documentation
+   └── scripts/                 # Development scripts
 
 Where to Add Code
 ~~~~~~~~~~~~~~~~~
 
-* New actions: ``biomapper/core/strategy_actions/``
-* API endpoints: ``biomapper-api/app/api/routes/``
-* Client methods: ``biomapper_client/client_v2.py``
+* New actions: ``src/actions/entities/`` (organized by entity type)
+* API endpoints: ``src/api/routes/``
+* Client methods: ``src/client/client_v2.py``
 * Tests: ``tests/unit/`` or ``tests/integration/``
+* Strategies: ``src/configs/strategies/``
 
 Getting Help
 ------------
@@ -369,13 +376,13 @@ Your contributions make BioMapper better for everyone. We appreciate your time a
 Verification Sources
 --------------------
 
-*Last verified: 2025-08-14*
+*Last verified: 2025-08-17*
 
 This documentation was verified against the following project resources:
 
 - ``/biomapper/README.md`` (installation instructions and project overview)
-- ``/biomapper/CLAUDE.md`` (development commands and CI integration)
+- ``/biomapper/CLAUDE.md`` (development commands and updated project structure)
 - ``/biomapper/pyproject.toml`` (Poetry dependency management and Python 3.11+ requirement)
-- ``/biomapper/Makefile`` (make check command and available development shortcuts)
-- ``/biomapper/biomapper/core/strategy_actions/typed_base.py`` (TypedStrategyAction pattern for new actions)
-- ``/biomapper/biomapper/core/strategy_actions/registry.py`` (self-registering action system)
+- ``/biomapper/src/biomapper/actions/typed_base.py`` (TypedStrategyAction pattern for new actions)
+- ``/biomapper/src/biomapper/actions/registry.py`` (self-registering action system)
+- ``/biomapper/src/biomapper/`` (current project structure under src/ directory)

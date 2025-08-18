@@ -18,8 +18,8 @@ Quick Start
 
 .. code-block:: bash
 
-   cd biomapper-api
-   poetry run uvicorn app.main:app --reload --port 8000
+   cd /home/ubuntu/biomapper
+   poetry run uvicorn src.biomapper.api.main:app --reload --port 8000
 
 **Access API Documentation:**
 
@@ -40,7 +40,7 @@ Health Check
    # Response
    {
      "status": "healthy",
-     "version": "0.2.0",
+     "version": "0.5.2",
      "services": {
        "database": "connected",
        "mapper_service": "initialized",
@@ -119,7 +119,7 @@ Synchronous
 
 .. code-block:: python
 
-   from biomapper_client import BiomapperClient
+   from biomapper.client import BiomapperClient
    
    client = BiomapperClient(base_url="http://localhost:8000")
    
@@ -138,7 +138,7 @@ Asynchronous
 .. code-block:: python
 
    import asyncio
-   from biomapper_client import BiomapperClient
+   from biomapper.client import BiomapperClient
    
    async def run_strategy():
        async with BiomapperClient() as client:
@@ -235,14 +235,14 @@ Progress updates via Server-Sent Events (SSE) and WebSocket connections:
 
 Verification Sources
 ~~~~~~~~~~~~~~~~~~~~
-*Last verified: 2025-08-16*
+*Last verified: 2025-08-17*
 
 This documentation was verified against the following project resources:
 
-- ``/biomapper/biomapper-api/app/main.py`` (API initialization, routers, and startup events)
-- ``/biomapper/biomapper-api/app/api/routes/strategies_v2_simple.py`` (V2 strategy execution endpoint implementation)
-- ``/biomapper/biomapper-api/app/api/routes/jobs.py`` (Job management and persistence endpoints)
-- ``/biomapper/biomapper-api/app/api/routes/health.py`` (Health check endpoint)
-- ``/biomapper/biomapper-api/pyproject.toml`` (API dependencies and version)
-- ``/biomapper/biomapper_client/biomapper_client/client_v2.py`` (BiomapperClient implementation)
+- ``/biomapper/src/biomapper/api/main.py`` (API initialization, routers, and startup events)
+- ``/biomapper/src/biomapper/api/api/routes/strategies_v2_simple.py`` (V2 strategy execution endpoint implementation)
+- ``/biomapper/src/biomapper/api/api/routes/jobs.py`` (Job management and persistence endpoints)
+- ``/biomapper/src/biomapper/api/api/routes/health.py`` (Health check endpoint)
+- ``/biomapper/pyproject.toml`` (API dependencies and version)
+- ``/biomapper/src/biomapper/client/client_v2.py`` (BiomapperClient implementation)
 - ``/biomapper/CLAUDE.md`` (Project conventions, commands, and architecture)

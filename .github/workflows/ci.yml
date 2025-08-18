@@ -34,19 +34,32 @@ jobs:
         path: .venv
         key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
     
-    - name: Install dependencies for biomapper
+    - name: Install dependencies
       run: |
-        poetry install --no-interaction --no-root
-        poetry install --no-interaction
+        poetry install --with dev,docs,api --no-interaction
     
-    - name: Install dependencies for biomapper-api
-      working-directory: ./biomapper-api
+    - name: Run linting
       run: |
-        poetry install --no-interaction --no-root
-        poetry install --no-interaction
+        poetry run ruff check src/ tests/ --exit-zero
+        poetry run ruff format --check src/ tests/ --quiet || echo "Format check completed with warnings"
+    
+    - name: Run type checking
+      run: |
+        poetry run mypy src/ --ignore-missing-imports --no-error-summary || echo "Type checking completed with warnings"
     
     - name: Run tests
       env:
         DATABASE_URL: "sqlite+aiosqlite:///./test.db"
+        LANGFUSE_ENABLED: "false"
+        PYTHONPATH: "${{ github.workspace }}/src:$PYTHONPATH"
       run: |
-        poetry run pytest -m "not requires_qdrant and not requires_external_services"
+        poetry run pytest -c pytest-ci.ini --cov=src --cov-report=xml --cov-report=term-missing
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      if: success()
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false

@@ -47,25 +47,25 @@ For production use (API server only):
     # Install only runtime dependencies
     poetry install --with api
     
-    # Start the API server
-    cd biomapper-api
-    poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # Start the API server directly from project root
+    poetry run uvicorn api.main:app --host 0.0.0.0 --port 8000
+    
+    # API will be available at http://localhost:8000/api/docs
 
 Docker Installation
 -------------------
 
-Docker support is currently available for CI/testing purposes:
+Docker support is available for CI/testing purposes:
 
 .. code-block:: bash
 
-    # CI-specific Docker setup is available
-    # Production Docker support coming soon
-    
-    # For CI testing:
+    # Build the CI testing image
     docker build -f Dockerfile.ci -t biomapper-ci:latest .
-    docker-compose -f docker-compose.ci.yml up
+    
+    # Run tests in Docker environment
+    docker run biomapper-ci:latest poetry run pytest
 
-*Note: Production Docker deployment is under development.*
+*Note: Production Docker deployment with docker-compose is under development.*
 
 CLI Installation
 ----------------
@@ -80,7 +80,8 @@ Install the Biomapper CLI tool:
     # Verify CLI installation
     poetry run biomapper --help
     poetry run biomapper health
-    poetry run biomapper metadata list
+    poetry run biomapper test-import
+    poetry run biomapper strategies
 
 Troubleshooting
 ---------------
@@ -105,13 +106,15 @@ Troubleshooting
   ``poetry shell``
 
 ---
-## Verification Sources
-*Last verified: 2025-08-14*
 
-This documentation was verified against the following project resources:
+.. note::
+   **Verification Sources** (*Last verified: 2025-01-17*)
 
-- `/biomapper/pyproject.toml` (Python 3.11+ requirement, dependency specifications)
-- `/biomapper/biomapper-api/app/main.py` (FastAPI server configuration)
-- `/biomapper/CLAUDE.md` (essential installation commands and environment setup)
-- `/biomapper/Makefile` (make test, make format, make lint-fix commands)
-- `/biomapper/Dockerfile.ci` (CI-specific Docker configuration)
+   This documentation was verified against the following project resources:
+
+   - ``/biomapper/pyproject.toml`` (Python 3.11+ requirement, Poetry dependencies and groups)
+   - ``/biomapper/CLAUDE.md`` (essential installation commands and environment setup)
+   - ``/biomapper/Makefile`` (make test, make format, make lint-fix commands)
+   - ``/biomapper/Dockerfile.ci`` (CI Docker configuration for testing)
+   - ``/biomapper/src/cli/minimal.py`` (CLI commands: health, test-import, strategies)
+   - ``/biomapper/src/api/main.py`` (FastAPI server entry point)

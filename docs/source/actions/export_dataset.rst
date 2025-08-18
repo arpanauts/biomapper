@@ -345,3 +345,17 @@ Integration Patterns
             input_key: "validated_results"
             output_path: "/output/success_${date}.tsv"
             format: "tsv"
+
+---
+
+## Verification Sources
+*Last verified: 2025-08-17*
+
+This documentation was verified against the following project resources:
+
+- `/biomapper/src/actions/export_dataset.py` (implementation with format support and column selection)
+- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class)
+- `/biomapper/src/actions/registry.py` (action registration via decorator)
+- `/biomapper/src/core/standards/context_handler.py` (UniversalContext for context handling)
+- `/biomapper/src/core/standards/base_models.py` (ActionParamsBase and FlexibleBaseModel)
+- `/biomapper/CLAUDE.md` (standardized parameter naming conventions)
