@@ -102,7 +102,7 @@ Strategy Loading and Discovery
 
 The ``MinimalStrategyService`` loads strategies from multiple sources:
 
-1. **Config Directory** (``src/biomapper/configs/strategies/``)
+1. **Config Directory** (``src/configs/strategies/``)
    Automatically discovered at startup, organized by entity and tier:
    
    * ``experimental/`` - Active development and testing strategies  
@@ -132,7 +132,7 @@ Integration Points
 **Python Client Library**
   .. code-block:: python
   
-      from biomapper.client.client_v2 import BiomapperClient
+      from src.client.client_v2 import BiomapperClient
       
       client = BiomapperClient(base_url="http://localhost:8000")
       result = client.run("strategy_name", parameters={
@@ -164,13 +164,13 @@ Benefits
 ---
 
 ## Verification Sources
-*Last verified: 2025-08-17*
+*Last verified: 2025-01-18*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/src/biomapper/core/minimal_strategy_service.py` (MinimalStrategyService with parameter resolver and dual context)
-- `/biomapper/src/biomapper/configs/strategies/` (YAML strategies organized by entity type with templates)
-- `/biomapper/src/biomapper/api/routes/strategies_v2_simple.py` (FastAPI strategy execution endpoints)
-- `/biomapper/src/biomapper/client/client_v2.py` (BiomapperClient with synchronous run() wrapper)
-- `/biomapper/README.md` (Strategy execution examples and Python client usage)
-- `/biomapper/CLAUDE.md` (Variable substitution patterns: ${parameters.key}, ${env.VAR}, ${VAR:-default})
+- `/home/ubuntu/biomapper/src/core/minimal_strategy_service.py` (MinimalStrategyService with parameter resolver and dual context)
+- `/home/ubuntu/biomapper/src/configs/strategies/` (YAML strategies organized by entity type)
+- `/home/ubuntu/biomapper/src/api/routes/strategies_v2_simple.py` (FastAPI strategy execution endpoints)
+- `/home/ubuntu/biomapper/src/client/client_v2.py` (BiomapperClient with synchronous run() wrapper)
+- `/home/ubuntu/biomapper/README.md` (Strategy execution examples and Python client usage)
+- `/home/ubuntu/biomapper/CLAUDE.md` (Variable substitution patterns: ${parameters.key}, ${env.VAR}, ${VAR:-default})

@@ -336,7 +336,7 @@ def test_large_dataset_performance(self):
 ```
 tests/unit/core/strategy_actions/entities/proteins/
   ↓ mirrors ↓
-biomapper/core/strategy_actions/entities/proteins/
+src/actions/entities/proteins/
 ```
 
 ### Test Naming Conventions
@@ -365,14 +365,14 @@ biomapper/core/strategy_actions/entities/proteins/
 ---
 
 ## Verification Sources
-*Last verified: 2025-01-17*
+*Last verified: 2025-01-18*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/tests/unit/core/strategy_actions/` (Core action tests including test_load_dataset_identifiers.py)
-- `/biomapper/tests/unit/strategy_actions/` (Direct action tests: test_semantic_metabolite_match.py, test_merge_datasets.py)
-- `/biomapper/tests/unit/core/standards/` (Standards tests: test_file_loader.py, test_file_validator.py)
-- `/biomapper/tests/scripts/` (Script tests: test_refactored_scripts.py, test_metabolomics_wrapper.py)
-- `/biomapper/pytest.ini` (Test markers, asyncio configuration, and addopts settings)
-- `/biomapper/pyproject.toml` (pytest-asyncio and coverage dependencies)
-- `/biomapper/CLAUDE.md` (TDD approach and testing commands)
+- `/home/ubuntu/biomapper/tests/unit/core/strategy_actions/` (Core action tests including test_load_dataset_identifiers.py)
+- `/home/ubuntu/biomapper/tests/unit/strategy_actions/` (Direct action tests: test_semantic_metabolite_match.py)
+- `/home/ubuntu/biomapper/tests/unit/core/standards/` (Standards tests: test_file_loader.py, test_api_validator.py, test_context_handler.py)
+- `/home/ubuntu/biomapper/tests/` (Test directory structure and organization)
+- `/home/ubuntu/biomapper/pytest.ini` (Test markers, asyncio configuration, and addopts settings)
+- `/home/ubuntu/biomapper/src/actions/` (Action implementations with entity-based organization)
+- `/home/ubuntu/biomapper/CLAUDE.md` (TDD approach and testing commands)

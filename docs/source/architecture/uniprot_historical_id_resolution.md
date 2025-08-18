@@ -40,19 +40,8 @@ Standardizes UniProt accessions by removing isoform suffixes and validating form
       validate_format: true   # Validates UniProt regex pattern
 ```
 
-### MERGE_WITH_UNIPROT_RESOLUTION
-Merges datasets with historical UniProt ID resolution via API:
-
-```python
-- name: merge_with_resolution
-  action:
-    type: MERGE_WITH_UNIPROT_RESOLUTION
-    params:
-      source_dataset_key: "dataset1"
-      target_dataset_key: "dataset2"
-      enable_api_resolution: true  # Enable UniProt API for unmatched IDs
-      confidence_threshold: 0.5
-```
+### UniProt Historical Resolution Client
+BioMapper provides a UniProtHistoricalResolverClient for resolving historical and secondary UniProt IDs via API calls. This client can be integrated into custom actions for historical ID resolution.
 
 ### How It Works
 
@@ -97,7 +86,7 @@ context["datasets"]["merged_dataset"] = [
 A complete protein harmonization strategy with UniProt resolution:
 
 ```yaml
-name: PROTEIN_HARMONIZATION_WITH_RESOLUTION
+name: PROTEIN_HARMONIZATION
 description: Harmonize protein datasets with historical ID resolution
 
 parameters:
@@ -134,18 +123,16 @@ steps:
         identifier_column: "protein_accession"
         output_key: "target_proteins"
 
-  # Step 4: Merge with UniProt resolution
-  - name: merge_with_resolution
+  # Step 4: Merge datasets (Note: Historical UniProt resolution would be implemented as a custom action)
+  - name: merge_datasets
     action:
-      type: MERGE_WITH_UNIPROT_RESOLUTION
+      type: MERGE_DATASETS
       params:
-        source_dataset_key: "source_proteins"
-        target_dataset_key: "target_proteins"
-        source_id_column: "identifier"
-        target_id_column: "identifier"
+        dataset1_key: "source_proteins"
+        dataset2_key: "target_proteins"
+        merge_column1: "identifier"
+        merge_column2: "identifier"
         output_key: "merged_proteins"
-        enable_api_resolution: true
-        confidence_threshold: 0.5
 
   # Step 5: Calculate overlap statistics
   - name: analyze_overlap
@@ -164,13 +151,13 @@ steps:
 Execute the strategy using BiomapperClient:
 
 ```python
-from biomapper.client.client_v2 import BiomapperClient
+from src.client.client_v2 import BiomapperClient
 
 client = BiomapperClient(base_url="http://localhost:8000")
 
 # Execute protein harmonization with UniProt resolution
 result = client.run(
-    strategy_name="PROTEIN_HARMONIZATION_WITH_RESOLUTION",
+    strategy_name="PROTEIN_HARMONIZATION",
     parameters={
         "source_file": "/data/ukbb_proteins.tsv",
         "target_file": "/data/hpa_proteins.csv",
@@ -259,13 +246,14 @@ The MERGE_WITH_UNIPROT_RESOLUTION action automatically batches API requests:
 ---
 
 ## Verification Sources
-*Last verified: 2025-08-17*
+*Last verified: 2025-01-18*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/src/biomapper/actions/merge_with_uniprot_resolution.py` (Main resolution action with API integration)
-- `/biomapper/src/biomapper/actions/entities/proteins/annotation/` (Protein normalization actions)
-- `/biomapper/tests/unit/core/strategy_actions/test_merge_with_uniprot_resolution.py` (Unit tests with secondary ID scenarios)
-- `/biomapper/src/biomapper/configs/strategies/templates/protein_mapping_template.yaml` (Template with UniProt resolution)
-- `/biomapper/src/biomapper/client/client_v2.py` (BiomapperClient with strategy execution)
-- `/biomapper/CLAUDE.md` (Protein action documentation and historical ID handling patterns)
+- `/home/ubuntu/biomapper/src/integrations/clients/uniprot_historical_resolver_client.py` (UniProt historical resolution client)
+- `/home/ubuntu/biomapper/src/actions/entities/proteins/annotation/` (Protein normalization actions)
+- `/home/ubuntu/biomapper/src/actions/entities/proteins/annotation/normalize_accessions.py` (PROTEIN_NORMALIZE_ACCESSIONS action)
+- `/home/ubuntu/biomapper/src/actions/entities/proteins/annotation/extract_uniprot_from_xrefs.py` (UniProt extraction action)
+- `/home/ubuntu/biomapper/src/client/client_v2.py` (BiomapperClient with strategy execution)
+- `/home/ubuntu/biomapper/src/actions/merge_datasets.py` (Dataset merging action)
+- `/home/ubuntu/biomapper/CLAUDE.md` (Protein action documentation and historical ID handling patterns)

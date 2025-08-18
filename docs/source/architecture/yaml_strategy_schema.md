@@ -114,39 +114,32 @@ Normalizes and validates UniProt accessions.
 | `remove_isoforms` | boolean | No | true | Remove isoform suffixes (-1, -2, etc.) |
 | `validate_format` | boolean | No | true | Validate UniProt accession format |
 
-#### MERGE_WITH_UNIPROT_RESOLUTION
+#### MERGE_DATASETS
 
-Merges two datasets with historical UniProt identifier resolution.
+Merges two datasets on specified columns.
 
 **Parameters:**
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `source_dataset_key` | string | Yes | - | Context key of source dataset |
-| `target_dataset_key` | string | Yes | - | Context key of target dataset |
-| `source_id_column` | string | Yes | - | Column name in source data |
-| `target_id_column` | string | Yes | - | Column name in target data |
+| `dataset1_key` | string | Yes | - | Context key of first dataset |
+| `dataset2_key` | string | Yes | - | Context key of second dataset |
+| `merge_column1` | string | Yes | - | Column name in first dataset |
+| `merge_column2` | string | Yes | - | Column name in second dataset |
 | `output_key` | string | Yes | - | Key to store merged results |
-| `enable_api_resolution` | boolean | No | true | Enable UniProt API for unmatched IDs |
-| `source_suffix` | string | No | "_source" | Suffix for source columns |
-| `target_suffix` | string | No | "_target" | Suffix for target columns |
-| `confidence_threshold` | number | No | 0.0 | Minimum confidence for matches |
-| `composite_separator` | string | No | "_" | Separator for composite identifiers |
 
 **Example:**
 
 ```yaml
 - name: merge_datasets
   action:
-    type: MERGE_WITH_UNIPROT_RESOLUTION
+    type: MERGE_DATASETS
     params:
-      source_dataset_key: "ukbb_proteins"
-      target_dataset_key: "hpa_proteins"
-      source_id_column: "UniProt"
-      target_id_column: "uniprot"
+      dataset1_key: "ukbb_proteins"
+      dataset2_key: "hpa_proteins"
+      merge_column1: "UniProt"
+      merge_column2: "uniprot"
       output_key: "merged_dataset"
-      enable_api_resolution: true
-      confidence_threshold: 0.5
 ```
 
 ### Analysis Actions
@@ -245,18 +238,16 @@ steps:
         remove_isoforms: true
         validate_format: true
 
-  # Step 5: Merge datasets with UniProt resolution
+  # Step 5: Merge datasets
   - name: merge_protein_data
     action:
-      type: MERGE_WITH_UNIPROT_RESOLUTION
+      type: MERGE_DATASETS
       params:
-        source_dataset_key: "ukbb_proteins"
-        target_dataset_key: "hpa_proteins"
-        source_id_column: "identifier"
-        target_id_column: "identifier"
+        dataset1_key: "ukbb_proteins"
+        dataset2_key: "hpa_proteins"
+        merge_column1: "identifier"
+        merge_column2: "identifier"
         output_key: "merged_proteins"
-        enable_api_resolution: true
-        confidence_threshold: 0.5
 
   # Step 6: Calculate overlap statistics
   - name: analyze_overlap
@@ -274,7 +265,7 @@ steps:
   # Step 7: Export results
   - name: export_results
     action:
-      type: EXPORT_DATASET_V2
+      type: EXPORT_DATASET
       params:
         input_key: "overlap_analysis"
         output_file: "${parameters.output_dir}/overlap_results.csv"
@@ -290,9 +281,9 @@ Step 1: LOAD_DATASET_IDENTIFIERS → context["datasets"]["ukbb_proteins_raw"]
 Step 2: PROTEIN_NORMALIZE_ACCESSIONS → context["datasets"]["ukbb_proteins"]
 Step 3: LOAD_DATASET_IDENTIFIERS → context["datasets"]["hpa_proteins_raw"]
 Step 4: PROTEIN_NORMALIZE_ACCESSIONS → context["datasets"]["hpa_proteins"]
-Step 5: MERGE_WITH_UNIPROT_RESOLUTION → context["datasets"]["merged_proteins"]
+Step 5: MERGE_DATASETS → context["datasets"]["merged_proteins"]
 Step 6: CALCULATE_SET_OVERLAP → context["datasets"]["overlap_analysis"]
-Step 7: EXPORT_DATASET_V2 → context["output_files"].append("overlap_results.csv")
+Step 7: EXPORT_DATASET → context["output_files"].append("overlap_results.csv")
 ```
 
 ## Variable Substitution
@@ -371,7 +362,7 @@ Strategies are executed via the REST API or Python client:
 ### Using Python Client (Synchronous)
 
 ```python
-from biomapper.client.client_v2 import BiomapperClient
+from src.client.client_v2 import BiomapperClient
 
 client = BiomapperClient(base_url="http://localhost:8000")
 
@@ -411,40 +402,44 @@ BioMapper provides 37+ self-registering actions organized by entity type:
 ### Protein Actions
 - `PROTEIN_NORMALIZE_ACCESSIONS` - Standardize UniProt identifiers
 - `PROTEIN_EXTRACT_UNIPROT_FROM_XREFS` - Extract UniProt IDs from compound fields
-- `PROTEIN_MULTI_BRIDGE` - Multi-source protein resolution
-- `MERGE_WITH_UNIPROT_RESOLUTION` - Historical UniProt ID mapping
 
 ### Metabolite Actions
-- `METABOLITE_CTS_BRIDGE` - Chemical Translation Service
-- `METABOLITE_NORMALIZE_HMDB` - Standardize HMDB formats
 - `NIGHTINGALE_NMR_MATCH` - Nightingale platform matching
 - `SEMANTIC_METABOLITE_MATCH` - AI-powered matching
-- `VECTOR_ENHANCED_MATCH` - Vector similarity matching
 
 ### Chemistry Actions
-- `CHEMISTRY_EXTRACT_LOINC` - Extract LOINC codes
 - `CHEMISTRY_FUZZY_TEST_MATCH` - Fuzzy clinical test matching
-- `CHEMISTRY_VENDOR_HARMONIZATION` - Harmonize vendor codes
 
-### Analysis Actions
-- `CALCULATE_SET_OVERLAP` - Jaccard similarity analysis
-- `CALCULATE_THREE_WAY_OVERLAP` - Three-dataset comparison
-- `GENERATE_METABOLOMICS_REPORT` - Comprehensive reports
+### Data Processing Actions
+- `LOAD_DATASET_IDENTIFIERS` - Load identifiers from files
+- `MERGE_DATASETS` - Merge datasets on common columns
+- `EXPORT_DATASET` - Export results to files
+- `FILTER_DATASET` - Apply filtering criteria
+- `CUSTOM_TRANSFORM` - Apply custom transformations
+- `PARSE_COMPOSITE_IDENTIFIERS` - Parse compound identifier fields
+
+### Reporting Actions
+- `GENERATE_MAPPING_VISUALIZATIONS` - Create mapping visualizations
+- `GENERATE_LLM_ANALYSIS` - Generate AI-powered analysis reports
+
+### I/O Actions
+- `SYNC_TO_GOOGLE_DRIVE_V2` - Sync results to Google Drive
 
 ---
 
 ## Verification Sources
-*Last verified: 2025-08-17*
+*Last verified: 2025-01-18*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/src/biomapper/configs/strategies/templates/` (Reusable YAML strategy templates for proteins, metabolites, chemistry)
-- `/biomapper/src/biomapper/core/minimal_strategy_service.py` (Parameter substitution logic and context management)
-- `/biomapper/src/biomapper/actions/load_dataset_identifiers.py` (LOAD_DATASET_IDENTIFIERS action parameters)
-- `/biomapper/src/biomapper/actions/merge_with_uniprot_resolution.py` (UniProt resolution action parameters)
-- `/biomapper/src/biomapper/actions/calculate_set_overlap.py` (Overlap analysis action parameters)
-- `/biomapper/src/biomapper/client/client_v2.py` (BiomapperClient.run() method and parameter passing)
-- `/biomapper/README.md` (Complete list of 37+ available actions with descriptions)
+- `/home/ubuntu/biomapper/src/configs/strategies/` (YAML strategy organization by entity type)
+- `/home/ubuntu/biomapper/src/core/minimal_strategy_service.py` (Parameter substitution logic and context management)
+- `/home/ubuntu/biomapper/src/actions/load_dataset_identifiers.py` (LOAD_DATASET_IDENTIFIERS action parameters)
+- `/home/ubuntu/biomapper/src/actions/merge_datasets.py` (MERGE_DATASETS action parameters)
+- `/home/ubuntu/biomapper/src/actions/export_dataset.py` (EXPORT_DATASET action parameters)
+- `/home/ubuntu/biomapper/src/actions/entities/proteins/annotation/normalize_accessions.py` (PROTEIN_NORMALIZE_ACCESSIONS action)
+- `/home/ubuntu/biomapper/src/client/client_v2.py` (BiomapperClient.run() method and parameter passing)
+- `/home/ubuntu/biomapper/src/actions/` (Action registry and available actions)
 
 ## See Also
 
