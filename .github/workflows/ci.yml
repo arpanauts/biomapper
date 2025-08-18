@@ -36,7 +36,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        poetry install --with dev,docs,api --no-interaction
+        poetry install --with dev,docs --extras api --no-interaction
     
     - name: Run linting
       run: |
