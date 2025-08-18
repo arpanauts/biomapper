@@ -3,7 +3,7 @@
 import pytest
 import pandas as pd
 from pathlib import Path
-from biomapper.core.standards.known_issues import KnownIssuesRegistry, KnownIssue
+from core.standards.known_issues import KnownIssuesRegistry, KnownIssue
 
 
 class TestKnownEdgeCases:

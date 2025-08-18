@@ -321,7 +321,7 @@ def main():
     auditor = ParameterAuditor()
     
     # Audit the strategy_actions directory
-    actions_dir = "/home/ubuntu/biomapper/biomapper/core/strategy_actions"
+    actions_dir = "/home/ubuntu/biomapper/src/biomapper/actions"
     auditor.run_audit(actions_dir)
     
     # Create audits directory if it doesn't exist

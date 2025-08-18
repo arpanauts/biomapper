@@ -2,11 +2,9 @@
 
 import pytest
 from typing import Dict, Any
-import pandas as pd
-from unittest.mock import MagicMock
 
 # This may fail initially - expected in TDD
-from biomapper.core.strategy_actions.merge_datasets import (
+from actions.merge_datasets import (
     MergeDatasetsAction,
     MergeDatasetsParams
 )

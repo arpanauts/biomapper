@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from biomapper.core.strategy_actions.semantic_metabolite_match import (
+from actions.semantic_metabolite_match import (
     EmbeddingCache,
     SemanticMetaboliteMatchAction,
     SemanticMetaboliteMatchParams,

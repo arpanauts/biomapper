@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from biomapper.core.strategy_actions.registry import ACTION_REGISTRY
-from biomapper.core.strategy_actions.entities.proteins.annotation.normalize_accessions import (
+from actions.registry import ACTION_REGISTRY
+from actions.entities.proteins.annotation.normalize_accessions import (
     ProteinNormalizeAccessionsAction,
     ProteinNormalizeAccessionsParams,
 )

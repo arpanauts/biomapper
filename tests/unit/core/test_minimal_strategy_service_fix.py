@@ -1,5 +1,5 @@
 import tempfile
-from biomapper.core.minimal_strategy_service import MinimalStrategyService
+from core.minimal_strategy_service import MinimalStrategyService
 
 
 class TestVariableSubstitution:

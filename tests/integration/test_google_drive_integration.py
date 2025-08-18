@@ -9,11 +9,9 @@ import pytest
 import os
 import tempfile
 import json
-from pathlib import Path
-from typing import Dict, Any
 from unittest.mock import patch, MagicMock
 
-from biomapper.core.strategy_actions.io.sync_to_google_drive_v2 import (
+from actions.io.sync_to_google_drive_v2 import (
     SyncToGoogleDriveV2Action,
     SyncToGoogleDriveV2Params
 )
@@ -190,7 +188,15 @@ class TestGoogleDriveIntegration:
                 sync_context_outputs=True
             )
             
-            result = await action.execute_typed(params, sample_context)
+            # Call with all required parameters for the action signature
+            result = await action.execute_typed(
+                current_identifiers=[],  # No specific identifiers for file sync
+                current_ontology_type="files",  # File sync operation
+                params=params,
+                source_endpoint=None,  # Not needed for file sync
+                target_endpoint=None,  # Not needed for file sync
+                context=sample_context
+            )
             
             assert result.success is True, f"Sync should succeed: {result.error}"
             assert result.data["uploaded_count"] >= 0, "Should report upload count"
@@ -220,7 +226,15 @@ class TestGoogleDriveIntegration:
         
         # Ensure no environment credentials
         with patch.dict(os.environ, {}, clear=True):
-            result = await action.execute_typed(params, sample_context)
+            # Call with all required parameters for the action signature
+            result = await action.execute_typed(
+                current_identifiers=[],  # No specific identifiers for file sync
+                current_ontology_type="files",  # File sync operation
+                params=params,
+                source_endpoint=None,  # Not needed for file sync
+                target_endpoint=None,  # Not needed for file sync
+                context=sample_context
+            )
         
         assert result.success is True, "Should succeed but skip sync"
         assert result.data.get("sync_skipped") is True, "Should indicate sync was skipped"
@@ -241,7 +255,14 @@ class TestGoogleDriveIntegration:
             sync_context_outputs=True
         )
         
-        result = await action.execute_typed(params, sample_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="files",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=sample_context
+        )
         
         # Should either fail gracefully or handle the error
         if not result.success:
@@ -270,12 +291,19 @@ class TestGoogleDriveIntegration:
             description="Biomapper integration test upload"
         )
         
-        result = await action.execute_typed(params, sample_context)
+        result = await action.execute_typed(
+            current_identifiers=[],
+            current_ontology_type="files",
+            params=params,
+            source_endpoint=None,
+            target_endpoint=None,
+            context=sample_context
+        )
         
         assert result.success is True, f"Real sync should succeed: {result.error}"
         assert result.data["uploaded_count"] > 0, "Should upload at least one file"
         
-        print(f"✅ Real Google Drive sync successful!")
+        print("✅ Real Google Drive sync successful!")
         print(f"📁 Folder structure: {result.data['folder_structure']}")
         print(f"📤 Files uploaded: {result.data['uploaded_count']}")
         print(f"🔗 Target folder ID: {result.data['target_folder_id']}")

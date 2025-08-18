@@ -1,5 +1,0 @@
-# Ignore all result files but keep directory structure
-*
-!.gitignore
-!README.md
-!*/

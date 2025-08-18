@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 # These imports will fail initially - that's expected in TDD
-from biomapper.core.strategy_actions.entities.proteins.annotation.extract_uniprot_from_xrefs import (
+from actions.entities.proteins.annotation.extract_uniprot_from_xrefs import (
     ProteinExtractUniProtFromXrefsAction,
     ExtractUniProtFromXrefsParams,
     ExtractUniProtFromXrefsResult,
@@ -21,9 +21,9 @@ class TestExtractUniProtFromXrefsParams:
     def test_default_parameters(self):
         """Test that default parameters are set correctly."""
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="test_proteins", xrefs_column="xrefs"
+            input_key="test_proteins", xrefs_column="xrefs"
         )
-        assert params.dataset_key == "test_proteins"
+        assert params.input_key == "test_proteins"
         assert params.xrefs_column == "xrefs"
         assert params.output_column == "uniprot_id"
         assert params.handle_multiple == "list"
@@ -33,14 +33,14 @@ class TestExtractUniProtFromXrefsParams:
     def test_custom_parameters(self):
         """Test custom parameter values."""
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="proteins",
+            input_key="proteins",
             xrefs_column="external_refs",
             output_column="uniprot_accession",
             handle_multiple="expand_rows",
             keep_isoforms=True,
             drop_na=False,
         )
-        assert params.dataset_key == "proteins"
+        assert params.input_key == "proteins"
         assert params.xrefs_column == "external_refs"
         assert params.output_column == "uniprot_accession"
         assert params.handle_multiple == "expand_rows"
@@ -51,7 +51,7 @@ class TestExtractUniProtFromXrefsParams:
         """Test that invalid handle_multiple values raise ValidationError."""
         with pytest.raises(ValueError):
             ExtractUniProtFromXrefsParams(
-                dataset_key="test",
+                input_key="test",
                 xrefs_column="xrefs",
                 handle_multiple="invalid_option",
             )
@@ -124,15 +124,15 @@ class TestProteinExtractUniProtFromXrefsAction:
         }
 
     # Test 1: Basic extraction - Single UniProt ID from xrefs
-    def test_basic_single_uniprot_extraction(self, action, context_basic):
+    async def test_basic_single_uniprot_extraction(self, action, context_basic):
         """Test basic extraction of single UniProt IDs from xrefs."""
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="test_proteins",
+            input_key="test_proteins",
             xrefs_column="xrefs",
             drop_na=False,  # Keep all rows for this test
         )
 
-        result = action.execute_typed(params, context_basic)
+        result = await action.execute_typed(params, context_basic)
 
         # Check result structure
         assert isinstance(result, ExtractUniProtFromXrefsResult)
@@ -147,13 +147,13 @@ class TestProteinExtractUniProtFromXrefsAction:
         assert len(df.loc[2, "uniprot_id"]) == 0  # No UniProt in third row
 
     # Test 2: Multiple IDs - Multiple UniProt IDs in one xrefs field
-    def test_multiple_uniprot_ids_list_mode(self, action, context_complex):
+    async def test_multiple_uniprot_ids_list_mode(self, action, context_complex):
         """Test extraction of multiple UniProt IDs in list mode."""
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="complex_proteins", xrefs_column="xrefs", handle_multiple="list"
+            input_key="complex_proteins", xrefs_column="xrefs", handle_multiple="list"
         )
 
-        result = action.execute_typed(params, context_complex)
+        result = await action.execute_typed(params, context_complex)
         df = result.data["complex_proteins"]
 
         # First row has multiple UniProt IDs
@@ -161,15 +161,15 @@ class TestProteinExtractUniProtFromXrefsAction:
         assert df.loc[1, "uniprot_id"] == ["P00750"]  # Isoform removed by default
         assert df.loc[4, "uniprot_id"] == ["P98765"]  # Only valid ID extracted
 
-    def test_multiple_uniprot_ids_first_mode(self, action, context_complex):
+    async def test_multiple_uniprot_ids_first_mode(self, action, context_complex):
         """Test extraction taking only first UniProt ID."""
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="complex_proteins",
+            input_key="complex_proteins",
             xrefs_column="xrefs",
             handle_multiple="first",
         )
 
-        result = action.execute_typed(params, context_complex)
+        result = await action.execute_typed(params, context_complex)
         df = result.data["complex_proteins"]
 
         # Should take only first valid UniProt ID
@@ -177,16 +177,16 @@ class TestProteinExtractUniProtFromXrefsAction:
         assert df.loc[1, "uniprot_id"] == "P00750"
         assert df.loc[4, "uniprot_id"] == "P98765"
 
-    def test_multiple_uniprot_ids_expand_rows_mode(self, action, context_complex):
+    async def test_multiple_uniprot_ids_expand_rows_mode(self, action, context_complex):
         """Test extraction expanding multiple IDs into separate rows."""
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="complex_proteins",
+            input_key="complex_proteins",
             xrefs_column="xrefs",
             handle_multiple="expand_rows",
             drop_na=False,  # Keep rows without UniProt IDs for this test
         )
 
-        result = action.execute_typed(params, context_complex)
+        result = await action.execute_typed(params, context_complex)
         df = result.data["complex_proteins"]
 
         # Should have more rows due to expansion
@@ -201,40 +201,40 @@ class TestProteinExtractUniProtFromXrefsAction:
         assert uniprot_ids == {"P12345", "Q14213"}
 
     # Test 3: Isoforms - Handling P12345-1 format
-    def test_isoform_handling_keep_false(self, action, context_complex):
+    async def test_isoform_handling_keep_false(self, action, context_complex):
         """Test isoform handling when keep_isoforms=False."""
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="complex_proteins", xrefs_column="xrefs", keep_isoforms=False
+            input_key="complex_proteins", xrefs_column="xrefs", keep_isoforms=False
         )
 
-        result = action.execute_typed(params, context_complex)
+        result = await action.execute_typed(params, context_complex)
         df = result.data["complex_proteins"]
 
         # Isoform should be stripped
         assert df.loc[1, "uniprot_id"] == ["P00750"]
 
-    def test_isoform_handling_keep_true(self, action, context_complex):
+    async def test_isoform_handling_keep_true(self, action, context_complex):
         """Test isoform handling when keep_isoforms=True."""
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="complex_proteins", xrefs_column="xrefs", keep_isoforms=True
+            input_key="complex_proteins", xrefs_column="xrefs", keep_isoforms=True
         )
 
-        result = action.execute_typed(params, context_complex)
+        result = await action.execute_typed(params, context_complex)
         df = result.data["complex_proteins"]
 
         # Isoform should be kept
         assert df.loc[1, "uniprot_id"] == ["P00750-1"]
 
     # Test 4: Mixed xrefs - UniProt mixed with other ID types
-    def test_mixed_xrefs_extraction(self, action, context_basic):
+    async def test_mixed_xrefs_extraction(self, action, context_basic):
         """Test extraction from xrefs containing mixed ID types."""
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="test_proteins",
+            input_key="test_proteins",
             xrefs_column="xrefs",
             drop_na=False,  # Keep all rows for this test
         )
 
-        result = action.execute_typed(params, context_basic)
+        result = await action.execute_typed(params, context_basic)
         df = result.data["test_proteins"]
 
         # Should only extract UniProt IDs, ignoring RefSeq and KEGG
@@ -243,19 +243,19 @@ class TestProteinExtractUniProtFromXrefsAction:
         assert len(df.loc[2, "uniprot_id"]) == 0  # No UniProt IDs
 
     # Test 5: Edge cases - Empty xrefs, malformed patterns
-    def test_empty_xrefs_handling(self, action, context_complex):
+    async def test_empty_xrefs_handling(self, action, context_complex):
         """Test handling of empty xrefs."""
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="complex_proteins", xrefs_column="xrefs", drop_na=False
+            input_key="complex_proteins", xrefs_column="xrefs", drop_na=False
         )
 
-        result = action.execute_typed(params, context_complex)
+        result = await action.execute_typed(params, context_complex)
         df = result.data["complex_proteins"]
 
         # Empty xrefs should result in empty list
         assert len(df.loc[3, "uniprot_id"]) == 0
 
-    def test_drop_na_functionality(self, action, sample_data_complex):
+    async def test_drop_na_functionality(self, action, sample_data_complex):
         """Test drop_na parameter functionality."""
         # Create separate contexts to avoid modification conflicts
         context_drop = {
@@ -273,22 +273,22 @@ class TestProteinExtractUniProtFromXrefsAction:
         }
 
         params_drop = ExtractUniProtFromXrefsParams(
-            dataset_key="complex_proteins", xrefs_column="xrefs", drop_na=True
+            input_key="complex_proteins", xrefs_column="xrefs", drop_na=True
         )
 
         params_keep = ExtractUniProtFromXrefsParams(
-            dataset_key="complex_proteins", xrefs_column="xrefs", drop_na=False
+            input_key="complex_proteins", xrefs_column="xrefs", drop_na=False
         )
 
-        result_drop = action.execute_typed(params_drop, context_drop)
-        result_keep = action.execute_typed(params_keep, context_keep)
+        result_drop = await action.execute_typed(params_drop, context_drop)
+        result_keep = await action.execute_typed(params_keep, context_keep)
 
         # With drop_na=True, should have fewer rows
         assert len(result_drop.data["complex_proteins"]) < len(
             result_keep.data["complex_proteins"]
         )
 
-    def test_malformed_uniprot_patterns(self, action):
+    async def test_malformed_uniprot_patterns(self, action):
         """Test handling of malformed UniProt patterns."""
         malformed_data = pd.DataFrame(
             {
@@ -309,10 +309,10 @@ class TestProteinExtractUniProtFromXrefsAction:
         }
 
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="malformed_proteins", xrefs_column="xrefs"
+            input_key="malformed_proteins", xrefs_column="xrefs"
         )
 
-        result = action.execute_typed(params, context)
+        result = await action.execute_typed(params, context)
         df = result.data["malformed_proteins"]
 
         # All malformed patterns should result in empty lists
@@ -320,7 +320,7 @@ class TestProteinExtractUniProtFromXrefsAction:
             assert len(df.loc[idx, "uniprot_id"]) == 0
 
     # Test 6: Real data patterns based on KG2c
-    def test_real_kg2c_patterns(self, action):
+    async def test_real_kg2c_patterns(self, action):
         """Test with realistic KG2c protein data patterns."""
         kg2c_like_data = pd.DataFrame(
             {
@@ -342,12 +342,12 @@ class TestProteinExtractUniProtFromXrefsAction:
         }
 
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="kg2c_proteins",
+            input_key="kg2c_proteins",
             xrefs_column="xrefs",
             drop_na=False,  # Keep all rows for this test
         )
 
-        result = action.execute_typed(params, context)
+        result = await action.execute_typed(params, context)
         df = result.data["kg2c_proteins"]
 
         # Verify expected extractions
@@ -359,7 +359,7 @@ class TestProteinExtractUniProtFromXrefsAction:
         ]  # Duplicates from isoforms
 
     # Test 7: Error handling
-    def test_missing_dataset_key(self, action):
+    async def test_missing_input_key(self, action):
         """Test error handling for missing dataset key."""
         context = {
             "datasets": {},
@@ -369,32 +369,32 @@ class TestProteinExtractUniProtFromXrefsAction:
         }
 
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="nonexistent_dataset", xrefs_column="xrefs"
+            input_key="nonexistent_dataset", xrefs_column="xrefs"
         )
 
         with pytest.raises(KeyError):
-            action.execute_typed(params, context)
+            await action.execute_typed(params, context)
 
-    def test_missing_xrefs_column(self, action, context_basic):
+    async def test_missing_xrefs_column(self, action, context_basic):
         """Test error handling for missing xrefs column."""
         params = ExtractUniProtFromXrefsParams(
-            dataset_key="test_proteins", xrefs_column="nonexistent_column"
+            input_key="test_proteins", xrefs_column="nonexistent_column"
         )
 
         with pytest.raises(KeyError):
-            action.execute_typed(params, context_basic)
+            await action.execute_typed(params, context_basic)
 
-    def test_action_registration(self, action):
+    async def test_action_registration(self, action):
         """Test that action is properly registered."""
-        from biomapper.core.strategy_actions.registry import ACTION_REGISTRY
+        from actions.registry import ACTION_REGISTRY
 
         assert "PROTEIN_EXTRACT_UNIPROT_FROM_XREFS" in ACTION_REGISTRY
 
-    def test_get_params_model(self, action):
+    async def test_get_params_model(self, action):
         """Test that action returns correct params model."""
         assert action.get_params_model() == ExtractUniProtFromXrefsParams
 
-    def test_regex_pattern_validation(self, action):
+    async def test_regex_pattern_validation(self, action):
         """Test the UniProt regex pattern directly."""
         test_patterns = [
             ("UniProtKB:P12345", ["P12345"]),

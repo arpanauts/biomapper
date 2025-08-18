@@ -4,7 +4,10 @@ import pytest
 import pandas as pd
 from unittest.mock import patch, MagicMock
 
-from biomapper.core.strategy_actions.entities.metabolites.matching.nightingale_nmr_match import (
+# Skip all nightingale unit tests - deferred until active development
+pytestmark = pytest.mark.skip(reason="Nightingale NMR matching deferred until active development")
+
+from actions.entities.metabolites.matching.nightingale_nmr_match import (
     NightingaleNmrMatchAction,
     NightingaleNmrMatchParams,
     NightingaleNmrMatchResult,

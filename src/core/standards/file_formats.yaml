@@ -1,0 +1,236 @@
+# Configuration for known biological data file formats
+# Used by BiologicalFileLoader for automatic format detection and loading
+
+formats:
+  # Proteomics formats
+  arivale_proteomics:
+    type: tsv
+    comment: '#'
+    identifier_column: uniprot
+    encoding: utf-8
+    description: "Arivale proteomics data with UniProt identifiers"
+    expected_columns:
+      - uniprot
+      - gene_symbol
+      - protein_name
+    validation:
+      identifier_type: uniprot
+      data_type: proteomics
+  
+  kg2c_proteins:
+    type: csv
+    identifier_column: id
+    has_header: true
+    encoding: utf-8
+    description: "RTX-KG2 protein ontology data"
+    expected_columns:
+      - id
+      - name
+      - category
+      - xrefs
+    validation:
+      data_type: proteomics
+  
+  kg2_10_2c_proteins:
+    type: csv
+    identifier_column: id
+    has_header: true
+    encoding: utf-8
+    description: "RTX-KG2 version 10.2c protein data"
+    path_pattern: "kg2.10.2c_ontologies/kg2c_proteins.csv"
+    expected_columns:
+      - id
+      - name
+      - category
+      - xrefs
+    validation:
+      data_type: proteomics
+  
+  uniprot_mapping:
+    type: tsv
+    comment: '#'
+    identifier_column: Entry
+    encoding: utf-8
+    description: "UniProt ID mapping file"
+    expected_columns:
+      - Entry
+      - Entry_Name
+      - Gene_Names
+      - Organism
+    validation:
+      identifier_type: uniprot
+      data_type: proteomics
+  
+  # Metabolomics formats
+  nightingale_nmr:
+    type: csv
+    delimiter: ','
+    decimal: '.'
+    identifier_column: biomarker_name
+    encoding: utf-8
+    description: "Nightingale Health NMR metabolomics data"
+    expected_columns:
+      - biomarker_name
+      - biomarker_id
+      - unit
+      - description
+    validation:
+      data_type: metabolomics
+  
+  hmdb_metabolites:
+    type: csv
+    identifier_column: hmdb_id
+    encoding: utf-8
+    description: "Human Metabolome Database export"
+    expected_columns:
+      - hmdb_id
+      - metabolite_name
+      - chemical_formula
+      - inchikey
+    validation:
+      identifier_type: hmdb
+      data_type: metabolomics
+  
+  metabolon_results:
+    type: csv
+    identifier_column: BIOCHEMICAL
+    encoding: utf-8
+    description: "Metabolon metabolomics platform results"
+    expected_columns:
+      - BIOCHEMICAL
+      - COMP_ID
+      - PLATFORM
+      - HMDB
+      - KEGG
+      - PUBCHEM
+    validation:
+      data_type: metabolomics
+  
+  # Genomics formats
+  ensembl_genes:
+    type: tsv
+    comment: '#'
+    identifier_column: gene_id
+    encoding: utf-8
+    description: "Ensembl gene annotations"
+    expected_columns:
+      - gene_id
+      - gene_name
+      - chromosome
+      - start
+      - end
+      - strand
+    validation:
+      identifier_type: ensembl_gene
+      data_type: genomics
+  
+  refseq_transcripts:
+    type: tsv
+    identifier_column: transcript_id
+    encoding: utf-8
+    description: "RefSeq transcript annotations"
+    expected_columns:
+      - transcript_id
+      - gene_symbol
+      - protein_id
+      - chromosome
+    validation:
+      identifier_type: refseq
+      data_type: genomics
+  
+  # Clinical formats
+  loinc_tests:
+    type: csv
+    identifier_column: loinc_code
+    encoding: utf-8
+    description: "LOINC clinical test codes"
+    expected_columns:
+      - loinc_code
+      - test_name
+      - component
+      - property
+      - system
+      - scale
+      - method
+    validation:
+      identifier_type: loinc
+      data_type: clinical
+  
+  clinical_results:
+    type: csv
+    identifier_column: sample_id
+    encoding: utf-8
+    description: "Clinical laboratory results"
+    expected_columns:
+      - sample_id
+      - patient_id
+      - test_code
+      - result_value
+      - unit
+      - reference_range
+    validation:
+      data_type: clinical
+  
+  # Generic formats
+  identifier_list:
+    type: tsv
+    identifier_column: id
+    encoding: utf-8
+    description: "Simple list of identifiers"
+    skip_validation: false
+  
+  mapping_table:
+    type: tsv
+    encoding: utf-8
+    description: "Two-column mapping table"
+    expected_columns:
+      - source_id
+      - target_id
+    skip_validation: false
+
+# Default parameters for unknown formats
+defaults:
+  tsv:
+    sep: '\t'
+    comment: '#'
+    low_memory: false
+    encoding: utf-8
+    encoding_errors: replace
+    skip_blank_lines: true
+    on_bad_lines: warn
+  
+  csv:
+    sep: ','
+    low_memory: false
+    encoding: utf-8
+    encoding_errors: replace
+    skip_blank_lines: true
+    on_bad_lines: warn
+  
+  txt:
+    # Treat as TSV by default
+    sep: '\t'
+    comment: '#'
+    low_memory: false
+    encoding: utf-8
+    encoding_errors: replace
+
+# Memory management thresholds
+memory_management:
+  # File size threshold for chunked loading (in MB)
+  chunk_threshold_mb: 500
+  # Default chunk size for large files
+  default_chunk_size: 10000
+  # Maximum memory usage per dataframe (in MB)
+  max_memory_mb: 2000
+
+# Validation settings
+validation:
+  # Maximum proportion of NA values before warning
+  max_na_proportion: 0.5
+  # Minimum rows for valid dataset
+  min_rows: 1
+  # Maximum string length before warning
+  max_string_length: 1000
+  # Sample size for identifier validation
+  validation_sample_size: 100

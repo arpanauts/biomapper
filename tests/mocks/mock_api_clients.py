@@ -2,7 +2,6 @@
 
 from typing import Dict, Any, List, Optional
 import asyncio
-from unittest.mock import MagicMock
 
 
 class MockUniProtAPIClient:

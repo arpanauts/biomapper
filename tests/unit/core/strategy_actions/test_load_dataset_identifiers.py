@@ -6,9 +6,9 @@ from pathlib import Path
 import tempfile
 import os
 
-from biomapper.core.strategy_actions.typed_base import StandardActionResult
-from biomapper.core.models.execution_context import StrategyExecutionContext
-from biomapper.core.strategy_actions.load_dataset_identifiers import (
+from actions.typed_base import StandardActionResult
+from core.models.execution_context import StrategyExecutionContext
+from actions.load_dataset_identifiers import (
     LoadDatasetIdentifiersParams,
     LoadDatasetIdentifiersAction,
 )

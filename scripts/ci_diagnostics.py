@@ -102,11 +102,11 @@ def check_async_mocking_issues() -> List[str]:
         # Check for missing ProgressEventType import
         if (
             "ProgressEventType" in content
-            and "from biomapper_client.models" not in content
+            and "from biomapper.client.models" not in content
         ):
             issues.append(
                 f"{test_file} - Uses ProgressEventType but missing import: "
-                "from biomapper_client.models import ProgressEventType"
+                "from biomapper.client.models import ProgressEventType"
             )
 
         # Check for StrategyExecutionContext validation issues

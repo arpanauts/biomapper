@@ -4,7 +4,7 @@ import pytest
 from datetime import datetime
 from pydantic import ValidationError
 
-from biomapper.core.models.execution_context import (
+from core.models.execution_context import (
     StrategyExecutionContext,
     StepResult,
     ProvenanceRecord,

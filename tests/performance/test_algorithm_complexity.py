@@ -4,16 +4,14 @@ import time
 import random
 import string
 import pandas as pd
-import numpy as np
-from typing import List, Tuple, Dict, Any
-import pytest
+from typing import List, Tuple, Dict
 from pathlib import Path
 import sys
 
 # Add biomapper to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from biomapper.core.algorithms.efficient_matching import EfficientMatcher
+from core.algorithms.efficient_matching import EfficientMatcher
 
 
 class TestAlgorithmComplexity:
@@ -130,7 +128,7 @@ class TestAlgorithmComplexity:
                 print(f"Nested Loop:    {time_nested:.4f}s ({len(matches_nested)} matches)")
             else:
                 time_nested = None
-                print(f"Nested Loop:    Skipped (would take too long)")
+                print("Nested Loop:    Skipped (would take too long)")
             
             # Test indexed matching
             matches_indexed, time_indexed = self.benchmark_indexed_matching(source, target)

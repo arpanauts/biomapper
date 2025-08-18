@@ -3,9 +3,8 @@
 import pytest
 import pandas as pd
 import tempfile
-import os
 from pathlib import Path
-from biomapper.core.standards import BiologicalFileLoader
+from core.standards import BiologicalFileLoader
 
 
 class TestBiologicalFileLoader:

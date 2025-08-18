@@ -4,6 +4,9 @@ import yaml
 from unittest.mock import patch
 import sys
 
+
+pytestmark = pytest.mark.requires_external_services
+
 # Add project root to path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))

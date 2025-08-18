@@ -3,7 +3,7 @@
 import pytest
 import pandas as pd
 
-from biomapper.core.strategy_actions.utils.data_processing.filter_dataset import (
+from actions.utils.data_processing.filter_dataset import (
     FilterDatasetAction,
     FilterDatasetParams,
     FilterCondition,
