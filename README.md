@@ -5,7 +5,7 @@
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-BioMapper is a general-purpose plugin- and strategy-based orchestration framework, with its first application in biological data harmonization. Architecturally, it blends elements of workflow engines (Nextflow, Snakemake, Kedro, Dagster) with a lightweight service-oriented API and a plugin registry backed by a unified UniversalContext. Its standout differentiator is an AI-native developer experience: CLAUDE.md, .claude/ scaffolding, custom slash commands, and the BioSherpa guide. This arguably makes it the first open-source orchestration platform with built-in LLM-assisted contributor workflows.
+BioMapper is a general-purpose plugin- and strategy-based orchestration framework, with its first application in biological data harmonization. Architecturally, it blends elements of workflow engines (Nextflow, Snakemake, Kedro, Dagster) with a lightweight service-oriented API and a plugin registry backed by a unified UniversalContext. Its standout differentiator is an AI-native developer experience: CLAUDE.md, .claude/ scaffolding, custom slash commands, and the BioSherpa guide. This potentially makes it the first open-source bioinformatics orchestration platform with built-in LLM-assisted contributor workflows.
 
 The result is a platform that is modular, extensible, and uniquely AI-augmented, well-positioned for long-term ecosystem growth. Built on a self-registering action system and YAML-based workflow definitions, it features a modern src-layout architecture with comprehensive test coverage and 2025 standardizations for production reliability.
 
