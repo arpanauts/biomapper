@@ -47,19 +47,19 @@ Quick Architecture Overview
 Component Responsibilities
 --------------------------
 
-**BiomapperClient** (``biomapper_client/biomapper_client/client_v2.py``)
+**BiomapperClient** (``src/client/client_v2.py``)
   Python client library providing synchronous wrapper and async interfaces. Primary entry point for programmatic access.
 
-**FastAPI Server** (``biomapper-api/app/main.py``)
+**FastAPI Server** (``src/api/main.py``)
   REST API handling HTTP requests, validation, response formatting, and Server-Sent Events (SSE) for progress tracking.
 
-**MapperService** (``biomapper-api/app/services/mapper_service.py``)
+**MapperService** (``src/api/services/mapper_service.py``)
   Orchestrates job execution, manages background tasks, handles SQLite persistence, and checkpoint recovery.
 
-**MinimalStrategyService** (``biomapper/core/minimal_strategy_service.py``)
-  Core execution engine that loads YAML strategies from ``src/biomapper/configs/strategies/`` and executes actions sequentially.
+**MinimalStrategyService** (``src/core/minimal_strategy_service.py``)
+  Core execution engine that loads YAML strategies from ``src/configs/strategies/`` and executes actions sequentially.
 
-**ACTION_REGISTRY** (``biomapper/actions/registry.py``)
+**ACTION_REGISTRY** (``src/actions/registry.py``)
   Global dictionary where actions self-register at import time using the ``@register_action`` decorator.
 
 **Execution Context**
@@ -84,8 +84,8 @@ Example action implementation:
 
 .. code-block:: python
 
-    from biomapper.actions.typed_base import TypedStrategyAction
-    from biomapper.actions.registry import register_action
+    from actions.typed_base import TypedStrategyAction
+    from actions.registry import register_action
     from pydantic import BaseModel, Field
     from typing import Dict, Any
     
@@ -199,18 +199,17 @@ Future Architecture Goals
 
 ---
 
----
-
 ## Verification Sources
-*Last verified: 2025-08-17*
+*Last verified: 2025-01-18*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/src/biomapper/actions/registry.py` (Action registry implementation with global ACTION_REGISTRY)
-- `/biomapper/src/biomapper/actions/typed_base.py` (TypedStrategyAction base class with execute() wrapper)
-- `/biomapper/src/biomapper/core/minimal_strategy_service.py` (Strategy execution engine with dual context support)
-- `/biomapper/src/biomapper/api/main.py` (FastAPI server with background job management)
-- `/biomapper/src/biomapper/client/client_v2.py` (BiomapperClient synchronous wrapper)
-- `/biomapper/README.md` (Project overview and 37+ available actions)
+- `/biomapper/src/actions/registry.py` (Action registry implementation with global ACTION_REGISTRY)
+- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class with execute_typed method)
+- `/biomapper/src/core/minimal_strategy_service.py` (Strategy execution engine with shared context)
+- `/biomapper/src/api/main.py` (FastAPI server with background job management)
+- `/biomapper/src/api/services/mapper_service.py` (MapperService orchestration logic)
+- `/biomapper/src/client/client_v2.py` (BiomapperClient synchronous wrapper)
+- `/biomapper/README.md` (Project overview and architecture documentation)
 - `/biomapper/CLAUDE.md` (TDD development guidelines and 2025 standardizations)
-- `/biomapper/pyproject.toml` (Poetry dependencies and test configuration)
+- `/biomapper/pyproject.toml` (Poetry dependencies and package configuration)

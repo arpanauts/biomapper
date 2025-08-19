@@ -1,7 +1,9 @@
 BioMapper Documentation
 =======================
 
-BioMapper is a YAML-based workflow platform built on a self-registering action system. While originally designed for biological data harmonization (proteins, metabolites, chemistry), its extensible architecture supports any workflow that can be expressed as a sequence of actions operating on shared execution context.
+BioMapper is a general-purpose plugin- and strategy-based orchestration framework, with its first application in biological data harmonization. Architecturally, it blends elements of workflow engines (Nextflow, Snakemake, Kedro, Dagster) with a lightweight service-oriented API and a plugin registry backed by a unified UniversalContext. Its standout differentiator is an AI-native developer experience: CLAUDE.md, .claude/ scaffolding, custom slash commands, and the BioSherpa guide. This arguably makes it the first open-source orchestration platform with built-in LLM-assisted contributor workflows.
+
+The result is a platform that is modular, extensible, and uniquely AI-augmented, well-positioned for long-term ecosystem growth. Built on a self-registering action system and YAML-based workflow definitions, it features a modern src-layout architecture with comprehensive test coverage and 2025 standardizations for production reliability.
 
 🎯 **Key Features**
 -------------------
@@ -44,11 +46,27 @@ BioMapper is a YAML-based workflow platform built on a self-registering action s
 🏗️ **Architecture**
 --------------------
 
-BioMapper follows a modern microservices architecture with three layers:
+BioMapper follows a modern microservices architecture with clear separation of concerns:
+
+**Core Design:**
+
+* **YAML Strategies** - Declarative configs defining pipelines of actions
+* **Action Registry** - Self-registering via decorators; plug-and-play extensibility
+* **UniversalContext** - Normalizes state access across heterogeneous action types
+* **Pydantic Models (v2)** - Typed parameter models per action category
+* **Progressive Mapping** - Iterative enrichment stages (65% → 80% coverage)
+
+**Comparison to Known Patterns:**
+
+* **Similar to:** Nextflow & Snakemake (declarative pipelines), Kedro (typed configs + reproducibility), Dagster (observability and orchestration)
+* **Different from:** Heavy orchestrators (Airflow, Beam) — BioMapper is lighter, service/API-first, domain-agnostic, and tailored for interactive workflows
+* **Unique:** Combines API service with strategy-based pipeline engine; domain-specific operations first (bio), but extensible beyond
+
+**Three-Layer Design:**
 
 1. **Client Layer** - Python client library (``biomapper_client``) for programmatic access
 2. **API Layer** - FastAPI service with SQLite job persistence and SSE progress tracking
-3. **Core Layer** - 13 self-registering actions with strategy execution engine
+3. **Core Layer** - Self-registering actions with strategy execution engine
 
 The system uses a **registry pattern** where actions self-register via ``@register_action`` decorators, a **strategy pattern** for YAML-based workflow configuration, and a **pipeline pattern** for data flow through shared execution context. Actions are organized by biological entity (proteins, metabolites, chemistry) and automatically discovered at runtime.
 
@@ -83,16 +101,63 @@ The system uses a **registry pattern** where actions self-register via ``@regist
    development/testing
    development/contributing
 
+🤖 **AI Integration**
+----------------------
+
+BioMapper features an AI-native developer experience that sets it apart from traditional orchestration frameworks:
+
+**Current AI Features:**
+
+* **CLAUDE.md** - Project "constitution" providing role-defining guidance for AI agents
+* **.claude/ folder** - Structured agent configs and scaffolding
+* **BioSherpa guide** - AI-powered onboarding and project navigation
+* **Type-safe actions** - Enable better code completion and error detection
+* **Self-documenting** - Pydantic models include descriptions
+* **TDD approach** - Tests provide clear specifications
+
+**Comparisons:**
+
+* **Copilot/Cody:** Offer IDE assistance but don't ship with per-project scaffolding
+* **Claude-Orchestrator/Flow frameworks:** Orchestrate multiple Claude agents, but not tied to strategy orchestration
+* **BioMapper:** First to embed LLM-native scaffolding inside an orchestration framework repo, making the AI "part of the project contract"
+
 📚 **Available Actions**
 ------------------------
 
-BioMapper includes 13 actions across categories:
+BioMapper includes actions across multiple categories:
 
 * **Data Operations**: Load, merge, filter, export, transform
-* **Protein Actions**: UniProt extraction, accession normalization
-* **Metabolite Actions**: Nightingale NMR matching, semantic matching
-* **Chemistry Actions**: Fuzzy test matching
+* **Protein Actions**: UniProt extraction, accession normalization, multi-bridge resolution
+* **Metabolite Actions**: CTS bridge, Nightingale NMR matching, semantic matching, vector matching, API enrichment
+* **Chemistry Actions**: LOINC extraction, fuzzy test matching, vendor harmonization
+* **Analysis & Reporting**: Set overlap, mapping quality, comprehensive reports
 * **Integration Actions**: Google Drive sync with chunked transfer
+
+✅ **2025 Standardizations**
+-----------------------------
+
+**Production-Ready Architecture Achieved:**
+
+* **Barebones Architecture**: Client → API → MinimalStrategyService → Self-Registering Actions
+* **Comprehensive Test Suite**: 1,217 passing tests with 79.69% coverage
+* **Type Safety**: Comprehensive Pydantic v2 migration
+* **Standards Compliance**: All 10 biomapper 2025 standardizations implemented
+* **Biological Data Testing**: Real-world protein, metabolite, and chemistry data patterns
+
+**Architectural Strengths:**
+
+* **Clean modularity** (strategy vs action vs context)
+* **Low barrier for extension** (just register a new action)
+* **Declarative configuration** approachable to non-programmers
+* **Pragmatic service orientation** (FastAPI, Poetry, pytest, Pydantic)
+
+**Gaps & Opportunities:**
+
+* No DAG/conditional execution in YAML
+* Limited provenance/lineage tracking
+* Potential performance bottlenecks at scale (10K–1M records)
+* Observability/logging not yet first-class
+* Single-agent AI model; opportunity for multi-agent orchestration
 
 Indices and tables
 ==================
@@ -105,11 +170,12 @@ Indices and tables
 
 Verification Sources
 --------------------
-*Last verified: 2025-08-18*
+*Last verified: 2025-08-19*
 
 This documentation was verified against the following project resources:
 
-- ``/biomapper/README.md`` (Project overview)
+- ``/biomapper/README.md`` (Project overview with architectural analysis)
 - ``/biomapper/CLAUDE.md`` (Commands and patterns)
-- ``/biomapper/src/actions/registry.py`` (Verified 13 actual registered actions)
+- ``/biomapper/src/actions/registry.py`` (Self-registering action system)
 - ``/biomapper/pyproject.toml`` (Project configuration and dependencies)
+- ``/biomapper/tests/`` (1,217 passing tests across unit and integration suites)

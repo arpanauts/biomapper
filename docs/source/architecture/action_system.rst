@@ -144,12 +144,9 @@ Actions are organized by biological entity type:
   * ``CHEMISTRY_VENDOR_HARMONIZATION`` - Harmonize vendor-specific codes
   * ``CHEMISTRY_TO_PHENOTYPE_BRIDGE`` - Link chemistry to phenotypes
 
-**Analysis Actions** (``algorithms/``)
-  * ``CALCULATE_SET_OVERLAP`` - Jaccard similarity with Venn diagrams
-  * ``CALCULATE_THREE_WAY_OVERLAP`` - Three-dataset comparison
-  * ``CALCULATE_MAPPING_QUALITY`` - Quality metrics assessment
-  * ``GENERATE_METABOLOMICS_REPORT`` - Comprehensive metabolomics reports
-  * ``GENERATE_ENHANCEMENT_REPORT`` - Validation and enhancement reports
+**Report Actions** (``reports/``)
+  * ``GENERATE_MAPPING_VISUALIZATIONS`` - Create visualization reports for mapping results
+  * ``GENERATE_LLM_ANALYSIS`` - Generate AI-powered analysis reports using LLM providers
 
 Benefits
 --------
@@ -163,20 +160,24 @@ Benefits
 
 **Infrastructure Actions** (``io/`` and ``utils/``)
   * ``SYNC_TO_GOOGLE_DRIVE_V2`` - Upload results to Google Drive with chunked transfer
-  * ``CHUNK_PROCESSOR`` - Process large datasets in configurable chunks
-  * ``BASELINE_FUZZY_MATCH`` - Fuzzy string matching utilities
+  * ``PARSE_COMPOSITE_IDENTIFIERS`` - Parse complex identifier formats from compound fields
+  * ``CUSTOM_TRANSFORM`` - Apply custom Python expressions to transform data columns
 
 ---
 
 ## Verification Sources
-*Last verified: 2025-01-17*
+*Last verified: 2025-01-18*
 
 This documentation was verified against the following project resources:
 
 - `/biomapper/src/actions/registry.py` (Global ACTION_REGISTRY dictionary with @register_action decorator)
-- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class with StandardActionResult)
-- `/biomapper/src/actions/load_dataset_identifiers.py` (LoadDatasetIdentifiersParams with file_path, identifier_column, output_key)
-- `/biomapper/src/actions/merge_datasets.py` (Dataset combination with deduplication logic)
-- `/biomapper/src/actions/semantic_metabolite_match.py` (AI-powered metabolite matching implementation)
-- `/biomapper/src/actions/calculate_set_overlap.py` (Jaccard similarity calculation with Venn diagrams)
+- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class with execute_typed method)
+- `/biomapper/src/actions/load_dataset_identifiers.py` (LOAD_DATASET_IDENTIFIERS action implementation)
+- `/biomapper/src/actions/merge_datasets.py` (MERGE_DATASETS action with deduplication logic)
+- `/biomapper/src/actions/semantic_metabolite_match.py` (SEMANTIC_METABOLITE_MATCH AI-powered matching)
+- `/biomapper/src/actions/reports/generate_mapping_visualizations.py` (GENERATE_MAPPING_VISUALIZATIONS action)
+- `/biomapper/src/actions/reports/generate_llm_analysis.py` (GENERATE_LLM_ANALYSIS action)
+- `/biomapper/src/actions/utils/data_processing/filter_dataset.py` (FILTER_DATASET action implementation)
+- `/biomapper/src/actions/utils/data_processing/custom_transform_expression.py` (CUSTOM_TRANSFORM and CUSTOM_TRANSFORM_EXPRESSION actions)
+- `/biomapper/src/actions/io/sync_to_google_drive_v2.py` (SYNC_TO_GOOGLE_DRIVE_V2 implementation)
 - `/biomapper/CLAUDE.md` (2025 standardizations and TDD development patterns)

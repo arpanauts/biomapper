@@ -5,7 +5,9 @@
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-BioMapper is a YAML-based workflow platform built on a self-registering action system. Designed for biological data harmonization (proteins, metabolites, chemistry), it features a modern src-layout architecture with comprehensive test coverage and 2025 standardizations for production reliability.
+BioMapper is a general-purpose plugin- and strategy-based orchestration framework, with its first application in biological data harmonization. Architecturally, it blends elements of workflow engines (Nextflow, Snakemake, Kedro, Dagster) with a lightweight service-oriented API and a plugin registry backed by a unified UniversalContext. Its standout differentiator is an AI-native developer experience: CLAUDE.md, .claude/ scaffolding, custom slash commands, and the BioSherpa guide. This arguably makes it the first open-source orchestration platform with built-in LLM-assisted contributor workflows.
+
+The result is a platform that is modular, extensible, and uniquely AI-augmented, well-positioned for long-term ecosystem growth. Built on a self-registering action system and YAML-based workflow definitions, it features a modern src-layout architecture with comprehensive test coverage and 2025 standardizations for production reliability.
 
 ## 🎯 Key Features
 
@@ -21,6 +23,18 @@ BioMapper is a YAML-based workflow platform built on a self-registering action s
 ### Overview
 
 BioMapper follows a modern microservices architecture with clear separation of concerns:
+
+**Core Design:**
+- **YAML Strategies** - Declarative configs defining pipelines of actions
+- **Action Registry** - Self-registering via decorators; plug-and-play extensibility
+- **UniversalContext** - Normalizes state access across heterogeneous action types
+- **Pydantic Models (v2)** - Typed parameter models per action category
+- **Progressive Mapping** - Iterative enrichment stages (65% → 80% coverage)
+
+**Comparison to Known Patterns:**
+- **Similar to:** Nextflow & Snakemake (declarative pipelines), Kedro (typed configs + reproducibility), Dagster (observability and orchestration)
+- **Different from:** Heavy orchestrators (Airflow, Beam) — BioMapper is lighter, service/API-first, domain-agnostic, and tailored for interactive workflows
+- **Unique:** Combines API service with strategy-based pipeline engine; domain-specific operations first (bio), but extensible beyond
 
 **Three-Layer Design:**
 1. **Client Layer** - Python client library (`src/client/`) provides programmatic access
@@ -432,19 +446,42 @@ Strategies support variable substitution:
 
 ## 🤖 AI Integration
 
-BioMapper is designed for AI-assisted development with Claude Code:
+BioMapper features an AI-native developer experience that sets it apart from traditional orchestration frameworks:
 
-1. **CLAUDE.md** - Provides context and instructions for Claude Code
-2. **Type-safe actions** - Enable better code completion and error detection
-3. **Self-documenting** - Pydantic models include descriptions
-4. **TDD approach** - Tests provide clear specifications
+### Current AI Features
 
-Example Claude Code usage:
+1. **CLAUDE.md** - Project "constitution" providing role-defining guidance for AI agents
+2. **.claude/ folder** - Structured agent configs and scaffolding
+3. **BioSherpa guide** - AI-powered onboarding and project navigation
+4. **Type-safe actions** - Enable better code completion and error detection
+5. **Self-documenting** - Pydantic models include descriptions
+6. **TDD approach** - Tests provide clear specifications
+
+### Comparisons
+
+- **Copilot/Cody:** Offer IDE assistance but don't ship with per-project scaffolding
+- **Claude-Orchestrator/Flow frameworks:** Orchestrate multiple Claude agents, but not tied to strategy orchestration
+- **BioMapper:** First to embed LLM-native scaffolding inside an orchestration framework repo, making the AI "part of the project contract"
+
+### Strengths
+
+- **Contributor on-ramp:** Immediate AI guidance without context overload
+- **Explicit developer ergonomics:** CLAUDE.md provides consistent AI-facing knowledge
+- **Balanced with traditional docs:** Non-AI contributors aren't excluded
+
+### Example Claude Code Usage
+
 ```
 "Help me create a new action that extracts gene symbols from protein descriptions"
 "Debug why my metabolite matching strategy is returning empty results"
 "Optimize the CTS API calls to handle rate limiting better"
 ```
+
+### Current Limitations
+
+- AI setup assumes Claude access — barrier for external contributors
+- Single-agent model; lacks multi-agent orchestration (architect/coder/tester roles)
+- AI hooks primarily developer-facing; limited in runtime/CI integration
 
 ## ✅ 2025 Standardizations Complete
 
@@ -463,11 +500,26 @@ Example Claude Code usage:
 - ✅ **Biological Data Testing**: Real-world protein, metabolite, and chemistry data patterns
 - ✅ **Error Handling**: Comprehensive edge case coverage and validation
 
+**Architectural Strengths:**
+- **Clean modularity** (strategy vs action vs context)
+- **Low barrier for extension** (just register a new action)
+- **Declarative configuration** approachable to non-programmers
+- **Pragmatic service orientation** (FastAPI, Poetry, pytest, Pydantic)
+
+**Gaps & Opportunities:**
+- No DAG/conditional execution in YAML
+- Limited provenance/lineage tracking
+- Potential performance bottlenecks at scale (10K–1M records)
+- Observability/logging not yet first-class
+
 **Next Development Priorities:**
 1. **Environment Setup Tools** - Restore setup wizards and configuration automation
 2. **Performance Monitoring** - Rebuild complexity audit and optimization detection
 3. **CLI Enhancement** - Expand command-line interface capabilities
 4. **External Integrations** - Enhanced Google Drive sync and external API connections
+5. **Multi-agent workflows** - Expand beyond single-agent AI model
+6. **AI-driven reviews** - Automated code and strategy review capabilities
+7. **End-user AI features** - Runtime AI assistance and intelligent suggestions
 
 ## 📖 Documentation
 
