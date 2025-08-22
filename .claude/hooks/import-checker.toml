@@ -1,0 +1,13 @@
+# Import Verification Hook - Automatic Python Import Checking
+[[hooks]]
+event = "PostToolUse"
+
+[hooks.matcher]
+tool_name = "edit_file"
+file_paths = ["src/**/*.py"]
+
+[hooks.config]
+command = "python .claude/hooks/hook_wrapper.py imports ${CLAUDE_FILE_PATH}"
+block_on_failure = false
+warning_on_failure = true
+message = "Import check: Verifying module imports"

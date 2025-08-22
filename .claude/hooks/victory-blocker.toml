@@ -1,0 +1,12 @@
+# Victory Blocker Hook - Prevent Premature Success Declarations
+[[hooks]]
+event = "PrePrompt"
+
+[hooks.matcher]
+pattern = "(?i)(success|complete|done|finished|works)"
+
+[hooks.config]
+command = "python .claude/hooks/hook_wrapper.py victory"
+block_on_failure = true
+message = "Validation required before declaring success"
+check_frequency = "on_submit"

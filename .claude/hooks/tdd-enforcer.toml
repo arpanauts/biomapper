@@ -1,0 +1,12 @@
+# TDD Enforcement Hook - Automatic Test-Driven Development
+[[hooks]]
+event = "PreToolUse"
+
+[hooks.matcher]
+tool_name = "edit_file"
+file_paths = ["src/actions/**/*.py", "src/core/**/*.py", "src/client/**/*.py"]
+
+[hooks.config]
+command = "python .claude/hooks/hook_wrapper.py tdd ${CLAUDE_FILE_PATH}"
+block_on_failure = true
+message = "TDD: Test required before implementation"

@@ -1,0 +1,93 @@
+# BiOMapper Hook Configuration - Team-Wide Settings (Version Controlled)
+# All developers use these settings automatically
+
+version: "3.1"
+project: "biomapper"
+
+# Team-wide enforcement settings
+enforcement:
+  # Current mode for entire team
+  # Options: disabled, warn, enforce_new, enforce_critical, enforce_all
+  mode: "warn"  # Start with warnings only
+  
+  # What to validate (team-wide)
+  validations:
+    tdd_required: true          # Tests required before implementation
+    parameter_substitution: true # YAML parameter validation
+    import_verification: true    # Python module imports
+    authentic_coverage: true     # No entity duplication
+    
+  # When to validate
+  triggers:
+    on_file_edit: ["*.py", "*.yaml"]
+    on_commit: ["all"]
+    
+  # Performance settings
+  performance:
+    cache_ttl: 300  # 5-minute cache
+    max_validation_time: 5000  # 5 seconds max
+
+# Biological validation standards
+biological_standards:
+  proteins:
+    min_coverage: 0.85    # 85% minimum
+    max_inflation: 1.02   # Max 2% inflation allowed
+    
+  metabolites:
+    min_coverage: 0.70    # 70% minimum
+    max_inflation: 1.05   # Max 5% inflation allowed
+    
+  chemistry:
+    min_coverage: 0.60    # 60% minimum
+    max_inflation: 1.10   # Max 10% inflation allowed
+
+# Anti-patterns blocked
+blocked_patterns:
+  - partial_victory_declaration  # No premature SUCCESS
+  - parameter_hardcoding        # Use variables not paths
+  - coverage_inflation          # No duplicate counting
+  - missing_tests              # TDD enforcement
+  - import_failures            # Clean imports required
+
+# Emergency override settings
+emergency_override:
+  enabled: true
+  max_duration_hours: 4
+  command: "/hooks disable --duration 2h --reason 'critical fix'"
+  requires_reason: true
+  log_file: ".claude/logs/emergency_overrides.log"
+
+# Team rollout phases
+rollout_schedule:
+  current_phase: 1
+  
+  phases:
+    1:
+      name: "Learning Phase"
+      mode: "warn"
+      duration_days: 7
+      message: "Week 1: Warnings only, learning the system"
+      
+    2:
+      name: "New Code Enforcement"
+      mode: "enforce_new"
+      duration_days: 14
+      message: "Weeks 2-3: New code requires tests"
+      
+    3:
+      name: "Critical Paths"
+      mode: "enforce_critical"
+      duration_days: 14
+      message: "Weeks 4-5: Critical paths enforced"
+      
+    4:
+      name: "Full Enforcement"
+      mode: "enforce_all"
+      duration_days: null  # Permanent
+      message: "Week 6+: Full quality enforcement"
+
+# Notification settings
+notifications:
+  on_validation_failure: false  # Don't spam on failures
+  on_emergency_override: true   # Alert on overrides
+  weekly_summary: true          # Weekly metrics email

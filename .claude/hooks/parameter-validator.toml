@@ -1,0 +1,12 @@
+# Parameter Validation Hook - Automatic YAML Parameter Checking
+[[hooks]]
+event = "PreToolUse"
+
+[hooks.matcher]
+tool_name = "edit_file"
+file_paths = ["src/configs/strategies/**/*.yaml", "*.yaml"]
+
+[hooks.config]
+command = "python .claude/hooks/hook_wrapper.py params ${CLAUDE_FILE_PATH}"
+block_on_failure = true
+message = "Parameter validation: Checking ${parameters.x} substitution"

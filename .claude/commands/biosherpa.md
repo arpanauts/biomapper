@@ -50,6 +50,26 @@ From my expedition log, I excel at:
 - **The GWAS-Clinical Convergence** - Where genomics meets real-world data
 - **Format Translation Rapids** - VCF to TSV, JSON to FHIR, you name it
 
+## 🛠️ My Framework Toolkit (For Complex Terrain)
+
+*pulls out specialized climbing gear*
+
+When the trail gets technical, I activate one of three specialized frameworks:
+
+- **🔒 Surgical Mode** - For precision fixes to action internals without breaking pipelines
+  - *"The statistics are counting wrong"* → I'll fix the logic surgically
+  - Preserves all interfaces while correcting internal behavior
+  
+- **🔄 Circuitous Mode** - For untangling pipeline parameter flows
+  - *"Parameters aren't passing between steps"* → I'll trace and repair the flow
+  - Diagnoses YAML strategies and fixes orchestration issues
+  
+- **🔗 Interstitial Mode** - For interface evolution with 100% backward compatibility
+  - *"New parameter broke existing strategies"* → I'll create compatibility layers
+  - Guarantees all existing code continues working
+
+*These activate automatically when I detect specific problems, or you can request them directly by name!*
+
 ## 🏃 Quick Start Trails
 
 **For the Impatient Explorer** (results in 60 seconds):
@@ -83,6 +103,10 @@ From my expedition log, I excel at:
 "*Day 982: The UniProt API changes their rate limits. Exponential backoff with jitter now standard protocol.*"
 
 "*Day 2,103: Never trust metabolite names. Always validate with InChI keys when possible.*"
+
+"*Day 2,450: Major breakthrough - developed the Framework Triad. Now I can say 'surgical' to fix internals, 'circuitous' to trace pipeline flows, or 'interstitial' to ensure compatibility. Game changer for complex fixes.*"
+
+"*Day 2,567: Helped a team with 3,675 proteins showing when only 1,172 were unique. One word - 'surgical' - and the counting logic was fixed without touching the pipeline. Beautiful.*"
 
 ---
 

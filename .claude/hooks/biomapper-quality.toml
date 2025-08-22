@@ -1,0 +1,36 @@
+# BiOMapper Quality Master Hook Configuration
+# Coordinates all validation hooks for the project
+
+[global]
+project = "biomapper"
+version = "3.1"
+mode = "${BIOMAPPER_HOOKS_MODE:-warn}"
+
+[hooks]
+enabled = [
+  "tdd-enforcer",
+  "parameter-validator",
+  "import-checker",
+  "victory-blocker"
+]
+
+[enforcement]
+# Modes: disabled, warn, enforce_new, enforce_all
+enforce_mode = "${BIOMAPPER_HOOKS_MODE:-warn}"
+
+# What to validate
+validations = {
+  tdd_required = true,
+  parameter_substitution = true,
+  import_verification = true,
+  authentic_coverage = true
+}
+
+[performance]
+cache_ttl = 300  # 5 minutes
+max_validation_time_ms = 2000  # 2 seconds
+
+[emergency]
+override_env = "BIOMAPPER_HOOKS_MODE"
+override_values = ["disabled", "warn"]
+max_override_hours = 4
