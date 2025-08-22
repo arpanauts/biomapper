@@ -27,10 +27,10 @@ Start the API
 .. code-block:: bash
 
    # Start from project root (recommended)
-   cd biomapper && poetry run uvicorn api.main:app --reload --port 8000
+   poetry run uvicorn src.api.main:app --reload --port 8000
    
-   # Alternative: Use CLI command
-   poetry run biomapper api --host localhost --port 8000
+   # Alternative: Check API status
+   poetry run biomapper health
 
 API will be available at:
 
@@ -73,7 +73,7 @@ Your First Strategy
 
 .. code-block:: python
 
-   from client.client_v2 import BiomapperClient
+   from src.client.client_v2 import BiomapperClient
    
    # Simple synchronous execution
    client = BiomapperClient(base_url="http://localhost:8000")
@@ -106,7 +106,7 @@ Verify Installation
    poetry run biomapper test-import
    
    # Run tests with coverage
-   poetry run pytest --cov=biomapper
+   poetry run pytest --cov=src
    
    # Quick unit tests only
    poetry run pytest tests/unit/
@@ -142,14 +142,17 @@ Next Steps
 
 ---
 
-.. note::
-   **Verification Sources** (*Last verified: 2025-08-18*)
+---
 
-   This documentation was verified against the following project resources:
+Verification Sources
+--------------------
+*Last verified: 2025-08-22*
 
-   - ``/biomapper/pyproject.toml`` (Python 3.11+ requirement, repository URL, CLI script definition)
-   - ``/biomapper/CLAUDE.md`` (Essential commands and environment setup)
-   - ``/biomapper/src/api/main.py`` (FastAPI server startup and endpoints)
-   - ``/biomapper/src/client/client_v2.py`` (BiomapperClient class with run() method and StrategyResult)
-   - ``/biomapper/src/cli/minimal.py`` (CLI commands: health, test-import, strategies, api)
-   - ``/biomapper/src/actions/registry.py`` (Action registry with 13 registered actions verified)
+This documentation was verified against the following project resources:
+
+- ``/biomapper/pyproject.toml`` (Python 3.11+ requirement, GitHub repository URL, src-layout structure)
+- ``/biomapper/CLAUDE.md`` (Essential commands and environment setup procedures)
+- ``/biomapper/src/api/main.py`` (FastAPI application with correct import paths and endpoint structure)
+- ``/biomapper/src/client/client_v2.py`` (BiomapperClient with run() method returning StrategyResult objects)
+- ``/biomapper/src/cli/minimal.py`` (CLI commands including health and test-import)
+- ``/biomapper/src/actions/`` (Action registry and organized entity-based action structure)

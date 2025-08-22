@@ -2,7 +2,7 @@
 
 ## Overview
 
-BioMapper is a YAML-based workflow platform for biological data harmonization and ontology mapping. Built on a self-registering action system with 37+ specialized actions, it provides comprehensive workflows for mapping proteins, metabolites, chemistry data, and other biological entities.
+BioMapper is a YAML-based workflow platform for biological data harmonization and ontology mapping. Built on a self-registering action system with comprehensive specialized actions, it provides workflows for mapping proteins, metabolites, chemistry data, and other biological entities.
 
 The architecture follows a three-layer design (Client → API → Core) with type-safe actions, automatic validation, and extensibility through simple decorator-based registration.
 
@@ -14,38 +14,35 @@ Actions automatically register at import time using the `@register_action` decor
 ### YAML Strategy System
 Declarative workflow definition with variable substitution, metadata tracking, and parameter validation. Strategies execute sequentially with shared context between steps.
 
-### Available Actions (37+)
+### Available Actions
 Organized by biological entity type:
 
 **Data Operations:**
 - `LOAD_DATASET_IDENTIFIERS` - Generic CSV/TSV loader
 - `MERGE_DATASETS` - Combine with deduplication
 - `FILTER_DATASET` - Complex filtering
-- `EXPORT_DATASET_V2` - Multi-format export
+- `EXPORT_DATASET` - Multi-format export
 - `CUSTOM_TRANSFORM_EXPRESSION` - Dynamic transformations
 
 **Protein Actions:**
 - `PROTEIN_NORMALIZE_ACCESSIONS` - Standardize UniProt IDs
 - `PROTEIN_EXTRACT_UNIPROT_FROM_XREFS` - Extract from compound fields
-- `PROTEIN_MULTI_BRIDGE` - Multi-source resolution
-- `MERGE_WITH_UNIPROT_RESOLUTION` - Historical ID mapping
 
 **Metabolite Actions:**
-- `METABOLITE_CTS_BRIDGE` - Chemical Translation Service
 - `NIGHTINGALE_NMR_MATCH` - Nightingale platform matching
 - `SEMANTIC_METABOLITE_MATCH` - AI-powered matching
-- `VECTOR_ENHANCED_MATCH` - Vector similarity
-- `METABOLITE_API_ENRICHMENT` - External API integration
 
 **Chemistry Actions:**
-- `CHEMISTRY_EXTRACT_LOINC` - Extract LOINC codes
 - `CHEMISTRY_FUZZY_TEST_MATCH` - Fuzzy clinical test matching
-- `CHEMISTRY_VENDOR_HARMONIZATION` - Harmonize vendor codes
 
 **Analysis & Reporting:**
-- `CALCULATE_SET_OVERLAP` - Jaccard similarity with Venn diagrams
-- `CALCULATE_THREE_WAY_OVERLAP` - Three-dataset comparison
-- `GENERATE_METABOLOMICS_REPORT` - Comprehensive reports
+- `GENERATE_MAPPING_VISUALIZATIONS` - Create visualization reports
+- `GENERATE_LLM_ANALYSIS` - AI-powered analysis reports
+
+**Infrastructure Actions:**
+- `SYNC_TO_GOOGLE_DRIVE_V2` - Upload to Google Drive
+- `PARSE_COMPOSITE_IDENTIFIERS` - Parse complex identifiers
+- `CUSTOM_TRANSFORM` - Apply custom transformations
 
 ### REST API Layer
 FastAPI service with:
@@ -56,15 +53,15 @@ FastAPI service with:
 - OpenAPI documentation
 
 ### Python Client Library
-`BiomapperClient` in `biomapper_client/client_v2.py` provides:
+`BiomapperClient` in `src/client/client_v2.py` provides:
 - Synchronous wrapper for async operations
 - Automatic retry and error handling
 - Progress streaming support
 - Simple interface: `client.run("strategy_name")`
 
 ### Core Execution Engine
-`MinimalStrategyService` in `biomapper/core/minimal_strategy_service.py`:
-- Direct YAML loading from `src/biomapper/configs/strategies/`
+`MinimalStrategyService` in `src/core/minimal_strategy_service.py`:
+- Direct YAML loading from `src/configs/strategies/`
 - Sequential action execution with error handling
 - Variable substitution (`${parameters.key}`, `${env.VAR}`)
 - Shared execution context management
@@ -263,8 +260,8 @@ See [YAML Strategies](./yaml_strategies.rst) for complete documentation.
 
 ## Current Status
 
-- **37+ Actions**: Comprehensive coverage of biological entities
-- **Type Safety Migration**: ~35 of 37 actions use TypedStrategyAction
+- **Comprehensive Actions**: Core coverage of biological entities
+- **Type Safety Migration**: Most actions use TypedStrategyAction
 - **Production Ready**: Used in multiple research projects
 - **Active Development**: Regular additions based on research needs
 
@@ -296,15 +293,17 @@ The system runs as a containerized FastAPI service with:
 ---
 
 ## Verification Sources
-*Last verified: 2025-01-17*
+*Last verified: 2025-08-22*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/src/actions/` (Self-registering actions organized by entity type with registry.py)
-- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class with StandardActionResult)
-- `/biomapper/src/core/minimal_strategy_service.py` (MinimalStrategyService execution engine)
-- `/biomapper/src/api/main.py` (FastAPI server configuration with uvicorn)
-- `/biomapper/src/api/services/mapper_service.py` (MapperService job orchestration)
-- `/biomapper/src/client/client_v2.py` (BiomapperClient synchronous wrapper)
-- `/biomapper/src/configs/strategies/` (YAML strategy templates and examples)
-- `/biomapper/CLAUDE.md` (2025 standardizations and TDD development patterns)
+- `/biomapper/src/actions/` (Self-registering actions organized by entity type with comprehensive registry system)
+- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class with execute_typed method pattern)
+- `/biomapper/src/core/minimal_strategy_service.py` (MinimalStrategyService execution engine implementation)
+- `/biomapper/src/api/main.py` (FastAPI server configuration with src-layout imports and uvicorn)
+- `/biomapper/src/api/services/mapper_service.py` (MapperService job orchestration and background processing)
+- `/biomapper/src/client/client_v2.py` (BiomapperClient synchronous wrapper with run() method)
+- `/biomapper/src/configs/strategies/` (YAML strategy definitions and experimental configurations)
+- `/biomapper/src/actions/load_dataset_identifiers.py` (LOAD_DATASET_IDENTIFIERS implementation)
+- `/biomapper/src/actions/registry.py` (Global ACTION_REGISTRY and @register_action decorator)
+- `/biomapper/CLAUDE.md` (2025 standardizations, TDD development patterns, and validation rules)

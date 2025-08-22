@@ -48,7 +48,7 @@ For production use (API server only):
     poetry install --with api
     
     # Start the API server directly from project root
-    poetry run uvicorn api.main:app --host 0.0.0.0 --port 8000
+    poetry run uvicorn src.api.main:app --host 0.0.0.0 --port 8000
     
     # API will be available at http://localhost:8000/api/docs
 
@@ -107,14 +107,16 @@ Troubleshooting
 
 ---
 
-.. note::
-   **Verification Sources** (*Last verified: 2025-01-17*)
+---
 
-   This documentation was verified against the following project resources:
+Verification Sources
+--------------------
+*Last verified: 2025-08-22*
 
-   - ``/biomapper/pyproject.toml`` (Python 3.11+ requirement, Poetry dependencies and groups)
-   - ``/biomapper/CLAUDE.md`` (essential installation commands and environment setup)
-   - ``/biomapper/Makefile`` (make test, make format, make lint-fix commands)
-   - ``/biomapper/Dockerfile.ci`` (CI Docker configuration for testing)
-   - ``/biomapper/src/cli/minimal.py`` (CLI commands: health, test-import, strategies)
-   - ``/biomapper/src/api/main.py`` (FastAPI server entry point)
+This documentation was verified against the following project resources:
+
+- ``/biomapper/pyproject.toml`` (Python 3.11+ requirement, Poetry dependency groups including dev/docs/api)
+- ``/biomapper/CLAUDE.md`` (Essential installation commands and environment setup procedures)
+- ``/biomapper/src/api/main.py`` (FastAPI application entry point with correct src-layout import paths)
+- ``/biomapper/src/cli/minimal.py`` (CLI commands including health, test-import, and strategies)
+- ``/biomapper/README.md`` (Installation instructions and dependency requirements verification)

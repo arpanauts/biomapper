@@ -34,14 +34,14 @@ The result is a platform that is modular, extensible, and uniquely AI-augmented,
 .. code-block:: python
 
    # Python client usage
-   from biomapper_client import BiomapperClient
+   from src.client.client_v2 import BiomapperClient
    
-   client = BiomapperClient("http://localhost:8000")
+   client = BiomapperClient(base_url="http://localhost:8000")
    result = client.run("test_metabolite_simple", parameters={
        "input_file": "/data/metabolites.csv",
        "output_dir": "/tmp/results"
    })
-   print(f"Status: {result['status']}")
+   print(f"Success: {result.success}")  # StrategyResult object
 
 🏗️ **Architecture**
 --------------------
@@ -64,7 +64,7 @@ BioMapper follows a modern microservices architecture with clear separation of c
 
 **Three-Layer Design:**
 
-1. **Client Layer** - Python client library (``biomapper_client``) for programmatic access
+1. **Client Layer** - Python client library (``src.client.client_v2``) for programmatic access
 2. **API Layer** - FastAPI service with SQLite job persistence and SSE progress tracking
 3. **Core Layer** - Self-registering actions with strategy execution engine
 
@@ -87,9 +87,45 @@ The system uses a **registry pattern** where actions self-register via ``@regist
 
 .. toctree::
    :maxdepth: 2
-   :caption: Reference
+   :caption: Actions Reference
    
    actions/index
+   actions/hmdb_vector_match
+   actions/sync_to_google_drive
+   actions/parse_composite_identifiers
+   actions/metabolite_fuzzy_string_match
+   actions/metabolite_rampdb_bridge
+   actions/progressive_semantic_match
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Workflows
+   
+   workflows/metabolomics_pipeline
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Integrations
+   
+   integrations/google_drive
+   integrations/rampdb_integration
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Examples
+   
+   examples/real_world_cases
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Performance
+   
+   performance/optimization_guide
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API Reference
+   
    api/index
    architecture/index
 
@@ -101,6 +137,16 @@ The system uses a **registry pattern** where actions self-register via ``@regist
    development/testing
    development/contributing
 
+.. toctree::
+   :maxdepth: 2
+   :caption: AI-Assisted Development
+   
+   ai_assistance/index
+   ai_assistance/framework_triad
+   ai_assistance/framework_triggering
+   ai_assistance/slash_commands
+   ai_assistance/examples
+
 🤖 **AI Integration**
 ----------------------
 
@@ -110,10 +156,27 @@ BioMapper features an AI-native developer experience that sets it apart from tra
 
 * **CLAUDE.md** - Project "constitution" providing role-defining guidance for AI agents
 * **.claude/ folder** - Structured agent configs and scaffolding
-* **BioSherpa guide** - AI-powered onboarding and project navigation
+* **BiOMapper Framework Triad** - Three automatic isolation frameworks for safe development
+* **Hook System** - Automatic TDD enforcement and validation
 * **Type-safe actions** - Enable better code completion and error detection
 * **Self-documenting** - Pydantic models include descriptions
-* **TDD approach** - Tests provide clear specifications
+
+**BiOMapper Framework Triad:**
+
+The system includes three complementary frameworks that automatically activate based on natural language:
+
+* **🔒 Surgical:** Fix internal action logic while preserving all external interfaces. Automatically activates when you describe counting, calculation, or statistics issues.
+* **🔄 Circuitous:** Repair pipeline orchestration and parameter flow. Automatically activates when you describe parameters not passing between steps or substitution failures.
+* **🔗 Interstitial:** Ensure 100% backward compatibility during interface evolution. Automatically activates when you describe compatibility issues or parameter changes breaking existing code.
+
+**Automatic Activation:** You don't need to know framework names - just describe the problem naturally and the appropriate framework activates automatically. See :doc:`ai_assistance/framework_triggering` for details on how this works.
+
+**Development Discipline:** Separate from the frameworks, a hook system enforces:
+
+* **TDD Requirements** - Tests must exist before implementation
+* **Parameter Validation** - All ``${parameters.x}`` must resolve
+* **Import Verification** - All modules must load cleanly
+* **Quality Gates** - Blocks premature success declarations
 
 **Comparisons:**
 
@@ -168,14 +231,17 @@ Indices and tables
 
 ---
 
+---
+
 Verification Sources
 --------------------
-*Last verified: 2025-08-19*
+*Last verified: 2025-08-22*
 
 This documentation was verified against the following project resources:
 
-- ``/biomapper/README.md`` (Project overview with architectural analysis)
-- ``/biomapper/CLAUDE.md`` (Commands and patterns)
-- ``/biomapper/src/actions/registry.py`` (Self-registering action system)
-- ``/biomapper/pyproject.toml`` (Project configuration and dependencies)
-- ``/biomapper/tests/`` (1,217 passing tests across unit and integration suites)
+- ``/biomapper/README.md`` (Project overview and architectural analysis with 1,217 passing tests)
+- ``/biomapper/CLAUDE.md`` (Commands, patterns, and 2025 standardizations)
+- ``/biomapper/src/actions/registry.py`` (Self-registering action system implementation)
+- ``/biomapper/src/client/client_v2.py`` (BiomapperClient class with correct import path and methods)
+- ``/biomapper/src/api/main.py`` (FastAPI server configuration and endpoint routing)
+- ``/biomapper/pyproject.toml`` (Project configuration, Python 3.11+ requirement, src-layout packages)

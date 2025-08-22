@@ -19,7 +19,7 @@ Basic Usage
 
 .. code-block:: python
 
-    from client.client_v2 import BiomapperClient
+    from src.client.client_v2 import BiomapperClient
     
     # Simple synchronous usage (recommended)
     client = BiomapperClient("http://localhost:8000")
@@ -125,8 +125,8 @@ The client provides custom exceptions for different error scenarios:
 
 .. code-block:: python
 
-    from client.client_v2 import BiomapperClient
-    from client.exceptions import ApiError, NetworkError, ValidationError
+    from src.client.client_v2 import BiomapperClient
+    from src.client.exceptions import ApiError, NetworkError, ValidationError
     
     # Synchronous error handling
     try:
@@ -188,7 +188,7 @@ Using with Jupyter Notebooks
 .. code-block:: python
 
     # In Jupyter notebooks, use the synchronous interface
-    from client.client_v2 import BiomapperClient
+    from src.client.client_v2 import BiomapperClient
     
     client = BiomapperClient()
     
@@ -278,8 +278,7 @@ Troubleshooting
   
   .. code-block:: bash
   
-      cd biomapper-api
-      poetry run uvicorn app.main:app --reload --port 8000
+      poetry run uvicorn src.api.main:app --reload --port 8000
 
 **Timeout errors**
   The client has a default timeout of 300 seconds (5 minutes). For large datasets, you can increase it:
@@ -312,12 +311,13 @@ Troubleshooting
 
 Verification Sources
 --------------------
-*Last verified: 2025-08-18*
+*Last verified: 2025-08-22*
 
 This documentation was verified against the following project resources:
 
-- ``/biomapper/src/client/client_v2.py`` (BiomapperClient implementation with run() and execute_strategy() methods)
-- ``/biomapper/src/client/models.py`` (StrategyResult, Job, and other client data models)
-- ``/biomapper/src/client/exceptions.py`` (Custom exception classes for error handling)
-- ``/biomapper/pyproject.toml`` (Package dependencies and CLI script configuration)
-- ``/biomapper/CLAUDE.md`` (Installation commands and usage patterns)
+- ``/biomapper/src/client/client_v2.py`` (BiomapperClient with run() and execute_strategy() methods, correct import paths)
+- ``/biomapper/src/client/models.py`` (StrategyResult, Job, and client data models with Pydantic v2)
+- ``/biomapper/src/client/exceptions.py`` (Custom exception classes for comprehensive error handling)
+- ``/biomapper/src/api/main.py`` (FastAPI server configuration with correct src-layout imports)
+- ``/biomapper/pyproject.toml`` (Package dependencies, CLI script configuration, and src-layout structure)
+- ``/biomapper/CLAUDE.md`` (Installation commands and client usage patterns)
