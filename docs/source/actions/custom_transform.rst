@@ -453,3 +453,16 @@ This action typically follows data loading and precedes specific analysis:
           type: CALCULATE_SET_OVERLAP
           params:
             dataset_key: "processed_data"
+
+---
+
+## Verification Sources
+*Last verified: 2025-08-22*
+
+This documentation was verified against the following project resources:
+
+- `/biomapper/src/actions/utils/data_processing/custom_transform_expression.py` (actual implementation with expression-based transformations)
+- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class)
+- `/biomapper/src/actions/registry.py` (dual registration for CUSTOM_TRANSFORM and CUSTOM_TRANSFORM_EXPRESSION)
+- `/biomapper/CLAUDE.md` (2025 standardizations and parameter naming conventions)
+- `/biomapper/pyproject.toml` (pandas dependency for DataFrame operations)

@@ -20,7 +20,7 @@ Required Parameters
 ~~~~~~~~~~~~~~~~~~~
 
 **file_path** (string)
-  Absolute path to the data file (CSV or TSV format).
+  Path to the data file (CSV or TSV format). Supports absolute and relative paths.
 
 **identifier_column** (string)
   Name of the column containing the biological identifiers.
@@ -206,10 +206,11 @@ Advanced Features
 Performance Notes
 -----------------
 
-* Uses optimized BiologicalFileLoader for robust parsing
-* Handles various encodings, delimiters, and NA values automatically
-* Memory efficient for large files (tested with 1M+ rows)
+* Uses pandas for reliable file parsing with automatic format detection
+* Handles various encodings and delimiters based on file extension
+* Memory efficient for large files (tested with 100K+ rows) 
 * TSV files parse faster than CSV due to simpler delimiter structure
+* Adds metadata columns for row tracking and provenance
 
 Integration
 -----------
@@ -250,13 +251,12 @@ This action is typically used as the first step in mapping strategies:
 ---
 
 ## Verification Sources
-*Last verified: 2025-08-18*
+*Last verified: 2025-08-22*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/src/actions/load_dataset_identifiers.py` (implementation with BiologicalFileLoader integration)
+- `/biomapper/src/actions/load_dataset_identifiers.py` (actual implementation using pandas with dual context support)
 - `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class and StandardActionResult)
-- `/biomapper/src/actions/registry.py` (self-registration mechanism via decorator)
-- `/biomapper/src/core/standards/file_loader.py` (BiologicalFileLoader for robust file parsing)
-- `/biomapper/CLAUDE.md` (standardized parameter naming and context handling patterns)
-- `/biomapper/tests/unit/core/strategy_actions/test_load_dataset_identifiers.py` (test coverage and validation)
+- `/biomapper/src/actions/registry.py` (self-registration mechanism via @register_action decorator)
+- `/biomapper/CLAUDE.md` (2025 standardizations and parameter naming conventions)
+- `/biomapper/pyproject.toml` (project dependencies including pandas for file loading)

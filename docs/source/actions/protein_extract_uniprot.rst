@@ -21,7 +21,7 @@ Parameters
 Required Parameters
 ~~~~~~~~~~~~~~~~~~~
 
-**dataset_key** (string)
+**input_key** (string)
   Key of the dataset in context to process.
 
 **xrefs_column** (string)
@@ -33,6 +33,10 @@ Optional Parameters
 **output_column** (string)
   Name of the output column for extracted UniProt IDs.
   Default: "uniprot_id"
+
+**output_key** (string)
+  Optional output dataset key. If not provided, modifies dataset in-place.
+  Default: None
 
 **handle_multiple** (string)
   How to handle multiple UniProt IDs: 'list', 'first', or 'expand_rows'.
@@ -80,7 +84,7 @@ Basic UniProt Extraction
       action:
         type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
         params:
-          dataset_key: "kg2c_proteins"
+          input_key: "kg2c_proteins"
           xrefs_column: "all_node_curie"
           output_column: "uniprot_id"
           handle_multiple: "list"
@@ -95,7 +99,7 @@ First Match Only
       action:
         type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
         params:
-          dataset_key: "spoke_proteins"
+          input_key: "spoke_proteins"
           xrefs_column: "xrefs"
           output_column: "primary_uniprot"
           handle_multiple: "first"
@@ -110,7 +114,7 @@ Expand Rows for Each UniProt ID
       action:
         type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
         params:
-          dataset_key: "protein_data"
+          input_key: "protein_data"
           xrefs_column: "external_refs"
           output_column: "uniprot_id"
           handle_multiple: "expand_rows"
@@ -125,7 +129,7 @@ Keep Isoform Information
       action:
         type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
         params:
-          dataset_key: "detailed_proteins"
+          input_key: "detailed_proteins"
           xrefs_column: "cross_references"
           output_column: "uniprot_accession"
           handle_multiple: "list"
@@ -330,7 +334,7 @@ This action typically follows data loading and precedes mapping operations:
         action:
           type: PROTEIN_EXTRACT_UNIPROT_FROM_XREFS
           params:
-            dataset_key: "kg2c_raw"
+            input_key: "kg2c_raw"
             xrefs_column: "all_node_curie"
             output_column: "uniprot_id"
             handle_multiple: "first"
@@ -345,3 +349,16 @@ This action typically follows data loading and precedes mapping operations:
             source_dataset_key: "kg2c_raw"
             target_dataset_key: "reference_proteins"
             output_key: "mapped_proteins"
+
+---
+
+## Verification Sources
+*Last verified: 2025-08-22*
+
+This documentation was verified against the following project resources:
+
+- `/biomapper/src/actions/entities/proteins/annotation/extract_uniprot_from_xrefs.py` (actual implementation with regex pattern and multiple handling modes)
+- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class)
+- `/biomapper/src/actions/registry.py` (self-registration via @register_action decorator)
+- `/biomapper/CLAUDE.md` (2025 standardization requirements for parameter naming)
+- `/biomapper/pyproject.toml` (pandas dependency for DataFrame operations)

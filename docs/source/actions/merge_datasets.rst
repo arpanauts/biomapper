@@ -318,13 +318,12 @@ The action supports legacy parameter formats for seamless migration:
 ---
 
 ## Verification Sources
-*Last verified: 2025-08-17*
+*Last verified: 2025-08-22*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/src/actions/merge_datasets.py` (implementation with backward compatibility and parameter validation)
+- `/biomapper/src/actions/merge_datasets.py` (actual implementation with flexible parameter format support)
 - `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class and StandardActionResult)
-- `/biomapper/src/actions/registry.py` (action registration via decorator)
-- `/biomapper/src/core/standards/context_handler.py` (UniversalContext for robust context handling)
-- `/biomapper/tests/unit/core/strategy_actions/test_merge_datasets_fix.py` (test coverage and validation)
-- `/biomapper/CLAUDE.md` (standardized parameter naming and context handling patterns)
+- `/biomapper/src/actions/registry.py` (self-registration via @register_action decorator)
+- `/biomapper/src/core/standards/context_handler.py` (UniversalContext for unified context access)
+- `/biomapper/CLAUDE.md` (2025 standardizations and parameter naming conventions)

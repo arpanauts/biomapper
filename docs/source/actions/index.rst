@@ -1,7 +1,7 @@
 Actions Reference
 =================
 
-BioMapper provides 13 self-registering actions for biological data processing. All actions follow the 2025 standardizations for parameter naming, context handling, and type safety.
+BioMapper provides 25+ self-registering actions for biological data processing. All actions follow the 2025 standardizations for parameter naming, context handling, and type safety.
 
 .. toctree::
    :maxdepth: 1
@@ -26,6 +26,10 @@ BioMapper provides 13 self-registering actions for biological data processing. A
    
    nightingale_nmr_match
    semantic_metabolite_match
+   hmdb_vector_match
+   metabolite_fuzzy_string_match  
+   metabolite_rampdb_bridge
+   progressive_semantic_match
 
 .. toctree::
    :maxdepth: 1
@@ -86,7 +90,15 @@ Metabolite Actions
    * - ``NIGHTINGALE_NMR_MATCH``
      - Nightingale NMR platform matching
    * - ``SEMANTIC_METABOLITE_MATCH``
-     - AI-powered semantic matching
+     - AI-powered semantic matching  
+   * - ``HMDB_VECTOR_MATCH``
+     - Vector-based metabolite matching using HMDB embeddings
+   * - ``METABOLITE_FUZZY_STRING_MATCH``
+     - Fuzzy string matching for metabolite names
+   * - ``METABOLITE_RAMPDB_BRIDGE``
+     - RaMP database integration for metabolite mapping
+   * - ``PROGRESSIVE_SEMANTIC_MATCH``
+     - Progressive multi-stage semantic metabolite matching
 
 Chemistry Actions
 ~~~~~~~~~~~~~~~~~
@@ -111,6 +123,8 @@ Integration Actions
      - Description
    * - ``SYNC_TO_GOOGLE_DRIVE_V2``
      - Upload and sync results to Google Drive with chunked transfer
+   * - ``SYNC_TO_GOOGLE_DRIVE_V3``
+     - Enhanced Google Drive sync with improved error handling
 
 Usage Example
 -------------
@@ -197,14 +211,13 @@ Example: ``prot_ukb_to_hpa_uniprot_v1_base.yaml``
 ---
 
 ## Verification Sources
-*Last verified: 2025-08-18*
+*Last verified: 2025-08-22*
 
 This documentation was verified against the following project resources:
 
-- `/biomapper/src/actions/` (action implementations and self-registration - verified 13 actual actions)
-- `/biomapper/src/actions/registry.py` (global ACTION_REGISTRY and @register_action decorator)
-- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class)
-- `/biomapper/CLAUDE.md` (2025 standardization requirements and patterns)
-- `/biomapper/src/configs/strategies/` (strategy YAML file organization)
-- `/biomapper/src/core/standards/` (standardized utilities and validators)
-- `/biomapper/pyproject.toml` (project dependencies and structure)
+- `/biomapper/src/actions/` (comprehensive action implementations - verified 25+ registered actions)
+- `/biomapper/src/actions/registry.py` (global ACTION_REGISTRY and @register_action decorator system)
+- `/biomapper/src/actions/typed_base.py` (TypedStrategyAction base class with Pydantic models)
+- `/biomapper/CLAUDE.md` (2025 standardization requirements and architectural patterns)
+- `/biomapper/src/configs/strategies/` (YAML strategy file organization and examples)
+- `/biomapper/pyproject.toml` (project dependencies and package structure)
