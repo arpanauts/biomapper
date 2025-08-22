@@ -43,15 +43,49 @@ Biomapper uses an **extensible action-based architecture**:
 
 ```
 docs/
-├── source/           # Complete Sphinx documentation
+├── source/           # Sphinx documentation source
 │   ├── guides/       # Getting started and tutorials
 │   ├── actions/      # Action reference documentation
 │   ├── api/          # API documentation
 │   └── architecture/ # System architecture and design
-├── build/            # Built documentation output
+├── guides/           # User and developer guides
+│   ├── API setup and usage guides
+│   └── Integration guides (Google Drive, OAuth2)
+├── frameworks/       # Framework and architecture docs
+│   ├── Framework Triad architecture
+│   └── Surgical framework patterns
+├── workflows/        # Complete workflow implementations
+│   ├── Metabolomics pipelines
+│   └── Protein mapping strategies
+├── reports/          # Validation and analysis reports
+│   ├── Test execution results
+│   ├── Coverage analysis
+│   └── Feasibility studies
+├── integrations/     # External service integrations
+│   └── LIPID MAPS, HMDB, UniProt, etc.
+├── planning/         # Development plans and strategies
+│   └── Fix plans and migration strategies
+├── build/            # Built documentation output (gitignored)
 ├── Makefile         # Sphinx build configuration
 └── requirements.txt # Documentation dependencies
 ```
+
+## Quick Navigation
+
+### For New Users
+- Start with [Getting Started Guide](source/guides/getting_started.md)
+- Review [Workflow Examples](workflows/)
+- Check [Integration Guides](guides/) for external services
+
+### For Developers
+- [Architecture Documentation](frameworks/)
+- [Action Development](source/actions/)
+- [API Reference](guides/API_METHODS.md)
+
+### For Data Scientists
+- [Metabolomics Workflows](workflows/)
+- [Protein Mapping Strategies](workflows/protein_mapping_strategy.md)
+- [Validation Reports](reports/) for performance metrics
 
 ## Quick Links
 
