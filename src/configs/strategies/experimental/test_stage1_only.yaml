@@ -1,0 +1,46 @@
+name: test_stage1_only
+description: Test just Stage 1 to get real metrics
+parameters:
+  file_path: /procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/metabolomics_metadata.tsv
+  reference_file: /procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_NMR_Meta.tsv
+  identifier_column: BIOCHEMICAL_NAME
+  output_dir: /tmp/biomapper/stage1_test
+
+steps:
+  # Load Arivale data
+  - name: load_arivale
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: ${parameters.file_path}
+        identifier_column: ${parameters.identifier_column}
+        output_key: arivale_data
+
+  # Load UKBB reference
+  - name: load_reference
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: ${parameters.reference_file}
+        identifier_column: title
+        output_key: reference_data
+
+  # Stage 1: Nightingale Bridge
+  - name: stage_1_nightingale
+    action:
+      type: METABOLITE_NIGHTINGALE_BRIDGE
+      params:
+        input_key: arivale_data
+        reference_key: reference_data
+        output_key: stage_1_matched
+        unmatched_key: stage_1_unmatched
+        threshold: 0.7
+
+  # Export results
+  - name: export_results
+    action:
+      type: EXPORT_DATASET
+      params:
+        input_key: stage_1_matched
+        output_file: ${parameters.output_dir}/stage1_matched.tsv
+        format: tsv

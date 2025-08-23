@@ -1,0 +1,637 @@
+name: met_arv_to_ukbb_progressive_v4.0
+description: |
+  Consolidated progressive metabolomics mapping pipeline with extensive debugging.
+  Features systematic stage-by-stage execution with comprehensive logging.
+  
+  Version 4.0 consolidates learnings from 7 development iterations.
+  
+  Key Features:
+  - Pre-flight validation checks
+  - Extensive debug logging at every step
+  - Incremental stage enabling for systematic testing
+  - Proper error propagation (no silent failures)
+  - Parameter resolution validation
+  
+  Testing approach:
+  - Set stages_to_run: [1] for Stage 1 only
+  - Set stages_to_run: [1,2] for Stages 1-2
+  - Set stages_to_run: [1,2,3] for Stages 1-3
+  - Set stages_to_run: [1,2,3,4] for all stages
+
+parameters:
+  # Core paths - MUST be absolute paths
+  file_path: /procedure/data/local_data/MAPPING_ONTOLOGIES/arivale/metabolomics_metadata.tsv
+  reference_file: /procedure/data/local_data/MAPPING_ONTOLOGIES/ukbb/UKBB_NMR_Meta.tsv
+  output_dir: ${OUTPUT_DIR:-/tmp/biomapper/met_arv_to_ukbb_v4.0}
+  
+  # Debug controls - CRITICAL for troubleshooting
+  debug_mode: true
+  verbose_logging: true
+  fail_on_warning: false
+  validate_parameters: true
+  
+  # Stage control - Enable incrementally for testing
+  stages_to_run: [1]  # Start with Stage 1 only, then [1,2], then [1,2,3], then [1,2,3,4]
+  
+  # Column specifications
+  identifier_column: BIOCHEMICAL_NAME
+  hmdb_column: HMDB
+  pubchem_column: PUBCHEM
+  kegg_column: KEGG
+  cas_column: CAS
+  
+  # Thresholds (conservative)
+  stage_1_threshold: 0.95
+  stage_2_threshold: 0.85
+  stage_3_threshold: 0.70
+  stage_4_threshold: 0.75
+  
+  # Feature flags (start with minimal features)
+  enable_tracking: true
+  enable_visualizations: false  # Enable after basic pipeline works
+  enable_llm_analysis: false   # Enable only after Stage 3 works
+  enable_google_drive: false   # Enable last
+  
+  # Cost controls
+  max_api_calls: 100  # Conservative limit
+  max_llm_calls: 10   # Very conservative
+  max_cost: 1.00      # $1 limit for testing
+
+steps:
+  # ============================================
+  # PRE-FLIGHT VALIDATION CHECKS
+  # ============================================
+  - name: validate_environment
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: dummy
+        output_key: validation_results
+        transformations:
+          - column: timestamp
+            expression: |
+              import os
+              import sys
+              from datetime import datetime
+              from pathlib import Path
+              
+              print("="*60)
+              print("PRE-FLIGHT VALIDATION CHECKS")
+              print("="*60)
+              print(f"Timestamp: {datetime.now()}")
+              print(f"Working directory: {os.getcwd()}")
+              print(f"Python path: {sys.path[0]}")
+              
+              # Check output directory
+              output_dir = "${parameters.output_dir}"
+              print(f"\n1. Output directory: {output_dir}")
+              if "${" in output_dir:
+                  print("   ❌ ERROR: Parameter not resolved!")
+                  raise ValueError("Output directory parameter not resolved")
+              
+              Path(output_dir).mkdir(parents=True, exist_ok=True)
+              if Path(output_dir).exists():
+                  print("   ✅ Created/verified")
+              else:
+                  print("   ❌ Could not create")
+                  raise ValueError(f"Cannot create output directory: {output_dir}")
+              
+              # Log all parameters
+              print("\n2. Parameters:")
+              print(f"   file_path: ${parameters.file_path}")
+              print(f"   reference_file: ${parameters.reference_file}")
+              print(f"   stages_to_run: ${parameters.stages_to_run}")
+              print(f"   debug_mode: ${parameters.debug_mode}")
+              
+              datetime.now().isoformat()
+
+  - name: validate_input_files
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: dummy
+        output_key: file_validation
+        transformations:
+          - column: validation_status
+            expression: |
+              from pathlib import Path
+              
+              print("\n3. Input file validation:")
+              
+              # Check Arivale file
+              arivale_file = Path("${parameters.file_path}")
+              print(f"   Arivale: {arivale_file}")
+              if arivale_file.exists():
+                  size = arivale_file.stat().st_size / 1024
+                  with open(arivale_file) as f:
+                      lines = len(f.readlines())
+                  print(f"   ✅ Found ({size:.1f} KB, {lines} lines)")
+              else:
+                  print(f"   ❌ NOT FOUND")
+                  raise FileNotFoundError(f"Arivale file not found: {arivale_file}")
+              
+              # Check reference file
+              ref_file = Path("${parameters.reference_file}")
+              print(f"   Reference: {ref_file}")
+              if ref_file.exists():
+                  size = ref_file.stat().st_size / 1024
+                  with open(ref_file) as f:
+                      lines = len(f.readlines())
+                  print(f"   ✅ Found ({size:.1f} KB, {lines} lines)")
+              else:
+                  print(f"   ❌ NOT FOUND")
+                  raise FileNotFoundError(f"Reference file not found: {ref_file}")
+              
+              "validated"
+
+  # ============================================
+  # DATA LOADING WITH DEBUG
+  # ============================================
+  - name: load_arivale_with_debug
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: ${parameters.file_path}
+        identifier_column: ${parameters.identifier_column}
+        output_key: arivale_raw
+        additional_columns:
+          - ${parameters.hmdb_column}
+          - ${parameters.pubchem_column}
+          - ${parameters.kegg_column}
+          - ${parameters.cas_column}
+          - SUPER_PATHWAY
+          - SUB_PATHWAY
+          - PLATFORM
+        delimiter: "\t"
+        skip_comment_lines: true
+
+  - name: debug_loaded_data
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: arivale_raw
+        output_key: arivale_debug
+        transformations:
+          - column: debug_info
+            expression: |
+              print("\n" + "="*60)
+              print("DATA LOADING RESULTS")
+              print("="*60)
+              print(f"Loaded {len(df)} metabolites")
+              print(f"Columns: {list(df.columns)}")
+              print(f"\nFirst 3 records:")
+              for i, row in df.head(3).iterrows():
+                  print(f"  {i}: {row['${parameters.identifier_column}'][:50]}...")
+              
+              print(f"\nData types:")
+              for col in df.columns[:5]:
+                  print(f"  {col}: {df[col].dtype}")
+              
+              print(f"\nMissing values:")
+              for col in ['${parameters.hmdb_column}', '${parameters.pubchem_column}']:
+                  if col in df.columns:
+                      missing = df[col].isna().sum()
+                      print(f"  {col}: {missing}/{len(df)} ({100*missing/len(df):.1f}%)")
+              
+              df['debug_loaded'] = 'true'
+              df
+
+  - name: load_reference_with_debug
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: ${parameters.reference_file}
+        identifier_column: title
+        output_key: reference_raw
+        delimiter: "\t"
+        skip_comment_lines: true
+
+  # ============================================
+  # STAGE 1: Nightingale Bridge (Direct ID matching)
+  # ============================================
+  - name: stage_1_pre_check
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: arivale_debug
+        output_key: stage_1_input
+        transformations:
+          - column: stage_1_ready
+            expression: |
+              if 1 not in ${parameters.stages_to_run}:
+                  print("\n⏭️ Skipping Stage 1 (not in stages_to_run)")
+                  df['stage_skipped'] = 'stage_1'
+              else:
+                  print("\n" + "="*60)
+                  print("STAGE 1: NIGHTINGALE BRIDGE")
+                  print("="*60)
+                  print(f"Input: {len(df)} metabolites")
+                  print(f"Threshold: ${parameters.stage_1_threshold}")
+                  
+                  # Check for required columns
+                  required = ['${parameters.identifier_column}', '${parameters.hmdb_column}']
+                  for col in required:
+                      if col not in df.columns:
+                          print(f"❌ Missing required column: {col}")
+                          raise ValueError(f"Missing column: {col}")
+                  
+                  print("✅ Ready for Stage 1")
+              df
+    condition: 1 in ${parameters.stages_to_run}
+
+  - name: stage_1_create_matched
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: stage_1_input
+        output_key: nightingale_matched
+        transformations:
+          # For now, Stage 1 matches nothing - return empty dataframe
+          - column: dummy
+            expression: |
+              print(f"Stage 1: Creating empty matches (0 matched)")
+              pd.DataFrame()
+    condition: 1 in ${parameters.stages_to_run}
+
+  - name: stage_1_create_unmapped
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: stage_1_input  
+        output_key: nightingale_unmapped
+        transformations:
+          # Transform the entire dataframe to Stage 2 format
+          - column: __dataframe_replacement__
+            expression: |
+              import pandas as pd
+              
+              # Create clean records for Stage 2 fuzzy matching
+              unmapped_records = []
+              for idx, row in df.iterrows():
+                  metabolite_name = str(row.get("${parameters.identifier_column}", "")).strip()
+                  
+                  if metabolite_name and metabolite_name != "nan" and len(metabolite_name) > 0:
+                      unmapped_records.append({
+                          "name": metabolite_name,
+                          "for_stage": 2,
+                          "original_id": f"met_{idx}",
+                          "BIOCHEMICAL_NAME": metabolite_name,
+                          "HMDB": str(row.get("${parameters.hmdb_column}", "")).strip(),
+                          "PUBCHEM": str(row.get("${parameters.pubchem_column}", "")).strip(),
+                          "KEGG": str(row.get("${parameters.kegg_column}", "")).strip(),
+                          "CAS": str(row.get("${parameters.cas_column}", "")).strip()
+                      })
+              
+              result_df = pd.DataFrame(unmapped_records)
+              print(f"\\n🔄 Stage 1: Created {len(result_df)} records for Stage 2")
+              
+              if len(result_df) > 0:
+                  print(f"   Sample: '{result_df.iloc[0]['name']}' → Stage 2")
+              
+              result_df
+    condition: 1 in ${parameters.stages_to_run}
+
+  - name: stage_1_results_debug
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: nightingale_matched
+        output_key: stage_1_matched_debug
+        transformations:
+          - column: match_stage
+            expression: '"stage_1"'
+          - column: debug_log
+            expression: |
+              matched_count = len(df)
+              print(f"\nStage 1 Results:")
+              print(f"  Matched: {matched_count} metabolites")
+              
+              # Save to file for inspection
+              output_file = "${parameters.output_dir}/stage_1_matched.tsv"
+              df.to_csv(output_file, sep='\t', index=False)
+              print(f"  Saved to: {output_file}")
+              
+              # Sample matches
+              if matched_count > 0:
+                  print(f"\n  Sample matches:")
+                  for i, row in df.head(3).iterrows():
+                      print(f"    {row.get('${parameters.identifier_column}', 'unknown')}")
+              
+              f"stage_1_matched_{matched_count}"
+    condition: 1 in ${parameters.stages_to_run}
+
+  - name: stage_1_unmatched_debug
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: nightingale_unmapped
+        output_key: stage_1_unmatched_debug
+        transformations:
+          - column: debug_log
+            expression: |
+              unmatched_count = len(df)
+              total_input = unmatched_count + len(context.get('datasets', {}).get('stage_1_matched_debug', pd.DataFrame()))
+              coverage = 100 * len(context.get('datasets', {}).get('stage_1_matched_debug', pd.DataFrame())) / max(total_input, 1)
+              
+              print(f"\nStage 1 Coverage:")
+              print(f"  Total input: {total_input}")
+              print(f"  Matched: {total_input - unmatched_count}")
+              print(f"  Unmatched: {unmatched_count}")
+              print(f"  Coverage: {coverage:.1f}%")
+              
+              # Save unmatched for inspection
+              output_file = "${parameters.output_dir}/stage_1_unmatched.tsv"
+              df.to_csv(output_file, sep='\t', index=False)
+              print(f"  Unmatched saved to: {output_file}")
+              
+              f"stage_1_unmatched_{unmatched_count}"
+    condition: 1 in ${parameters.stages_to_run}
+
+  # ============================================
+  # STAGE 2: Fuzzy String Matching
+  # ============================================
+  - name: stage_2_pre_check
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: nightingale_unmapped
+        output_key: stage_2_input
+        transformations:
+          - column: stage_2_ready
+            expression: |
+              if 2 not in ${parameters.stages_to_run}:
+                  print("\n⏭️ Skipping Stage 2 (not in stages_to_run)")
+                  df['stage_skipped'] = 'stage_2'
+              else:
+                  print("\n" + "="*60)
+                  print("STAGE 2: FUZZY STRING MATCHING")
+                  print("="*60)
+                  print(f"Input: {len(df)} unmatched from Stage 1")
+                  print(f"Threshold: ${parameters.stage_2_threshold}")
+                  print("✅ Ready for Stage 2")
+              df
+    condition: 2 in ${parameters.stages_to_run}
+
+  - name: stage_2_fuzzy_match
+    action:
+      type: METABOLITE_FUZZY_STRING_MATCH
+      params:
+        unmapped_key: stage_2_input  # Changed from input_key to unmapped_key
+        reference_key: reference_raw
+        output_key: fuzzy_matched  # Use default action output key
+        final_unmapped_key: fuzzy_unmapped  # Use default action output key
+        fuzzy_threshold: ${parameters.stage_2_threshold}  # Changed from threshold to fuzzy_threshold
+    condition: 2 in ${parameters.stages_to_run}
+
+  - name: stage_2_results_debug
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: fuzzy_matched
+        output_key: stage_2_matched_debug
+        transformations:
+          - column: match_stage
+            expression: '"stage_2"'
+          - column: debug_log
+            expression: |
+              matched_count = len(df)
+              print(f"\nStage 2 Results:")
+              print(f"  Matched: {matched_count} additional metabolites")
+              
+              # Save to file
+              output_file = "${parameters.output_dir}/stage_2_matched.tsv"
+              df.to_csv(output_file, sep='\t', index=False)
+              print(f"  Saved to: {output_file}")
+              
+              # Calculate cumulative coverage
+              stage1_matched = len(context.get('datasets', {}).get('stage_1_matched_debug', pd.DataFrame()))
+              cumulative = stage1_matched + matched_count
+              total = 1351  # Arivale total
+              print(f"\nCumulative Coverage:")
+              print(f"  Stage 1: {stage1_matched}")
+              print(f"  Stage 2: +{matched_count}")
+              print(f"  Total: {cumulative}/{total} ({100*cumulative/total:.1f}%)")
+              
+              f"stage_2_matched_{matched_count}"
+    condition: 2 in ${parameters.stages_to_run}
+
+  # ============================================
+  # STAGE 3: RampDB Bridge (API)
+  # ============================================
+  - name: stage_3_pre_check
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: fuzzy_unmapped
+        output_key: stage_3_input
+        transformations:
+          - column: stage_3_ready
+            expression: |
+              if 3 not in ${parameters.stages_to_run}:
+                  print("\n⏭️ Skipping Stage 3 (not in stages_to_run)")
+                  df['stage_skipped'] = 'stage_3'
+              else:
+                  print("\n" + "="*60)
+                  print("STAGE 3: RAMPDB BRIDGE")
+                  print("="*60)
+                  print(f"Input: {len(df)} unmatched from Stage 2")
+                  print(f"Threshold: ${parameters.stage_3_threshold}")
+                  print(f"Max API calls: ${parameters.max_api_calls}")
+                  print("⚠️ WARNING: This stage requires RampDB API access")
+                  print("✅ Ready for Stage 3")
+              df
+    condition: 3 in ${parameters.stages_to_run}
+
+  - name: stage_3_rampdb_bridge
+    action:
+      type: METABOLITE_RAMPDB_BRIDGE
+      params:
+        unmapped_key: stage_3_input  # Changed from input_key to unmapped_key
+        output_key: rampdb_matched  # Use default action output key
+        final_unmapped_key: rampdb_unmapped  # Use correct parameter name and default key
+        confidence_threshold: ${parameters.stage_3_threshold}
+    condition: 3 in ${parameters.stages_to_run}
+
+  - name: stage_3_results_debug
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: rampdb_matched
+        output_key: stage_3_matched_debug
+        transformations:
+          - column: match_stage
+            expression: '"stage_3"'
+          - column: debug_log
+            expression: |
+              matched_count = len(df)
+              print(f"\nStage 3 Results:")
+              print(f"  Matched: {matched_count} additional metabolites")
+              
+              # Save to file
+              output_file = "${parameters.output_dir}/stage_3_matched.tsv"
+              df.to_csv(output_file, sep='\t', index=False)
+              print(f"  Saved to: {output_file}")
+              
+              # Calculate cumulative coverage
+              stage1_matched = len(context.get('datasets', {}).get('stage_1_matched_debug', pd.DataFrame()))
+              stage2_matched = len(context.get('datasets', {}).get('stage_2_matched_debug', pd.DataFrame()))
+              cumulative = stage1_matched + stage2_matched + matched_count
+              total = 1351
+              print(f"\nCumulative Coverage:")
+              print(f"  Stages 1-2: {stage1_matched + stage2_matched}")
+              print(f"  Stage 3: +{matched_count}")
+              print(f"  Total: {cumulative}/{total} ({100*cumulative/total:.1f}%)")
+              
+              f"stage_3_matched_{matched_count}"
+    condition: 3 in ${parameters.stages_to_run}
+
+  # ============================================
+  # STAGE 4: HMDB VectorRAG (Requires Qdrant)
+  # ============================================
+  - name: stage_4_pre_check
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: rampdb_unmapped
+        output_key: stage_4_input
+        transformations:
+          - column: stage_4_ready
+            expression: |
+              if 4 not in ${parameters.stages_to_run}:
+                  print("\n⏭️ Skipping Stage 4 (not in stages_to_run)")
+                  df['stage_skipped'] = 'stage_4'
+              else:
+                  print("\n" + "="*60)
+                  print("STAGE 4: HMDB VECTORRAG")
+                  print("="*60)
+                  print(f"Input: {len(df)} unmatched from Stage 3")
+                  print(f"Threshold: ${parameters.stage_4_threshold}")
+                  print("⚠️ WARNING: Requires Qdrant database with HMDB data")
+                  print("⚠️ WARNING: May require LLM API access")
+                  
+                  # Check Qdrant path
+                  from pathlib import Path
+                  qdrant_path = Path("/home/ubuntu/biomapper/data/qdrant_storage")
+                  if qdrant_path.exists():
+                      print(f"✅ Qdrant path exists: {qdrant_path}")
+                  else:
+                      print(f"❌ Qdrant path missing: {qdrant_path}")
+                      raise FileNotFoundError("Qdrant storage not found")
+                  
+                  print("✅ Ready for Stage 4")
+              df
+    condition: 4 in ${parameters.stages_to_run}
+
+  - name: stage_4_hmdb_vector
+    action:
+      type: HMDB_VECTOR_MATCH
+      params:
+        input_key: stage_4_input
+        output_key: stage_4_matched
+        unmatched_key: stage_4_unmatched
+        identifier_column: ${parameters.identifier_column}
+        threshold: ${parameters.stage_4_threshold}
+        collection_name: hmdb_metabolites
+        qdrant_path: /home/ubuntu/biomapper/data/qdrant_storage
+        embedding_model: sentence-transformers/all-MiniLM-L6-v2
+        enable_llm_validation: false  # Start without LLM
+        top_k: 5
+        batch_size: 32
+    condition: 4 in ${parameters.stages_to_run}
+
+  # ============================================
+  # CONSOLIDATION AND FINAL RESULTS
+  # ============================================
+  - name: merge_all_matches
+    action:
+      type: MERGE_DATASETS
+      params:
+        dataset_keys:
+          - stage_1_matched_debug
+          - stage_2_matched_debug
+          - stage_3_matched_debug
+          - stage_4_matched
+        merge_type: concat
+        deduplicate: true
+        output_key: all_matches
+    condition: ${parameters.stages_to_run} != []
+
+  - name: final_results_summary
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: all_matches
+        output_key: final_results
+        transformations:
+          - column: final_debug
+            expression: |
+              print("\n" + "="*60)
+              print("FINAL RESULTS SUMMARY")
+              print("="*60)
+              
+              total_matched = len(df)
+              total_input = 1351  # Arivale total
+              coverage = 100 * total_matched / total_input
+              
+              print(f"Total Matched: {total_matched}/{total_input}")
+              print(f"Final Coverage: {coverage:.1f}%")
+              print(f"Stages Run: ${parameters.stages_to_run}")
+              
+              # Stage breakdown
+              print("\nBreakdown by stage:")
+              if 'match_stage' in df.columns:
+                  for stage in df['match_stage'].unique():
+                      count = len(df[df['match_stage'] == stage])
+                      print(f"  {stage}: {count} metabolites")
+              
+              # Save final results
+              output_file = "${parameters.output_dir}/final_matched_metabolites.tsv"
+              df.to_csv(output_file, sep='\t', index=False)
+              print(f"\nFinal results saved to: {output_file}")
+              
+              # Create summary file
+              summary_file = "${parameters.output_dir}/execution_summary.txt"
+              with open(summary_file, 'w') as f:
+                  f.write(f"Execution Summary\n")
+                  f.write(f"================\n")
+                  f.write(f"Stages Run: ${parameters.stages_to_run}\n")
+                  f.write(f"Total Matched: {total_matched}\n")
+                  f.write(f"Coverage: {coverage:.1f}%\n")
+                  f.write(f"Output Directory: ${parameters.output_dir}\n")
+              print(f"Summary saved to: {summary_file}")
+              
+              df
+
+  - name: export_final_results
+    action:
+      type: EXPORT_DATASET
+      params:
+        input_key: final_results
+        output_path: ${parameters.output_dir}/met_arv_to_ukbb_v4.0_final.tsv
+        format: tsv
+
+metadata:
+  version: '4.0'
+  created_date: '2025-08-21'
+  type: 'consolidated_progressive'
+  features:
+    - 'Extensive debug logging at every step'
+    - 'Pre-flight validation checks'
+    - 'Incremental stage enabling'
+    - 'Proper error propagation'
+    - 'Parameter resolution validation'
+    - 'Systematic testing approach'
+  testing_instructions: |
+    1. Start with stages_to_run: [1] - verify Stage 1 works
+    2. Then stages_to_run: [1,2] - verify Stage 2 adds value
+    3. Then stages_to_run: [1,2,3] - test RampDB if available
+    4. Finally stages_to_run: [1,2,3,4] - test full pipeline
+  consolidation_notes: |
+    This file consolidates 7 development iterations:
+    - progressive_metabolomics_corrected.yaml
+    - metabolomics_progressive_mvp.yaml
+    - metabolomics_progressive_real_data.yaml
+    - metabolomics_progressive_mapping.yaml
+    - metabolomics_progressive_analysis.yaml
+    - metabolomics_progressive_complete.yaml
+    - metabolomics_progressive_production.yaml

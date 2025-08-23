@@ -1,0 +1,135 @@
+# TDD-Enforced Progressive Mapping Strategy Template
+# REQUIREMENT: tests/strategies/test_${STRATEGY_NAME}.py must exist before execution
+
+name: ${STRATEGY_NAME}
+description: TDD-enforced progressive mapping with comprehensive validation
+
+# TDD_REQUIRED: Tests must exist and fail before implementation
+# VALIDATION_ENFORCED: All hooks prevent partial completion  
+# AUTHENTIC_COVERAGE: No entity inflation allowed
+
+parameters:
+  # Data paths (use parameters, not hardcoded paths)
+  source_file: "${DATA_DIR}/${SOURCE_DATASET}.tsv"
+  target_file: "${DATA_DIR}/${TARGET_DATASET}.csv"
+  output_dir: "${OUTPUT_DIR:-/tmp/biomapper}/${STRATEGY_NAME}"
+  
+  # TDD Test Configuration
+  test_data_size: 1000
+  expected_stage_1_coverage: 0.60  # Direct matching
+  expected_stage_2_coverage: 0.75  # With composite parsing
+  expected_stage_3_coverage: 0.85  # With historical resolution
+  
+  # Validation requirements
+  require_all_outputs: true
+  require_authentic_coverage: true
+  require_progressive_tracking: true
+
+validation:
+  pre_execution:
+    - parameter_substitution_test
+    - import_path_verification
+    - test_data_availability
+    
+  post_execution:
+    - authentic_coverage_calculation
+    - all_outputs_generated
+    - progressive_stats_validated
+    - no_component_failures
+
+hooks:
+  on_start: "python .claude/hooks/tdd_enforcer.py ${STRATEGY_NAME}"
+  on_failure: "python scripts/debug_failure_point.py ${STRATEGY_NAME}"
+  on_success: "python scripts/prevent_partial_victory.py ${STRATEGY_NAME}"
+
+steps:
+  # Stage 0: Validation Setup
+  - name: validate_requirements
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: none
+        transformations:
+          - column: validation_check
+            expression: '"TDD tests required"'
+        output_key: validation_status
+        
+  # Stage 1: Load Data
+  - name: load_source_data
+    action:
+      type: LOAD_DATASET_IDENTIFIERS
+      params:
+        file_path: "${parameters.source_file}"
+        identifier_column: "${ENTITY_ID_COLUMN}"
+        output_key: source_data
+        
+  # Stage 2: Direct Matching
+  - name: direct_match
+    action:
+      type: "${ENTITY_TYPE}_DIRECT_MATCH"
+      params:
+        input_key: source_data
+        target_file: "${parameters.target_file}"
+        confidence_score: 1.0
+        match_type: direct
+        output_key: stage_1_results
+        
+  # Stage 3: Progressive Enhancement
+  - name: composite_parsing
+    action:
+      type: PARSE_COMPOSITE_IDENTIFIERS
+      params:
+        input_key: stage_1_unmatched
+        separator: ","
+        output_key: stage_2_results
+        
+  # Stage 4: Final Enhancement
+  - name: historical_resolution
+    action:
+      type: "${ENTITY_TYPE}_HISTORICAL_RESOLUTION"
+      params:
+        input_key: stage_2_unmatched
+        confidence_score: 0.85
+        output_key: stage_3_results
+        
+  # Stage 5: Merge Results
+  - name: merge_all_stages
+    action:
+      type: MERGE_DATASETS
+      params:
+        datasets_to_merge:
+          - stage_1_results
+          - stage_2_results
+          - stage_3_results
+        output_key: final_results
+        
+  # Stage 6: Validation & Reporting
+  - name: validate_coverage
+    action:
+      type: CUSTOM_TRANSFORM
+      params:
+        input_key: final_results
+        transformations:
+          - column: coverage_check
+            expression: 'len(df) / ${parameters.test_data_size}'
+        output_key: coverage_validation
+        
+  - name: generate_report
+    action:
+      type: EXPORT_DATASET
+      params:
+        input_key: final_results
+        file_path: "${parameters.output_dir}/mapping_report.json"
+        format: json
+
+metadata:
+  tdd_enforced: true
+  validation_level: comprehensive
+  anti_patterns_blocked:
+    - partial_success
+    - parameter_hardcoding
+    - coverage_inflation
+  quality_gates:
+    - authentic_coverage
+    - progressive_tracking
+    - complete_outputs
