@@ -1,0 +1,383 @@
+"""
+Track progressive mapping statistics across stages.
+
+This action calculates and maintains progressive statistics for multi-stage
+mapping strategies, tracking match rates, confidence scores, and cumulative
+improvements at each stage.
+"""
+
+from typing import Dict, Any, Optional, List
+from pydantic import BaseModel, Field
+import pandas as pd
+import logging
+from datetime import datetime
+
+from actions.typed_base import TypedStrategyAction
+from actions.registry import register_action
+from core.standards.context_handler import UniversalContext
+
+logger = logging.getLogger(__name__)
+
+
+class ActionResult(BaseModel):
+    """Standard action result for statistics tracking."""
+    
+    success: bool
+    message: Optional[str] = None
+    error: Optional[str] = None
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TrackProgressiveStatsParams(BaseModel):
+    """Parameters for tracking progressive statistics."""
+    
+    # Required parameters
+    input_key: str = Field(
+        ...,
+        description="Dataset key containing current stage results"
+    )
+    stage_id: int = Field(
+        ...,
+        description="Numeric stage identifier (1, 2, 3, etc.)"
+    )
+    stage_name: str = Field(
+        ...,
+        description="Human-readable stage name (e.g., 'Direct Matching')"
+    )
+    
+    # Optional parameters
+    method: str = Field(
+        "unknown",
+        description="Matching method used in this stage"
+    )
+    entity_id_column: str = Field(
+        "uniprot",
+        description="Column name for unique entity identifier (e.g., 'uniprot', 'hmdb_id')"
+    )
+    previous_stages_key: Optional[str] = Field(
+        None,
+        description="Dataset key containing results from previous stages (for calculating new matches)"
+    )
+    track_confidence: bool = Field(
+        True,
+        description="Calculate confidence score statistics"
+    )
+    track_match_types: bool = Field(
+        True,
+        description="Track distribution of match types"
+    )
+    track_unique_entities: bool = Field(
+        True,
+        description="Track unique entities separately from total rows (important for one-to-many mappings)"
+    )
+    is_baseline_stage: bool = Field(
+        False,
+        description="If True, this stage represents the baseline input (not a matching stage)"
+    )
+
+
+@register_action("TRACK_PROGRESSIVE_STATS")
+class TrackProgressiveStats(TypedStrategyAction[TrackProgressiveStatsParams, ActionResult]):
+    """Track and update progressive mapping statistics."""
+    
+    def get_params_model(self) -> type[TrackProgressiveStatsParams]:
+        return TrackProgressiveStatsParams
+    
+    def get_result_model(self) -> type[ActionResult]:
+        return ActionResult
+    
+    async def execute_typed(
+        self, params: TrackProgressiveStatsParams, context: Any, **kwargs
+    ) -> ActionResult:
+        """Execute progressive statistics tracking."""
+        try:
+            start_time = datetime.now()
+            
+            # Wrap context for standardized access
+            ctx = UniversalContext.wrap(context)
+            
+            # Get datasets
+            datasets = ctx.get('datasets', {})
+            stage_data = datasets.get(params.input_key)
+            
+            if stage_data is None:
+                return ActionResult(
+                    success=False,
+                    message=f"Dataset '{params.input_key}' not found in context"
+                )
+            
+            # Convert to DataFrame if needed
+            if isinstance(stage_data, list):
+                if len(stage_data) == 0:
+                    logger.warning(f"Stage {params.stage_id}: Empty dataset")
+                    stage_df = pd.DataFrame()
+                else:
+                    stage_df = pd.DataFrame(stage_data)
+                    logger.info(f"Converted {len(stage_data)} records to DataFrame for stats tracking")
+            elif isinstance(stage_data, pd.DataFrame):
+                stage_df = stage_data
+            else:
+                return ActionResult(
+                    success=False,
+                    message=f"Unsupported data type for '{params.input_key}': {type(stage_data)}"
+                )
+            
+            # Get or initialize progressive_stats
+            progressive_stats = ctx.get('progressive_stats', {})
+            if not progressive_stats:
+                # Check if input_statistics exists in context
+                input_stats = ctx.get('input_statistics', {})
+                
+                progressive_stats = {
+                    'stages': {},
+                    'start_time': start_time.isoformat(),
+                    'total_processed': 0,
+                    'final_match_rate': 0.0,
+                    'input_statistics': input_stats,  # NEW: Preserve input statistics
+                    'unique_tracking': {
+                        'all_unique_ids': set(),
+                        'total_unique_entities': 0,
+                        'by_stage': {}
+                    }
+                }
+            
+            # CRITICAL: Capture input statistics at stage 0 (initial input) OR baseline stages
+            if (params.stage_id == 0 or params.is_baseline_stage) and params.track_unique_entities:
+                if params.entity_id_column in stage_df.columns:
+                    unique_entities = stage_df[params.entity_id_column].nunique()
+                    total_rows = len(stage_df)
+                    
+                    # Store as input_statistics for visualization
+                    progressive_stats['input_statistics'] = {
+                        'total_input_entities': unique_entities,
+                        'total_input_rows': total_rows,
+                        'input_dataset_key': params.input_key,
+                        'timestamp': start_time.isoformat()
+                    }
+                    
+                    if params.is_baseline_stage:
+                        logger.info(f"📊 Baseline Statistics Captured: {unique_entities} unique entities from {total_rows} total rows")
+                    else:
+                        logger.info(f"📊 Input Statistics Captured at Stage 0: {unique_entities} unique entities from {total_rows} total rows")
+            
+            # Ensure unique_tracking exists (for backward compatibility)
+            if 'unique_tracking' not in progressive_stats:
+                progressive_stats['unique_tracking'] = {
+                    'all_unique_ids': set(),
+                    'total_unique_entities': 0,
+                    'by_stage': {}
+                }
+            
+            # Calculate statistics for this stage
+            total_records = len(stage_df)
+            
+            # Track unique entities if requested and column exists
+            unique_entities = 0
+            new_unique_entities = 0
+            expansion_factor = 1.0
+            
+            if params.track_unique_entities and params.entity_id_column in stage_df.columns:
+                # Check if we have composite entity tracking
+                if "_composite_entity_id" in stage_df.columns:
+                    # Count composite entities as single units
+                    # Composites: count unique _composite_entity_id values (excluding None)
+                    composite_entities = stage_df[stage_df["_composite_entity_id"].notna()]["_composite_entity_id"].nunique()
+                    # Simple entities: count unique entity IDs where _composite_entity_id is None
+                    simple_entities = stage_df[stage_df["_composite_entity_id"].isna()][params.entity_id_column].nunique()
+                    unique_entities = composite_entities + simple_entities
+                    
+                    logger.info(f"Stage {params.stage_id}: Using composite-aware counting - {composite_entities} composites + {simple_entities} simple = {unique_entities} total entities")
+                    
+                    # Get unique IDs for tracking (still track individual components for matching)
+                    stage_unique_ids = set(stage_df[params.entity_id_column].dropna().unique())
+                else:
+                    # Standard counting (no composite tracking)
+                    stage_unique_ids = set(stage_df[params.entity_id_column].dropna().unique())
+                    unique_entities = len(stage_unique_ids)
+                    logger.info(f"Stage {params.stage_id}: Using standard counting - {unique_entities} unique entities (no composite tracking columns found)")
+                
+                # For baseline stages, don't track as "matched" entities
+                if params.is_baseline_stage:
+                    # Baseline stage: Just count entities, don't add to matched tracking
+                    new_unique_entities = 0  # Baseline doesn't contribute new matches
+                    
+                    # Store baseline info but don't update all_unique_ids
+                    progressive_stats['unique_tracking']['by_stage'][str(params.stage_id)] = {
+                        'unique_entities': unique_entities,
+                        'new_unique_entities': 0,  # Baseline contributes 0 matches
+                        'is_baseline': True,
+                        'stage_unique_ids': list(stage_unique_ids)[:10]  # Store sample for debugging
+                    }
+                else:
+                    # Normal matching stage: Track new matches
+                    # Calculate new unique entities not seen in previous MATCHING stages
+                    # Convert to set if it was stored as list
+                    all_previous_ids_raw = progressive_stats['unique_tracking'].get('all_unique_ids', [])
+                    if isinstance(all_previous_ids_raw, list):
+                        all_previous_ids = set(all_previous_ids_raw)
+                    else:
+                        all_previous_ids = all_previous_ids_raw
+                    new_unique_ids = stage_unique_ids - all_previous_ids
+                    new_unique_entities = len(new_unique_ids)
+                    
+                    # Update tracking (convert set to list for serialization)
+                    all_previous_ids.update(stage_unique_ids)
+                    progressive_stats['unique_tracking']['all_unique_ids'] = list(all_previous_ids)
+                    progressive_stats['unique_tracking']['total_unique_entities'] = len(all_previous_ids)
+                    progressive_stats['unique_tracking']['by_stage'][str(params.stage_id)] = {
+                        'unique_entities': unique_entities,
+                        'new_unique_entities': new_unique_entities,
+                        'stage_unique_ids': list(stage_unique_ids)[:10]  # Store sample for debugging
+                    }
+            
+            if params.is_baseline_stage:
+                # Baseline stage: No matches to count
+                matched_records = 0
+                unmapped_records = total_records
+                unique_matched = 0
+                match_rate = 0.0
+                confidence_stats = {}
+            elif 'confidence_score' in stage_df.columns:
+                matched_records = len(stage_df[stage_df['confidence_score'] > 0])
+                unmapped_records = len(stage_df[stage_df['confidence_score'] == 0])
+                
+                # Calculate unique matched entities
+                if params.track_unique_entities and params.entity_id_column in stage_df.columns:
+                    matched_df = stage_df[stage_df['confidence_score'] > 0]
+                    if not matched_df.empty:
+                        # Check for composite entity tracking
+                        if "_composite_entity_id" in matched_df.columns:
+                            # Count composite entities as single units
+                            composite_matched = matched_df[matched_df["_composite_entity_id"].notna()]["_composite_entity_id"].nunique()
+                            simple_matched = matched_df[matched_df["_composite_entity_id"].isna()][params.entity_id_column].nunique()
+                            unique_matched = composite_matched + simple_matched
+                        else:
+                            unique_matched = matched_df[params.entity_id_column].nunique()
+                        expansion_factor = matched_records / unique_matched if unique_matched > 0 else 1.0
+                    else:
+                        unique_matched = 0
+                else:
+                    unique_matched = matched_records  # Fallback
+                
+                match_rate = unique_matched / unique_entities if unique_entities > 0 else (matched_records / total_records if total_records > 0 else 0.0)
+                
+                # Confidence statistics
+                if params.track_confidence and matched_records > 0:
+                    matched_df = stage_df[stage_df['confidence_score'] > 0]
+                    confidence_stats = {
+                        'mean': float(matched_df['confidence_score'].mean()),
+                        'median': float(matched_df['confidence_score'].median()),
+                        'std': float(matched_df['confidence_score'].std()),
+                        'min': float(matched_df['confidence_score'].min()),
+                        'max': float(matched_df['confidence_score'].max())
+                    }
+                else:
+                    confidence_stats = {}
+            else:
+                # If no confidence_score column, assume all are matched
+                matched_records = total_records
+                unmapped_records = 0
+                match_rate = 1.0 if total_records > 0 else 0.0
+                confidence_stats = {}
+            
+            # Calculate new matches (not in previous stages)
+            new_matches = matched_records
+            if params.previous_stages_key:
+                previous_data = datasets.get(params.previous_stages_key)
+                if previous_data:
+                    if isinstance(previous_data, list):
+                        previous_df = pd.DataFrame(previous_data) if previous_data else pd.DataFrame()
+                    else:
+                        previous_df = previous_data
+                    
+                    if not previous_df.empty and 'confidence_score' in previous_df.columns:
+                        previous_matched = len(previous_df[previous_df['confidence_score'] > 0])
+                        new_matches = max(0, matched_records - previous_matched)
+            
+            # Track match type distribution
+            match_type_dist = {}
+            if params.track_match_types and 'match_type' in stage_df.columns:
+                match_type_dist = stage_df['match_type'].value_counts().to_dict()
+            
+            # Calculate cumulative statistics
+            if params.is_baseline_stage:
+                # Baseline stage doesn't contribute to cumulative matches
+                cumulative_matched = 0
+                new_matches = 0
+            else:
+                cumulative_matched = matched_records
+                previous_stages = [s for sid, s in progressive_stats.get('stages', {}).items() 
+                                 if int(sid) < params.stage_id and not s.get('is_baseline', False)]
+                if previous_stages:
+                    # Get the last non-baseline stage's cumulative count
+                    last_stage = max(previous_stages, key=lambda s: s.get('stage_id', 0))
+                    cumulative_matched = last_stage.get('cumulative_matched', 0) + new_matches
+            
+            # Update stage statistics with unique entity tracking
+            stage_stats = {
+                'stage_id': params.stage_id,
+                'name': params.stage_name,
+                'method': params.method,
+                'is_baseline': params.is_baseline_stage,  # Mark baseline stages
+                'total_records': total_records,
+                'matched': matched_records,
+                'unmapped': unmapped_records,
+                'new_matches': new_matches,
+                'cumulative_matched': cumulative_matched,
+                'match_rate': match_rate,
+                # Unique entity tracking
+                'unique_entities': unique_entities,
+                'unique_matched': unique_matched if 'unique_matched' in locals() else matched_records,
+                'new_unique_entities': new_unique_entities,
+                'expansion_factor': expansion_factor,
+                # Additional stats
+                'confidence_stats': confidence_stats,
+                'match_type_distribution': match_type_dist,
+                'computation_time': f"{(datetime.now() - start_time).total_seconds():.2f}s"
+            }
+            
+            # Store in progressive_stats
+            progressive_stats['stages'][str(params.stage_id)] = stage_stats
+            
+            # Update totals
+            progressive_stats['total_processed'] = total_records
+            progressive_stats['final_match_rate'] = match_rate
+            progressive_stats['last_updated'] = datetime.now().isoformat()
+            
+            # Calculate total time if all stages complete
+            if progressive_stats.get('start_time'):
+                start = datetime.fromisoformat(progressive_stats['start_time'])
+                progressive_stats['total_time'] = f"{(datetime.now() - start).total_seconds():.2f}s"
+            
+            # Update context with progressive_stats
+            ctx.set('progressive_stats', progressive_stats)
+            
+            # Log with unique entity focus if available
+            if params.track_unique_entities and unique_entities > 0:
+                logger.info(f"Stage {params.stage_id} ({params.stage_name}): "
+                           f"{new_unique_entities} new unique entities found, "
+                           f"{unique_entities} total in stage ({expansion_factor:.2f}x expansion), "
+                           f"{progressive_stats['unique_tracking']['total_unique_entities']} cumulative unique")
+            else:
+                logger.info(f"Stage {params.stage_id} ({params.stage_name}): "
+                           f"{matched_records}/{total_records} matched ({match_rate:.1%}), "
+                           f"{new_matches} new matches, "
+                           f"{cumulative_matched} cumulative")
+            
+            # Log the complete progressive_stats for debugging
+            logger.debug(f"Updated progressive_stats: {progressive_stats}")
+            
+            return ActionResult(
+                success=True,
+                message=f"Tracked statistics for stage {params.stage_id}: {matched_records}/{total_records} matched",
+                data={
+                    'stage_stats': stage_stats,
+                    'cumulative_matched': cumulative_matched,
+                    'match_rate': match_rate
+                }
+            )
+            
+        except Exception as e:
+            error_msg = f"Failed to track progressive statistics: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return ActionResult(success=False, message=error_msg)
