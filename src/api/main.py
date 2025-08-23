@@ -20,7 +20,8 @@ try:
         extract_uniprot_from_xrefs,
         normalize_accessions,
     )
-    from actions.entities.proteins.matching import multi_bridge, historical_resolution  # noqa: F401
+    from actions.entities.proteins.matching import multi_bridge  # noqa: F401
+    from actions.entities.proteins.annotation import historical_resolution  # noqa: F401
     
     # Data processing actions - import the class to trigger registration
     from actions.utils.data_processing.parse_composite_identifiers import ParseCompositeIdentifiersAction  # noqa: F401

@@ -367,12 +367,30 @@ class BiomapperClient:
         """
         client = self._get_client()
         try:
-            response = await client.get(f"/api/mapping/jobs/{job_id}/status")
+            # Try v2 endpoint first (for modern strategies)
+            response = await client.get(f"/api/strategies/v2/jobs/{job_id}/status")
             response.raise_for_status()
-            return JobStatus(**response.json())
+            data = response.json()
+            
+            # Convert v2 response to JobStatus format
+            from datetime import datetime
+            return JobStatus(
+                job_id=data.get("job_id"),
+                status=data.get("status"),
+                progress=100.0 if data.get("status") == "completed" else 0.0,
+                current_action=None,
+                message=data.get("error"),
+                updated_at=datetime.utcnow()
+            )
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
-                raise JobNotFoundError(f"Job not found: {job_id}")
+                # Fallback to old endpoint
+                try:
+                    response = await client.get(f"/api/mapping/jobs/{job_id}/status")
+                    response.raise_for_status()
+                    return JobStatus(**response.json())
+                except httpx.HTTPStatusError:
+                    raise JobNotFoundError(f"Job not found: {job_id}")
             else:
                 raise ApiError(e.response.status_code, e.response.text)
 
@@ -389,13 +407,21 @@ class BiomapperClient:
             JobNotFoundError: If job not found
         """
         client = self._get_client()
+        
+        # Try v2 endpoint first (for modern strategies)
         try:
-            response = await client.get(f"/api/mapping/jobs/{job_id}/results")
+            response = await client.get(f"/api/strategies/v2/jobs/{job_id}/results")
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
-                raise JobNotFoundError(f"Job not found: {job_id}")
+                # Try v1 endpoint as fallback
+                try:
+                    response = await client.get(f"/api/mapping/jobs/{job_id}/results")
+                    response.raise_for_status()
+                    return response.json()
+                except httpx.HTTPStatusError:
+                    raise JobNotFoundError(f"Job not found: {job_id}")
             else:
                 raise ApiError(e.response.status_code, e.response.text)
 

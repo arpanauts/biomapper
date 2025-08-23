@@ -178,7 +178,7 @@ def adapt_context(context: Any) -> Any:
         return context
     
     # If it's a StrategyExecutionContext, wrap it
-    from core.models.execution_context import StrategyExecutionContext
+    from .models.execution_context import StrategyExecutionContext
     if isinstance(context, StrategyExecutionContext):
         return StrategyExecutionContextAdapter(context)
     

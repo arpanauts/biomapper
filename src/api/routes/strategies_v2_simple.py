@@ -13,9 +13,8 @@ from src.core.minimal_strategy_service import MinimalStrategyService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/strategies/v2", tags=["Strategy Execution V2"])
-logger.info(
-    "strategies_v2_simple module loaded - v2 routes registered at /api/strategies/v2"
-)
+# Module-level logging moved to avoid initialization issues
+# logger.info("strategies_v2_simple module loaded - v2 routes registered at /api/strategies/v2")
 
 
 class V2ExecutionOptions(BaseModel):
@@ -60,20 +59,30 @@ async def run_strategy_async(
     try:
         # Update job status
         jobs[job_id]["status"] = "running"
+        logger.info(f"Starting async execution of strategy '{strategy_name}' (job_id: {job_id})")
+        logger.debug(f"Parameters received: {parameters}")
 
         # Execute strategy
-        strategies_dir = Path(__file__).parent.parent.parent.parent / "configs" / "strategies"
+        strategies_dir = Path(__file__).parent.parent.parent / "configs" / "strategies"
         service = MinimalStrategyService(str(strategies_dir))
+        
+        # Properly format context with parameters
+        context = {"parameters": parameters} if parameters else None
+        logger.debug(f"Calling execute_strategy with context: {context}")
+        
         result = await service.execute_strategy(
-            strategy_name=strategy_name, context=parameters
+            strategy_name=strategy_name, context=context
         )
+        
+        logger.info(f"Strategy '{strategy_name}' execution completed (job_id: {job_id})")
+        logger.debug(f"Result keys: {list(result.keys()) if result else 'None'}")
 
         # Update job with results
         jobs[job_id]["status"] = "completed"
         jobs[job_id]["result"] = result
 
     except Exception as e:
-        logger.error(f"Strategy execution failed: {e}")
+        logger.error(f"Strategy execution failed for job {job_id}: {e}", exc_info=True)
         jobs[job_id]["status"] = "failed"
         jobs[job_id]["error"] = str(e)
 
@@ -110,7 +119,7 @@ async def execute_strategy(
         }
 
         # Check if strategy exists
-        strategies_dir = Path(__file__).parent.parent.parent.parent / "configs" / "strategies"
+        strategies_dir = Path(__file__).parent.parent.parent / "configs" / "strategies"
         logger.info(f"Loading strategies from: {strategies_dir}")
         service = MinimalStrategyService(str(strategies_dir))
         logger.info(f"Loaded strategies: {list(service.strategies.keys())}")
@@ -157,14 +166,37 @@ async def get_job_status(job_id: str):
 @router.get("/jobs/{job_id}/results")
 async def get_job_results(job_id: str):
     """Get the results of a completed job."""
-    if job_id not in jobs:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    try:
+        if job_id not in jobs:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    job = jobs[job_id]
-    if job["status"] != "completed":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Job {job_id} is not completed. Status: {job['status']}",
-        )
+        job = jobs[job_id]
+        if job["status"] != "completed":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Job {job_id} is not completed. Status: {job['status']}",
+            )
 
-    return job.get("result", {})
+        # Convert result to JSON-serializable format
+        result = job.get("result", {})
+        
+        # Convert datasets to simple summaries (DataFrames aren't JSON serializable)
+        if "datasets" in result:
+            datasets_summary = {}
+            for key, value in result["datasets"].items():
+                if hasattr(value, "to_dict"):
+                    # For DataFrames, just return row count
+                    datasets_summary[key] = {"_row_count": len(value)}
+                elif isinstance(value, list):
+                    datasets_summary[key] = value[:100] if len(value) > 100 else value  # Limit large lists
+                else:
+                    datasets_summary[key] = value
+            result["datasets"] = datasets_summary
+        
+        return result
+    except Exception as e:
+        # Log the error without extra kwargs that might cause issues
+        import traceback
+        logger.error(f"Error in get_job_results: {str(e)}")
+        logger.debug(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving results: {str(e)}")

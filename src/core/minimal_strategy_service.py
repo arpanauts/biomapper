@@ -13,13 +13,13 @@ except ImportError:
     # dotenv not available, skip loading
     pass
 
-from core.models.execution_context import (
+from .models.execution_context import (
     StrategyExecutionContext,
     ProvenanceRecord,
 )
-from core.infrastructure.parameter_resolver import ParameterResolver
-from core.standards.debug_tracer import DebugTracer
-from core.standards.known_issues import KnownIssuesRegistry
+from .infrastructure.parameter_resolver import ParameterResolver
+from .standards.debug_tracer import DebugTracer
+from .standards.known_issues import KnownIssuesRegistry
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -109,38 +109,13 @@ class MinimalStrategyService:
 
     def _build_action_registry(self) -> Dict[str, Any]:
         """Build registry of available actions."""
-        # Import the action registry first
+        # Import all actions which will trigger their registration
+        # The actions/__init__.py file already imports all the necessary modules
+        import actions
+        
+        # Now get the registry which should have all the registered actions
         from actions.registry import ACTION_REGISTRY
-
-        # Import specific action modules individually to handle missing dependencies gracefully
-        action_modules = [
-            "load_dataset_identifiers",
-            "merge_with_uniprot_resolution",
-            "calculate_set_overlap",
-            "merge_datasets",
-            "export_dataset",
-            "calculate_three_way_overlap",
-            "baseline_fuzzy_match",
-            "build_nightingale_reference",
-            "cts_enriched_match",
-            "generate_enhancement_report",
-            "generate_metabolomics_report",
-            "nightingale_nmr_match",
-            "vector_enhanced_match",
-            "semantic_metabolite_match",
-            "metabolite_api_enrichment",
-            "combine_metabolite_matches",
-            "chemistry_to_phenotype_bridge",
-        ]
-
-        for module_name in action_modules:
-            try:
-                __import__(f"biomapper.actions.{module_name}")
-                logger.debug(f"Successfully imported action module: {module_name}")
-            except ImportError as e:
-                logger.warning(f"Could not import action module {module_name}: {e}")
-                continue
-
+        
         # Use the central action registry which now has all registered actions
         logger.info(f"Loaded {len(ACTION_REGISTRY)} actions from registry")
         return ACTION_REGISTRY
@@ -223,6 +198,12 @@ class MinimalStrategyService:
             return
 
         try:
+            # Enhanced logging for progressive_stats tracking
+            if "progressive_stats" in dict_context:
+                logger.debug(f"Progressive stats in dict_context: {dict_context.get('progressive_stats', {})}")
+            if pydantic_context and "progressive_stats" in pydantic_context.custom_action_data:
+                logger.debug(f"Progressive stats in pydantic custom_action_data: {pydantic_context.custom_action_data.get('progressive_stats', {})}")
+            
             # Update dict from Pydantic custom_action_data
             for key, value in pydantic_context.custom_action_data.items():
                 dict_context[key] = value
@@ -326,6 +307,43 @@ class MinimalStrategyService:
         # Default: try Pydantic first, fallback to dict
         return "pydantic"
 
+    def _evaluate_condition(self, condition_expr: str, parameters: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None) -> bool:
+        """Evaluate a step condition expression.
+        
+        Args:
+            condition_expr: The condition expression (e.g., "1 in ${parameters.stages_to_run}")
+            parameters: Parameters dictionary for substitution
+            metadata: Optional metadata for substitution
+            
+        Returns:
+            True if condition is met or no condition specified, False otherwise
+        """
+        if not condition_expr:
+            return True  # No condition means always execute
+        
+        try:
+            # Substitute parameters in the condition expression
+            resolved_expr = self._substitute_parameters(condition_expr, parameters, metadata)
+            
+            # Create safe namespace for evaluation
+            # Make parameters accessible both as 'parameters' and directly
+            safe_namespace = {
+                "parameters": parameters,
+                "metadata": metadata or {},
+                "__builtins__": {}  # Restrict builtins for safety
+            }
+            # Also add individual parameter values to namespace
+            safe_namespace.update(parameters)
+            
+            # Safely evaluate the boolean expression
+            result = eval(resolved_expr, {"__builtins__": {}}, safe_namespace)
+            return bool(result)
+            
+        except Exception as e:
+            logger.warning(f"Failed to evaluate condition '{condition_expr}': {e}")
+            # Default to executing if evaluation fails (backward compatibility)
+            return True
+    
     async def execute_strategy(
         self,
         strategy_name: str,
@@ -409,15 +427,26 @@ class MinimalStrategyService:
             f"Executing strategy '{strategy_name}' with {len(strategy.get('steps', []))} steps"
         )
 
+        # Get metadata from strategy config for substitution
+        metadata = strategy.get("metadata", {})
+
         # Execute each step with smart context selection
         for step in strategy.get("steps", []):
             step_name = step.get("name", "unnamed")
+            
+            # Check step condition before execution
+            condition = step.get("condition")
+            if condition:
+                if not self._evaluate_condition(condition, parameters, metadata):
+                    logger.info(f"Skipping step '{step_name}' - condition not met: {condition}")
+                    continue
+                else:
+                    logger.debug(f"Step '{step_name}' condition met: {condition}")
+            
             action_config = step.get("action", {})
             action_type = action_config.get("type")
             # Substitute parameters in action params
             raw_params = action_config.get("params", {})
-            # Get metadata from strategy config for substitution
-            metadata = strategy.get("metadata", {})
             action_params = self._substitute_parameters(
                 raw_params, parameters, metadata
             )
@@ -485,6 +514,7 @@ class MinimalStrategyService:
                 # Fallback to dict context or if dict is preferred
                 if result_dict is None:
                     logger.debug(f"Executing {action_type} with dict context")
+                    logger.debug(f"Datasets available before {action_type} (dict): {list(dict_context.get('datasets', {}).keys())}")
                     result_dict = await action.execute(
                         current_identifiers=dict_context["current_identifiers"],
                         current_ontology_type=dict_context.get(
@@ -495,6 +525,10 @@ class MinimalStrategyService:
                         target_endpoint=dummy_endpoint,
                         context=dict_context,
                     )
+                    
+                    logger.debug(f"Result dict keys from {action_type}: {list(result_dict.keys()) if result_dict else 'None'}")
+                    if result_dict and "details" in result_dict:
+                        logger.debug(f"Result details keys from {action_type}: {list(result_dict['details'].keys())}")
 
                     # Try to sync back to Pydantic if it exists
                     if pydantic_context:
@@ -513,6 +547,24 @@ class MinimalStrategyService:
 
                 # Update context with results
                 if result_dict:
+                    # CRITICAL: Ensure datasets persist between steps
+                    # This is the fix for context preservation issue
+                    if "datasets" in result_dict:
+                        if "datasets" not in dict_context:
+                            dict_context["datasets"] = {}
+                        dict_context["datasets"].update(result_dict["datasets"])
+                    
+                    # Enhanced logging for progressive_stats tracking
+                    if step.get("name", "").startswith("tag_") or "match" in step.get("name", ""):
+                        # This might be a matching stage - check for data
+                        datasets = dict_context.get("datasets", {})
+                        for key, data in datasets.items():
+                            if key in ["direct_match_tagged", "composite_match_tagged", "final_merged"]:
+                                if isinstance(data, list) and len(data) > 0:
+                                    # Count matches
+                                    matched = sum(1 for item in data if item.get("confidence_score", 0) > 0)
+                                    logger.info(f"Stage {step.get('name')}: Dataset '{key}' has {len(data)} items, {matched} matched")
+                    
                     # Update standard fields in dict context
                     if "output_identifiers" in result_dict:
                         dict_context["current_identifiers"] = result_dict[
@@ -562,8 +614,25 @@ class MinimalStrategyService:
                             "provenance",
                         ]:
                             dict_context[key] = value
+                    
+                    # CRITICAL FIX: Also check details for datasets
+                    if "details" in result_dict and isinstance(result_dict["details"], dict):
+                        if "datasets" in result_dict["details"]:
+                            if "datasets" not in dict_context:
+                                dict_context["datasets"] = {}
+                            dict_context["datasets"].update(result_dict["details"]["datasets"])
+                            logger.debug(f"Updated datasets from action result details: {list(dict_context['datasets'].keys())}")
+                        
+                        # Also merge data dict if present
+                        if "data" in result_dict["details"] and isinstance(result_dict["details"]["data"], dict):
+                            if "datasets" in result_dict["details"]["data"]:
+                                if "datasets" not in dict_context:
+                                    dict_context["datasets"] = {}
+                                dict_context["datasets"].update(result_dict["details"]["data"]["datasets"])
+                                logger.debug(f"Updated datasets from action result data: {list(dict_context['datasets'].keys())}")
 
                     logger.debug(f"Step '{step_name}' completed successfully")
+                    logger.debug(f"Context datasets after step: {list(dict_context.get('datasets', {}).keys())}")
                     
                     # Debug trace step completion
                     if tracer:
