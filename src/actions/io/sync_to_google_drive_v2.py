@@ -80,6 +80,16 @@ class SyncToGoogleDriveV2Params(BaseModel):
     create_summary: bool = Field(
         default=False, description="Create a summary file of uploaded items"
     )
+    
+    # Duplicate handling parameters
+    check_duplicates: bool = Field(
+        default=True,
+        description="Check for existing files before uploading to prevent duplicates"
+    )
+    update_existing: bool = Field(
+        default=False,
+        description="Update existing files instead of skipping when duplicates found"
+    )
 
 
 @register_action("SYNC_TO_GOOGLE_DRIVE_V2")
@@ -228,8 +238,9 @@ class SyncToGoogleDriveV2Action(TypedStrategyAction[SyncToGoogleDriveV2Params, S
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 folder_name = f"run_{timestamp}"
             
-            timestamp_folder_id = await self._create_folder(
-                service, folder_name, current_parent_id, params.description
+            # CRITICAL FIX: Use find_or_create to prevent duplicate folders
+            timestamp_folder_id = await self._find_or_create_folder(
+                service, folder_name, current_parent_id
             )
             current_parent_id = timestamp_folder_id
         
@@ -382,10 +393,29 @@ class SyncToGoogleDriveV2Action(TypedStrategyAction[SyncToGoogleDriveV2Params, S
         # Collect from context outputs
         if params.sync_context_outputs:
             output_files = ctx.get('output_files', {})
+            
+            # Debug logging to understand format
+            logger.info(f"Context output_files type: {type(output_files)}")
+            
+            # Handle both dict and list formats
             if isinstance(output_files, dict):
+                dict_count = 0
                 for key, path in output_files.items():
                     if path and os.path.exists(path):
                         files.append(path)
+                        dict_count += 1
+                logger.info(f"Added {dict_count} files from dict format")
+                
+            elif isinstance(output_files, list):
+                list_count = 0
+                for path in output_files:
+                    # Ensure path is valid and not already added
+                    if path and os.path.exists(path) and path not in files:
+                        files.append(path)
+                        list_count += 1
+                logger.info(f"Added {list_count} files from list format")
+            
+            logger.info(f"Total files collected from context: {len(files)}")
         
         # Collect from local directory if specified
         if params.local_directory and os.path.exists(params.local_directory):
@@ -427,15 +457,82 @@ class SyncToGoogleDriveV2Action(TypedStrategyAction[SyncToGoogleDriveV2Params, S
         
         return filtered
     
+    async def _file_exists(
+        self, service, folder_id: str, file_name: str
+    ) -> Optional[str]:
+        """Check if file already exists in folder. Returns file ID if exists."""
+        query = (
+            f"'{folder_id}' in parents and "
+            f"name = '{file_name}' and "
+            f"mimeType != 'application/vnd.google-apps.folder' and "
+            f"trashed = false"
+        )
+        
+        try:
+            results = service.files().list(
+                q=query,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+                fields="files(id, name, modifiedTime)"
+            ).execute()
+            
+            items = results.get('files', [])
+            if items:
+                # File exists, return its ID
+                logger.info(f"File already exists: {file_name} (ID: {items[0]['id']})")
+                return items[0]['id']
+        except Exception as e:
+            logger.warning(f"Error checking file existence: {e}")
+        
+        return None
+    
     async def _upload_file(
         self, service, file_path: str, folder_id: str, params: SyncToGoogleDriveV2Params
     ) -> Dict[str, Any]:
-        """Upload a single file to Google Drive."""
+        """Upload a single file to Google Drive, checking for duplicates."""
         from googleapiclient.http import MediaFileUpload
         
         file_name = os.path.basename(file_path)
         mime_type = self._guess_mime_type(file_name)
         
+        # Check if file already exists (only if duplicate checking is enabled)
+        check_duplicates = getattr(params, 'check_duplicates', True)  # Default to True
+        update_existing = getattr(params, 'update_existing', False)  # Default to False
+        
+        if check_duplicates:
+            existing_file_id = await self._file_exists(service, folder_id, file_name)
+            
+            if existing_file_id:
+                if update_existing:
+                    # Update existing file
+                    logger.info(f"Updating existing file: {file_name}")
+                    media = MediaFileUpload(
+                        file_path,
+                        mimetype=mime_type,
+                        resumable=True,
+                        chunksize=params.chunk_size if hasattr(params, 'chunk_size') else 10*1024*1024
+                    )
+                    
+                    file = service.files().update(
+                        fileId=existing_file_id,
+                        media_body=media,
+                        fields="id,name,webViewLink,modifiedTime",
+                        supportsAllDrives=True
+                    ).execute()
+                    
+                    logger.info(f"Updated: {file_name}")
+                    return file
+                else:
+                    # Skip upload if file exists
+                    logger.info(f"Skipping duplicate upload: {file_name}")
+                    return {
+                        "id": existing_file_id,
+                        "name": file_name,
+                        "skipped": True,
+                        "reason": "File already exists"
+                    }
+        
+        # File doesn't exist or duplicate checking disabled, create new
         file_metadata = {
             "name": file_name,
             "parents": [folder_id]

@@ -330,6 +330,19 @@ class MergeDatasetsAction(
                             df = df.copy()
                             df["_merge_source"] = key
 
+                        # Debug logging for merge
+                        logger.info(f"Merging {first_key} ({len(merged_df)} rows) with {key} ({len(df)} rows)")
+                        logger.info(f"Join columns: {first_col} (left) = {join_col} (right)")
+                        logger.info(f"Join type: {params.join_how}")
+                        
+                        # Sample values for debugging
+                        if len(merged_df) > 0 and first_col in merged_df.columns:
+                            left_samples = merged_df[first_col].dropna().head(3).tolist()
+                            logger.debug(f"Sample {first_col} values from left: {left_samples}")
+                        if len(df) > 0 and join_col in df.columns:
+                            right_samples = df[join_col].dropna().head(3).tolist()
+                            logger.debug(f"Sample {join_col} values from right: {right_samples}")
+                        
                         # Perform the actual merge
                         merged_df = pd.merge(
                             merged_df,
@@ -339,6 +352,8 @@ class MergeDatasetsAction(
                             how=params.join_how,
                             suffixes=("", f"_{key}"),
                         )
+                        
+                        logger.info(f"After merge: {len(merged_df)} rows")
 
                         # Handle one-to-many based on params
                         if (

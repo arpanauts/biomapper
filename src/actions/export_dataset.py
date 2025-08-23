@@ -92,11 +92,29 @@ class ExportDatasetAction(TypedStrategyAction[ExportDatasetParams, ActionResult]
                     success=False, error=f"Unsupported format: {params.format}"
                 )
 
-            # Update context with output file info
+            # Update context with output file info - preserve existing files
             output_files = ctx.get("output_files", {})
-            if not isinstance(output_files, dict):
-                output_files = {}
-            output_files[params.input_key] = str(output_path)
+            
+            # Debug logging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"EXPORT_DATASET: Current output_files type: {type(output_files)}")
+            
+            # Preserve existing format - don't force conversion
+            if isinstance(output_files, list):
+                # Keep as list, just append the new file
+                logger.info(f"EXPORT_DATASET: Preserving list format with {len(output_files)} existing files")
+                output_files.append(str(output_path))
+                logger.info(f"EXPORT_DATASET: Added new file, now {len(output_files)} total files")
+            elif isinstance(output_files, dict):
+                # Keep as dict, add new entry
+                output_files[params.input_key] = str(output_path)
+                logger.info(f"EXPORT_DATASET: Added to existing dict, now {len(output_files)} files")
+            else:
+                # Initialize as dict only if no existing format
+                output_files = {params.input_key: str(output_path)}
+                logger.info(f"EXPORT_DATASET: Initialized as dict with 1 file")
+            
             ctx.set("output_files", output_files)
 
             return ActionResult(

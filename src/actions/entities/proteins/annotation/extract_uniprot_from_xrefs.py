@@ -153,6 +153,10 @@ class ProteinExtractUniProtFromXrefsAction(
             lambda x: self._extract_uniprot_ids(x, params.keep_isoforms)
         )
         
+        # Debug: Check extraction results
+        total_with_ids = df[df[params.output_column].apply(lambda x: len(x) > 0 if isinstance(x, list) else False)].shape[0]
+        self.logger.info(f"Extracted UniProt IDs from {total_with_ids}/{len(df)} rows")
+        
         # Debug: Check how many rows have multiple IDs
         multi_id_rows = df[df[params.output_column].apply(lambda x: isinstance(x, list) and len(x) > 1)]
         self.logger.info(f"Rows with multiple UniProt IDs: {len(multi_id_rows)}")
