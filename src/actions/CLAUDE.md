@@ -582,3 +582,65 @@ poetry run mypy biomapper/core/strategy_actions/entities/proteins/
 ```
 
 Remember: The enhanced organization enables scalable development while maintaining the robust, tested patterns that make biomapper actions reliable for complex bioinformatics data processing.
+
+## Action Development Checklist
+
+### Before You Start
+- [ ] Does this action already exist? Check registry
+- [ ] Which entity does it belong to? (proteins/metabolites/chemistry)
+- [ ] Have you written tests FIRST? (TDD mandatory)
+- [ ] Is there a similar action to reference?
+
+### During Development
+- [ ] Using TypedStrategyAction base class?
+- [ ] Parameters extend ActionParamsBase?
+- [ ] Context wrapped with UniversalContext?
+- [ ] Identifiers normalized with registry?
+- [ ] Complexity checked (<O(n²))?
+- [ ] Progress events emitted?
+
+### Before Commit
+- [ ] Tests pass (unit, integration, production)?
+- [ ] Type checking passes (mypy)?
+- [ ] Coverage >80% for new code?
+- [ ] Action auto-registers correctly?
+- [ ] Documentation in docstrings?
+
+## Debugging Guide
+
+### Action Not Found
+```python
+# Check registration
+from src.actions.registry import ACTION_REGISTRY
+print(ACTION_REGISTRY.keys())
+```
+
+### Context Issues
+```python
+# Always wrap context
+from biomapper.core.standards.context_handler import UniversalContext
+ctx = UniversalContext.wrap(context)
+```
+
+### Performance Problems
+```bash
+# Profile your action
+python audits/complexity_audit.py src/actions/your_action.py
+```
+
+## Entity-Specific Patterns
+
+### Proteins
+- Always handle composite IDs (P12345,P67890)
+- Normalize UniProt accessions
+- Preserve original IDs in _original_* columns
+
+### Metabolites  
+- Multiple ID types (HMDB, InChIKey, CAS, KEGG)
+- Use progressive matching (direct → fuzzy → semantic)
+- Track match confidence scores
+
+### Chemistry
+- LOINC code extraction
+- Clinical test name normalization
+- Unit conversion handling

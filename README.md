@@ -448,6 +448,27 @@ Strategies support variable substitution:
 
 BioMapper features an AI-native developer experience that sets it apart from traditional orchestration frameworks:
 
+### BiOMapper Framework Triad
+
+Three specialized frameworks provide automatic isolation and safe development:
+
+**🔒 Surgical Framework** - Fix internal action logic while preserving interfaces
+- Activated by: "surgical" or describing counting/calculation issues
+- Guarantees: External interfaces remain unchanged
+- Example: "The statistics are counting duplicates" → Fixes logic without breaking pipeline
+
+**🔄 Circuitous Framework** - Repair pipeline orchestration and parameter flow
+- Activated by: "circuitous" or describing parameter flow issues  
+- Guarantees: Traces and fixes YAML strategy execution
+- Example: "Parameters not passing between steps" → Diagnoses and repairs flow
+
+**🔗 Interstitial Framework** - Ensure 100% backward compatibility
+- Activated by: "interstitial" or describing compatibility issues
+- Guarantees: All existing strategies continue working
+- Example: "New parameter broke old code" → Creates compatibility layers
+
+These frameworks activate automatically based on natural language or can be called directly by name.
+
 ### Current AI Features
 
 1. **CLAUDE.md** - Project "constitution" providing role-defining guidance for AI agents
@@ -472,9 +493,20 @@ BioMapper features an AI-native developer experience that sets it apart from tra
 ### Example Claude Code Usage
 
 ```
+# Standard development requests
 "Help me create a new action that extracts gene symbols from protein descriptions"
 "Debug why my metabolite matching strategy is returning empty results"
 "Optimize the CTS API calls to handle rate limiting better"
+
+# Framework-specific requests (by name)
+"Use surgical mode to fix the duplicate counting in statistics"
+"Apply circuitous analysis to trace why parameters aren't substituting"
+"Activate interstitial framework to add a new required parameter safely"
+
+# Framework activation (by description)
+"The protein count shows 3675 but should be 1172 unique"  → Surgical
+"The ${parameters.input_file} isn't being replaced in step 3"  → Circuitous  
+"We renamed dataset_key to input_key and broke production"  → Interstitial
 ```
 
 ### Current Limitations
