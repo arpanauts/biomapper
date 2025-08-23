@@ -103,7 +103,7 @@ class CustomTransformExpressionAction(
         params: CustomTransformExpressionParams,
         source_endpoint: Any,
         target_endpoint: Any,
-        context: Dict[str, Any]
+        context: Any  # Can be dict or StrategyExecutionContext
     ) -> ActionResult:
         """Execute custom transformations on dataset using Python expressions."""
         try:
@@ -170,10 +170,18 @@ class CustomTransformExpressionAction(
                         logger.warning(error_msg)
                         # Continue with other transformations
 
-            # Store result in context
+            # Store result in context - convert to list of dicts for consistency
             datasets = ctx.get_datasets()
-            datasets[params.output_key] = df
+            logger.info(f"Storing dataset '{params.output_key}' with {len(df)} rows")
+            datasets[params.output_key] = df.to_dict('records')
             ctx.set("datasets", datasets)
+            
+            # Debug: verify it's actually stored
+            verify_datasets = ctx.get_datasets()
+            if params.output_key in verify_datasets:
+                logger.info(f"✅ Successfully stored dataset '{params.output_key}' in context")
+            else:
+                logger.error(f"❌ Failed to store dataset '{params.output_key}' in context")
 
             # Update statistics in context
             statistics = ctx.get_statistics()
@@ -208,25 +216,7 @@ class CustomTransformExpressionAction(
     ) -> pd.DataFrame:
         """Apply a single transformation to a DataFrame column using Python expression."""
 
-        # Check if column exists - if not, create it for new columns
-        if transform.column not in df.columns:
-            # If we have an expression, this is likely creating a new column
-            if transform.expression:
-                logger.info(
-                    f"Creating new column '{transform.column}' via transformation."
-                )
-                # Initialize column with None so we can apply the expression
-                df[transform.column] = None
-            else:
-                logger.warning(
-                    f"Column '{transform.column}' not found and no expression provided. Skipping transformation."
-                )
-                return df
-
-        # Determine target column name
-        target_column = transform.new_column or transform.column
-
-        # Create safe namespace for evaluation
+        # Create safe namespace for evaluation FIRST (before using it)
         # Include commonly needed functions and modules
         safe_namespace = {
             # Built-in functions
@@ -265,6 +255,38 @@ class CustomTransformExpressionAction(
             # Lambda support
             "lambda": lambda: None,  # Placeholder, actual lambdas work in eval
         }
+
+        # Check if column exists
+        is_new_column = transform.column not in df.columns
+        
+        if is_new_column:
+            # If we have an expression, this is likely creating a new column
+            if transform.expression:
+                logger.info(
+                    f"Creating new column '{transform.column}' via transformation."
+                )
+                # For new columns with constant expressions, we can set directly
+                # Check if the expression is a constant (doesn't use 'value')
+                if 'value' not in transform.expression and 'df' not in transform.expression:
+                    # This is a constant expression - evaluate it once
+                    try:
+                        result = eval(transform.expression, {"__builtins__": {}}, safe_namespace)
+                        df[transform.column] = result
+                        logger.debug(f"Set new column '{transform.column}' to constant value: {result}")
+                        return df  # Skip the apply since we already set the value
+                    except Exception as e:
+                        logger.debug(f"Could not evaluate as constant: {e}")
+                
+                # Initialize column with None for value-dependent expressions
+                df[transform.column] = None
+            else:
+                logger.warning(
+                    f"Column '{transform.column}' not found and no expression provided. Skipping transformation."
+                )
+                return df
+
+        # Determine target column name
+        target_column = transform.new_column or transform.column
 
         def transform_value(value: Any) -> Any:
             """Apply expression to a single value."""

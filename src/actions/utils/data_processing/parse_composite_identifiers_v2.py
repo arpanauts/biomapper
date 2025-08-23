@@ -48,6 +48,9 @@ class ParseCompositeIdentifiersParams(BaseModel):
     preserve_original: bool = Field(
         default=False, description="Preserve original composite values"
     )
+    track_entity_identity: bool = Field(
+        default=False, description="Track composite entities as single units for statistics"
+    )
     
     # Validation options
     validate_format: bool = Field(default=False, description="Validate ID format")
@@ -89,19 +92,14 @@ class ParseCompositeIdentifiersAction(
         """Get the result model."""
         return ParseCompositeIdentifiersResult
 
-    async def execute_typed(
-        self,
-        current_identifiers: List[str],
-        current_ontology_type: str,
-        params: ParseCompositeIdentifiersParams,
-        source_endpoint: Any,
-        target_endpoint: Any,
-        context: Any,
+    async def execute_typed(  # type: ignore[override]
+        self, params: ParseCompositeIdentifiersParams, context: Any, **kwargs
     ) -> ParseCompositeIdentifiersResult:
         """Execute the composite identifier parsing."""
         try:
-            # Handle different context types
-            ctx = self._get_context_dict(context)
+            # Use UniversalContext for consistent handling
+            from core.standards.context_handler import UniversalContext
+            ctx = UniversalContext.wrap(context)
 
             # Get input key (handle multiple parameter names)
             input_key = params.input_key or params.input_context_key or params.dataset_key
@@ -120,13 +118,14 @@ class ParseCompositeIdentifiersAction(
                 )
             
             # Get input data
-            if input_key not in ctx.get("datasets", {}):
+            datasets = ctx.get_datasets()
+            if input_key not in datasets:
                 # Raise KeyError for backward compatibility with tests
                 raise KeyError(f"Dataset '{input_key}' not found in context")
 
-            input_data = ctx["datasets"][input_key]
+            input_data = datasets[input_key]
 
-            if not input_data:
+            if len(input_data) == 0:
                 return ParseCompositeIdentifiersResult(
                     success=False, message="Input dataset is empty"
                 )
@@ -144,6 +143,10 @@ class ParseCompositeIdentifiersAction(
             # Get separators from patterns or direct parameter
             separators = self._get_separators(params)
             
+            # Add debug logging
+            logger.info(f"Parsing composite identifiers in column '{params.id_field}'")
+            logger.info(f"Input dataset has {len(df)} rows with columns: {list(df.columns)}")
+            
             # Process the data
             expanded_df = self._expand_composite_ids(df, params, separators)
 
@@ -154,12 +157,29 @@ class ParseCompositeIdentifiersAction(
             expansion_factor = (
                 rows_expanded / rows_processed if rows_processed > 0 else 1.0
             )
+            
+            # More debug logging
+            logger.info(f"Found {composite_count} composite IDs, expanded to {rows_expanded} rows")
+            if composite_count > 0:
+                # Show sample of composite IDs
+                composite_samples = []
+                for _, row in df.iterrows():
+                    id_val = row[params.id_field]
+                    if pd.notna(id_val) and any(sep in str(id_val) for sep in separators):
+                        composite_samples.append(str(id_val))
+                        if len(composite_samples) >= 5:
+                            break
+                logger.info(f"Sample composite IDs: {composite_samples}")
+            
+            logger.info(f"Output dataset columns: {list(expanded_df.columns)}")
 
             # Track statistics (always track for test compatibility)
-            self._track_statistics(ctx, df, expanded_df, params, composite_count, separators)
+            self._track_statistics_universal(ctx, df, expanded_df, params, composite_count, separators)
 
-            # Store result
-            ctx["datasets"][output_key] = expanded_df.to_dict("records")
+            # Store result using UniversalContext
+            datasets = ctx.get_datasets()
+            datasets[output_key] = expanded_df.to_dict("records")
+            ctx.set("datasets", datasets)
 
             logger.info(
                 f"Expanded {rows_processed} rows to {rows_expanded} rows "
@@ -191,8 +211,20 @@ class ParseCompositeIdentifiersAction(
         elif hasattr(context, "_dict"):  # MockContext
             return context._dict
         else:
-            # Try to adapt other context types
-            return {"datasets": {}, "statistics": {}}
+            # Use UniversalContext to handle pydantic and other context types
+            from core.standards.context_handler import UniversalContext
+            ctx = UniversalContext.wrap(context)
+            # Build a dict view from the context
+            result = {
+                "datasets": ctx.get_datasets(),
+                "statistics": ctx.get_statistics(),
+            }
+            # Add any other keys from the context
+            if hasattr(context, 'custom_action_data'):
+                for key, value in context.custom_action_data.items():
+                    if key not in result:
+                        result[key] = value
+            return result
 
     def _get_separators(self, params: ParseCompositeIdentifiersParams) -> List[str]:
         """Get separators from patterns or direct parameter."""
@@ -248,6 +280,7 @@ class ParseCompositeIdentifiersAction(
             # Create a row for each component
             if len(components) > 1:
                 # Composite ID - expand
+                entity_weight = 1.0 / len(components) if params.track_entity_identity else 1.0
                 for component in components:
                     row_dict = row.to_dict()
                     row_dict[params.id_field] = component
@@ -256,6 +289,11 @@ class ParseCompositeIdentifiersAction(
                     row_dict["_expansion_count"] = len(components)
                     if params.preserve_order:
                         row_dict["_original_index"] = idx
+                    # Track composite entity identity
+                    if params.track_entity_identity:
+                        row_dict["_composite_entity_id"] = id_str
+                        row_dict["_entity_weight"] = entity_weight
+                        row_dict["_is_composite_component"] = True
                     expanded_rows.append(row_dict)
             else:
                 # Single ID - keep as is
@@ -264,6 +302,11 @@ class ParseCompositeIdentifiersAction(
                     row_dict["_original_index"] = idx
                 if params.preserve_original and components:
                     row_dict[f"_original_{params.id_field}"] = id_str
+                # Mark as non-composite for entity tracking
+                if params.track_entity_identity:
+                    row_dict["_composite_entity_id"] = None
+                    row_dict["_entity_weight"] = 1.0
+                    row_dict["_is_composite_component"] = False
                 expanded_rows.append(row_dict)
 
         return pd.DataFrame(expanded_rows)
@@ -299,16 +342,16 @@ class ParseCompositeIdentifiersAction(
 
         return count
 
-    def _track_statistics(
+    def _track_statistics_universal(
         self,
-        context: Dict[str, Any],
+        ctx,  # UniversalContext
         original_df: pd.DataFrame,
         expanded_df: pd.DataFrame,
         params: ParseCompositeIdentifiersParams,
         composite_count: int,
         separators: List[str],
     ):
-        """Track expansion statistics in context."""
+        """Track expansion statistics in context using UniversalContext."""
         # Calculate max components
         max_components = 1
         patterns_used = {}
@@ -324,12 +367,11 @@ class ParseCompositeIdentifiersAction(
                     if sep in str(id_value):
                         patterns_used[sep] = patterns_used.get(sep, 0) + 1
 
-        # Store statistics
-        if "statistics" not in context:
-            context["statistics"] = {}
+        # Store statistics using UniversalContext
+        statistics = ctx.get_statistics()
 
         # Store in format expected by tests
-        context["statistics"]["composite_tracking"] = {
+        statistics["composite_tracking"] = {
             "total_input": len(original_df),
             "composite_count": composite_count,
             "individual_count": len(expanded_df),
@@ -341,7 +383,7 @@ class ParseCompositeIdentifiersAction(
         
         # Also store detailed expansion stats
         input_key = params.input_key or params.input_context_key or params.dataset_key
-        context["statistics"]["composite_expansion"] = {
+        statistics["composite_expansion"] = {
             "dataset_key": input_key,
             "field": params.id_field,
             "total_input_rows": len(original_df),
@@ -353,6 +395,24 @@ class ParseCompositeIdentifiersAction(
             "max_components": max_components,
             "separators_used": separators,
         }
+        
+        # Write statistics back to context
+        ctx.set("statistics", statistics)
+
+    def _track_statistics(
+        self,
+        context: Dict[str, Any],
+        original_df: pd.DataFrame,
+        expanded_df: pd.DataFrame,
+        params: ParseCompositeIdentifiersParams,
+        composite_count: int,
+        separators: List[str],
+    ):
+        """Track expansion statistics in context (backward compatibility)."""
+        # Wrap dict context and delegate to universal version
+        from core.standards.context_handler import UniversalContext
+        ctx = UniversalContext.wrap(context)
+        self._track_statistics_universal(ctx, original_df, expanded_df, params, composite_count, separators)
 
 # Export compatibility functions for testing
 from pydantic import BaseModel, Field
