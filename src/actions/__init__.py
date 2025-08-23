@@ -14,14 +14,22 @@ as a step in a mapping strategy.
 """
 
 # Import registry first (required for action registration)
-
-# Import base classes
-
-# Import organizational modules (triggers action registration)
-
-# Import essential actions for backward compatibility
-
-# Export registry components for backward compatibility
 from .registry import ACTION_REGISTRY, register_action
 
-__all__ = ['ACTION_REGISTRY', 'register_action']
+# Import base classes
+from .typed_base import TypedStrategyAction
+
+# Import core actions (triggers registration)
+from . import load_dataset_identifiers
+from . import export_dataset
+from . import merge_datasets
+from . import semantic_metabolite_match
+
+# Import organizational modules (triggers action registration)
+from . import entities
+from . import utils
+from . import io
+from . import reports
+
+# Export registry components for backward compatibility
+__all__ = ['ACTION_REGISTRY', 'register_action', 'TypedStrategyAction']

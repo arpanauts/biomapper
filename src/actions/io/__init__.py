@@ -1,5 +1,6 @@
 """Data input/output actions."""
 
-# Future imports for IO modules
+# Import IO actions to trigger registration
+from .sync_to_google_drive_v2 import *
 
 __all__ = []

@@ -6,6 +6,10 @@ from .extract_uniprot_from_xrefs import (
     ExtractUniProtFromXrefsResult,
 )
 
+# Import to trigger registration
+from . import normalize_accessions
+from . import historical_resolution
+
 __all__ = [
     "ProteinExtractUniProtFromXrefsAction",
     "ExtractUniProtFromXrefsParams",
