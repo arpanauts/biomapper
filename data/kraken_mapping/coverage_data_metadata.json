@@ -1,0 +1,26 @@
+{
+  "description": "BiOMapper Coverage Data - Calculated from Actual Result Files",
+  "date_generated": "2025-09-24 11:02:05.759224",
+  "cohorts": [
+    "Arivale",
+    "UKBB",
+    "Israeli10K"
+  ],
+  "entity_types": [
+    "Proteins",
+    "Metabolites",
+    "Chemistry",
+    "Demographics",
+    "Questionnaires \u2192 LOINC",
+    "Questionnaires \u2192 MONDO"
+  ],
+  "calculation_method": "Direct file analysis of result files",
+  "notes": {
+    "Proteins_Metabolites_Chemistry_Demographics": "Mapped to Kraken Knowledge Graph",
+    "Questionnaires_LOINC": "Mapped to LOINC clinical terminology codes",
+    "Questionnaires_MONDO": "Mapped to MONDO disease ontology",
+    "coverage": "Percentage of successfully mapped entities",
+    "mapped": "Number of entities successfully mapped",
+    "total": "Total number of entities in source data"
+  }
+}
